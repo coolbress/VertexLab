@@ -1,0 +1,21 @@
+[project]
+name = "vertex-lab"
+version = "0.1.0"
+description = "Vertex Investment Framework Monorepo"
+requires-python = ">=3.10"
+dependencies = []  # 루트에는 코드가 없으므로 의존성 비워둠
+
+[tool.uv]
+# packages 폴더 아래에 있는 애들을 내 식구로 인정한다.
+workspace = { members = ["packages/*"] }
+
+[tool.ruff]
+# 전체 프로젝트에 적용될 린터 설정
+line-length = 88
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "ruff>=0.14.14",
+]
+
