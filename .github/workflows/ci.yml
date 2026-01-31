@@ -1,0 +1,32 @@
+name: Vertex CI
+
+# 언제 로봇이 깨어날까요?
+on:
+  push:
+    branches: [ main ]  # main 브랜치에 코드가 올라올 때
+  pull_request:
+    branches: [ main ]  # 누군가(혹은 내가) merge 요청을 보낼 때
+
+jobs:
+  quality-check:
+    name: 🛡️ Code Quality Check
+    runs-on: ubuntu-latest  # 최신 리눅스 환경에서 실행
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4  # 내 코드를 가져옴
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5 # uv 설치 (초고속!)
+
+      - name: Set up Python
+        run: uv python install 3.10 # 파이썬 3.10 설치
+
+      - name: Install dependencies
+        run: uv sync  # 라이브러리 설치 테스트
+
+      - name: Lint Code (Ruff)
+        # packages 폴더 안에 있는 모든 코드를 검사 (legacy_code 제외)
+        run: uv run ruff check packages/ --exclude "legacy_code"
+
+      - name: Run Tests (Pytest)
+        run: uv run pytest packages/ --tb=short 
