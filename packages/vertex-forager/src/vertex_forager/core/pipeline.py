@@ -6,7 +6,7 @@ import logging
 import time
 import itertools
 import functools
-from typing import Any, TYPE_CHECKING
+from typing import Any
 from collections.abc import Iterable, Sequence, Callable
 
 import polars as pl
@@ -18,9 +18,6 @@ from vertex_forager.core.retry import create_retry_controller
 from vertex_forager.routers.base import BaseRouter
 from vertex_forager.schema.mapper import SchemaMapper
 from vertex_forager.writers.base import BaseWriter
-
-if TYPE_CHECKING:
-    from vertex_forager.writers.memory import InMemoryBufferWriter
 
 logger = logging.getLogger("vertex_forager.debug")
 

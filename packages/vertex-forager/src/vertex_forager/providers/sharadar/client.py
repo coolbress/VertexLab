@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable
+from typing import Any, Callable
 from contextlib import asynccontextmanager
 
 import polars as pl
@@ -14,6 +14,7 @@ from vertex_forager.core.config import RunResult
 from vertex_forager.routers import create_router
 from vertex_forager.schema.mapper import SchemaMapper
 from vertex_forager.writers import create_writer
+from vertex_forager.writers.base import BaseWriter
 from vertex_forager.utils import (
     jupyter_safe,
     process_symbols,
@@ -152,8 +153,6 @@ class SharadarClient(BaseClient):
         return self._optimizer.optimize(
             symbols, meta_df, start_date, end_date, table_name
         )
-
-    from vertex_forager.writers.base import BaseWriter
 
     async def _fetch_with_writer(
         self,
