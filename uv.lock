@@ -2487,6 +2487,7 @@ source = { virtual = "." }
 [package.dev-dependencies]
 dev = [
     { name = "pytest" },
+    { name = "pytest-asyncio" },
     { name = "ruff" },
     { name = "vertex-forager" },
 ]
@@ -2496,6 +2497,7 @@ dev = [
 [package.metadata.requires-dev]
 dev = [
     { name = "pytest", specifier = ">=9.0.2" },
+    { name = "pytest-asyncio", specifier = ">=0.23.5" },
     { name = "ruff", specifier = ">=0.14.14" },
     { name = "vertex-forager", editable = "packages/vertex-forager" },
 ]
