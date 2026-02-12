@@ -59,13 +59,6 @@ def sharadar_client(
     from unittest.mock import patch
     from vertex_forager.providers.sharadar.client import SharadarClient
 
-    # Create real client
-    client = SharadarClient(
-        api_key=sharadar_client_config["api_key"],
-        rate_limit=sharadar_client_config["rate_limit"],
-        base_url=sharadar_client_config["base_url"]
-    )
-    
     # Patch HttpExecutor in the base client module (where _run is defined)
     # This ensures that when the client creates an HttpExecutor, it gets our mock
     with patch("vertex_forager.clients.base.HttpExecutor") as MockHttpExecutorClass:
@@ -77,6 +70,14 @@ def sharadar_client(
             # Ensure mock_async_client supports async context manager protocol
             mock_async_client.__aenter__.return_value = mock_async_client
             mock_async_client.__aexit__.return_value = None
+            
+            # Create real client
+            client = SharadarClient(
+                api_key=sharadar_client_config["api_key"],
+                rate_limit=sharadar_client_config["rate_limit"],
+                base_url=sharadar_client_config["base_url"]
+            )
+            
             yield client
 
 

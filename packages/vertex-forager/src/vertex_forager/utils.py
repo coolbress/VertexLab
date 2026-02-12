@@ -123,9 +123,9 @@ class ListHandler(logging.Handler):
     """로그 레코드를 메모리에 저장하는 핸들러."""
     def __init__(self):
         super().__init__()
-        self.records = []
+        self.records: list[logging.LogRecord] = []
 
-    def emit(self, record):
+    def emit(self, record: logging.LogRecord) -> None:
         self.records.append(record)
 
 
@@ -335,12 +335,13 @@ def jupyter_safe(async_func: Callable[..., Any]) -> Callable[..., Any]:
             return loop.run_until_complete(task)
         except KeyboardInterrupt:
             # Ensure the background task is cancelled when user interrupts
-            task.cancel()
-            try:
-                # Wait for cancellation to complete
-                loop.run_until_complete(task)
-            except asyncio.CancelledError:
-                pass
+            if not task.done():
+                task.cancel()
+                try:
+                    # Wait for cancellation to complete
+                    loop.run_until_complete(task)
+                except asyncio.CancelledError:
+                    pass
             raise
 
     return wrapper
