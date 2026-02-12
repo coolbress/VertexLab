@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+import httpx
 from tenacity import (
     AsyncRetrying,
     before_sleep_log,
@@ -21,7 +22,7 @@ logger = logging.getLogger("vertex_forager.retry")
 def create_retry_controller(
     config: RetryConfig,
     log_level: int = logging.WARNING,
-    retry_on: tuple[type[Exception], ...] = (Exception,),
+    retry_on: tuple[type[Exception], ...] = (httpx.TransportError,),
 ) -> AsyncRetrying:
     """Create a tenacity AsyncRetrying controller from configuration.
 
@@ -29,6 +30,7 @@ def create_retry_controller(
         config: Retry configuration.
         log_level: Logging level for retry attempts.
         retry_on: Tuple of exception types to retry on.
+                  Defaults to (httpx.TransportError,).
 
     Returns:
         AsyncRetrying: Configured retry controller.
