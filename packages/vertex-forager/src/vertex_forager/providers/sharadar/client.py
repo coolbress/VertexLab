@@ -176,7 +176,7 @@ class SharadarClient(BaseClient):
             await writer.__aenter__()
             try:
                 yield writer
-            except:
+            except BaseException:
                 # Propagate exception to writer's __aexit__
                 exc_info = sys.exc_info()
                 # Standard pattern: If __aexit__ returns True, exception is suppressed.

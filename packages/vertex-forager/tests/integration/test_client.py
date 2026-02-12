@@ -67,8 +67,8 @@ class TestClientVisualization:
             mock_tqdm_instance.__enter__.return_value = mock_tqdm_instance
             
             # Act
-            tickers = ["AAPL", "GOOGL"]# Act
-            result = sharadar_client.get_price_data(
+            tickers = ["AAPL", "GOOGL"]
+            sharadar_client.get_price_data(
                 tickers=tickers,
                 start_date="2024-01-01",
                 end_date="2024-01-10",
