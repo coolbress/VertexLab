@@ -33,20 +33,27 @@ def collect(symbol, source):
 
         async def _run_collect():
             async with create_client(provider=source, api_key=api_key, rate_limit=120) as client:
-                result = await client.get_price_data(tickers=list(symbol))
-                return result
+                if source == "sharadar":
+                    # For Sharadar, we use the specialized client method
+                    # In the future, this can be generalized via a CollectorCore interface
+                    result = await client.get_price_data(tickers=list(symbol))
+                    return result
+                else:
+                    click.echo(f"⚠️ {source} is not fully implemented yet.")
+                    return None
 
         result = asyncio.run(_run_collect())
         
-        # Show summary
-        if hasattr(result, "tables"):
-            total_rows = sum(result.tables.values())
-            click.echo(f"✅ 수집 완료: 총 {total_rows}개 행이 처리되었습니다.")
-            for table, count in result.tables.items():
-                click.echo(f"  - {table}: {count} rows")
-        else:
-            # InMemoryBuffer result (pl.DataFrame)
-            click.echo(f"✅ 수집 완료: {len(result)}개 행이 수집되었습니다.")
+        if result:
+            # Show summary
+            if hasattr(result, "tables"):
+                total_rows = sum(result.tables.values())
+                click.echo(f"✅ 수집 완료: 총 {total_rows}개 행이 처리되었습니다.")
+                for table, count in result.tables.items():
+                    click.echo(f"  - {table}: {count} rows")
+            else:
+                # Fallback for other result types
+                click.echo(f"✅ 수집 완료: {result}")
 
     except Exception as e:
         click.echo(f"❌ 수집 중 오류가 발생했습니다: {str(e)}")

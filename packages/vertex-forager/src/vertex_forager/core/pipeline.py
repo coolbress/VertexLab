@@ -311,7 +311,7 @@ class VertexForager:
                     # Also CPU-bound, so we offload it
                     normalized_packet = await loop.run_in_executor(
                         None,
-                        functools.partial(self._mapper.normalize, packet)
+                        functools.partial(self._mapper.normalize, packet=packet)
                     )
                     await pkt_q.put(normalized_packet)
 
