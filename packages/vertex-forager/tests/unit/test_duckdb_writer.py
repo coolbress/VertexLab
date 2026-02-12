@@ -10,10 +10,10 @@ from vertex_forager.writers.duckdb import DuckDBWriter
 from vertex_forager.writers import create_writer
 
 
-@pytest.mark.asyncio
 class TestDuckDBWriter:
     """Test suite for DuckDBWriter."""
 
+    @pytest.mark.asyncio
     async def test_writer_initialization_and_creation(self, tmp_path):
         """Test that create_writer returns a DuckDBWriter for duckdb:// scheme."""
         db_path = tmp_path / "test.duckdb"
@@ -23,6 +23,7 @@ class TestDuckDBWriter:
         assert isinstance(writer, DuckDBWriter)
         assert writer.db_path == str(db_path)
 
+    @pytest.mark.asyncio
     async def test_write_single_packet(self, tmp_path):
         """Test writing a single data packet to DuckDB."""
         db_path = tmp_path / "test.duckdb"
@@ -52,6 +53,7 @@ class TestDuckDBWriter:
         assert count == 2
         conn.close()
 
+    @pytest.mark.asyncio
     async def test_concurrent_writes(self, tmp_path):
         """Test concurrent writes to ensure locking works correctly."""
         db_path = tmp_path / "concurrent.duckdb"
@@ -82,6 +84,7 @@ class TestDuckDBWriter:
         assert count == 1000  # 100 packets * 10 rows
         conn.close()
 
+    @pytest.mark.asyncio
     async def test_upsert_behavior(self, tmp_path):
         """Test that data is UPSERTED (deduplicated) when PK is known."""
         db_path = tmp_path / "upsert.duckdb"
@@ -125,6 +128,7 @@ class TestDuckDBWriter:
         assert res[0] == 200.0
         conn.close()
 
+    @pytest.mark.asyncio
     async def test_write_bulk_small_data(self, tmp_path):
         """Test writing a small bulk (less than limit) works immediately."""
         db_path = tmp_path / "small_batch.duckdb"
@@ -154,4 +158,3 @@ class TestDuckDBWriter:
         count = conn.execute("SELECT count(*) FROM small_test").fetchone()[0]
         assert count == 2
         conn.close()
-

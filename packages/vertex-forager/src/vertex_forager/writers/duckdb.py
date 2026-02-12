@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+import functools
 from pathlib import Path
 from typing import Sequence
 
@@ -80,7 +81,7 @@ class DuckDBWriter(BaseWriter):
         """
         async with self._lock:
             loop = asyncio.get_running_loop()
-            return await loop.run_in_executor(None, lambda: self._write_sync(packets))
+            return await loop.run_in_executor(None, functools.partial(self._write_sync, packets))
 
     def _write_sync(self, packets: Sequence[FramePacket]) -> list[WriteResult]:
         """Synchronous implementation of write logic for offloading."""
@@ -216,7 +217,7 @@ class DuckDBWriter(BaseWriter):
             conn.register('temp_df_view', df)
             
             # Create the table structure
-            conn.execute(f"CREATE TABLE {table_name} AS SELECT * FROM temp_df_view WHERE 1=0")
+            conn.execute(f'CREATE TABLE "{table_name}" AS SELECT * FROM temp_df_view WHERE 1=0')
             
             # Apply Primary Key constraint from Schema Registry
             pk_cols = self._get_primary_keys(table_name)
@@ -224,9 +225,9 @@ class DuckDBWriter(BaseWriter):
             if pk_cols:
                 # Check if all PK columns exist in the dataframe
                 if all(col in df.columns for col in pk_cols):
-                    pk_str = ", ".join(pk_cols)
+                    pk_str = ", ".join(f'"{c}"' for c in pk_cols)
                     try:
-                        conn.execute(f"CREATE UNIQUE INDEX IF NOT EXISTS idx_{table_name}_pk ON {table_name} ({pk_str})")
+                        conn.execute(f'CREATE UNIQUE INDEX IF NOT EXISTS "idx_{table_name}_pk" ON "{table_name}" ({pk_str})')
                         self._logger.info(f"Created UNIQUE INDEX on {table_name}({pk_str})")
                     except Exception as e:
                         self._logger.warning(f"Failed to create unique index on {table_name}: {e}")
@@ -241,7 +242,7 @@ class DuckDBWriter(BaseWriter):
         else:
             # Table exists but not in cache yet (first run or restart)
             # Fetch existing schema
-            existing_info = conn.execute(f"DESCRIBE {table_name}").fetchall()
+            existing_info = conn.execute(f'DESCRIBE "{table_name}"').fetchall()
             existing_cols = {row[0] for row in existing_info}
             self._table_schemas[table_name] = existing_cols
             
@@ -261,7 +262,7 @@ class DuckDBWriter(BaseWriter):
         if table_name in self._table_schemas:
             existing_cols = self._table_schemas[table_name]
         else:
-            existing_info = conn.execute(f"DESCRIBE {table_name}").fetchall()
+            existing_info = conn.execute(f'DESCRIBE "{table_name}"').fetchall()
             existing_cols = {row[0] for row in existing_info}
             self._table_schemas[table_name] = existing_cols
 
@@ -280,7 +281,7 @@ class DuckDBWriter(BaseWriter):
             
             try:
                 self._logger.info(f"Adding column {col_name} ({sql_type}) to {table_name}")
-                conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {col_name} {sql_type}")
+                conn.execute(f'ALTER TABLE "{table_name}" ADD COLUMN "{col_name}" {sql_type}')
                 # Update Cache
                 self._table_schemas[table_name].add(col_name)
             except Exception as e:
@@ -329,8 +330,8 @@ class DuckDBWriter(BaseWriter):
         if not pk_cols:
             conn.register('temp_batch_view', df)
             # Use explicit column names to handle schema evolution (new columns in table but not in this batch)
-            cols_str = ", ".join(df.columns)
-            conn.execute(f"INSERT INTO {table_name} ({cols_str}) SELECT {cols_str} FROM temp_batch_view")
+            cols_str = ", ".join(f'"{c}"' for c in df.columns)
+            conn.execute(f'INSERT INTO "{table_name}" ({cols_str}) SELECT {cols_str} FROM temp_batch_view')
             conn.unregister('temp_batch_view')
             return len(df)
             
@@ -338,9 +339,9 @@ class DuckDBWriter(BaseWriter):
         # DuckDB's INSERT OR REPLACE / ON CONFLICT logic
         conn.register('temp_batch_view', df)
         
-        pk_str = ", ".join(pk_cols)
+        pk_str = ", ".join(f'"{c}"' for c in pk_cols)
         cols = df.columns
-        cols_str = ", ".join(cols)
+        cols_str = ", ".join(f'"{c}"' for c in cols)
         
         # Using INSERT OR IGNORE or INSERT OR REPLACE
         # For financial data, we typically want REPLACE to update corrections
@@ -349,16 +350,16 @@ class DuckDBWriter(BaseWriter):
         # If there are no columns to update (only PK columns), we do NOTHING
         if all(col in pk_cols for col in cols):
             query = f"""
-            INSERT INTO {table_name} ({cols_str})
+            INSERT INTO "{table_name}" ({cols_str})
             SELECT {cols_str} FROM temp_batch_view
             ON CONFLICT ({pk_str}) DO NOTHING
             """
         else:
             query = f"""
-            INSERT INTO {table_name} ({cols_str})
+            INSERT INTO "{table_name}" ({cols_str})
             SELECT {cols_str} FROM temp_batch_view
             ON CONFLICT ({pk_str}) DO UPDATE SET {
-                ", ".join([f"{col} = EXCLUDED.{col}" for col in cols if col not in pk_cols])
+                ", ".join([f'"{col}" = EXCLUDED."{col}"' for col in cols if col not in pk_cols])
             }
             """
             

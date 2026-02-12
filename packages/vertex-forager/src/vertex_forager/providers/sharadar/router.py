@@ -45,27 +45,16 @@ class SharadarRouter(BaseRouter):
         "sp500",
     }
 
-    _TICKERS_PAGINATION_CONTEXT = {
+    _DEFAULT_PAGINATION_CONTEXT = {
         "pagination": {
             "cursor_param": "qopts.cursor_id",
             "meta_key": "next_cursor_id",
             "max_pages": 1000,
         }
     }
-    _SP500_PAGINATION_CONTEXT = {
-        "pagination": {
-            "cursor_param": "qopts.cursor_id",
-            "meta_key": "next_cursor_id",
-            "max_pages": 1000,
-        }
-    }
-    _GENERIC_PAGINATION_CONTEXT = {
-        "pagination": {
-            "cursor_param": "qopts.cursor_id",
-            "meta_key": "next_cursor_id",
-            "max_pages": 1000,
-        }
-    }
+    _TICKERS_PAGINATION_CONTEXT = _DEFAULT_PAGINATION_CONTEXT
+    _SP500_PAGINATION_CONTEXT = _DEFAULT_PAGINATION_CONTEXT
+    _GENERIC_PAGINATION_CONTEXT = _DEFAULT_PAGINATION_CONTEXT
 
     def __init__(
         self,

@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from vertex_forager.providers.sharadar.schema import (
     SHARADAR_ACTIONS,
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from vertex_forager.providers.sharadar.router import SharadarRouter
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     if name == "SharadarClient":
         from vertex_forager.providers.sharadar.client import SharadarClient
 

@@ -43,8 +43,7 @@ class Registry(Generic[T]):
             ValueError: If the key is already registered.
         """
         if key in self._registry:
-            # Allow re-registration for now to handle reload scenarios
-            pass
+            raise ValueError(f"Key already registered in {self._name}: {key}")
         self._registry[key] = item
 
     def get(self, key: str) -> T:

@@ -17,7 +17,12 @@ def collect(symbol, source):
         return
 
     click.echo(f"🚀 {source}를 통해 {symbol} 데이터 수집을 시작합니다...")
-    # TODO: 여기에 실제 수집 엔진(Collector Core) 로직 연결
+    
+    # TODO: Implement Collector Core logic here
+    # Currently, this is a placeholder. 
+    # See https://github.com/vertex-lab/issues/1 for the tracking issue.
+    click.echo("⚠️ Collector Core integration is pending implementation.")
+    
     click.echo("✅ 수집 프로세스가 완료되었습니다.")
 
 @main.command()

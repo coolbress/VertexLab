@@ -34,6 +34,5 @@ async def test_fetch_pagination_show_progress_false(mock_client):
             connect_db=None,
             show_progress=False
         )
-        # Check if tqdm was called with disable=True
-        call_kwargs = mock_tqdm.call_args.kwargs
-        assert call_kwargs.get("disable") is True
+        # Check if tqdm was NOT called (implementation skips it entirely if False)
+        mock_tqdm.assert_not_called()

@@ -5,7 +5,8 @@ import inspect
 import logging
 import time
 import itertools
-from typing import Any
+import functools
+from typing import Any, TYPE_CHECKING
 from collections.abc import Iterable, Sequence, Callable
 
 import polars as pl
@@ -17,6 +18,9 @@ from vertex_forager.core.retry import create_retry_controller
 from vertex_forager.routers.base import BaseRouter
 from vertex_forager.schema.mapper import SchemaMapper
 from vertex_forager.writers.base import BaseWriter
+
+if TYPE_CHECKING:
+    from vertex_forager.writers.memory import InMemoryBufferWriter
 
 logger = logging.getLogger("vertex_forager.debug")
 
@@ -70,14 +74,17 @@ class VertexForager:
         # Since InMemoryBufferWriter just stores frames in a list, we can 
         # avoid the overhead of intermediate merges by setting threshold to infinity.
         # This allows the worker to collect ALL frames and perform a SINGLE merge at the end.
-        from vertex_forager.writers.memory import InMemoryBufferWriter
-        if isinstance(writer, InMemoryBufferWriter):
-            # Override instance config (not the global config object)
-            # We treat 1 billion rows as effectively infinite for memory buffer
-            self._flush_threshold = 1_000_000_000 
-            logger.debug("PIPELINE: Detected InMemoryBufferWriter. Disabled intermediate flushing.")
-        else:
-            self._flush_threshold = config.flush_threshold_rows
+        self._flush_threshold = config.flush_threshold_rows
+        
+        try:
+            from vertex_forager.writers.memory import InMemoryBufferWriter
+            if isinstance(writer, InMemoryBufferWriter):
+                # Override instance config (not the global config object)
+                # We treat 1 billion rows as effectively infinite for memory buffer
+                self._flush_threshold = 1_000_000_000 
+                logger.debug("PIPELINE: Detected InMemoryBufferWriter. Disabled intermediate flushing.")
+        except ImportError:
+            pass
 
     async def run(
         self,
@@ -252,7 +259,7 @@ class VertexForager:
                         else:
                             on_progress(**kwargs)
                     except TypeError:
-                         # Fallback for simple callbacks (no args)
+                        # Fallback for simple callbacks (no args)
                         if is_async:
                             await on_progress()
                         else:
@@ -293,7 +300,7 @@ class VertexForager:
                 loop = asyncio.get_running_loop()
                 parse_result = await loop.run_in_executor(
                     None,  # Use default ThreadPoolExecutor
-                    lambda: self._router.parse(job=job, payload=payload)
+                    functools.partial(self._router.parse, job=job, payload=payload)
                 )
                 t2 = time.monotonic()
                 logger.debug(f"[Worker-{worker_id}] Parsed {job.symbol} in {t2 - t1:.3f}s. Packets: {len(parse_result.packets)}, Next Jobs: {len(parse_result.next_jobs)}")
@@ -303,7 +310,7 @@ class VertexForager:
                     # Also CPU-bound, so we offload it
                     normalized_packet = await loop.run_in_executor(
                         None,
-                        lambda: self._mapper.normalize(packet)
+                        functools.partial(self._mapper.normalize, packet)
                     )
                     await pkt_q.put(normalized_packet)
 

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from abc import ABC
+from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
-from typing import Any, Callable
+from typing import Any, Callable, AsyncGenerator
 
 import httpx
+import polars as pl
 
 from vertex_forager.core.http import HttpExecutor, default_async_client
 from vertex_forager.core.config import EngineConfig, RunResult
@@ -95,6 +96,45 @@ class BaseClient(ABC):
         """
         await self.aclose()
 
+    @property
+    def http_client(self) -> httpx.AsyncClient:
+        """Get the active HTTP client.
+
+        Raises:
+            RuntimeError: If the client has not been initialized (not in context).
+        """
+        if self._client is None:
+            raise RuntimeError("Client not initialized. Use 'async with client:'")
+        return self._client
+
+    @abstractmethod
+    async def get_price_data(
+        self,
+        symbols: list[str],
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> pl.DataFrame:
+        """Fetch price data for the given symbols.
+
+        Args:
+            symbols: List of ticker symbols.
+            start_date: Start date (YYYY-MM-DD).
+            end_date: End date (YYYY-MM-DD).
+
+        Returns:
+            Polars DataFrame containing price data.
+        """
+        ...
+
+    @abstractmethod
+    async def get_tickers(self) -> pl.DataFrame:
+        """Fetch ticker metadata.
+
+        Returns:
+            Polars DataFrame containing ticker metadata.
+        """
+        ...
+
     async def _run(
         self,
         *,
@@ -142,7 +182,7 @@ class BaseClient(ABC):
             )
 
     @asynccontextmanager
-    async def _http_client(self) -> httpx.AsyncClient:
+    async def _http_client(self) -> AsyncGenerator[httpx.AsyncClient, None]:
         """Manage the HTTP client lifecycle.
 
         Yields the existing client if available, or creates a temporary one

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import logging
+import time
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, Callable
+from contextlib import asynccontextmanager
 
 import polars as pl
 import psutil
@@ -53,6 +56,8 @@ class SharadarClient(BaseClient):
         self._mapper = SchemaMapper()
         self._optimizer = OptimizedBulkCalculator()
         self._metadata_cache: pl.DataFrame | None = None
+        self._last_meta_fetch_failure: float = 0.0
+        self._meta_fetch_cooldown: float = 300.0  # 5 minutes cooldown
 
     @property
     def cached_metadata(self) -> pl.DataFrame | None:
@@ -112,7 +117,10 @@ class SharadarClient(BaseClient):
         # Apply Smart Batching to ALL ticker-based datasets.
         # This ensures consistent optimization regardless of data density (daily/quarterly).
         meta_df = self._metadata_cache
-        if meta_df is None:
+        
+        # Check cooldown to avoid repeated failures
+        now = time.monotonic()
+        if meta_df is None and (now - self._last_meta_fetch_failure > self._meta_fetch_cooldown):
             try:
                 # Use Spinner only if we are actually fetching metadata
                 # and not just using cache.
@@ -129,10 +137,12 @@ class SharadarClient(BaseClient):
                     )
                     if isinstance(result, pl.DataFrame):
                         meta_df = result
+                        self._last_meta_fetch_failure = 0.0  # Reset failure timestamp on success
             except Exception as e:
                 logger.warning(
                     f"Failed to fetch metadata: {e}. Falling back to heuristic."
                 )
+                self._last_meta_fetch_failure = now  # Record failure timestamp
 
         # 2. Optimize Batches (Bin Packing)
         # Now supports table-aware estimation (SF1 vs SEP)
@@ -142,6 +152,72 @@ class SharadarClient(BaseClient):
         return self._optimizer.optimize(
             symbols, meta_df, start_date, end_date, table_name
         )
+
+    from vertex_forager.writers.base import BaseWriter
+
+    async def _fetch_with_writer(
+        self,
+        connect_db: str | Path | None,
+        desc: str,
+        table_name: str,
+        run_func: Callable[[BaseWriter, Callable | None], Any],
+        show_progress: bool = True,
+        is_metadata_fetch: bool = False,
+        total_items: int | None = None,
+        unit: str = "it",
+    ) -> pl.DataFrame | RunResult:
+        """Helper to manage writer lifecycle and progress reporting."""
+        
+        # Helper to create writer context
+        @asynccontextmanager
+        async def managed_writer():
+            writer = create_writer(connect_db)
+            await writer.__aenter__()
+            try:
+                yield writer
+            finally:
+                if show_progress:
+                    logger.info("Fetching complete. Finalizing database writes...")
+                    with Spinner("Finalizing database writes..."):
+                        await writer.__aexit__(None, None, None)
+                else:
+                    await writer.__aexit__(None, None, None)
+
+        async with managed_writer() as writer:
+            pbar_updater = None
+            if show_progress:
+                pbar = tqdm(
+                    total=total_items,
+                    unit=unit,
+                    desc=desc,
+                    dynamic_ncols=True,
+                    disable=False,
+                )
+                pbar_updater = create_pbar_updater(pbar)
+            else:
+                pbar = None
+
+            try:
+                run_result = await run_func(writer, pbar_updater)
+            finally:
+                if pbar:
+                    pbar.close()
+
+            self.last_run = run_result
+            
+            final_result = run_result
+            if connect_db is None:
+                final_result = writer.collect_table(table_name)
+
+            # Cache metadata if requested
+            if (
+                is_metadata_fetch
+                and isinstance(final_result, pl.DataFrame)
+            ):
+                logger.debug("Caching full metadata from explicit get_tickers() call.")
+                self._metadata_cache = final_result
+
+            return final_result
 
     async def _fetch_pagination(
         self,
@@ -154,54 +230,34 @@ class SharadarClient(BaseClient):
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Pattern 1: Fetch full dataset via pagination (e.g., SP500, All Tickers)."""
-        writer = create_writer(connect_db)
-        # Manually enter writer context to control closing with Spinner
-        await writer.__aenter__()
-
-        try:
+        
+        async def run_logic(writer: BaseWriter, on_progress: Callable | None):
             router = create_router(
                 "sharadar",
-                api_key=self.api_key,  # type: ignore[arg-type] # Validated in __init__
+                api_key=self.api_key,  # type: ignore[arg-type]
                 config=self._config,
                 start_date=None,
                 end_date=None,
             )
+            return await self._run(
+                router=router,
+                dataset=dataset,
+                symbols=None,
+                writer=writer,
+                mapper=self._mapper,
+                on_progress=on_progress,
+                **kwargs,
+            )
 
-            with tqdm(desc=desc, unit="pages", disable=not show_progress) as pbar:
-                run_result = await self._run(
-                    router=router,
-                    dataset=dataset,
-                    symbols=None,  # Always None for pure pagination
-                    writer=writer,
-                    mapper=self._mapper,
-                    on_progress=create_pbar_updater(pbar) if show_progress else None,
-                    **kwargs,
-                )
-        
-            self.last_run = run_result
-            
-            final_result = run_result
-            if connect_db is None:
-                final_result = writer.collect_table(table_name)
-
-            # Cache metadata if this was a full tickers fetch (explicit get_tickers call)
-            if (
-                dataset == "tickers"
-                and isinstance(final_result, pl.DataFrame)
-            ):
-                logger.debug("Caching full metadata from explicit get_tickers() call.")
-                self._metadata_cache = final_result
-
-            return final_result
-
-        finally:
-            # Ensure writer is closed properly with user feedback
-            if show_progress:
-                logger.info("Fetching complete. Finalizing database writes...")
-                with Spinner("Finalizing database writes..."):
-                    await writer.__aexit__(None, None, None)
-            else:
-                await writer.__aexit__(None, None, None)
+        return await self._fetch_with_writer(
+            connect_db=connect_db,
+            desc=desc,
+            table_name=table_name,
+            run_func=run_logic,
+            show_progress=show_progress,
+            is_metadata_fetch=(dataset == "tickers"),
+            unit="pages",
+        )
 
     async def _fetch_by_tickers(
         self,
@@ -219,10 +275,8 @@ class SharadarClient(BaseClient):
         """Pattern 2: Fetch specific tickers with Smart Batching (Auto)."""
         symbols = process_symbols(tickers)
         
-        # Validation is only needed if we are fetching specific tickers into memory
         if symbols:
             self._validate_input(symbols, connect_db)
-            # Store original ticker count for correct progress bar total
             total_tickers = len(symbols)
             symbols = await self._create_optimized_bulk(
                 symbols, dataset, table_name, start_date, end_date, **kwargs
@@ -230,64 +284,34 @@ class SharadarClient(BaseClient):
         else:
             total_tickers = None
 
-        writer = create_writer(connect_db)
-        # Manually enter writer context to control closing with Spinner
-        await writer.__aenter__()
-
-        try:
+        async def run_logic(writer: BaseWriter, on_progress: Callable | None):
             router = create_router(
                 "sharadar",
-                api_key=self.api_key,  # type: ignore[arg-type] # Validated in __init__
+                api_key=self.api_key,  # type: ignore[arg-type]
                 config=self._config,
                 start_date=start_date,
                 end_date=end_date,
             )
-            
-            # Use original ticker count if available, otherwise None
-            total = total_tickers
+            return await self._run(
+                router=router,
+                dataset=dataset,
+                symbols=symbols,
+                writer=writer,
+                mapper=self._mapper,
+                on_progress=on_progress,
+                **kwargs,
+            )
 
-            with tqdm(
-                total=total,
-                unit="tickers",
-                desc=desc,
-                dynamic_ncols=True,
-                disable=not show_progress,
-            ) as pbar:
-                run_result = await self._run(
-                    router=router,
-                    dataset=dataset,
-                    symbols=symbols,
-                    writer=writer,
-                    mapper=self._mapper,
-                    on_progress=create_pbar_updater(pbar) if show_progress else None,
-                    **kwargs,
-                )
-
-            self.last_run = run_result
-            
-            final_result = run_result
-            if connect_db is None:
-                final_result = writer.collect_table(table_name)
-
-            # Cache metadata if this was a full tickers fetch (explicit get_tickers call)
-            if (
-                dataset == "tickers"
-                and tickers is None
-                and isinstance(final_result, pl.DataFrame)
-            ):
-                logger.debug("Caching full metadata from explicit get_tickers() call.")
-                self._metadata_cache = final_result
-
-            return final_result
-
-        finally:
-            # Ensure writer is closed properly with user feedback
-            if show_progress:
-                logger.info("Fetching complete. Finalizing database writes...")
-                with Spinner("Finalizing database writes..."):
-                    await writer.__aexit__(None, None, None)
-            else:
-                await writer.__aexit__(None, None, None)
+        return await self._fetch_with_writer(
+            connect_db=connect_db,
+            desc=desc,
+            table_name=table_name,
+            run_func=run_logic,
+            show_progress=show_progress,
+            is_metadata_fetch=(dataset == "tickers" and tickers is None),
+            total_items=total_tickers,
+            unit="tickers",
+        )
 
     # ----------------------------------------------------------------
     # Public User Methods

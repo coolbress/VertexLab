@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import asyncio
+import threading
 
 import polars as pl
 
@@ -18,18 +18,18 @@ class InMemoryBufferWriter(BaseWriter):
     """
 
     def __init__(self) -> None:
-        self._lock = asyncio.Lock()
+        self._lock = threading.Lock()
         self._tables: dict[str, list[pl.DataFrame]] = {}
 
     async def write(self, packet: FramePacket) -> WriteResult:
         """Append packet to the in-memory buffer.
 
-        Thread-safe via asyncio lock.
+        Thread-safe via threading lock.
         """
         if packet.frame.is_empty():
             return WriteResult(table=packet.table, rows=0, partitions={})
 
-        async with self._lock:
+        with self._lock:
             self._tables.setdefault(packet.table, []).append(packet.frame)
 
         return WriteResult(table=packet.table, rows=packet.frame.height, partitions={})
@@ -43,9 +43,13 @@ class InMemoryBufferWriter(BaseWriter):
         Returns:
             pl.DataFrame: Combined data.
         """
-        parts = self._tables.get(table) or []
-        if not parts:
-            return pl.DataFrame()
+        with self._lock:
+            parts = self._tables.get(table) or []
+            if not parts:
+                return pl.DataFrame()
+            
+            # Copy list to avoid holding lock during concat
+            parts = parts.copy()
         
         if len(parts) == 1:
             df = parts[0]

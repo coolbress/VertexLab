@@ -35,6 +35,7 @@ class TestSharadarRouterUnit:
         # Act & Assert
         assert router.provider == "sharadar"
 
+    @pytest.mark.asyncio
     async def test_generate_jobs_creates_correct_fetch_jobs_for_price_dataset(
         self, router: SharadarRouter
     ) -> None:
@@ -49,6 +50,7 @@ class TestSharadarRouterUnit:
         assert isinstance(job.spec, RequestSpec)
         assert job.spec.params.get("ticker") in ["AAPL", "MSFT"]
 
+    @pytest.mark.asyncio
     async def test_generate_jobs_handles_empty_symbols_list(self, router: SharadarRouter) -> None:
         """Test that generate_jobs handles empty symbols list gracefully."""
         # Act
@@ -57,6 +59,7 @@ class TestSharadarRouterUnit:
         # Assert
         assert len(jobs) == 0
 
+    @pytest.mark.asyncio
     async def test_generate_jobs_handles_none_symbols(self, router: SharadarRouter) -> None:
         """Test that generate_jobs handles None symbols gracefully."""
         # Act
@@ -65,6 +68,7 @@ class TestSharadarRouterUnit:
         # Assert
         assert len(jobs) == 0
 
+    @pytest.mark.asyncio
     async def test_generate_jobs_passes_kwargs_for_tickers_dataset(self, router: SharadarRouter) -> None:
         """Test that generate_jobs passes kwargs correctly for tickers dataset."""
         jobs = [job async for job in router.generate_jobs(dataset="tickers", symbols=None, per_page=500)]
@@ -74,6 +78,7 @@ class TestSharadarRouterUnit:
         assert job.dataset == "tickers"
         assert job.spec.params.get("qopts.per_page") == "500"
 
+    @pytest.mark.asyncio
     async def test_generate_jobs_passes_kwargs_for_fundamental_dataset(self, router: SharadarRouter) -> None:
         """Test that generate_jobs passes kwargs correctly for fundamental dataset."""
         jobs = [job async for job in router.generate_jobs(dataset="fundamental", symbols=["AAPL"], dimension="ARQ")]
@@ -83,6 +88,7 @@ class TestSharadarRouterUnit:
         assert job.dataset == "fundamental"
         assert job.spec.params.get("dimension") == "ARQ"
 
+    @pytest.mark.asyncio
     async def test_generate_jobs_does_not_batch_by_default(
         self, router: SharadarRouter
     ) -> None:
@@ -97,6 +103,7 @@ class TestSharadarRouterUnit:
 
         assert len(jobs) == 3
 
+    @pytest.mark.asyncio
     async def test_generate_jobs_ignores_bulk_size(
         self, router: SharadarRouter
     ) -> None:
@@ -113,6 +120,7 @@ class TestSharadarRouterUnit:
         # Expect 3 jobs because Router no longer chunks
         assert len(jobs) == 3
 
+    @pytest.mark.asyncio
     async def test_generate_jobs_handles_pre_batched_strings(
         self, router: SharadarRouter
     ) -> None:
@@ -128,6 +136,7 @@ class TestSharadarRouterUnit:
         assert len(jobs) == 1
         assert jobs[0].spec.params.get("ticker") == "AAPL,MSFT,TSLA"
 
+    @pytest.mark.asyncio
     async def test_generate_jobs_creates_correct_fetch_jobs_for_actions_dataset(
         self, router: SharadarRouter
     ) -> None:
@@ -144,6 +153,7 @@ class TestSharadarRouterUnit:
         assert job.spec.url.endswith("ACTIONS.json")
         assert job.spec.params.get("ticker") in ["AAPL", "MSFT"]
 
+    @pytest.mark.asyncio
     async def test_generate_jobs_creates_correct_fetch_jobs_for_daily_dataset(
         self, router: SharadarRouter
     ) -> None:
@@ -160,6 +170,7 @@ class TestSharadarRouterUnit:
         assert job.spec.url.endswith("DAILY.json")
         assert job.spec.params.get("ticker") in ["AAPL", "MSFT"]
 
+    @pytest.mark.asyncio
     async def test_generate_jobs_creates_correct_fetch_jobs_for_sp500_dataset(
         self, router: SharadarRouter
     ) -> None:
@@ -299,6 +310,7 @@ class TestSharadarRouterUnit:
 class TestRouterEdgeCases:
     """Tests for router edge cases and error conditions."""
 
+    @pytest.mark.asyncio
     async def test_router_handles_unknown_dataset_gracefully(self, sharadar_router: SharadarRouter) -> None:
         """Test that router handles unknown dataset names gracefully."""
         # Act & Assert

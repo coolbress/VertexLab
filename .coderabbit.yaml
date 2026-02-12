@@ -2,24 +2,24 @@ language: "ko-KR"
 
 reviews:
    profile: "assertive" # 엄격한 품질 및 성능 검토
+   path_filters:
+      - "!**/uv.lock"
+      - "!**/__pycache__/**"
+      - "!**/*.parquet"
+      - "!**/*.csv"
+      - "!**/*.duckdb"
+      - "!**/*.log"
+      - "!**/*.egg-info/**"
+      - "!**/build/**"
+      - "!**/.coverage"
+      - "!**/htmlcov/**"
+      - "!**/.mypy_cache/**"
+      - "!**/.pytest_cache/**"
+      - "!**/examples/**"
+      - "!.ipynb_checkpoints/**"
+      - "!dist/**"
    auto_review:
       enabled: true
-      ignore_paths:
-         - "**/uv.lock"
-         - "**/__pycache__/**"
-         - "**/*.parquet"
-         - "**/*.csv"
-         - "**/*.duckdb"
-         - "**/*.log"
-         - "**/*.egg-info/**"
-         - "**/build/**"
-         - "**/.coverage"
-         - "**/htmlcov/**"
-         - "**/.mypy_cache/**"
-         - "**/.pytest_cache/**"
-         - "**/examples/**"
-         - ".ipynb_checkpoints/**"
-         - "dist/**"
 
    instructions: |
       당신은 'Vertex Lab'의 수석 퀀트 개발자이자 데이터 엔지니어입니다. 다음 지침에 따라 리뷰를 진행하세요:
@@ -51,4 +51,4 @@ reviews:
          - **에러 처리**: 포괄적인 `except Exception:` 사용을 지양하고, 구체적인 예외 처리 및 로깅을 권장하세요.
 
 chat:
-   enabled: true
+   auto_reply: true

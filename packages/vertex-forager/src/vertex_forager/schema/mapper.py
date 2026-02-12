@@ -120,7 +120,7 @@ class SchemaMapper:
         1. If `target_col` is None, skip normalization.
         2. If `target_col` is "date", do nothing (already standard).
         3. If `frame` has a "date" column but it's NOT the target, rename it to "date_original" 
-           to avoid collision and data loss.
+            to avoid collision and data loss.
         4. Rename `target_col` to "date".
         """
         if target_col is None:
@@ -129,12 +129,10 @@ class SchemaMapper:
         if target_col == "date":
             return frame
 
-        # Collision handling: if 'date' exists but is not our target
-        if "date" in frame.columns:
-            frame = frame.rename({"date": "date_original"})
-
-        # Rename target to standard 'date'
+        # Only rename 'date' if we are actually going to overwrite it with target_col
         if target_col in frame.columns:
+            if "date" in frame.columns:
+                frame = frame.rename({"date": "date_original"})
             return frame.rename({target_col: "date"})
 
         return frame

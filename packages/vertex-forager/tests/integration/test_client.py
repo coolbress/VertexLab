@@ -89,9 +89,10 @@ class TestClientVisualization:
                     break
             assert price_call_found
             
-            # Verify tqdm was used as context manager
-            mock_tqdm_instance.__enter__.assert_called()
-            mock_tqdm_instance.__exit__.assert_called()
+            # Verify tqdm was used
+            # Refactored implementation does not use context manager, but try/finally with close()
+            # mock_tqdm_instance.__enter__.assert_called() 
+            mock_tqdm_instance.close.assert_called()
 
 
 class TestClientIntegration:

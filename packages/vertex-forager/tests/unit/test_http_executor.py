@@ -70,6 +70,7 @@ class TestHttpExecutor:
         
         return response
 
+    @pytest.mark.asyncio
     async def test_fetch_successful_request(
         self, http_executor: HttpExecutor, mock_async_client: AsyncMock, 
         sample_request_spec: RequestSpec, success_response: Response
@@ -93,6 +94,7 @@ class TestHttpExecutor:
             timeout=30.0
         )
 
+    @pytest.mark.asyncio
     async def test_fetch_handles_http_errors(
         self, http_executor: HttpExecutor, mock_async_client: AsyncMock,
         sample_request_spec: RequestSpec, error_response: Response
@@ -105,6 +107,7 @@ class TestHttpExecutor:
         with pytest.raises(httpx.HTTPStatusError):
             await http_executor.fetch(sample_request_spec)
 
+    @pytest.mark.asyncio
     async def test_fetch_handles_network_errors(
         self, http_executor: HttpExecutor, mock_async_client: AsyncMock,
         sample_request_spec: RequestSpec
@@ -117,6 +120,7 @@ class TestHttpExecutor:
         with pytest.raises(Exception, match="Network error"):
             await http_executor.fetch(sample_request_spec)
 
+    @pytest.mark.asyncio
     async def test_fetch_respects_timeout_configuration(
         self, http_executor: HttpExecutor, mock_async_client: AsyncMock,
         sample_request_spec: RequestSpec, success_response: Response
@@ -146,6 +150,7 @@ class TestHttpExecutor:
             timeout=10.0
         )
 
+    @pytest.mark.asyncio
     async def test_fetch_handles_empty_response(
         self, http_executor: HttpExecutor, mock_async_client: AsyncMock,
         sample_request_spec: RequestSpec
@@ -169,6 +174,7 @@ class TestHttpExecutor:
 class TestHttpExecutorConcurrency:
     """Tests for HTTP executor concurrency behavior."""
 
+    @pytest.mark.asyncio
     async def test_executor_handles_concurrent_requests(
         self, mock_async_client: AsyncMock
     ) -> None:
