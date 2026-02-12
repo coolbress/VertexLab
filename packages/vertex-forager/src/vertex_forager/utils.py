@@ -91,7 +91,8 @@ def create_pbar_updater(pbar: tqdm) -> Callable:
             return
 
         # Calculate number of symbols in this batch
-        count = len(symbol.split(","))
+        # Filter out empty strings from split result (e.g. "AAPL,," -> ["AAPL"])
+        count = len([s for s in symbol.split(",") if s.strip()])
         
         # Check for pagination
         # If next_jobs exist, this logical request is not yet complete.
@@ -297,10 +298,19 @@ def get_cache_dir() -> Path:
 
 def clear_app_cache():
     """캐시 디렉토리 내부를 완전히 비웁니다."""
-    cache_dir = get_cache_dir()
+    app_root = get_app_root().resolve()
+    cache_dir = get_cache_dir().resolve()
+
+    # Safety check: ensure cache_dir is a subdirectory of app_root
+    try:
+        cache_dir.relative_to(app_root)
+    except ValueError:
+        logging.warning(f"Safety check failed: Cache dir {cache_dir} is not inside app root {app_root}")
+        return
+
     if cache_dir.exists():
         shutil.rmtree(cache_dir)
-        cache_dir.mkdir()
+        cache_dir.mkdir(parents=True, exist_ok=True)
 
 
 def load_env_file(env_file: Path | None = None) -> None:
