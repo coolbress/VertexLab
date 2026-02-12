@@ -2488,6 +2488,7 @@ source = { virtual = "." }
 dev = [
     { name = "pytest" },
     { name = "ruff" },
+    { name = "vertex-forager" },
 ]
 
 [package.metadata]
@@ -2496,6 +2497,7 @@ dev = [
 dev = [
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "ruff", specifier = ">=0.14.14" },
+    { name = "vertex-forager", editable = "packages/vertex-forager" },
 ]
 
 [[package]]
