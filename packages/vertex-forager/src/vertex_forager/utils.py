@@ -151,12 +151,12 @@ class Spinner:
         # Spinner chars
         self.spinner_chars = itertools.cycle(['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'])
 
-    def update_message(self, new_message: str):
+    def update_message(self, new_message: str) -> None:
         """Update the message displayed next to the spinner."""
         with self._message_lock:
             self.message = new_message
 
-    def _spinner_task(self):
+    def _spinner_task(self) -> None:
         """Background task to animate the spinner."""
         while self.busy:
             spinner_char = next(self.spinner_chars)
@@ -182,7 +182,7 @@ class Spinner:
             
             time.sleep(self.delay)
 
-    def start(self):
+    def start(self) -> None:
         """Start the spinner."""
         self.busy = True
         
@@ -195,7 +195,7 @@ class Spinner:
             sys.stderr.write(f"{self.message}\n")
             sys.stderr.flush()
 
-    def stop(self, clear: bool = True):
+    def stop(self, clear: bool = True) -> None:
         """Stop the spinner and cleanup.
         
         Args:
@@ -219,7 +219,7 @@ class Spinner:
             self._show_cursor()
         # Non-TTY: do nothing on stop (already printed message)
 
-    def _clear_line(self):
+    def _clear_line(self) -> None:
         """Clear the current line in stderr."""
         if not self._is_tty:
             return
@@ -255,7 +255,7 @@ class Spinner:
         self.start()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: Any) -> bool:
         if exc_type is KeyboardInterrupt:
             self.stop(clear=False)
             sys.stderr.write("Aborted by user.\n")

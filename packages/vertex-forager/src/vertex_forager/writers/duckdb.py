@@ -163,7 +163,7 @@ class DuckDBWriter(BaseWriter):
         before closing the connection.
         """
         # Flush any remaining data first (outside lock to avoid deadlock)
-        await self.flush()
+        # await self.flush() (no-op, removed to avoid recursive lock wait)
 
         async with self._lock:
             if self._conn:

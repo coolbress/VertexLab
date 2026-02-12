@@ -179,8 +179,9 @@ class SharadarClient(BaseClient):
             except:
                 # Propagate exception to writer's __aexit__
                 exc_info = sys.exc_info()
-                await writer.__aexit__(*exc_info)
-                raise
+                # Standard pattern: If __aexit__ returns True, exception is suppressed.
+                if not await writer.__aexit__(*exc_info):
+                    raise
             else:
                 # Normal exit
                 if show_progress:

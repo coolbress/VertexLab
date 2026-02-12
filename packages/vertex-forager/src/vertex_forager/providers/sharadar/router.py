@@ -158,6 +158,8 @@ class SharadarRouter(BaseRouter):
         # The Router simply creates one job per input symbol string.
         # This removes the need for 'bulk_size' logic in the Router.
         for symbol in symbol_list:
+            if not symbol:
+                continue
             yield self._build_per_symbol_job(
                 dataset=dataset, symbol=symbol, dimension=dimension
             )
@@ -198,7 +200,11 @@ class SharadarRouter(BaseRouter):
                 # Safe extraction handling potential nulls/empty frames
                 meta_col = json_df.select(pl.col("meta"))
                 if not meta_col.is_empty():
-                    meta = meta_col.item(0) or {}
+                    # For DataFrame with 1 column, item(0, 0) is safer in recent Polars
+                    try:
+                        meta = meta_col.item(0, 0) or {}
+                    except (ValueError, TypeError):
+                        meta = {}
 
             # Extract Data using Pure Polars operations (avoiding Python round-trip)
             # This is significantly faster (approx 1.6x) for large payloads
@@ -206,7 +212,16 @@ class SharadarRouter(BaseRouter):
             # 1. Get Column Names (Metadata is small, safe to extract to Python)
             # 'columns' is List[Struct] in the JSON
             # We use item(0, 0) to get the first row, first column safely
-            cols_list = json_df.select(pl.col("datatable").struct.field("columns")).item(0, 0) or []
+            cols_val = json_df.select(pl.col("datatable").struct.field("columns")).item(0, 0)
+            
+            # Handle Polars Series return type (for List columns)
+            if isinstance(cols_val, pl.Series):
+                cols_list = cols_val.to_list()
+            else:
+                cols_list = cols_val
+            
+            cols_list = cols_list or []
+
             col_names = []
             for i, c in enumerate(cols_list):
                 name = c.get("name")

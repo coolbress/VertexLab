@@ -259,12 +259,9 @@ class VertexForager:
                             await on_progress(**kwargs)
                         else:
                             on_progress(**kwargs)
-                    except TypeError:
-                        # Fallback for simple callbacks (no args)
-                        if is_async:
-                            await on_progress()
-                        else:
-                            on_progress()
+                    except Exception as e:
+                        logger.error(f"Error in on_progress callback: {e}")
+                        # Don't re-raise to keep worker alive
                 
                 handler = _progress_wrapper
             except Exception as e:
