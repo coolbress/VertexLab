@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any, Callable, AsyncGenerator
 
 import httpx
@@ -110,30 +111,46 @@ class BaseClient(ABC):
     @abstractmethod
     async def get_price_data(
         self,
-        symbols: list[str],
+        *,
+        tickers: list[str] | None = None,
+        connect_db: str | Path | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
-    ) -> pl.DataFrame:
-        """Fetch price data for the given symbols.
+        **kwargs: Any,
+    ) -> pl.DataFrame | RunResult:
+        """Fetch price data.
 
         Args:
-            symbols: List of ticker symbols.
+            tickers: List of ticker symbols.
+            connect_db: Database connection string or path.
             start_date: Start date (YYYY-MM-DD).
             end_date: End date (YYYY-MM-DD).
+            **kwargs: Additional provider-specific arguments.
 
         Returns:
-            Polars DataFrame containing price data.
+            Polars DataFrame containing price data or RunResult.
         """
-        ...
+        raise NotImplementedError
 
     @abstractmethod
-    async def get_tickers(self) -> pl.DataFrame:
+    async def get_tickers(
+        self,
+        *,
+        tickers: list[str] | None = None,
+        connect_db: str | Path | None = None,
+        **kwargs: Any,
+    ) -> pl.DataFrame | RunResult:
         """Fetch ticker metadata.
 
+        Args:
+            tickers: List of ticker symbols.
+            connect_db: Database connection string or path.
+            **kwargs: Additional provider-specific arguments.
+
         Returns:
-            Polars DataFrame containing ticker metadata.
+            Polars DataFrame containing ticker metadata or RunResult.
         """
-        ...
+        raise NotImplementedError
 
     async def _run(
         self,

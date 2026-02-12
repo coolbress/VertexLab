@@ -12,7 +12,7 @@ from vertex_forager.core.config import EngineConfig, FetchJob, FramePacket, RunR
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor
 from vertex_forager.core.pipeline import VertexForager
-from vertex_forager.core import retry
+from . import retry
 
 __all__ = [
     "VertexForager",
