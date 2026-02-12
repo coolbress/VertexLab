@@ -115,7 +115,23 @@ class SharadarRouter(BaseRouter):
         # - tickers: paginated only when symbols not provided
         # - sp500: paginated only when symbols not provided
         if (dataset == "tickers" and not symbols) or (dataset == "sp500" and not symbols):
-            per_page = int(str(kwargs.get("per_page", 10000)))
+            try:
+                raw_per_page = kwargs.get("per_page", 10000)
+                # Ensure it's not None/Empty and is numeric
+                if raw_per_page is None or str(raw_per_page).strip() == "":
+                    per_page = 10000
+                else:
+                    per_page = int(raw_per_page)
+                
+                # Enforce sensible bounds
+                if per_page < 1:
+                    per_page = 1
+                elif per_page > 100000:  # Reasonable upper limit for Sharadar
+                    per_page = 100000
+            except (ValueError, TypeError):
+                # Fallback on failure
+                per_page = 10000
+
             yield self._build_pagination_job(dataset=dataset, per_page=per_page)
             return
 

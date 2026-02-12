@@ -6,7 +6,7 @@ import logging
 import time
 import itertools
 import functools
-from typing import Any
+from typing import Any, TYPE_CHECKING
 from collections.abc import Iterable, Sequence, Callable
 
 import polars as pl
@@ -18,6 +18,14 @@ from vertex_forager.core.retry import create_retry_controller
 from vertex_forager.routers.base import BaseRouter
 from vertex_forager.schema.mapper import SchemaMapper
 from vertex_forager.writers.base import BaseWriter
+
+if TYPE_CHECKING:
+    from vertex_forager.writers.memory import InMemoryBufferWriter
+
+try:
+    from vertex_forager.writers.memory import InMemoryBufferWriter
+except ImportError:
+    InMemoryBufferWriter = None
 
 logger = logging.getLogger("vertex_forager.debug")
 
@@ -73,15 +81,11 @@ class VertexForager:
         # This allows the worker to collect ALL frames and perform a SINGLE merge at the end.
         self._flush_threshold = config.flush_threshold_rows
         
-        try:
-            from vertex_forager.writers.memory import InMemoryBufferWriter
-            if isinstance(writer, InMemoryBufferWriter):
-                # Override instance config (not the global config object)
-                # We treat 1 billion rows as effectively infinite for memory buffer
-                self._flush_threshold = 1_000_000_000 
-                logger.debug("PIPELINE: Detected InMemoryBufferWriter. Disabled intermediate flushing.")
-        except ImportError:
-            pass
+        if InMemoryBufferWriter is not None and isinstance(writer, InMemoryBufferWriter):
+            # Override instance config (not the global config object)
+            # We treat 1 billion rows as effectively infinite for memory buffer
+            self._flush_threshold = 1_000_000_000 
+            logger.debug("PIPELINE: Detected InMemoryBufferWriter. Disabled intermediate flushing.")
 
     async def run(
         self,
