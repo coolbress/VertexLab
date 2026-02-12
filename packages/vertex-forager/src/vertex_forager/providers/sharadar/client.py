@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
+import sys
 from pathlib import Path
 from typing import Any, Callable
 from contextlib import asynccontextmanager
@@ -174,7 +175,13 @@ class SharadarClient(BaseClient):
             await writer.__aenter__()
             try:
                 yield writer
-            finally:
+            except:
+                # Propagate exception to writer's __aexit__
+                exc_info = sys.exc_info()
+                await writer.__aexit__(*exc_info)
+                raise
+            else:
+                # Normal exit
                 if show_progress:
                     logger.info("Fetching complete. Finalizing database writes...")
                     with Spinner("Finalizing database writes..."):

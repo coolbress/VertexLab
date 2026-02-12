@@ -45,16 +45,13 @@ class SharadarRouter(BaseRouter):
         "sp500",
     }
 
-    _DEFAULT_PAGINATION_CONTEXT = {
+    _PAGINATION_CONTEXT = {
         "pagination": {
             "cursor_param": "qopts.cursor_id",
             "meta_key": "next_cursor_id",
             "max_pages": 1000,
         }
     }
-    _TICKERS_PAGINATION_CONTEXT = _DEFAULT_PAGINATION_CONTEXT
-    _SP500_PAGINATION_CONTEXT = _DEFAULT_PAGINATION_CONTEXT
-    _GENERIC_PAGINATION_CONTEXT = _DEFAULT_PAGINATION_CONTEXT
 
     def __init__(
         self,
@@ -182,8 +179,11 @@ class SharadarRouter(BaseRouter):
                     raise ValueError(f"Sharadar API error {code}: {message}")
 
             # Extract Metadata
-            if "meta" in json_df.columns:
-                meta = json_df.select(pl.col("meta")).item(0) or {}
+            if "meta" in json_df.columns and not json_df.is_empty():
+                # Safe extraction handling potential nulls/empty frames
+                meta_col = json_df.select(pl.col("meta"))
+                if not meta_col.is_empty():
+                    meta = meta_col.item(0) or {}
 
             # Extract Data using Pure Polars operations (avoiding Python round-trip)
             # This is significantly faster (approx 1.6x) for large payloads
@@ -213,9 +213,12 @@ class SharadarRouter(BaseRouter):
             # Ideally, we should hint types here if we knew them, but Sharadar columns vary.
             # SchemaMapper will handle the actual casting/validation.
             
-        except Exception:
+        except (pl.exceptions.PolarsError, ValueError, TypeError, json.JSONDecodeError) as e:
             # Fallback to standard parsing if Polars fails (e.g., unexpected format)
-            # logging.warning("Polars JSON parse failed, falling back to json.loads", exc_info=True)
+            logger.warning(
+                f"Polars JSON parse failed for {job.dataset}, falling back to json.loads. Error: {e}", 
+                exc_info=True
+            )
             decoded = self._decode_payload(payload)
             frame = self._datatable_to_frame(decoded, dataset=job.dataset)
             meta = decoded.get("meta") or {}
@@ -337,7 +340,7 @@ class SharadarRouter(BaseRouter):
             params=params,
             auth=self._auth(),
         )
-        context = self._TICKERS_PAGINATION_CONTEXT if dataset == "tickers" else self._SP500_PAGINATION_CONTEXT
+        context = self._PAGINATION_CONTEXT
         return FetchJob(
             provider=self.provider,
             dataset=dataset,
@@ -384,7 +387,7 @@ class SharadarRouter(BaseRouter):
         )
         
         # Add pagination context for all datasets that support it
-        context = self._GENERIC_PAGINATION_CONTEXT.copy()
+        context = self._PAGINATION_CONTEXT.copy()
         
         return FetchJob(
             provider=self.provider,
