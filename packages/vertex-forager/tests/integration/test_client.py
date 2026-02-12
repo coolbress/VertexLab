@@ -67,11 +67,13 @@ class TestClientVisualization:
             mock_tqdm_instance.__enter__.return_value = mock_tqdm_instance
             
             # Act
-            tickers = ["AAPL", "GOOGL"]
-            sharadar_client.get_price_data(
+            tickers = ["AAPL", "GOOGL"]# Act
+            result = sharadar_client.get_price_data(
                 tickers=tickers,
                 start_date="2024-01-01",
-                end_date="2024-01-10"
+                end_date="2024-01-10",
+                persist=True,
+                db_path="/tmp/test.db"
             )
 
             # Assert
@@ -98,6 +100,7 @@ class TestClientVisualization:
 class TestClientIntegration:
     """Integration tests for client functionality."""
 
+    @pytest.mark.asyncio
     async def test_get_price_data_returns_dataframe_with_correct_structure(
         self, sharadar_client, mock_http_executor, sample_price_data
     ) -> None:
@@ -124,6 +127,7 @@ class TestClientIntegration:
         assert "provider" in result.columns
         assert "fetched_at" in result.columns
 
+    @pytest.mark.asyncio
     async def test_get_price_data_with_persistence_returns_run_result(
         self, sharadar_client, mock_http_executor, sample_price_data, tmp_path
     ) -> None:
@@ -149,6 +153,7 @@ class TestClientIntegration:
         assert result.tables["sharadar_sep"] == 2
         assert len(result.errors) == 0
 
+    @pytest.mark.asyncio
     async def test_get_ticker_info_parses_metadata_correctly(
         self, sharadar_client, mock_http_executor, sample_ticker_data
     ) -> None:
@@ -168,6 +173,7 @@ class TestClientIntegration:
         assert "exchange" in result.columns
         # 모든 티커 정보를 반환하므로 특정 티커만 확인하지 않음
 
+    @pytest.mark.asyncio
     async def test_get_daily_metrics_handles_financial_data(
         self, sharadar_client, mock_http_executor
     ) -> None:

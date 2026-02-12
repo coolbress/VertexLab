@@ -15,7 +15,9 @@ async def test_fetch_pagination_show_progress_true(mock_client):
          patch("vertex_forager.providers.sharadar.client.create_router"):
         
         # Setup mocks
-        mock_writer = AsyncMock()
+        mock_writer = MagicMock()
+        mock_writer.__aenter__ = AsyncMock(return_value=mock_writer)
+        mock_writer.__aexit__ = AsyncMock(return_value=None)
         mock_create_writer.return_value = mock_writer
         
         await mock_client._fetch_pagination(
@@ -37,7 +39,9 @@ async def test_fetch_pagination_show_progress_false(mock_client):
          patch("vertex_forager.providers.sharadar.client.create_router"):
         
         # Setup mocks
-        mock_writer = AsyncMock()
+        mock_writer = MagicMock()
+        mock_writer.__aenter__ = AsyncMock(return_value=mock_writer)
+        mock_writer.__aexit__ = AsyncMock(return_value=None)
         mock_create_writer.return_value = mock_writer
 
         await mock_client._fetch_pagination(
