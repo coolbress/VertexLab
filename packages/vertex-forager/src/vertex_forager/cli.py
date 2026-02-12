@@ -18,12 +18,40 @@ def collect(symbol, source):
 
     click.echo(f"🚀 {source}를 통해 {symbol} 데이터 수집을 시작합니다...")
     
-    # TODO: Implement Collector Core logic here
-    # Currently, this is a placeholder. 
-    # See https://github.com/vertex-lab/issues/1 for the tracking issue.
-    click.echo("⚠️ Collector Core integration is pending implementation.")
-    
-    click.echo("✅ 수집 프로세스가 완료되었습니다.")
+    try:
+        from vertex_forager.clients import create_client
+        import asyncio
+        import os
+
+        # API Key lookup
+        api_key_env = "SHARADAR_API_KEY" if source == "sharadar" else f"{source.upper()}_API_KEY"
+        api_key = os.getenv(api_key_env)
+        
+        if not api_key:
+            click.echo(f"⚠️ {api_key_env} 환경변수가 설정되지 않았습니다.")
+            return
+
+        async def _run_collect():
+            async with create_client(provider=source, api_key=api_key, rate_limit=120) as client:
+                result = await client.get_price_data(tickers=list(symbol))
+                return result
+
+        result = asyncio.run(_run_collect())
+        
+        # Show summary
+        if hasattr(result, "tables"):
+            total_rows = sum(result.tables.values())
+            click.echo(f"✅ 수집 완료: 총 {total_rows}개 행이 처리되었습니다.")
+            for table, count in result.tables.items():
+                click.echo(f"  - {table}: {count} rows")
+        else:
+            # InMemoryBuffer result (pl.DataFrame)
+            click.echo(f"✅ 수집 완료: {len(result)}개 행이 수집되었습니다.")
+
+    except Exception as e:
+        click.echo(f"❌ 수집 중 오류가 발생했습니다: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
 @main.command()
 def status():
