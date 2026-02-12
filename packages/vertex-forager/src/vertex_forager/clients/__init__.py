@@ -3,13 +3,9 @@
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING
 
 from vertex_forager.clients.base import BaseClient
 from vertex_forager.core.registries import clients as client_registry, ClientRegistration
-
-if TYPE_CHECKING:
-    from vertex_forager.providers.sharadar.client import SharadarClient
 
 
 def _register_sharadar() -> None:

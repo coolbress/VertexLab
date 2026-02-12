@@ -16,10 +16,6 @@ from tqdm import tqdm
 
 from dotenv import load_dotenv
 
-# Re-export Spinner for backward compatibility or direct use
-# This class is defined here to avoid circular imports if needed by other modules
-class Spinner:
-    """Simple spinner for CLI feedback."""
 
 def process_symbols(tickers: list[str] | None) -> list[str] | None:
     """Convert tickers to normalized symbols.

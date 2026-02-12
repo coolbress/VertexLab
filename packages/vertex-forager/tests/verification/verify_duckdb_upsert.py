@@ -1,6 +1,5 @@
 
 import asyncio
-import shutil
 from datetime import date, datetime
 from pathlib import Path
 
