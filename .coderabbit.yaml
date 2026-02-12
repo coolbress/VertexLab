@@ -2,6 +2,8 @@ language: "ko-KR"
 
 reviews:
    profile: "assertive" # 엄격한 품질 및 성능 검토
+   request_review_authors:
+      - "coolbress"
    path_filters:
       - "!**/uv.lock"
       - "!**/__pycache__/**"
