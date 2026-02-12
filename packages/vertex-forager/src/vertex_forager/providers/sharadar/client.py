@@ -14,6 +14,7 @@ from vertex_forager.clients.base import BaseClient
 from vertex_forager.core.config import RunResult
 from vertex_forager.routers import create_router
 from vertex_forager.schema.mapper import SchemaMapper
+from vertex_forager.schema.registry import get_table_schema
 from vertex_forager.writers import create_writer
 from vertex_forager.writers.base import BaseWriter
 from vertex_forager.utils import (
@@ -213,7 +214,10 @@ class SharadarClient(BaseClient):
             
             final_result = run_result
             if connect_db is None:
-                final_result = writer.collect_table(table_name)
+                # Use schema unique_key for deterministic sorting if available
+                schema = get_table_schema(table_name)
+                sort_cols = list(schema.unique_key) if schema and schema.unique_key else None
+                final_result = writer.collect_table(table_name, sort_cols=sort_cols)
 
             # Cache metadata if requested
             if (

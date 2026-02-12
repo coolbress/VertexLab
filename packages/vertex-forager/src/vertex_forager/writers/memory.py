@@ -34,11 +34,12 @@ class InMemoryBufferWriter(BaseWriter):
 
         return WriteResult(table=packet.table, rows=packet.frame.height, partitions={})
 
-    def collect_table(self, table: str) -> pl.DataFrame:
+    def collect_table(self, table: str, sort_cols: list[str] | None = None) -> pl.DataFrame:
         """Concatenate all buffered parts for a table into a single DataFrame.
 
         Args:
             table: Table name (e.g., 'price_bars').
+            sort_cols: Optional list of columns to sort by (e.g., from schema unique_key).
 
         Returns:
             pl.DataFrame: Combined data.
@@ -48,25 +49,15 @@ class InMemoryBufferWriter(BaseWriter):
             if not parts:
                 return pl.DataFrame()
             
-            # Copy list to avoid holding lock during concat
-            parts = parts.copy()
-        
-        if len(parts) == 1:
-            df = parts[0]
-        else:
-            df = pl.concat(parts, how="vertical", rechunk=False)
+            if len(parts) == 1:
+                df = parts[0]
+            else:
+                df = pl.concat(parts, how="vertical", rechunk=False)
 
-        # Sort by ticker and date if available (User Request)
-        # This ensures deterministic output even if packets arrived out of order.
-        sort_cols = []
-        if "ticker" in df.columns:
-            sort_cols.append("ticker")
-        if "date" in df.columns:
-            sort_cols.append("date")
-        elif "filingdate" in df.columns:  # For SF2/SF3
-            sort_cols.append("filingdate")
-            
-        if sort_cols:
-            df = df.sort(sort_cols)
-            
-        return df
+            if sort_cols:
+                # Only sort by columns that actually exist in the DataFrame
+                valid_sort_cols = [c for c in sort_cols if c in df.columns]
+                if valid_sort_cols:
+                    df = df.sort(valid_sort_cols)
+                
+            return df

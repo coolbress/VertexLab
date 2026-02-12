@@ -1,4 +1,3 @@
-
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
 from vertex_forager.providers.sharadar.client import SharadarClient
@@ -11,7 +10,14 @@ def mock_client():
 
 @pytest.mark.asyncio
 async def test_fetch_pagination_show_progress_true(mock_client):
-    with patch("vertex_forager.providers.sharadar.client.tqdm") as mock_tqdm:
+    with patch("vertex_forager.providers.sharadar.client.tqdm") as mock_tqdm, \
+         patch("vertex_forager.providers.sharadar.client.create_writer") as mock_create_writer, \
+         patch("vertex_forager.providers.sharadar.client.create_router"):
+        
+        # Setup mocks
+        mock_writer = AsyncMock()
+        mock_create_writer.return_value = mock_writer
+        
         await mock_client._fetch_pagination(
             dataset="test",
             desc="test",
@@ -26,7 +32,14 @@ async def test_fetch_pagination_show_progress_true(mock_client):
 
 @pytest.mark.asyncio
 async def test_fetch_pagination_show_progress_false(mock_client):
-    with patch("vertex_forager.providers.sharadar.client.tqdm") as mock_tqdm:
+    with patch("vertex_forager.providers.sharadar.client.tqdm") as mock_tqdm, \
+         patch("vertex_forager.providers.sharadar.client.create_writer") as mock_create_writer, \
+         patch("vertex_forager.providers.sharadar.client.create_router"):
+        
+        # Setup mocks
+        mock_writer = AsyncMock()
+        mock_create_writer.return_value = mock_writer
+
         await mock_client._fetch_pagination(
             dataset="test",
             desc="test",

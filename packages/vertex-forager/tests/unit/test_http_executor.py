@@ -19,13 +19,14 @@ from vertex_forager.core.config import RequestSpec
 from vertex_forager.core.http import HttpExecutor
 
 
+@pytest.fixture
+def mock_async_client() -> AsyncMock:
+    """Create mock async client."""
+    return AsyncMock(spec=AsyncClient)
+
+
 class TestHttpExecutor:
     """Tests for HTTP executor functionality."""
-
-    @pytest.fixture
-    def mock_async_client(self) -> AsyncMock:
-        """Create mock async client."""
-        return AsyncMock(spec=AsyncClient)
 
     @pytest.fixture
     def http_executor(self, mock_async_client: AsyncMock) -> HttpExecutor:
@@ -114,10 +115,12 @@ class TestHttpExecutor:
     ) -> None:
         """Test that network errors are properly handled."""
         # Arrange
-        mock_async_client.request.side_effect = Exception("Network error")
+        mock_async_client.request.side_effect = httpx.RequestError(
+            "Network error", request=MagicMock()
+        )
 
         # Act & Assert
-        with pytest.raises(Exception, match="Network error"):
+        with pytest.raises(httpx.RequestError):
             await http_executor.fetch(sample_request_spec)
 
     @pytest.mark.asyncio

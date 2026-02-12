@@ -89,6 +89,21 @@ class SharadarRouter(BaseRouter):
         """
         return "sharadar"
 
+    @property
+    def api_key(self) -> str:
+        """Get the configured API key."""
+        return self._api_key
+
+    @property
+    def rate_limit(self) -> int:
+        """Get the configured rate limit."""
+        return self._rate_limit
+
+    @property
+    def start_date(self) -> str | None:
+        """Get the configured start date filter."""
+        return self._start_date
+
     async def generate_jobs(
         self, *, dataset: str, symbols: Sequence[str] | None, **kwargs: object
     ) -> AsyncIterator[FetchJob]:

@@ -27,22 +27,21 @@ class TestDuckDBWriter:
     async def test_write_single_packet(self, tmp_path):
         """Test writing a single data packet to DuckDB."""
         db_path = tmp_path / "test.duckdb"
-        writer = DuckDBWriter(db_path)
-        
-        df = pl.DataFrame({
-            "ticker": ["AAPL", "MSFT"],
-            "price": [150.0, 300.0],
-            "date": ["2024-01-01", "2024-01-01"]
-        })
-        
-        packet = FramePacket(
-            provider="test_provider",
-            table="prices",
-            frame=df,
-            observed_at=datetime.now()
-        )
-        
-        result = await writer.write(packet)
+        async with DuckDBWriter(db_path) as writer:
+            df = pl.DataFrame({
+                "ticker": ["AAPL", "MSFT"],
+                "price": [150.0, 300.0],
+                "date": ["2024-01-01", "2024-01-01"]
+            })
+            
+            packet = FramePacket(
+                provider="test_provider",
+                table="prices",
+                frame=df,
+                observed_at=datetime.now()
+            )
+            
+            result = await writer.write(packet)
         
         assert result.rows == 2
         assert result.table == "prices"
@@ -57,26 +56,25 @@ class TestDuckDBWriter:
     async def test_concurrent_writes(self, tmp_path):
         """Test concurrent writes to ensure locking works correctly."""
         db_path = tmp_path / "concurrent.duckdb"
-        writer = DuckDBWriter(db_path)
-        
-        # Create 100 packets with 10 rows each
-        packets = []
-        for i in range(100):
-            df = pl.DataFrame({
-                "id": range(i * 10, (i + 1) * 10),
-                "val": [i] * 10
-            })
-            packets.append(FramePacket(
-                provider="test",
-                table="concurrent_test",
-                frame=df,
-                observed_at=datetime.now()
-            ))
-        
-        # Run writes concurrently
-        # Although DuckDBWriter uses a lock, asyncio.gather will schedule them
-        # and we want to ensure no "database locked" errors occur.
-        await asyncio.gather(*(writer.write(p) for p in packets))
+        async with DuckDBWriter(db_path) as writer:
+            # Create 100 packets with 10 rows each
+            packets = []
+            for i in range(100):
+                df = pl.DataFrame({
+                    "id": range(i * 10, (i + 1) * 10),
+                    "val": [i] * 10
+                })
+                packets.append(FramePacket(
+                    provider="test",
+                    table="concurrent_test",
+                    frame=df,
+                    observed_at=datetime.now()
+                ))
+            
+            # Run writes concurrently
+            # Although DuckDBWriter uses a lock, asyncio.gather will schedule them
+            # and we want to ensure no "database locked" errors occur.
+            await asyncio.gather(*(writer.write(p) for p in packets))
         
         # Verify total rows
         conn = duckdb.connect(str(db_path))
@@ -88,36 +86,35 @@ class TestDuckDBWriter:
     async def test_upsert_behavior(self, tmp_path):
         """Test that data is UPSERTED (deduplicated) when PK is known."""
         db_path = tmp_path / "upsert.duckdb"
-        writer = DuckDBWriter(db_path)
-        
-        # Use "sharadar_sep" table which has known PK in schema registry: [provider, ticker, date]
-        # Note: Schema definition requires provider column for PK
-        df1 = pl.DataFrame({
-            "provider": ["sharadar"],
-            "ticker": ["AAPL"], 
-            "date": [datetime(2024, 1, 1).date()],
-            "close": [100.0]
-        })
-        await writer.write(FramePacket(
+        async with DuckDBWriter(db_path) as writer:
+            # Use "sharadar_sep" table which has known PK in schema registry: [provider, ticker, date]
+            # Note: Schema definition requires provider column for PK
+            df1 = pl.DataFrame({
+                "provider": ["sharadar"],
+                "ticker": ["AAPL"], 
+                "date": [datetime(2024, 1, 1).date()],
+                "close": [100.0]
+            })
+            await writer.write(FramePacket(
+                    provider="sharadar", 
+                    table="sharadar_sep", 
+                    frame=df1,
+                    observed_at=datetime.now()
+                ))
+            
+            # Insert same PK with different value
+            df2 = pl.DataFrame({
+                "provider": ["sharadar"],
+                "ticker": ["AAPL"], 
+                "date": [datetime(2024, 1, 1).date()],
+                "close": [200.0]
+            })
+            await writer.write(FramePacket(
                 provider="sharadar", 
                 table="sharadar_sep", 
-                frame=df1,
+                frame=df2,
                 observed_at=datetime.now()
             ))
-        
-        # Insert same PK with different value
-        df2 = pl.DataFrame({
-            "provider": ["sharadar"],
-            "ticker": ["AAPL"], 
-            "date": [datetime(2024, 1, 1).date()],
-            "close": [200.0]
-        })
-        await writer.write(FramePacket(
-            provider="sharadar", 
-            table="sharadar_sep", 
-            frame=df2,
-            observed_at=datetime.now()
-        ))
         
         conn = duckdb.connect(str(db_path))
         # Should be 1 row with updated price

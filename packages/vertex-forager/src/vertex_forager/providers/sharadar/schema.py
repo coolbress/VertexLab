@@ -185,7 +185,7 @@ SHARADAR_SF1: Final[TableSchema] = TableSchema(
         "workingcapital": pl.Int64,
         "fetched_at": pl.Datetime(time_zone="UTC"),
     },
-    unique_key=("provider", "ticker", "dimension", "date", "reportperiod"),
+    unique_key=("provider", "ticker", "dimension", "calendardate", "reportperiod"),
     analysis_date_col="datekey",
 )
 
@@ -220,7 +220,7 @@ SHARADAR_SF2: Final[TableSchema] = TableSchema(
         "securitytitle": pl.Utf8,
         "fetched_at": pl.Datetime(time_zone="UTC"),
     },
-    unique_key=("provider", "ticker", "date", "rownum"),
+    unique_key=("provider", "ticker", "filingdate", "rownum"),
     analysis_date_col="filingdate",
 )
 
@@ -238,7 +238,7 @@ SHARADAR_SF3: Final[TableSchema] = TableSchema(
         "value": pl.Float64,
         "fetched_at": pl.Datetime(time_zone="UTC"),
     },
-    unique_key=("provider", "ticker", "date", "investorname", "securitytype"),
+    unique_key=("provider", "ticker", "calendardate", "investorname", "securitytype"),
     analysis_date_col="calendardate",
 )
 

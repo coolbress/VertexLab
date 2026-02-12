@@ -53,9 +53,6 @@ class SchemaMapper:
 
         frame = self._cast_to_schema(packet.frame, table_schema.schema)
         
-        # Add standard 'date' column for analysis consistency
-        frame = self._normalize_date_column(frame, table_schema.analysis_date_col)
-        
         # Reorder columns to put unique key (PK) first for better readability
         frame = self._reorder_columns(frame, table_schema.unique_key)
         
@@ -109,30 +106,4 @@ class SchemaMapper:
         return frame.select(pk_cols + other_cols)
 
 
-    def _normalize_date_column(self, frame: pl.DataFrame, target_col: str | None) -> pl.DataFrame:
-        """
-        Ensure the designated analysis date column is renamed to 'date'.
 
-        This method standardizes the temporal dimension for downstream analysis.
-        The `target_col` is defined in the TableSchema (e.g., 'datekey' for SF1).
-
-        Logic:
-        1. If `target_col` is None, skip normalization.
-        2. If `target_col` is "date", do nothing (already standard).
-        3. If `frame` has a "date" column but it's NOT the target, rename it to "date_original" 
-            to avoid collision and data loss.
-        4. Rename `target_col` to "date".
-        """
-        if target_col is None:
-            return frame
-
-        if target_col == "date":
-            return frame
-
-        # Only rename 'date' if we are actually going to overwrite it with target_col
-        if target_col in frame.columns:
-            if "date" in frame.columns:
-                frame = frame.rename({"date": "date_original"})
-            return frame.rename({target_col: "date"})
-
-        return frame

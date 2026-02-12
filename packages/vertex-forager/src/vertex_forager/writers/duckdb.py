@@ -39,6 +39,11 @@ class DuckDBWriter(BaseWriter):
         # Cache for table existence and schema (table_name -> set of column names)
         self._table_schemas: dict[str, set[str]] = {}
         
+    def _quote_identifier(self, identifier: str) -> str:
+        """Safely quote an identifier (table or column name) for DuckDB."""
+        escaped = identifier.replace('"', '""')
+        return f'"{escaped}"'
+
     def _get_connection(self) -> duckdb.DuckDBPyConnection:
         """Get or create a DuckDB connection."""
         if self._conn is None:
@@ -157,10 +162,10 @@ class DuckDBWriter(BaseWriter):
         Acquires the lock to ensure no write operations are in progress
         before closing the connection.
         """
+        # Flush any remaining data first (outside lock to avoid deadlock)
+        await self.flush()
+
         async with self._lock:
-            # Flush any remaining data first
-            await self.flush()
-            
             if self._conn:
                 try:
                     self._conn.close()
@@ -217,7 +222,8 @@ class DuckDBWriter(BaseWriter):
             conn.register('temp_df_view', df)
             
             # Create the table structure
-            conn.execute(f'CREATE TABLE "{table_name}" AS SELECT * FROM temp_df_view WHERE 1=0')
+            q_table = self._quote_identifier(table_name)
+            conn.execute(f'CREATE TABLE {q_table} AS SELECT * FROM temp_df_view WHERE 1=0')
             
             # Apply Primary Key constraint from Schema Registry
             pk_cols = self._get_primary_keys(table_name)
@@ -225,9 +231,9 @@ class DuckDBWriter(BaseWriter):
             if pk_cols:
                 # Check if all PK columns exist in the dataframe
                 if all(col in df.columns for col in pk_cols):
-                    pk_str = ", ".join(f'"{c}"' for c in pk_cols)
+                    pk_str = ", ".join(self._quote_identifier(c) for c in pk_cols)
                     try:
-                        conn.execute(f'CREATE UNIQUE INDEX IF NOT EXISTS "idx_{table_name}_pk" ON "{table_name}" ({pk_str})')
+                        conn.execute(f'CREATE UNIQUE INDEX IF NOT EXISTS "idx_{table_name}_pk" ON {q_table} ({pk_str})')
                         self._logger.info(f"Created UNIQUE INDEX on {table_name}({pk_str})")
                     except Exception as e:
                         self._logger.warning(f"Failed to create unique index on {table_name}: {e}")
@@ -242,7 +248,8 @@ class DuckDBWriter(BaseWriter):
         else:
             # Table exists but not in cache yet (first run or restart)
             # Fetch existing schema
-            existing_info = conn.execute(f'DESCRIBE "{table_name}"').fetchall()
+            q_table = self._quote_identifier(table_name)
+            existing_info = conn.execute(f'DESCRIBE {q_table}').fetchall()
             existing_cols = {row[0] for row in existing_info}
             self._table_schemas[table_name] = existing_cols
             
@@ -262,7 +269,8 @@ class DuckDBWriter(BaseWriter):
         if table_name in self._table_schemas:
             existing_cols = self._table_schemas[table_name]
         else:
-            existing_info = conn.execute(f'DESCRIBE "{table_name}"').fetchall()
+            q_table = self._quote_identifier(table_name)
+            existing_info = conn.execute(f'DESCRIBE {q_table}').fetchall()
             existing_cols = {row[0] for row in existing_info}
             self._table_schemas[table_name] = existing_cols
 
@@ -274,14 +282,16 @@ class DuckDBWriter(BaseWriter):
 
         self._logger.info(f"Schema evolution: Adding {len(new_cols)} new columns to {table_name}")
         
+        q_table = self._quote_identifier(table_name)
         # Add each new column
         for col_name in new_cols:
             dtype = df.schema[col_name]
             sql_type = self._map_polars_type_to_sql(dtype)
+            q_col = self._quote_identifier(col_name)
             
             try:
                 self._logger.info(f"Adding column {col_name} ({sql_type}) to {table_name}")
-                conn.execute(f'ALTER TABLE "{table_name}" ADD COLUMN "{col_name}" {sql_type}')
+                conn.execute(f'ALTER TABLE {q_table} ADD COLUMN {q_col} {sql_type}')
                 # Update Cache
                 self._table_schemas[table_name].add(col_name)
             except Exception as e:
@@ -326,12 +336,14 @@ class DuckDBWriter(BaseWriter):
         # Determine Primary Key
         pk_cols = self._get_primary_keys(table_name)
         
+        q_table = self._quote_identifier(table_name)
+        
         # If no PK, simple append
         if not pk_cols:
             conn.register('temp_batch_view', df)
             # Use explicit column names to handle schema evolution (new columns in table but not in this batch)
-            cols_str = ", ".join(f'"{c}"' for c in df.columns)
-            conn.execute(f'INSERT INTO "{table_name}" ({cols_str}) SELECT {cols_str} FROM temp_batch_view')
+            cols_str = ", ".join(self._quote_identifier(c) for c in df.columns)
+            conn.execute(f'INSERT INTO {q_table} ({cols_str}) SELECT {cols_str} FROM temp_batch_view')
             conn.unregister('temp_batch_view')
             return len(df)
             
@@ -339,9 +351,9 @@ class DuckDBWriter(BaseWriter):
         # DuckDB's INSERT OR REPLACE / ON CONFLICT logic
         conn.register('temp_batch_view', df)
         
-        pk_str = ", ".join(f'"{c}"' for c in pk_cols)
+        pk_str = ", ".join(self._quote_identifier(c) for c in pk_cols)
         cols = df.columns
-        cols_str = ", ".join(f'"{c}"' for c in cols)
+        cols_str = ", ".join(self._quote_identifier(c) for c in cols)
         
         # Using INSERT OR IGNORE or INSERT OR REPLACE
         # For financial data, we typically want REPLACE to update corrections
@@ -350,17 +362,16 @@ class DuckDBWriter(BaseWriter):
         # If there are no columns to update (only PK columns), we do NOTHING
         if all(col in pk_cols for col in cols):
             query = f"""
-            INSERT INTO "{table_name}" ({cols_str})
+            INSERT INTO {q_table} ({cols_str})
             SELECT {cols_str} FROM temp_batch_view
             ON CONFLICT ({pk_str}) DO NOTHING
             """
         else:
+            update_set = ", ".join([f'{self._quote_identifier(col)} = EXCLUDED.{self._quote_identifier(col)}' for col in cols if col not in pk_cols])
             query = f"""
-            INSERT INTO "{table_name}" ({cols_str})
+            INSERT INTO {q_table} ({cols_str})
             SELECT {cols_str} FROM temp_batch_view
-            ON CONFLICT ({pk_str}) DO UPDATE SET {
-                ", ".join([f'"{col}" = EXCLUDED."{col}"' for col in cols if col not in pk_cols])
-            }
+            ON CONFLICT ({pk_str}) DO UPDATE SET {update_set}
             """
             
         conn.execute(query)

@@ -26,10 +26,10 @@ class TestRouterFactory:
         )
         
         assert isinstance(router, SharadarRouter)
-        # Verify internal attributes
-        assert router._api_key == api_key
-        assert router._rate_limit == 100
-        assert router._start_date == "2024-01-01"
+        # Verify internal attributes via public interface
+        assert router.api_key == api_key
+        assert router.rate_limit == 100
+        assert router.start_date == "2024-01-01"
 
     def test_create_router_invalid_provider(self):
         """Test error when provider is invalid."""

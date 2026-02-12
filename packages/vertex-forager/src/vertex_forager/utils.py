@@ -144,6 +144,9 @@ class Spinner:
         self.update_thread = None
         self._message_lock = threading.Lock()
         
+        # Detect TTY
+        self._is_tty = sys.stderr.isatty()
+        
         # Spinner chars
         self.spinner_chars = itertools.cycle(['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'])
 
@@ -180,10 +183,16 @@ class Spinner:
 
     def start(self):
         """Start the spinner."""
-        self._hide_cursor()
         self.busy = True
-        self.update_thread = threading.Thread(target=self._spinner_task, daemon=True)
-        self.update_thread.start()
+        
+        if self._is_tty:
+            self._hide_cursor()
+            self.update_thread = threading.Thread(target=self._spinner_task, daemon=True)
+            self.update_thread.start()
+        else:
+            # Non-TTY mode: just log the message once
+            sys.stderr.write(f"{self.message}\n")
+            sys.stderr.flush()
 
     def stop(self, clear: bool = True):
         """Stop the spinner and cleanup.
@@ -192,22 +201,28 @@ class Spinner:
             clear: Whether to clear the spinner line.
         """
         self.busy = False
-        if self.update_thread:
-            try:
-                self.update_thread.join(timeout=0.2)
-            except Exception:
-                pass
         
-        if clear:
-            self._clear_line()
-        else:
-            sys.stderr.write("\n")
-            sys.stderr.flush()
+        if self._is_tty:
+            if self.update_thread:
+                try:
+                    self.update_thread.join(timeout=0.2)
+                except Exception:
+                    pass
             
-        self._show_cursor()
+            if clear:
+                self._clear_line()
+            else:
+                sys.stderr.write("\n")
+                sys.stderr.flush()
+                
+            self._show_cursor()
+        # Non-TTY: do nothing on stop (already printed message)
 
     def _clear_line(self):
         """Clear the current line in stderr."""
+        if not self._is_tty:
+            return
+
         try:
             columns = shutil.get_terminal_size(fallback=(80, 24)).columns
         except Exception:
@@ -219,13 +234,15 @@ class Spinner:
 
     def _hide_cursor(self):
         """Hide the cursor."""
-        sys.stderr.write("\033[?25l")
-        sys.stderr.flush()
+        if self._is_tty:
+            sys.stderr.write("\033[?25l")
+            sys.stderr.flush()
 
     def _show_cursor(self):
         """Show the cursor."""
-        sys.stderr.write("\033[?25h")
-        sys.stderr.flush()
+        if self._is_tty:
+            sys.stderr.write("\033[?25h")
+            sys.stderr.flush()
 
     def __enter__(self):
         # Setup logging capture like before

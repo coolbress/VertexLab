@@ -310,17 +310,25 @@ class TestSharadarRouterUnit:
 class TestRouterEdgeCases:
     """Tests for router edge cases and error conditions."""
 
+    @pytest.fixture
+    def router(self) -> SharadarRouter:
+        """Create a SharadarRouter instance for testing."""
+        return SharadarRouter(
+            api_key="test_api_key",
+            rate_limit=500,
+        )
+
     @pytest.mark.asyncio
-    async def test_router_handles_unknown_dataset_gracefully(self, sharadar_router: SharadarRouter) -> None:
+    async def test_router_handles_unknown_dataset_gracefully(self, router: SharadarRouter) -> None:
         """Test that router handles unknown dataset names gracefully."""
         # Act & Assert
         with pytest.raises(NotImplementedError, match="Unsupported dataset"):
-            async for _ in sharadar_router.generate_jobs(dataset="unknown_dataset", symbols=["AAPL"]):
+            async for _ in router.generate_jobs(dataset="unknown_dataset", symbols=["AAPL"]):
                 pass
 
-    def test_router_maintains_api_rate_limits(self, sharadar_router: SharadarRouter) -> None:
+    def test_router_maintains_api_rate_limits(self, router: SharadarRouter) -> None:
         """Test that router respects rate limiting configuration."""
         # This would typically be tested with integration tests
         # For unit tests, we verify that the rate limit config is properly set
-        assert hasattr(sharadar_router, "_rate_limit")
-        assert sharadar_router._rate_limit == 500
+        assert hasattr(router, "_rate_limit")
+        assert router._rate_limit == 500

@@ -11,6 +11,7 @@ Test fixtures and utilities for vertex-forager tests.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -170,5 +171,5 @@ def create_test_frame_packet() -> FramePacket:
         provider="sharadar",
         table="sharadar_sep",
         frame=frame,
-        observed_at="2024-01-02T00:00:00Z",
+        observed_at=datetime(2024, 1, 2, tzinfo=timezone.utc),
     )

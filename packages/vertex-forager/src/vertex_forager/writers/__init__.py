@@ -46,17 +46,19 @@ def create_writer(connect_db: str | Path | None) -> BaseWriter:
         return DuckDBWriter(db_path=connect_db)
 
     # Handle String Input
-    parsed = urlparse(connect_db)
-    
-    # 1. URI with Scheme (e.g., duckdb://)
-    if parsed.scheme:
-        try:
-            factory = writer_registry.get(parsed.scheme)
-            return factory(connect_db)
-        except NotImplementedError:
-            raise NotImplementedError(
-                f"Writer for scheme '{parsed.scheme}' is not implemented"
-            )
+    # Fix: Only treat as URI if it contains '://' to avoid misinterpreting Windows paths
+    if isinstance(connect_db, str) and "://" in connect_db:
+        parsed = urlparse(connect_db)
+        
+        # 1. URI with Scheme (e.g., duckdb://)
+        if parsed.scheme:
+            try:
+                factory = writer_registry.get(parsed.scheme)
+                return factory(connect_db)
+            except NotImplementedError:
+                raise NotImplementedError(
+                    f"Writer for scheme '{parsed.scheme}' is not implemented"
+                )
 
     # 2. Plain String Path (No Scheme) -> Assume DuckDB
     # Previously mapped to HiveParquetWriter, now defaulting to DuckDB for simplicity

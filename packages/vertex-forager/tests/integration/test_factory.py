@@ -42,7 +42,9 @@ class TestClientFactory:
     def test_create_client_missing_api_key(self):
         """Test error when API key is missing."""
         # Ensure env var is not set
-        with patch.dict(os.environ, {}, clear=True):
+        with patch.dict(os.environ):
+            if "SHARADAR_API_KEY" in os.environ:
+                del os.environ["SHARADAR_API_KEY"]
             with pytest.raises(ValueError, match="Missing api_key"):
                 create_client(
                     provider="sharadar",

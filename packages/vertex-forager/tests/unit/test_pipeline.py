@@ -25,7 +25,9 @@ async def test_adaptive_batching_worker_drains_queue_correctly():
     # 1. Setup Mocks
     mock_writer = AsyncMock(spec=BaseWriter)
     # Mock write to return a WriteResult, as required by the pipeline
-    mock_writer.write.side_effect = lambda pkt: WriteResult(table=pkt.table, rows=len(pkt.frame))
+    async def mock_write(pkt):
+        return WriteResult(table=pkt.table, rows=len(pkt.frame))
+    mock_writer.write.side_effect = mock_write
     
     # Mock other dependencies required for VertexForager initialization
     mock_router = MagicMock()

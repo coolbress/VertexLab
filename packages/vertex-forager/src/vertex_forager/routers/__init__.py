@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from vertex_forager.core.config import EngineConfig
@@ -10,8 +9,6 @@ from vertex_forager.routers.base import BaseRouter
 from vertex_forager.providers.sharadar.router import SharadarRouter
 from vertex_forager.core.registries import routers as router_registry, RouterRegistration
 
-
-logger = logging.getLogger(__name__)
 
 
 # Register known providers

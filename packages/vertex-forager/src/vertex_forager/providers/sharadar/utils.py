@@ -123,17 +123,21 @@ class OptimizedBulkCalculator:
             valid_e = isinstance(e, (str, date, datetime))
 
             if valid_t and valid_s and valid_e:
-                if isinstance(s, str):
-                    s = datetime.strptime(s, "%Y-%m-%d").date()
-                elif isinstance(s, datetime):
-                    s = s.date()
-                
-                if isinstance(e, str):
-                    e = datetime.strptime(e, "%Y-%m-%d").date()
-                elif isinstance(e, datetime):
-                    e = e.date()
+                try:
+                    if isinstance(s, str):
+                        s = datetime.strptime(s, "%Y-%m-%d").date()
+                    elif isinstance(s, datetime):
+                        s = s.date()
+                    
+                    if isinstance(e, str):
+                        e = datetime.strptime(e, "%Y-%m-%d").date()
+                    elif isinstance(e, datetime):
+                        e = e.date()
 
-                meta_map[t] = (s, e)
+                    meta_map[t] = (s, e)
+                except ValueError:
+                    logger.warning(f"Failed to parse date for ticker {t}: start={s}, end={e}. Skipping.")
+                    continue
             else:
                 logger.debug(f"Skipping metadata for {t}: {start_col}={s}, {end_col}={e}")
 
@@ -144,14 +148,19 @@ class OptimizedBulkCalculator:
         MAX_ROWS = 9500  # Safety margin for 10k limit
         MAX_TICKERS_PER_BULK = 100  # Safety margin for URL length (Sharadar recommendation)
 
-        req_start = (
-            datetime.strptime(start_date, "%Y-%m-%d").date() if start_date else None
-        )
-        req_end = (
-            datetime.strptime(end_date, "%Y-%m-%d").date()
-            if end_date
-            else date.today()
-        )
+        try:
+            req_start = (
+                datetime.strptime(start_date, "%Y-%m-%d").date() if start_date else None
+            )
+            req_end = (
+                datetime.strptime(end_date, "%Y-%m-%d").date()
+                if end_date
+                else date.today()
+            )
+        except ValueError as e:
+            logger.warning(f"Invalid date format in request: {e}. Defaulting to full range.")
+            req_start = None
+            req_end = date.today()
 
         for t in tickers:
             # Estimate rows
