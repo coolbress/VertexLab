@@ -8,8 +8,15 @@ Classes:
     VertexForager: The main engine class coordinating the pipeline.
 
 Usage:
-    engine = VertexForager(router=..., writer=...)
-    result = await engine.run(dataset="price", symbols=["AAPL"])
+        engine = VertexForager(
+            router=sharadar_router,
+            http=http_executor,
+            writer=duckdb_writer,
+            mapper=schema_mapper,
+            config=engine_config,
+            controller=flow_controller,
+        )
+        result = await engine.run(dataset="sep", symbols=["AAPL", "MSFT"])
 """
 from __future__ import annotations
 
@@ -25,6 +32,13 @@ from collections.abc import Sequence, Callable
 from collections import defaultdict
 
 import polars as pl
+from polars.exceptions import ComputeError
+from pydantic import ValidationError
+
+try:
+    import duckdb
+except ImportError:
+    duckdb = None
 
 from vertex_forager.core.http import HttpExecutor
 from vertex_forager.core.config import (
@@ -71,8 +85,10 @@ class VertexForager:
         _flush_threshold (int): Row count threshold for flushing buffers.
 
     Public Methods:
-        run(symbols: list[str]) -> RunResult: Execute the full collection pipeline.
-        stop(): Gracefully stop the pipeline.
+        run(dataset: str, symbols: Symbols | None, ...) -> RunResult:
+            Execute the full collection pipeline.
+        stop() -> None:
+            Gracefully stop the pipeline.
     """
 
     # Configurable flush threshold
@@ -141,7 +157,7 @@ class VertexForager:
 
         Process:
         1.  Create `req_q` (for jobs) and `pkt_q` (for data packets).
-        2.  Spawn `_sink_worker` tasks (consumers of processed data).
+        2.  Spawn `_writer_worker` tasks (consumers of processed data).
         3.  Spawn `_fetch_worker` tasks (consumers of jobs, producers of data).
         4.  Spawn `_producer` task (generator of jobs).
         5.  Wait for all tasks to complete in order:
@@ -151,7 +167,7 @@ class VertexForager:
         6.  Aggregate results and handle cleanup.
 
         Args:
-            dataset: Name of the dataset to fetch (e.g., "price").
+            dataset: Name of the dataset to fetch (e.g., "sep").
             symbols: List of symbols to fetch, or None for all.
             on_progress: Optional callback to update progress bar (called on job completion).
             **kwargs: Additional arguments passed to the router's generate_jobs method.
@@ -217,7 +233,7 @@ class VertexForager:
                 logger.info("PIPELINE: Request queue joined, sending sentinel signals...")
                 for _ in range(self.controller.concurrency_limit):
                     # Sentinel with lowest priority (highest number)
-                    await req_q.put((999, 0, None))
+                    await req_q.put((self.PRIORITY_SENTINEL, 0, None))
                 logger.info("PIPELINE: Waiting for fetch tasks to complete...")
                 await asyncio.gather(*fetch_tasks)
 
@@ -535,14 +551,21 @@ class VertexForager:
                 buffers[table] = []
                 buffer_rows[table] = 0
 
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
+            except (ComputeError, ValidationError) as e:
                 async with result_lock:
-                    result.errors.append(f"Writer:{e}")
-                logger.error(f"WRITER: Error flushing {table}: {e}")
-                # Retain buffer or explicitly propagate according to retry policy
-                raise
+                    result.errors.append(f"WriterError:{table}:{e}")
+                logger.error(f"WRITER: Error writing batch for {table}: {e}")
+            except Exception as e:
+                # Check for DuckDB Error if available
+                if duckdb and isinstance(e, duckdb.Error):
+                    async with result_lock:
+                        result.errors.append(f"DuckDBError:{table}:{e}")
+                    logger.error(f"WRITER: DuckDB error for {table}: {e}")
+                else:
+                    async with result_lock:
+                        result.errors.append(f"UnexpectedWriterError:{table}:{e}")
+                    logger.exception(f"WRITER: Unexpected error writing batch for {table}: {e}")
+                    raise
 
         while True:
             packet = await pkt_q.get()

@@ -49,6 +49,11 @@ class BaseWriter(ABC):
 
         Returns:
             WriteResult: Summary including table name and written row count.
+
+        Raises:
+            polars.exceptions.ComputeError: On data processing errors.
+            pydantic.ValidationError: On schema validation errors.
+            duckdb.Error: On database specific errors (if applicable).
         """
 
     async def write_bulk(self, packets: list[FramePacket]) -> list[WriteResult]:

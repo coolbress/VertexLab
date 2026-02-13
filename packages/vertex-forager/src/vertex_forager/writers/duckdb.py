@@ -114,7 +114,6 @@ class DuckDBWriter(BaseWriter):
         if not packets:
             return []
 
-        # Group by table
         return await self._write_internal(packets)
 
     async def _write_internal(
@@ -133,9 +132,6 @@ class DuckDBWriter(BaseWriter):
 
     def _write_sync(self, packets: Sequence[FramePacket]) -> list[WriteResult]:
         """Synchronous implementation of write logic for offloading."""
-        # Assuming all packets in the bulk might belong to different tables
-        # But for optimization, we group them.
-
         # Log start
         total_rows = sum(len(p.frame) for p in packets)
         self._logger.debug(
@@ -143,39 +139,59 @@ class DuckDBWriter(BaseWriter):
         )
         t0 = time.monotonic()
 
-        by_table: dict[str, list[pl.DataFrame]] = {}
-        results: list[WriteResult] = []
+        # Group by table but keep track of original indices to return ordered results
+        by_table: dict[str, list[tuple[int, FramePacket]]] = {}
+        final_results: list[WriteResult | None] = [None] * len(packets)
 
-        for p in packets:
+        for i, p in enumerate(packets):
             if p.frame.is_empty():
+                final_results[i] = WriteResult(table=p.table, rows=0)
                 continue
+            
             if p.table not in by_table:
                 by_table[p.table] = []
-            by_table[p.table].append(p.frame)
+            by_table[p.table].append((i, p))
 
         if not by_table:
-            return []
+            # All packets were empty
+            return [res for res in final_results if res is not None]  # Should be all
 
         # In sync mode, we assume exclusive access provided by caller (async lock)
         # or single-threaded execution context.
         conn = self._get_connection()
 
-        for table_name, dfs in by_table.items():
+        for table_name, entries in by_table.items():
             try:
-                merged_df = pl.concat(dfs, how="diagonal")
+                frames = [p.frame for _, p in entries]
+                merged_df = pl.concat(frames, how="diagonal")
                 rows = len(merged_df)
-                if rows == 0:
-                    continue
+                
+                if rows > 0:
+                    self._ensure_table_exists(conn, table_name, merged_df)
+                    # We upsert the whole batch. 
+                    # Note: This assumes _upsert_data succeeds for the whole batch.
+                    # If partial failure is possible, this logic would need refinement,
+                    # but DuckDB operations are typically transactional per statement.
+                    self._upsert_data(conn, table_name, merged_df)
 
-                self._ensure_table_exists(conn, table_name, merged_df)
-                rows_affected = self._upsert_data(conn, table_name, merged_df)
-
-                results.append(WriteResult(table=table_name, rows=rows_affected))
+                # Assign results back to their original positions
+                for idx, p in entries:
+                    final_results[idx] = WriteResult(table=table_name, rows=len(p.frame))
 
             except duckdb.Error as e:
                 self._logger.error(f"Failed to write batch for {table_name}: {e}")
                 raise
 
+        # Fill any remaining None (should be covered by empty check or loop, but safe guard)
+        # Actually my type hint says list[WriteResult | None] but return is list[WriteResult]
+        # I need to ensure no None remains.
+        # Logic above:
+        # 1. Empty packets -> filled immediately.
+        # 2. Non-empty packets -> added to by_table -> filled in loop.
+        # So all should be filled.
+        
+        results = [res for res in final_results if res is not None]
+        
         t1 = time.monotonic()
         self._logger.debug(
             f"DUCKDB: Finished sync write in {t1 - t0:.3f}s. Results: {len(results)}"
@@ -439,6 +455,9 @@ class DuckDBWriter(BaseWriter):
         elif dtype == pl.Date:
             return "DATE"
         elif dtype == pl.Datetime:
+            # Check for timezone information
+            if getattr(dtype, "time_zone", None):
+                return "TIMESTAMPTZ"
             return "TIMESTAMP"
         elif dtype == pl.Duration:
             return "INTERVAL"

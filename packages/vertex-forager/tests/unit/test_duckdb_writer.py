@@ -154,9 +154,10 @@ class TestDuckDBWriter:
             # Write bulk immediately
             results = await writer.write_bulk(packets)
 
-            # Since both packets are for the same table, they are merged into one write operation
-            assert len(results) == 1
-            assert results[0].rows == 2
+            # Now returns 1:1 results for each packet
+            assert len(results) == 2
+            assert results[0].rows == 1
+            assert results[1].rows == 1
 
         # Verify data in DuckDB
         conn = duckdb.connect(str(db_path))

@@ -133,5 +133,5 @@ async def test_writer_failure_propagates_exception() -> None:
 
     # Verify error recorded in result
     assert len(result.errors) > 0
-    assert "Writer:Disk Full" in result.errors[0]
+    assert "UnexpectedWriterError:fail_test:Disk Full" in result.errors[0]
 

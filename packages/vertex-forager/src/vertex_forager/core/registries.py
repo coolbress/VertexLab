@@ -119,7 +119,16 @@ class Registry(Generic[T]):
 class WriterFactory(Protocol):
     """Protocol for writer factory functions."""
 
-    def __call__(self, uri: str) -> "BaseWriter": ...
+    def __call__(self, uri: str) -> "BaseWriter":
+        """Create a writer instance.
+
+        Args:
+            uri: Connection URI for the writer (e.g., "duckdb:///path/to/db").
+
+        Returns:
+            BaseWriter: An initialized writer instance.
+        """
+        ...
 
 
 # Registry for Writer Factories
@@ -143,7 +152,20 @@ class RouterFactory(Protocol):
         start_date: str | None = None,
         end_date: str | None = None,
         **kwargs: Any,
-    ) -> "BaseRouter": ...
+    ) -> "BaseRouter":
+        """Create a router instance.
+
+        Args:
+            api_key: API key for the provider, or None if not required.
+            rate_limit: Rate limit in requests per minute.
+            start_date: Optional start date filter (YYYY-MM-DD).
+            end_date: Optional end date filter (YYYY-MM-DD).
+            **kwargs: Additional provider-specific arguments.
+
+        Returns:
+            BaseRouter: An initialized router instance.
+        """
+        ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -172,7 +194,18 @@ class ClientFactory(Protocol):
 
     def __call__(
         self, *, api_key: str | None = None, rate_limit: int, **kwargs: Any
-    ) -> "BaseClient": ...
+    ) -> "BaseClient":
+        """Create a client instance.
+
+        Args:
+            api_key: API key for the provider, or None if not required.
+            rate_limit: Rate limit in requests per minute.
+            **kwargs: Additional provider-specific arguments.
+
+        Returns:
+            BaseClient: An initialized client instance.
+        """
+        ...
 
 
 @dataclass(frozen=True, slots=True)
