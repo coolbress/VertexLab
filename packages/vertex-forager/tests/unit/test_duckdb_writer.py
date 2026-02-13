@@ -56,7 +56,7 @@ class TestDuckDBWriter:
         conn.close()
 
     @pytest.mark.asyncio
-    async def test_concurrent_writes(self, tmp_path) -> None:
+    async def test_concurrent_writes(self, tmp_path: Path) -> None:
         """Test concurrent writes to ensure locking works correctly."""
         db_path = tmp_path / "concurrent.duckdb"
         async with DuckDBWriter(db_path) as writer:
@@ -136,7 +136,7 @@ class TestDuckDBWriter:
         conn.close()
 
     @pytest.mark.asyncio
-    async def test_write_bulk_small_data(self, tmp_path) -> None:
+    async def test_write_bulk_small_data(self, tmp_path: Path) -> None:
         """Test writing a small bulk (less than limit) works immediately."""
         db_path = tmp_path / "small_batch.duckdb"
         async with DuckDBWriter(db_path) as writer:

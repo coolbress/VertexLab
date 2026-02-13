@@ -114,7 +114,13 @@ class DuckDBWriter(BaseWriter):
         if not packets:
             return []
 
-        return await self._write_internal(packets)
+        # Persist data (table-level batching for efficiency)
+        await self._write_internal(packets)
+        # Preserve BaseWriter contract: one result per input packet
+        return [
+            WriteResult(table=p.table, rows=p.frame.height)
+            for p in packets
+        ]
 
     async def _write_internal(
         self, packets: Sequence[FramePacket]
@@ -454,12 +460,12 @@ class DuckDBWriter(BaseWriter):
             return "BOOLEAN"
         elif dtype == pl.Date:
             return "DATE"
-        elif dtype == pl.Datetime:
+        elif dtype.base_type() == pl.Datetime:
             # Check for timezone information
             if getattr(dtype, "time_zone", None):
                 return "TIMESTAMPTZ"
             return "TIMESTAMP"
-        elif dtype == pl.Duration:
+        elif dtype.base_type() == pl.Duration:
             return "INTERVAL"
         elif dtype in (pl.String, pl.Categorical):
             return "VARCHAR"

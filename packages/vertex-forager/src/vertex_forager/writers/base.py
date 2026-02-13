@@ -1,3 +1,23 @@
+"""
+Vertex Forager Writers Base Module.
+
+This module defines the abstract base classes and common types for data writers in the
+Vertex Forager pipeline. Writers are responsible for persisting normalized data frames
+to various storage backends (e.g., DuckDB, In-Memory).
+
+Classes:
+    WriteResult: Data class capturing the result of a write operation.
+    BaseWriter: Abstract base class defining the writer interface.
+
+Usage:
+    class MyWriter(BaseWriter):
+        async def write(self, packet: FramePacket) -> WriteResult:
+            ...
+
+Notes:
+    All writers must implement the `write` and `write_bulk` methods and handle
+    async context management.
+"""
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -9,7 +29,14 @@ from vertex_forager.core.config import FramePacket
 
 
 class WriteResult(BaseModel):
-    """Writer write result."""
+    """
+    Writer write result.
+
+    Attributes:
+        table (str): The target table name written to.
+        rows (int): Number of rows written.
+        partitions (Mapping[str, str]): Partition key/value pairs created or updated (defaults to empty dict).
+    """
 
     table: str
     rows: int
