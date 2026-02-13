@@ -16,14 +16,11 @@ from vertex_forager.writers.base import BaseWriter, WriteResult
 
 
 class DuckDBWriter(BaseWriter):
-    """
-    DuckDB Writer implementation using asyncio for concurrency control.
+    """DuckDB writer implementation.
 
-    Features:
-    - Single-writer enforcement via asyncio.Lock
-    - Automatic table creation from Polars schema
-    - Upsert support (INSERT OR REPLACE)
-    - Zero-copy data transfer from Polars to DuckDB
+    Manages a local DuckDB database for storing collected data.
+    Handles schema migration, deduplication, and batch writes.
+    Uses a single-threaded executor for thread safety.
     """
 
     def __init__(self, db_path: str | Path) -> None:
@@ -177,8 +174,9 @@ class DuckDBWriter(BaseWriter):
         Returns:
             None
         """
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(self._executor, self._compact_sync)
+        async with self._lock:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(self._executor, self._compact_sync)
 
     def _compact_sync(self) -> None:
         """Synchronous implementation of compact logic."""

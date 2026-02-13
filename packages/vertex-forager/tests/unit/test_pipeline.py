@@ -19,7 +19,7 @@ from vertex_forager.writers.base import BaseWriter, WriteResult
 
 
 @pytest.mark.asyncio
-async def test_adaptive_batching_worker_drains_queue_correctly():
+async def test_adaptive_batching_worker_drains_queue_correctly() -> None:
     """Verify that the worker drains the queue and calls writer.write with merged packets."""
 
     # 1. Setup Mocks

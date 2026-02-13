@@ -8,7 +8,7 @@ from vertex_forager.core.config import FramePacket
 from vertex_forager.writers.duckdb import DuckDBWriter
 
 
-async def main():
+async def main() -> None:
     # Setup
     db_path = Path("test_upsert.duckdb")
     if db_path.exists():
@@ -17,7 +17,7 @@ async def main():
     print(f"--- 1. Initialize DuckDB Writer at {db_path} ---")
     async with DuckDBWriter(db_path) as writer:
         # Helper to print table content
-        def print_table(msg: str):
+        def print_table(msg: str) -> None:
             conn = duckdb.connect(str(db_path))
             try:
                 df = conn.execute(

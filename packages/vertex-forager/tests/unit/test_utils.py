@@ -93,7 +93,10 @@ class TestCacheUtils:
         mock_get_root.return_value = root_path
         mock_get_cache.return_value = cache_path
 
-        clear_app_cache()
+        # Mock existence and is_dir to pass initial checks
+        with patch.object(Path, "exists", return_value=True), \
+             patch.object(Path, "is_dir", return_value=True):
+            clear_app_cache()
 
         # Should NOT call rmtree
         mock_rmtree.assert_not_called()

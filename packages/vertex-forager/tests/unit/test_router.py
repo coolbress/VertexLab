@@ -350,7 +350,7 @@ class TestSharadarRouterUnit:
         malformed_payload = b"{invalid json"
 
         # Act & Assert
-        with pytest.raises(Exception):
+        with pytest.raises(json.JSONDecodeError):
             router.parse(job=job, payload=malformed_payload)
 
 

@@ -14,7 +14,7 @@ class TestDuckDBWriter:
     """Test suite for DuckDBWriter."""
 
     @pytest.mark.asyncio
-    async def test_writer_initialization_and_creation(self, tmp_path):
+    async def test_writer_initialization_and_creation(self, tmp_path) -> None:
         """Test that create_writer returns a DuckDBWriter for duckdb:// scheme."""
         db_path = tmp_path / "test.duckdb"
         uri = f"duckdb://{db_path}"
@@ -24,7 +24,7 @@ class TestDuckDBWriter:
         assert writer.db_path == str(db_path)
 
     @pytest.mark.asyncio
-    async def test_write_single_packet(self, tmp_path):
+    async def test_write_single_packet(self, tmp_path) -> None:
         """Test writing a single data packet to DuckDB."""
         db_path = tmp_path / "test.duckdb"
         async with DuckDBWriter(db_path) as writer:
@@ -55,22 +55,22 @@ class TestDuckDBWriter:
         conn.close()
 
     @pytest.mark.asyncio
-    async def test_concurrent_writes(self, tmp_path):
+    async def test_concurrent_writes(self, tmp_path) -> None:
         """Test concurrent writes to ensure locking works correctly."""
         db_path = tmp_path / "concurrent.duckdb"
         async with DuckDBWriter(db_path) as writer:
             # Create 100 packets with 10 rows each
-            packets = []
-            for i in range(100):
-                df = pl.DataFrame({"id": range(i * 10, (i + 1) * 10), "val": [i] * 10})
-                packets.append(
-                    FramePacket(
-                        provider="test",
-                        table="concurrent_test",
-                        frame=df,
-                        observed_at=datetime.now(),
-                    )
+            packets = [
+                FramePacket(
+                    provider="test",
+                    table="concurrent_test",
+                    frame=pl.DataFrame(
+                        {"id": range(i * 10, (i + 1) * 10), "val": [i] * 10}
+                    ),
+                    observed_at=datetime.now(),
                 )
+                for i in range(100)
+            ]
 
             # Run writes concurrently
             # Although DuckDBWriter uses a lock, asyncio.gather will schedule them
@@ -84,7 +84,7 @@ class TestDuckDBWriter:
         conn.close()
 
     @pytest.mark.asyncio
-    async def test_upsert_behavior(self, tmp_path):
+    async def test_upsert_behavior(self, tmp_path) -> None:
         """Test that data is UPSERTED (deduplicated) when PK is known."""
         db_path = tmp_path / "upsert.duckdb"
         async with DuckDBWriter(db_path) as writer:
@@ -135,30 +135,27 @@ class TestDuckDBWriter:
         conn.close()
 
     @pytest.mark.asyncio
-    async def test_write_bulk_small_data(self, tmp_path):
+    async def test_write_bulk_small_data(self, tmp_path) -> None:
         """Test writing a small bulk (less than limit) works immediately."""
         db_path = tmp_path / "small_batch.duckdb"
-        writer = DuckDBWriter(db_path)
-
-        # Create just 2 packets (far less than 10,000 rows)
-        packets = []
-        for i in range(2):
-            df = pl.DataFrame({"id": [i], "val": [i * 10]})
-            packets.append(
+        async with DuckDBWriter(db_path) as writer:
+            # Create just 2 packets (far less than 10,000 rows)
+            packets = [
                 FramePacket(
                     provider="test",
                     table="small_test",
-                    frame=df,
+                    frame=pl.DataFrame({"id": [i], "val": [i * 10]}),
                     observed_at=datetime.now(),
                 )
-            )
+                for i in range(2)
+            ]
 
-        # Write bulk immediately
-        results = await writer.write_bulk(packets)
+            # Write bulk immediately
+            results = await writer.write_bulk(packets)
 
-        # Since both packets are for the same table, they are merged into one write operation
-        assert len(results) == 1
-        assert results[0].rows == 2
+            # Since both packets are for the same table, they are merged into one write operation
+            assert len(results) == 1
+            assert results[0].rows == 2
 
         # Verify data in DuckDB
         conn = duckdb.connect(str(db_path))

@@ -9,7 +9,17 @@ logger = logging.getLogger(__name__)
 
 @click.group()
 def main() -> None:
-    """Vertex Forager: High-performance Financial Data Collector"""
+    """Vertex Forager: High-performance Financial Data Collector.
+
+    Main entry point for the CLI application.
+    Manages subcommands for data collection and system status.
+
+    Args:
+        None
+
+    Returns:
+        None: Entry point does not return a value.
+    """
     # uv run으로 실행되므로 여기서 아키텍처 체크를 할 필요가 없습니다.
     pass
 
@@ -71,7 +81,7 @@ def collect(symbol: tuple[str, ...], source: str) -> None:
 
         result = asyncio.run(_run_collect())
 
-        if result:
+        if result is not None:
             # Show summary
             if hasattr(result, "tables") and isinstance(result.tables, Mapping):
                 total_rows = sum(result.tables.values())
@@ -97,7 +107,14 @@ def collect(symbol: tuple[str, ...], source: str) -> None:
 
 @main.command()
 def status() -> None:
-    """현재 데이터 저장소 및 시스템 상태를 확인합니다."""
+    """Check current data storage and system status.
+
+    Args:
+        None
+
+    Returns:
+        None: Status information is printed to stdout.
+    """
     root: Path = get_app_root()
     click.echo(f"📂 Data Root: {root}")
     click.echo(f"📦 Cache Dir: {get_cache_dir()}")
@@ -109,7 +126,14 @@ def status() -> None:
 
 @main.command()
 def clear() -> None:
-    """모든 임시 캐시 데이터를 삭제합니다."""
+    """Clear all temporary cache data.
+
+    Args:
+        None
+
+    Returns:
+        None: Confirmation message is printed to stdout.
+    """
     if click.confirm("⚠️ 모든 캐시 데이터를 삭제하시겠습니까?"):
         clear_app_cache()
         click.echo("🧹 캐시가 성공적으로 비워졌습니다.")

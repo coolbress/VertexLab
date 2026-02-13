@@ -190,7 +190,7 @@ class FlowController:
         self._concurrency_limiter = GradientConcurrencyLimiter(
             initial_limit=concurrency_limit,
             max_limit=concurrency_limit,
-            min_limit=5,
+            min_limit=min(5, concurrency_limit),
         )
 
     @property

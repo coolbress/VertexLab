@@ -320,7 +320,7 @@ def get_cache_dir() -> Path:
     return cache_path
 
 
-def clear_app_cache():
+def clear_app_cache() -> None:
     """캐시 디렉토리 내부를 완전히 비웁니다."""
     app_root = get_app_root().resolve()
     cache_dir = get_cache_dir().resolve()
