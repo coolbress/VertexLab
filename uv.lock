@@ -2390,7 +2390,6 @@ dependencies = [
     { name = "pyarrow" },
     { name = "pydantic" },
     { name = "python-dotenv" },
-    { name = "requests" },
     { name = "tenacity" },
     { name = "tqdm" },
 ]
@@ -2417,7 +2416,6 @@ requires-dist = [
     { name = "pyarrow", specifier = ">=23.0.0,<24.0.0" },
     { name = "pydantic", specifier = ">=2.12.5,<3.0.0" },
     { name = "python-dotenv", specifier = ">=1.2.1,<2.0.0" },
-    { name = "requests", specifier = ">=2.32.5,<3.0.0" },
     { name = "tenacity", specifier = ">=9.1.4,<10.0.0" },
     { name = "tqdm", specifier = ">=4.67.3,<5.0.0" },
 ]
