@@ -22,6 +22,7 @@ import functools
 import httpx
 from typing import Any, TYPE_CHECKING
 from collections.abc import Iterable, Sequence, Callable
+from collections import defaultdict
 
 import polars as pl
 
@@ -168,9 +169,8 @@ class VertexForager:
                 self._writer_worker(
                     pkt_q=pkt_q, result=result, result_lock=result_lock
                 ),
-                name=f"vertex-forager:writer:{i}",
+                name="vertex-forager:writer:0",
             )
-            for i in range(1)  # Always single writer for DuckDB
         ]
 
         fetch_tasks = [
@@ -414,25 +414,7 @@ class VertexForager:
                         # Use monotonic time as tie breaker.
                         await req_q.put((0, time.monotonic_ns(), next_job))
 
-            except httpx.HTTPStatusError as exc:
-                worker_exc = exc
-                async with result_lock:
-                    result.errors.append(
-                        f"{job.provider}:{job.dataset}:{job.symbol}:{exc}"
-                    )
-                logger.error(
-                    f"[Worker-{worker_id}] Error processing {job.symbol}: {exc}"
-                )
-            except httpx.RequestError as exc:
-                worker_exc = exc
-                async with result_lock:
-                    result.errors.append(
-                        f"{job.provider}:{job.dataset}:{job.symbol}:{exc}"
-                    )
-                logger.error(
-                    f"[Worker-{worker_id}] Error processing {job.symbol}: {exc}"
-                )
-            except ValueError as exc:
+            except (httpx.HTTPStatusError, httpx.RequestError, ValueError) as exc:
                 worker_exc = exc
                 async with result_lock:
                     result.errors.append(
@@ -476,8 +458,8 @@ class VertexForager:
         4. Minimizes IOPS and Lock contention.
         """
         # Buffer: table_name -> list of packets
-        buffers: dict[str, list[FramePacket]] = {}
-        buffer_rows: dict[str, int] = {}
+        buffers: dict[str, list[FramePacket]] = defaultdict(list)
+        buffer_rows: dict[str, int] = defaultdict(int)
 
         # Use config value
         threshold = self._flush_threshold
@@ -493,8 +475,6 @@ class VertexForager:
             try:
                 # Merge frames
                 frames = [p.frame for p in packets]
-                if not frames:
-                    return
 
                 merged_frame = pl.concat(frames, how="vertical")
 
@@ -528,7 +508,7 @@ class VertexForager:
                 async with result_lock:
                     result.errors.append(f"Writer:{e}")
                 logger.error(f"WRITER: Error flushing {table}: {e}")
-                # 재시도 정책에 맞게 버퍼 유지 또는 명시적 전파
+                # Retain buffer or explicitly propagate according to retry policy
                 raise
             finally:
                 # Always mark task done to prevent deadlock
@@ -557,9 +537,6 @@ class VertexForager:
 
                 # Add to buffer
                 table = packet.table
-                if table not in buffers:
-                    buffers[table] = []
-                    buffer_rows[table] = 0
 
                 buffers[table].append(packet)
                 previous_rows = buffer_rows[table]

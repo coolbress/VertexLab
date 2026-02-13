@@ -159,7 +159,7 @@ class DuckDBWriter(BaseWriter):
 
         for table_name, dfs in by_table.items():
             try:
-                merged_df = pl.concat(dfs)
+                merged_df = pl.concat(dfs, how="diagonal")
                 rows = len(merged_df)
                 if rows == 0:
                     continue

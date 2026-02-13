@@ -48,19 +48,33 @@ class Registry(Generic[T]):
         self._name = name
         self._registry: dict[str, T] = {}
 
-    def register(self, key: str, item: T) -> None:
+    def register(self, key: str, item: T | None = None) -> Callable[[T], T] | None:
         """Register an item with a specific key.
+
+        Can be used as a method or a decorator.
 
         Args:
             key: Unique identifier for the item.
-            item: The item to register.
+            item: The item to register. If None, returns a decorator.
+
+        Returns:
+            A decorator function if item is None, otherwise None.
 
         Raises:
             ValueError: If the key is already registered.
         """
-        if key in self._registry:
-            raise ValueError(f"Key already registered in {self._name}: {key}")
-        self._registry[key] = item
+
+        def _register(obj: T) -> T:
+            if key in self._registry:
+                raise ValueError(f"Key already registered in {self._name}: {key}")
+            self._registry[key] = obj
+            return obj
+
+        if item is None:
+            return _register
+
+        _register(item)
+        return None
 
     def get(self, key: str) -> T:
         """Retrieve an item by key.
