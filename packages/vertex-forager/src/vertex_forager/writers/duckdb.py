@@ -1,3 +1,18 @@
+"""DuckDB Writer Module.
+
+This module provides the DuckDBWriter class for persisting financial data frames
+to a local DuckDB database. It handles schema evolution, upsert logic, and
+concurrency control to ensure data integrity during high-throughput ingestion.
+
+Classes:
+    DuckDBWriter: Asynchronous writer for DuckDB using Polars integration.
+
+Usage:
+    writer = DuckDBWriter("data/market_data.duckdb")
+    await writer.write(packet)
+    await writer.compact()
+    await writer.close()
+"""
 from __future__ import annotations
 
 import asyncio

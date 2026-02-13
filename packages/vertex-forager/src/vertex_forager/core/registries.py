@@ -1,3 +1,19 @@
+"""Component Registries Module.
+
+This module provides a generic Registry class and specific registry instances for
+writers, routers, and clients. It facilitates a plugin-like architecture where
+components can be dynamically registered and retrieved by name.
+
+Classes:
+    Registry: Generic registry implementation.
+    RouterRegistration: Metadata for registered routers.
+    ClientRegistration: Metadata for registered clients.
+    WriterFactory, RouterFactory, ClientFactory: Protocols for factories.
+
+Usage:
+    @routers.register("sharadar")
+    def create_sharadar_router(...): ...
+"""
 from __future__ import annotations
 
 from typing import Any, Protocol, TYPE_CHECKING, Generic, TypeVar

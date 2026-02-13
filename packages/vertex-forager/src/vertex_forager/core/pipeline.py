@@ -1,3 +1,16 @@
+"""Core Pipeline Engine Module.
+
+This module implements the central `VertexForager` engine which orchestrates the
+asynchronous data collection pipeline. It manages producer tasks (job generation),
+worker tasks (fetching and parsing), and writer tasks (persisting data).
+
+Classes:
+    VertexForager: The main engine class coordinating the pipeline.
+
+Usage:
+    engine = VertexForager(router=..., writer=...)
+    result = await engine.run(dataset="price", symbols=["AAPL"])
+"""
 from __future__ import annotations
 
 import asyncio
