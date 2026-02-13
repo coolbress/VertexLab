@@ -182,10 +182,6 @@ class DuckDBWriter(BaseWriter):
         )
         return results
 
-    def _flush_table(self, table_name: str) -> WriteResult:
-        """Deprecated: Internal buffer removed."""
-        return WriteResult(table=table_name, rows=0)
-
     async def flush(self) -> None:
         """
         Flush is now no-op as we write immediately.
@@ -446,7 +442,7 @@ class DuckDBWriter(BaseWriter):
             return "TIMESTAMP"
         elif dtype == pl.Duration:
             return "INTERVAL"
-        elif dtype in (pl.Utf8, pl.String, pl.Categorical):
+        elif dtype in (pl.String, pl.Categorical):
             return "VARCHAR"
         elif isinstance(dtype, (pl.Struct, pl.List)):
             # Complex types fallback to VARCHAR

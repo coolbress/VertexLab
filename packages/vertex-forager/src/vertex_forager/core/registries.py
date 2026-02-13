@@ -16,7 +16,7 @@ Usage:
 """
 from __future__ import annotations
 
-from typing import Any, Protocol, TYPE_CHECKING, Generic, TypeVar, Callable
+from typing import Any, Protocol, TYPE_CHECKING, Generic, TypeVar, Callable, overload
 from dataclasses import dataclass
 
 if TYPE_CHECKING:
@@ -47,6 +47,12 @@ class Registry(Generic[T]):
         """
         self._name = name
         self._registry: dict[str, T] = {}
+
+    @overload
+    def register(self, key: str, item: T) -> None: ...
+
+    @overload
+    def register(self, key: str, item: None = ...) -> Callable[[T], T]: ...
 
     def register(self, key: str, item: T | None = None) -> Callable[[T], T] | None:
         """Register an item with a specific key.

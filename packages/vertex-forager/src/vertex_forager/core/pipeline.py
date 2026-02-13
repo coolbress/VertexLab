@@ -79,6 +79,14 @@ class VertexForager:
     # Increased to 500k to allow better batching for large packets (125k rows each)
     FLUSH_THRESHOLD_ROWS = 500_000
 
+    # Priority Constants
+    PRIORITY_PAGINATION = 0  # Highest priority for pagination/next jobs
+    PRIORITY_NEW_JOB = 10    # Normal priority for new jobs
+    PRIORITY_SENTINEL = 999  # Lowest priority for sentinel (shutdown)
+    
+    # Infinite threshold for in-memory writer
+    FLUSH_THRESHOLD_INFINITE = 1_000_000_000
+
     def __init__(
         self,
         *,
@@ -96,6 +104,9 @@ class VertexForager:
         self._config = config
         self.controller = controller
 
+        # Track active tasks for graceful shutdown
+        self._active_tasks: list[asyncio.Task] = []
+
         # Validate configuration
         self._config.validate()
 
@@ -110,7 +121,7 @@ class VertexForager:
         ):
             # Override instance config (not the global config object)
             # We treat 1 billion rows as effectively infinite for memory buffer
-            self._flush_threshold = 1_000_000_000
+            self._flush_threshold = self.FLUSH_THRESHOLD_INFINITE
             logger.debug(
                 "PIPELINE: Detected InMemoryBufferWriter. Disabled intermediate flushing."
             )
@@ -151,8 +162,8 @@ class VertexForager:
         # PriorityQueue to prioritize pagination (next jobs) over new jobs
         # Tuple structure: (priority, order, job)
         # Priority: 0=NextJob, 10=NewJob, 999=Sentinel
-        req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = (
-            asyncio.PriorityQueue(maxsize=self._config.queue_max)
+        req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue(
+            maxsize=self._config.queue_max
         )
         pkt_q: asyncio.Queue[FramePacket | None] = asyncio.Queue(
             maxsize=self._config.queue_max
@@ -190,6 +201,9 @@ class VertexForager:
             name="vertex-forager:producer",
         )
 
+        # Register tasks for stop()
+        self._active_tasks = [producer_task, *fetch_tasks, *writer_tasks]
+
         try:
             # Create a monitor for writer tasks to detect early failures
             writer_monitor = asyncio.gather(*writer_tasks)
@@ -216,6 +230,7 @@ class VertexForager:
             orchestrator = asyncio.create_task(
                 _pipeline_orchestration(), name="vertex-forager:orchestrator"
             )
+            self._active_tasks.append(orchestrator)
 
             done, pending = await asyncio.wait(
                 [orchestrator, writer_monitor],
@@ -250,17 +265,33 @@ class VertexForager:
             logger.info(f"PIPELINE: Run completed. Total errors: {len(result.errors)}")
             return result
         finally:
-            for task in [producer_task, *fetch_tasks, *writer_tasks]:
-                if not task.done():
-                    task.cancel()
-            await asyncio.gather(
-                producer_task, *fetch_tasks, *writer_tasks, return_exceptions=True
-            )
+            await self.stop()
+
+    async def stop(self) -> None:
+        """Gracefully stop the pipeline.
+
+        Cancels all running tasks (producer, fetchers, writers) and awaits their
+        cleanup. This method is idempotent and safe to call multiple times.
+        """
+        if not self._active_tasks:
+            return
+
+        logger.info("PIPELINE: Stopping pipeline...")
+        for task in self._active_tasks:
+            if not task.done():
+                task.cancel()
+
+        # Wait for all tasks to complete (suppressing CancelledError)
+        if self._active_tasks:
+            await asyncio.gather(*self._active_tasks, return_exceptions=True)
+        
+        self._active_tasks.clear()
+        logger.info("PIPELINE: Pipeline stopped.")
 
     async def _producer(
         self,
         *,
-        req_q: asyncio.PriorityQueue,
+        req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]],
         dataset: str,
         symbols: Symbols | None,
         **kwargs: object,
@@ -291,7 +322,7 @@ class VertexForager:
         self,
         worker_id: int,
         *,
-        req_q: asyncio.PriorityQueue,
+        req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]],
         pkt_q: asyncio.Queue[FramePacket | None],
         result: RunResult,
         result_lock: asyncio.Lock,
@@ -465,6 +496,11 @@ class VertexForager:
         )
 
         async def flush(table: str) -> None:
+            """Flush the buffer for a specific table.
+
+            Note: This helper does not call task_done(). Queue consumption is handled
+            by the calling loop (main loop or shutdown sequence).
+            """
             packets = buffers.get(table, [])
             if not packets:
                 return
@@ -507,14 +543,6 @@ class VertexForager:
                 logger.error(f"WRITER: Error flushing {table}: {e}")
                 # Retain buffer or explicitly propagate according to retry policy
                 raise
-            finally:
-                # Always mark task done to prevent deadlock
-                # if this flush was triggered by a queue item
-                # Note: flush() is called from two places:
-                # 1. Main loop (triggered by packet) -> needs task_done() in main loop
-                # 2. Shutdown (triggered by None) -> needs task_done() in main loop
-                # 3. Explicit flush() calls -> this helper doesn't consume queue item
-                pass
 
         while True:
             packet = await pkt_q.get()
