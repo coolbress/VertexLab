@@ -66,6 +66,14 @@ class Registry(Generic[T]):
         """List all registered keys."""
         return list(self._registry.keys())
 
+    def __contains__(self, key: str) -> bool:
+        """Check if a key exists in the registry."""
+        return key in self._registry
+
+    def __len__(self) -> int:
+        """Return the number of registered items."""
+        return len(self._registry)
+
 
 # =============================================================================
 # Writer Registry

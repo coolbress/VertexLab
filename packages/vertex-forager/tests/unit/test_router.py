@@ -20,16 +20,17 @@ from vertex_forager.core.config import FetchJob, ParseResult, RequestSpec
 from vertex_forager.providers.sharadar.router import SharadarRouter
 
 
+@pytest.fixture
+def router() -> SharadarRouter:
+    """Create a SharadarRouter instance for testing."""
+    return SharadarRouter(
+        api_key="test_api_key",
+        rate_limit=500,
+    )
+
+
 class TestSharadarRouterUnit:
     """Unit tests for SharadarRouter functionality."""
-
-    @pytest.fixture
-    def router(self) -> SharadarRouter:
-        """Create a SharadarRouter instance for testing."""
-        return SharadarRouter(
-            api_key="test_api_key",
-            rate_limit=500,
-        )
 
     def test_router_provider_property_returns_correct_value(
         self, router: SharadarRouter
@@ -357,14 +358,6 @@ class TestSharadarRouterUnit:
 
 class TestRouterEdgeCases:
     """Tests for router edge cases and error conditions."""
-
-    @pytest.fixture
-    def router(self) -> SharadarRouter:
-        """Create a SharadarRouter instance for testing."""
-        return SharadarRouter(
-            api_key="test_api_key",
-            rate_limit=500,
-        )
 
     @pytest.mark.asyncio
     async def test_router_handles_unknown_dataset_gracefully(

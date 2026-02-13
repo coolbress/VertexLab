@@ -44,17 +44,23 @@ class VertexForager:
 
     This class orchestrates the end-to-end data collection process using a
     Producer-Consumer architecture with asyncio. It manages three main stages:
-    1.  **Job Generation (Producer)**: Iterates over the provider's job list.
-    2.  **Data Fetching (Fetch Workers)**: Executes HTTP requests and parses responses.
-    3.  **Data Writing (Writer Workers)**: Writes processed data to storage.
+    Job Generation (Producer), Data Fetching (Fetch Workers), and Data Writing
+    (Writer Workers).
 
-    Architecture:
-        [Router] --(Jobs)--> [Req Queue] --(Fetch Workers)--> [Pkt Queue] --(Writer Workers)--> [Storage]
-                                    |                              |
-                            [HttpExecutor]                   [SchemaMapper]
+    Attributes:
+        req_queue (asyncio.Queue): Queue for pending fetch jobs.
+        pkt_queue (asyncio.Queue): Queue for processed data packets.
+        http_executor (HttpExecutor): Handles HTTP requests.
+        schema_mapper (SchemaMapper): Normalizes data schemas.
+        provider (str): Name of the data provider (e.g., 'sharadar').
+        rate_limiter (FlowController): Controls request rate and concurrency.
+        logger (logging.Logger): Logger instance.
+        fetch_workers (list[asyncio.Task]): List of fetch worker tasks.
+        writer_workers (list[asyncio.Task]): List of writer worker tasks.
 
-    The pipeline is designed for maximum throughput while respecting rate limits
-    and handling errors gracefully.
+    Public Methods:
+        run(symbols: list[str]) -> RunResult: Execute the full collection pipeline.
+        stop(): Gracefully stop the pipeline.
     """
 
     # Configurable flush threshold

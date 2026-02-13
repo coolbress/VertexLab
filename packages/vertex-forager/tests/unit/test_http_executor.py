@@ -14,16 +14,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import httpx
-from httpx import AsyncClient, Response
+from httpx import Response
 
-from vertex_forager.core.config import RequestSpec, HttpMethod
+from vertex_forager.core.config import RequestSpec, HttpMethod, RequestAuth
 from vertex_forager.core.http import HttpExecutor
-
-
-@pytest.fixture
-def mock_async_client() -> AsyncMock:
-    """Create mock async client."""
-    return AsyncMock(spec=AsyncClient)
 
 
 class TestHttpExecutor:
@@ -97,6 +91,66 @@ class TestHttpExecutor:
             content=None,
             timeout=30.0,
         )
+
+    @pytest.mark.asyncio
+    async def test_fetch_injects_bearer_auth(
+        self,
+        http_executor: HttpExecutor,
+        mock_async_client: AsyncMock,
+        success_response: Response,
+    ) -> None:
+        """Verify Bearer token injection."""
+        mock_async_client.request.return_value = success_response
+        spec = RequestSpec(
+            url="http://test.com",
+            method=HttpMethod.GET,
+            auth=RequestAuth(kind="bearer", token="secret_token"),
+        )
+
+        await http_executor.fetch(spec)
+
+        kwargs = mock_async_client.request.call_args.kwargs
+        assert kwargs["headers"]["Authorization"] == "Bearer secret_token"
+
+    @pytest.mark.asyncio
+    async def test_fetch_injects_query_auth(
+        self,
+        http_executor: HttpExecutor,
+        mock_async_client: AsyncMock,
+        success_response: Response,
+    ) -> None:
+        """Verify Query parameter auth injection."""
+        mock_async_client.request.return_value = success_response
+        spec = RequestSpec(
+            url="http://test.com",
+            method=HttpMethod.GET,
+            auth=RequestAuth(kind="query", query_param="api_key", token="12345"),
+        )
+
+        await http_executor.fetch(spec)
+
+        kwargs = mock_async_client.request.call_args.kwargs
+        assert kwargs["params"]["api_key"] == "12345"
+
+    @pytest.mark.asyncio
+    async def test_fetch_injects_header_auth(
+        self,
+        http_executor: HttpExecutor,
+        mock_async_client: AsyncMock,
+        success_response: Response,
+    ) -> None:
+        """Verify Custom Header auth injection."""
+        mock_async_client.request.return_value = success_response
+        spec = RequestSpec(
+            url="http://test.com",
+            method=HttpMethod.GET,
+            auth=RequestAuth(kind="header", header_name="X-API-KEY", token="secret"),
+        )
+
+        await http_executor.fetch(spec)
+
+        kwargs = mock_async_client.request.call_args.kwargs
+        assert kwargs["headers"]["X-API-KEY"] == "secret"
 
     @pytest.mark.asyncio
     async def test_fetch_handles_http_errors(
