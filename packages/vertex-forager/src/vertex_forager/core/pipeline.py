@@ -23,9 +23,9 @@ from vertex_forager.core.controller import FlowController
 from vertex_forager.core.retry import create_retry_controller
 from vertex_forager.routers.base import BaseRouter
 from vertex_forager.schema.mapper import SchemaMapper
-from vertex_forager.writers.base import BaseWriter
 
 if TYPE_CHECKING:
+    from vertex_forager.writers.base import BaseWriter
     from vertex_forager.writers.memory import InMemoryBufferWriter
 
 try:

@@ -10,7 +10,19 @@ from vertex_forager.core.config import RunResult
 
 
 class YFinanceClient(BaseClient):
-    """YFinance client implementation."""
+    """YFinance client implementation.
+
+    Provides access to Yahoo Finance data via the unofficial API.
+
+    Characteristics:
+        - Free API: No authentication required.
+        - Rate Limiting: Default is 120 requests per minute to avoid IP bans.
+        - Data Quality: Real-time data may be delayed; historical data accuracy is best-effort.
+        - API Key: The `api_key` field is present for interface compatibility but is unused.
+
+    Note:
+        `get_price_data` and `get_tickers` are currently stubs and will raise NotImplementedError.
+    """
 
     def __init__(
         self,

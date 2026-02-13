@@ -18,9 +18,18 @@ from vertex_forager.writers.base import BaseWriter, WriteResult
 class DuckDBWriter(BaseWriter):
     """DuckDB writer implementation.
 
-    Manages a local DuckDB database for storing collected data.
-    Handles schema migration, deduplication, and batch writes.
-    Uses a single-threaded executor for thread safety.
+    Manages a local DuckDB database for storing collected data using Polars integration.
+
+    Attributes:
+        lock (asyncio.Lock): Lock to ensure single-writer access to the database.
+        connection (duckdb.DuckDBPyConnection): Active DuckDB connection.
+        db_path (str): Path to the DuckDB database file.
+
+    Features:
+        - Automatic table creation from Polars schema.
+        - Upsert semantics based on primary keys.
+        - Zero-copy data transfer between Polars and DuckDB.
+        - Thread-safe execution using a single-threaded executor.
     """
 
     def __init__(self, db_path: str | Path) -> None:

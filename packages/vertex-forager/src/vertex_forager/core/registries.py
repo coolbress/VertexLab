@@ -58,10 +58,9 @@ class Registry(Generic[T]):
         Raises:
             KeyError: If the key is not found.
         """
-        item = self._registry.get(key)
-        if item is None:
+        if key not in self._registry:
             raise KeyError(f"Unsupported {self._name}: {key}")
-        return item
+        return self._registry[key]
 
     def list_keys(self) -> list[str]:
         """List all registered keys."""

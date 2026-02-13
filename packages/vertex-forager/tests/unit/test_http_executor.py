@@ -16,7 +16,7 @@ import pytest
 import httpx
 from httpx import AsyncClient, Response
 
-from vertex_forager.core.config import RequestSpec
+from vertex_forager.core.config import RequestSpec, HttpMethod
 from vertex_forager.core.http import HttpExecutor
 
 
@@ -38,7 +38,7 @@ class TestHttpExecutor:
     def sample_request_spec(self) -> RequestSpec:
         """Create sample request specification."""
         return RequestSpec(
-            method="GET",
+            method=HttpMethod.GET,
             url="https://api.example.com/data",
             params={"ticker": "AAPL"},
             headers={"Authorization": "Bearer token123"},
