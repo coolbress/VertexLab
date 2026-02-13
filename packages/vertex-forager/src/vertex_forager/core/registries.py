@@ -16,7 +16,7 @@ Usage:
 """
 from __future__ import annotations
 
-from typing import Any, Protocol, TYPE_CHECKING, Generic, TypeVar
+from typing import Any, Protocol, TYPE_CHECKING, Generic, TypeVar, Callable
 from dataclasses import dataclass
 
 if TYPE_CHECKING:
