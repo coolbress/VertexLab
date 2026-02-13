@@ -42,7 +42,7 @@ def create_router(
         Configured router instance inheriting from BaseRouter.
 
     Raises:
-        NotImplementedError: If provider is unknown.
+        KeyError: If provider is unknown.
     """
     registration = router_registry.get(provider)
     
