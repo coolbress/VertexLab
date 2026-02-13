@@ -181,23 +181,57 @@ class VertexForager:
         )
 
         try:
-            logger.info("PIPELINE: Starting producer task...")
-            await producer_task
-            logger.info("PIPELINE: Producer completed, waiting for request queue...")
-            await req_q.join()
-            logger.info("PIPELINE: Request queue joined, sending sentinel signals...")
-            for _ in range(self.controller.concurrency_limit):
-                # Sentinel with lowest priority (highest number)
-                await req_q.put((999, 0, None))
-            logger.info("PIPELINE: Waiting for fetch tasks to complete...")
-            await asyncio.gather(*fetch_tasks)
+            # Create a monitor for writer tasks to detect early failures
+            writer_monitor = asyncio.gather(*writer_tasks)
 
-            logger.info("PIPELINE: Fetch tasks completed, waiting for packet queue...")
-            await pkt_q.join()
-            for _ in writer_tasks:
-                await pkt_q.put(None)
+            async def _pipeline_orchestration() -> None:
+                """Orchestrate the producer-fetcher-join sequence."""
+                logger.info("PIPELINE: Starting producer task...")
+                await producer_task
+                logger.info("PIPELINE: Producer completed, waiting for request queue...")
+                await req_q.join()
+                logger.info("PIPELINE: Request queue joined, sending sentinel signals...")
+                for _ in range(self.controller.concurrency_limit):
+                    # Sentinel with lowest priority (highest number)
+                    await req_q.put((999, 0, None))
+                logger.info("PIPELINE: Waiting for fetch tasks to complete...")
+                await asyncio.gather(*fetch_tasks)
+
+                logger.info("PIPELINE: Fetch tasks completed, waiting for packet queue...")
+                await pkt_q.join()
+                for _ in writer_tasks:
+                    await pkt_q.put(None)
+
+            # Run orchestration concurrently with writer monitor
+            orchestrator = asyncio.create_task(
+                _pipeline_orchestration(), name="vertex-forager:orchestrator"
+            )
+
+            done, pending = await asyncio.wait(
+                [orchestrator, writer_monitor],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+
+            # Check if writers failed early
+            if writer_monitor in done:
+                # Writer exited early (likely due to error since we haven't sent None yet)
+                # Unless orchestrator also finished and sent None?
+                if orchestrator not in done:
+                    # Writer failed while pipeline was running
+                    exc = writer_monitor.exception()
+                    if exc:
+                        raise exc
+                    # If it finished without exception but orchestrator is still running,
+                    # it means it exited prematurely (e.g. consumed None that wasn't sent?)
+                    # This shouldn't happen with correct logic.
+                    raise RuntimeError("Writer exited prematurely")
+
+            # Ensure orchestrator completes (if it wasn't the one that finished)
+            await orchestrator
+
+            # Wait for writers to complete (graceful shutdown)
             logger.info("PIPELINE: Waiting for writer tasks to complete...")
-            await asyncio.gather(*writer_tasks, return_exceptions=True)
+            await writer_monitor
 
             # Flush any buffered data in the writer
             logger.info("PIPELINE: Flushing writer buffer...")
