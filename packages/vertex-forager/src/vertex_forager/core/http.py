@@ -60,7 +60,7 @@ class HttpExecutor:
             content=spec.data,
             timeout=spec.timeout_s,
         )
-        
+
         # logger.debug(f"HTTP Request latency: {time.monotonic() - t_start:.3f}s | URL: {spec.url}")
 
         resp.raise_for_status()

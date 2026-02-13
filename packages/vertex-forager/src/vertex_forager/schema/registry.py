@@ -4,6 +4,7 @@ Central registry for table schemas.
 This module aggregates schema definitions from various providers into a single
 lookup table. It serves as the source of truth for `SchemaMapper`.
 """
+
 from __future__ import annotations
 
 from typing import Final
@@ -20,4 +21,3 @@ TABLES: Final[dict[str, TableSchema]] = {
 def get_table_schema(table: str) -> TableSchema | None:
     """Retrieve the schema for a given table name."""
     return TABLES.get(table)
-

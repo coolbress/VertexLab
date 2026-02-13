@@ -12,7 +12,13 @@ from collections.abc import Iterable, Sequence, Callable
 import polars as pl
 
 from vertex_forager.core.http import HttpExecutor
-from vertex_forager.core.config import EngineConfig, FetchJob, FramePacket, RunResult, ParseResult
+from vertex_forager.core.config import (
+    EngineConfig,
+    FetchJob,
+    FramePacket,
+    RunResult,
+    ParseResult,
+)
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.retry import create_retry_controller
 from vertex_forager.routers.base import BaseRouter
@@ -71,21 +77,25 @@ class VertexForager:
         self._mapper = mapper
         self._config = config
         self.controller = controller
-        
+
         # Validate configuration
         self._config.validate()
-        
+
         # Optimization: Disable intermediate flushing for In-Memory Writer
-        # Since InMemoryBufferWriter just stores frames in a list, we can 
+        # Since InMemoryBufferWriter just stores frames in a list, we can
         # avoid the overhead of intermediate merges by setting threshold to infinity.
         # This allows the worker to collect ALL frames and perform a SINGLE merge at the end.
         self._flush_threshold = config.flush_threshold_rows
-        
-        if InMemoryBufferWriter is not None and isinstance(writer, InMemoryBufferWriter):
+
+        if InMemoryBufferWriter is not None and isinstance(
+            writer, InMemoryBufferWriter
+        ):
             # Override instance config (not the global config object)
             # We treat 1 billion rows as effectively infinite for memory buffer
-            self._flush_threshold = 1_000_000_000 
-            logger.debug("PIPELINE: Detected InMemoryBufferWriter. Disabled intermediate flushing.")
+            self._flush_threshold = 1_000_000_000
+            logger.debug(
+                "PIPELINE: Detected InMemoryBufferWriter. Disabled intermediate flushing."
+            )
 
     async def run(
         self,
@@ -123,8 +133,8 @@ class VertexForager:
         # PriorityQueue to prioritize pagination (next jobs) over new jobs
         # Tuple structure: (priority, order, job)
         # Priority: 0=NextJob, 10=NewJob, 999=Sentinel
-        req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue(
-            maxsize=self._config.queue_max
+        req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = (
+            asyncio.PriorityQueue(maxsize=self._config.queue_max)
         )
         pkt_q: asyncio.Queue[FramePacket | None] = asyncio.Queue(
             maxsize=self._config.queue_max
@@ -135,7 +145,9 @@ class VertexForager:
 
         writer_tasks = [
             asyncio.create_task(
-                self._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock),
+                self._writer_worker(
+                    pkt_q=pkt_q, result=result, result_lock=result_lock
+                ),
                 name=f"vertex-forager:writer:{i}",
             )
             for i in range(1)  # Always single writer for DuckDB
@@ -194,7 +206,14 @@ class VertexForager:
                 producer_task, *fetch_tasks, *writer_tasks, return_exceptions=True
             )
 
-    async def _producer(self, *, req_q: asyncio.PriorityQueue, dataset: str, symbols: Symbols | None, **kwargs: object) -> None:
+    async def _producer(
+        self,
+        *,
+        req_q: asyncio.PriorityQueue,
+        dataset: str,
+        symbols: Symbols | None,
+        **kwargs: object,
+    ) -> None:
         """Generate fetch jobs and push them to the request queue.
 
         Iterates through the provider's `generate_jobs` generator. Once all jobs are
@@ -202,15 +221,19 @@ class VertexForager:
         """
         counter = itertools.count()
         job_count = 0
-        logger.info(f"PRODUCER: Starting job generation for dataset={dataset}, symbols={len(symbols) if symbols else 'all'}")
-        
-        async for job in self._router.generate_jobs(dataset=dataset, symbols=symbols, **kwargs):
+        logger.info(
+            f"PRODUCER: Starting job generation for dataset={dataset}, symbols={len(symbols) if symbols else 'all'}"
+        )
+
+        async for job in self._router.generate_jobs(
+            dataset=dataset, symbols=symbols, **kwargs
+        ):
             # Priority 10 for initial jobs
             await req_q.put((10, next(counter), job))
             job_count += 1
             if job_count % 100 == 0:
                 logger.debug(f"PRODUCER: Generated {job_count} jobs so far...")
-        
+
         logger.info(f"PRODUCER: Completed job generation. Total jobs: {job_count}")
 
     async def _fetch_worker(
@@ -233,8 +256,14 @@ class VertexForager:
         5.  Put resulting `FramePacket`s into `pkt_q`.
         6.  Log errors to `result` if exceptions occur.
         """
+
         # Optimization: Pre-calculate progress handler to avoid repeated inspection
-        async def noop_handler(job: FetchJob, payload: bytes | None, exc: Exception | None, parse_result: ParseResult | None) -> None:
+        async def noop_handler(
+            job: FetchJob,
+            payload: bytes | None,
+            exc: Exception | None,
+            parse_result: ParseResult | None,
+        ) -> None:
             pass
 
         handler = noop_handler
@@ -245,15 +274,15 @@ class VertexForager:
                 is_async = inspect.iscoroutinefunction(on_progress)
 
                 async def _progress_wrapper(
-                    job: FetchJob, 
-                    payload: bytes | None, 
-                    exc: Exception | None, 
-                    parse_result: ParseResult | None
+                    job: FetchJob,
+                    payload: bytes | None,
+                    exc: Exception | None,
+                    parse_result: ParseResult | None,
                 ) -> None:
                     kwargs = {"job": job, "payload": payload, "exc": exc}
                     if wants_parse_result:
                         kwargs["parse_result"] = parse_result
-                    
+
                     try:
                         if is_async:
                             await on_progress(**kwargs)
@@ -262,7 +291,7 @@ class VertexForager:
                     except Exception as e:
                         logger.error(f"Error in on_progress callback: {e}")
                         # Don't re-raise to keep worker alive
-                
+
                 handler = _progress_wrapper
             except Exception as e:
                 logger.warning(f"Failed to bind on_progress handler: {e}")
@@ -272,10 +301,14 @@ class VertexForager:
             priority, _, job = await req_q.get()
             job_count += 1
             if job_count % 100 == 0:
-                logger.debug(f"[Worker-{worker_id}] Processed {job_count} jobs so far...")
-                
+                logger.debug(
+                    f"[Worker-{worker_id}] Processed {job_count} jobs so far..."
+                )
+
             if job is None:
-                logger.debug(f"[Worker-{worker_id}] Received sentinel, shutting down. Total jobs processed: {job_count}")
+                logger.debug(
+                    f"[Worker-{worker_id}] Received sentinel, shutting down. Total jobs processed: {job_count}"
+                )
                 req_q.task_done()
                 return
 
@@ -284,36 +317,43 @@ class VertexForager:
             parse_result: ParseResult | None = None
             try:
                 # Log Fetch Start
-                logger.debug(f"[Worker-{worker_id}] Processing job: {job.symbol} (priority: {priority})")
-                
+                logger.debug(
+                    f"[Worker-{worker_id}] Processing job: {job.symbol} (priority: {priority})"
+                )
+
                 t_fetch_start = time.monotonic()
                 payload = await self._fetch_with_retry(job)
                 t_fetch_end = time.monotonic()
                 fetch_latency = t_fetch_end - t_fetch_start
-                
+
                 t1 = time.monotonic()
-                logger.debug(f"[Worker-{worker_id}] Fetched {job.symbol} ({len(payload) if payload else 0} bytes) in {fetch_latency:.3f}s")
-                
+                logger.debug(
+                    f"[Worker-{worker_id}] Fetched {job.symbol} ({len(payload) if payload else 0} bytes) in {fetch_latency:.3f}s"
+                )
+
                 # Offload CPU-bound parsing to a thread pool
                 loop = asyncio.get_running_loop()
                 parse_result = await loop.run_in_executor(
                     None,  # Use default ThreadPoolExecutor
-                    functools.partial(self._router.parse, job=job, payload=payload)
+                    functools.partial(self._router.parse, job=job, payload=payload),
                 )
                 t2 = time.monotonic()
-                logger.debug(f"[Worker-{worker_id}] Parsed {job.symbol} in {t2 - t1:.3f}s. Packets: {len(parse_result.packets)}, Next Jobs: {len(parse_result.next_jobs)}")
+                logger.debug(
+                    f"[Worker-{worker_id}] Parsed {job.symbol} in {t2 - t1:.3f}s. Packets: {len(parse_result.packets)}, Next Jobs: {len(parse_result.next_jobs)}"
+                )
 
                 for packet in parse_result.packets:
                     # Normalize packet schema (enforce types, fill missing cols)
                     # Also CPU-bound, so we offload it
                     normalized_packet = await loop.run_in_executor(
-                        None,
-                        functools.partial(self._mapper.normalize, packet=packet)
+                        None, functools.partial(self._mapper.normalize, packet=packet)
                     )
                     await pkt_q.put(normalized_packet)
 
                 if parse_result.next_jobs:
-                    logger.debug(f"[Worker-{worker_id}] Adding {len(parse_result.next_jobs)} pagination jobs for {job.symbol}")
+                    logger.debug(
+                        f"[Worker-{worker_id}] Adding {len(parse_result.next_jobs)} pagination jobs for {job.symbol}"
+                    )
                     for next_job in parse_result.next_jobs:
                         # Priority 0 for derived jobs (e.g., pagination, detailed info) to complete logical units first.
                         # This implements a generic Depth-First Fetching strategy.
@@ -323,8 +363,12 @@ class VertexForager:
             except Exception as exc:
                 worker_exc = exc
                 async with result_lock:
-                    result.errors.append(f"{job.provider}:{job.dataset}:{job.symbol}:{exc}")
-                logger.error(f"[Worker-{worker_id}] Error processing {job.symbol}: {exc}")
+                    result.errors.append(
+                        f"{job.provider}:{job.dataset}:{job.symbol}:{exc}"
+                    )
+                logger.error(
+                    f"[Worker-{worker_id}] Error processing {job.symbol}: {exc}"
+                )
             finally:
                 req_q.task_done()
                 try:
@@ -343,7 +387,7 @@ class VertexForager:
         result_lock: asyncio.Lock,
     ) -> None:
         """Consume packets and write to storage with adaptive bulk writing.
-        
+
         Optimized Strategy:
         1. Buffers packets in memory until `flush_threshold_rows` is reached.
         2. Merges small packets into larger chunks using Polars.
@@ -353,24 +397,26 @@ class VertexForager:
         # Buffer: table_name -> list of packets
         buffers: dict[str, list[FramePacket]] = {}
         buffer_rows: dict[str, int] = {}
-        
+
         # Use config value
         threshold = self._flush_threshold
-        logger.debug(f"WRITER: Adaptive bulk writing enabled. Threshold={threshold} rows")
+        logger.debug(
+            f"WRITER: Adaptive bulk writing enabled. Threshold={threshold} rows"
+        )
 
         async def flush(table: str) -> None:
             packets = buffers.get(table, [])
             if not packets:
                 return
-            
+
             try:
                 # Merge frames
                 frames = [p.frame for p in packets]
                 if not frames:
                     return
-                    
+
                 merged_frame = pl.concat(frames)
-                
+
                 # Create merged packet (use metadata from the first packet)
                 first = packets[0]
                 merged_packet = FramePacket(
@@ -380,13 +426,17 @@ class VertexForager:
                     observed_at=first.observed_at,
                     context=first.context,
                 )
-                
-                logger.debug(f"WRITER: Flushing {len(packets)} packets ({len(merged_frame)} rows) for {table}")
+
+                logger.debug(
+                    f"WRITER: Flushing {len(packets)} packets ({len(merged_frame)} rows) for {table}"
+                )
                 write_result = await self._writer.write(merged_packet)
-                
+
                 async with result_lock:
-                    result.tables[write_result.table] = result.tables.get(write_result.table, 0) + write_result.rows
-                
+                    result.tables[write_result.table] = (
+                        result.tables.get(write_result.table, 0) + write_result.rows
+                    )
+
             except Exception as e:
                 async with result_lock:
                     result.errors.append(f"Writer:{e}")
@@ -398,34 +448,38 @@ class VertexForager:
 
         while True:
             packet = await pkt_q.get()
-            
+
             if packet is None:
                 # Flush all remaining buffers
-                logger.debug("WRITER: Received shutdown signal. Flushing remaining buffers...")
+                logger.debug(
+                    "WRITER: Received shutdown signal. Flushing remaining buffers..."
+                )
                 for table in list(buffers.keys()):
                     await flush(table)
                 pkt_q.task_done()
                 return
-            
+
             # Add to buffer
             table = packet.table
             if table not in buffers:
                 buffers[table] = []
                 buffer_rows[table] = 0
-            
+
             buffers[table].append(packet)
             previous_rows = buffer_rows[table]
             current_rows = previous_rows + len(packet.frame)
             buffer_rows[table] = current_rows
-            
+
             # Log progress every 100k rows to assure user it's working
             if (current_rows // 100_000) > (previous_rows // 100_000):
-                logger.debug(f"WRITER: Buffering {table}... {current_rows:,} / {threshold:,} rows")
-            
+                logger.debug(
+                    f"WRITER: Buffering {table}... {current_rows:,} / {threshold:,} rows"
+                )
+
             # Check threshold
             if buffer_rows[table] >= threshold:
                 await flush(table)
-            
+
             pkt_q.task_done()
 
     async def _fetch_with_retry(self, job: FetchJob) -> bytes:
@@ -440,7 +494,7 @@ class VertexForager:
             2. These new jobs are fed back into the request queue.
             3. Each subsequent job MUST pass through this method again.
             4. `async with self.controller.throttle()` ensures that EVERY page request consumes a token.
-            
+
             This guarantees that the physical request rate (RPM) never exceeds the limit,
             even if one "logical" user request expands into hundreds of API calls.
         """

@@ -60,22 +60,24 @@ class TestHttpExecutor:
         response.status_code = 500
         response.content = b'{"error": "internal error"}'
         response.headers = {"Content-Type": "application/json"}
-        
+
         # Mock raise_for_status to raise HTTPStatusError for error responses
         def raise_for_status():
             raise httpx.HTTPStatusError(
-                "Server error",
-                request=MagicMock(),
-                response=response
+                "Server error", request=MagicMock(), response=response
             )
+
         response.raise_for_status = raise_for_status
-        
+
         return response
 
     @pytest.mark.asyncio
     async def test_fetch_successful_request(
-        self, http_executor: HttpExecutor, mock_async_client: AsyncMock, 
-        sample_request_spec: RequestSpec, success_response: Response
+        self,
+        http_executor: HttpExecutor,
+        mock_async_client: AsyncMock,
+        sample_request_spec: RequestSpec,
+        success_response: Response,
     ) -> None:
         """Test successful HTTP request execution."""
         # Arrange
@@ -93,13 +95,16 @@ class TestHttpExecutor:
             headers={"Authorization": "Bearer token123"},
             json=None,
             content=None,
-            timeout=30.0
+            timeout=30.0,
         )
 
     @pytest.mark.asyncio
     async def test_fetch_handles_http_errors(
-        self, http_executor: HttpExecutor, mock_async_client: AsyncMock,
-        sample_request_spec: RequestSpec, error_response: Response
+        self,
+        http_executor: HttpExecutor,
+        mock_async_client: AsyncMock,
+        sample_request_spec: RequestSpec,
+        error_response: Response,
     ) -> None:
         """Test that HTTP errors are properly handled."""
         # Arrange
@@ -111,8 +116,10 @@ class TestHttpExecutor:
 
     @pytest.mark.asyncio
     async def test_fetch_handles_network_errors(
-        self, http_executor: HttpExecutor, mock_async_client: AsyncMock,
-        sample_request_spec: RequestSpec
+        self,
+        http_executor: HttpExecutor,
+        mock_async_client: AsyncMock,
+        sample_request_spec: RequestSpec,
     ) -> None:
         """Test that network errors are properly handled."""
         # Arrange
@@ -126,18 +133,19 @@ class TestHttpExecutor:
 
     @pytest.mark.asyncio
     async def test_fetch_respects_timeout_configuration(
-        self, http_executor: HttpExecutor, mock_async_client: AsyncMock,
-        sample_request_spec: RequestSpec, success_response: Response
+        self,
+        http_executor: HttpExecutor,
+        mock_async_client: AsyncMock,
+        sample_request_spec: RequestSpec,
+        success_response: Response,
     ) -> None:
         """Test that timeout configuration is respected."""
         # Arrange
         mock_async_client.request.return_value = success_response
-        
+
         # Create spec with custom timeout
         spec_with_timeout = RequestSpec(
-            method="GET",
-            url="https://api.example.com/data",
-            timeout_s=10.0
+            method="GET", url="https://api.example.com/data", timeout_s=10.0
         )
 
         # Act
@@ -151,28 +159,30 @@ class TestHttpExecutor:
             headers={},
             json=None,
             content=None,
-            timeout=10.0
+            timeout=10.0,
         )
 
     @pytest.mark.asyncio
     async def test_fetch_handles_empty_response(
-        self, http_executor: HttpExecutor, mock_async_client: AsyncMock,
-        sample_request_spec: RequestSpec
+        self,
+        http_executor: HttpExecutor,
+        mock_async_client: AsyncMock,
+        sample_request_spec: RequestSpec,
     ) -> None:
         """Test handling of empty responses."""
         # Arrange
         empty_response = MagicMock(spec=Response)
         empty_response.status_code = 200
-        empty_response.content = b''
+        empty_response.content = b""
         empty_response.headers = {}
-        
+
         mock_async_client.request.return_value = empty_response
 
         # Act
         result = await http_executor.fetch(sample_request_spec)
 
         # Assert
-        assert result == b''
+        assert result == b""
 
 
 class TestHttpExecutorConcurrency:
@@ -185,21 +195,18 @@ class TestHttpExecutorConcurrency:
         """Test that executor can handle concurrent requests."""
         # Arrange
         executor = HttpExecutor(client=mock_async_client)
-        
+
         success_response = MagicMock(spec=Response)
         success_response.status_code = 200
         success_response.content = b'{"data": "success"}'
-        
+
         mock_async_client.request.return_value = success_response
 
         spec1 = RequestSpec(url="https://api.example.com/data1")
         spec2 = RequestSpec(url="https://api.example.com/data2")
 
         # Act - execute requests concurrently
-        results = await asyncio.gather(
-            executor.fetch(spec1),
-            executor.fetch(spec2)
-        )
+        results = await asyncio.gather(executor.fetch(spec1), executor.fetch(spec2))
 
         # Assert
         assert len(results) == 2

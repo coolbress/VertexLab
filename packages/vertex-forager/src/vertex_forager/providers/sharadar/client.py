@@ -25,13 +25,20 @@ from vertex_forager.utils import (
     Spinner,
 )
 from tqdm import tqdm
-from vertex_forager.providers.sharadar.utils import DATASET_TABLE, OptimizedBulkCalculator
+from vertex_forager.providers.sharadar.utils import (
+    DATASET_TABLE,
+    OptimizedBulkCalculator,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class SharadarClient(BaseClient):
     """Sharadar-specific client exposing Sharadar data APIs."""
+
+    BYTES_PER_TICKER_METADATA = 1024  # 1KB for metadata
+    BYTES_PER_TICKER_FULL = 1 * 1024 * 1024  # 1MB for price/financials
+    ESTIMATED_TOTAL_TICKERS = 15_000
 
     def __init__(
         self,
@@ -75,10 +82,10 @@ class SharadarClient(BaseClient):
     # Internal Helpers & Core Patterns
     # ----------------------------------------------------------------
     def _validate_input(
-        self, 
-        symbols: list[str] | None, 
+        self,
+        symbols: list[str] | None,
         connect_db: str | Path | None,
-        dataset: str | None = None
+        dataset: str | None = None,
     ) -> None:
         """Validate input and check memory safety."""
         # Allow full fetch in-memory only for small metadata datasets
@@ -90,11 +97,11 @@ class SharadarClient(BaseClient):
             return
 
         if dataset == "tickers":
-            BYTES_PER_TICKER = 1024  # 1KB for metadata
+            BYTES_PER_TICKER = self.BYTES_PER_TICKER_METADATA
         else:
-            BYTES_PER_TICKER = 1 * 1024 * 1024  # 1MB for price/financials
+            BYTES_PER_TICKER = self.BYTES_PER_TICKER_FULL
 
-        ESTIMATED_TOTAL_TICKERS = 15_000
+        ESTIMATED_TOTAL_TICKERS = self.ESTIMATED_TOTAL_TICKERS
 
         num_tickers = len(symbols) if symbols else ESTIMATED_TOTAL_TICKERS
         estimated_size = num_tickers * BYTES_PER_TICKER
@@ -129,10 +136,12 @@ class SharadarClient(BaseClient):
         # Apply Smart Batching to ALL ticker-based datasets.
         # This ensures consistent optimization regardless of data density (daily/quarterly).
         meta_df = self._metadata_cache
-        
+
         # Check cooldown to avoid repeated failures
         now = time.monotonic()
-        if meta_df is None and (now - self._last_meta_fetch_failure > self._meta_fetch_cooldown):
+        if meta_df is None and (
+            now - self._last_meta_fetch_failure > self._meta_fetch_cooldown
+        ):
             try:
                 # Use Spinner only if we are actually fetching metadata
                 # and not just using cache.
@@ -149,7 +158,9 @@ class SharadarClient(BaseClient):
                     )
                     if isinstance(result, pl.DataFrame):
                         meta_df = result
-                        self._last_meta_fetch_failure = 0.0  # Reset failure timestamp on success
+                        self._last_meta_fetch_failure = (
+                            0.0  # Reset failure timestamp on success
+                        )
             except Exception as e:
                 logger.warning(
                     f"Failed to fetch metadata: {e}. Falling back to heuristic."
@@ -158,7 +169,7 @@ class SharadarClient(BaseClient):
 
         # 2. Optimize Batches (Bin Packing)
         # Now supports table-aware estimation (SF1 vs SEP)
-        # Note: Even if estimation fails and a batch exceeds 10,000 rows, 
+        # Note: Even if estimation fails and a batch exceeds 10,000 rows,
         # the SharadarRouter handles pagination (cursor_id) automatically as a safety net,
         # ensuring no data loss occurs.
         return self._optimizer.optimize(
@@ -177,7 +188,7 @@ class SharadarClient(BaseClient):
         unit: str = "it",
     ) -> pl.DataFrame | RunResult:
         """Helper to manage writer lifecycle and progress reporting."""
-        
+
         # Helper to create writer context
         @asynccontextmanager
         async def managed_writer():
@@ -221,19 +232,18 @@ class SharadarClient(BaseClient):
                     pbar.close()
 
             self.last_run = run_result
-            
+
             final_result = run_result
             if connect_db is None:
                 # Use schema unique_key for deterministic sorting if available
                 schema = get_table_schema(table_name)
-                sort_cols = list(schema.unique_key) if schema and schema.unique_key else None
+                sort_cols = (
+                    list(schema.unique_key) if schema and schema.unique_key else None
+                )
                 final_result = writer.collect_table(table_name, sort_cols=sort_cols)
 
             # Cache metadata if requested
-            if (
-                is_metadata_fetch
-                and isinstance(final_result, pl.DataFrame)
-            ):
+            if is_metadata_fetch and isinstance(final_result, pl.DataFrame):
                 logger.debug("Caching full metadata from explicit get_tickers() call.")
                 self._metadata_cache = final_result
 
@@ -250,7 +260,7 @@ class SharadarClient(BaseClient):
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Pattern 1: Fetch full dataset via pagination (e.g., SP500, All Tickers)."""
-        
+
         async def run_logic(writer: BaseWriter, on_progress: Callable | None):
             router = create_router(
                 "sharadar",
@@ -294,8 +304,8 @@ class SharadarClient(BaseClient):
     ) -> pl.DataFrame | RunResult:
         """Pattern 2: Fetch specific tickers with Smart Batching (Auto)."""
         symbols = process_symbols(tickers)
-        
-        # Unconditionally check memory safety. 
+
+        # Unconditionally check memory safety.
         # If symbols is None (full request), _validate_input handles it (using default estimate).
         self._validate_input(symbols, connect_db, dataset=dataset)
 
@@ -406,7 +416,7 @@ class SharadarClient(BaseClient):
             **kwargs: Additional arguments passed to the fetcher.
 
         Returns:
-            polars.DataFrame | RunResult: DataFrame if fetching in-memory, 
+            polars.DataFrame | RunResult: DataFrame if fetching in-memory,
             or RunResult object if storing to database.
 
         Raises:

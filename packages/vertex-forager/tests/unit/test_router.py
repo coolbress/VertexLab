@@ -30,7 +30,9 @@ class TestSharadarRouterUnit:
             rate_limit=500,
         )
 
-    def test_router_provider_property_returns_correct_value(self, router: SharadarRouter) -> None:
+    def test_router_provider_property_returns_correct_value(
+        self, router: SharadarRouter
+    ) -> None:
         """Test that provider property returns expected value."""
         # Act & Assert
         assert router.provider == "sharadar"
@@ -41,7 +43,12 @@ class TestSharadarRouterUnit:
     ) -> None:
         """Test that generate_jobs creates proper FetchJob instances for price dataset."""
         # Default behavior is 1 job per symbol (no implicit batching)
-        jobs = [job async for job in router.generate_jobs(dataset="price", symbols=["AAPL", "MSFT"])]
+        jobs = [
+            job
+            async for job in router.generate_jobs(
+                dataset="price", symbols=["AAPL", "MSFT"]
+            )
+        ]
 
         assert len(jobs) == 2
         job = jobs[0]
@@ -51,7 +58,9 @@ class TestSharadarRouterUnit:
         assert job.spec.params.get("ticker") in ["AAPL", "MSFT"]
 
     @pytest.mark.asyncio
-    async def test_generate_jobs_handles_empty_symbols_list(self, router: SharadarRouter) -> None:
+    async def test_generate_jobs_handles_empty_symbols_list(
+        self, router: SharadarRouter
+    ) -> None:
         """Test that generate_jobs handles empty symbols list gracefully."""
         # Act
         jobs = [job async for job in router.generate_jobs(dataset="price", symbols=[])]
@@ -60,18 +69,29 @@ class TestSharadarRouterUnit:
         assert len(jobs) == 0
 
     @pytest.mark.asyncio
-    async def test_generate_jobs_handles_none_symbols(self, router: SharadarRouter) -> None:
+    async def test_generate_jobs_handles_none_symbols(
+        self, router: SharadarRouter
+    ) -> None:
         """Test that generate_jobs handles None symbols gracefully."""
         # Act
-        jobs = [job async for job in router.generate_jobs(dataset="price", symbols=None)]
+        jobs = [
+            job async for job in router.generate_jobs(dataset="price", symbols=None)
+        ]
 
         # Assert
         assert len(jobs) == 0
 
     @pytest.mark.asyncio
-    async def test_generate_jobs_passes_kwargs_for_tickers_dataset(self, router: SharadarRouter) -> None:
+    async def test_generate_jobs_passes_kwargs_for_tickers_dataset(
+        self, router: SharadarRouter
+    ) -> None:
         """Test that generate_jobs passes kwargs correctly for tickers dataset."""
-        jobs = [job async for job in router.generate_jobs(dataset="tickers", symbols=None, per_page=500)]
+        jobs = [
+            job
+            async for job in router.generate_jobs(
+                dataset="tickers", symbols=None, per_page=500
+            )
+        ]
 
         assert len(jobs) == 1
         job = jobs[0]
@@ -79,9 +99,16 @@ class TestSharadarRouterUnit:
         assert job.spec.params.get("qopts.per_page") == "500"
 
     @pytest.mark.asyncio
-    async def test_generate_jobs_passes_kwargs_for_fundamental_dataset(self, router: SharadarRouter) -> None:
+    async def test_generate_jobs_passes_kwargs_for_fundamental_dataset(
+        self, router: SharadarRouter
+    ) -> None:
         """Test that generate_jobs passes kwargs correctly for fundamental dataset."""
-        jobs = [job async for job in router.generate_jobs(dataset="fundamental", symbols=["AAPL"], dimension="ARQ")]
+        jobs = [
+            job
+            async for job in router.generate_jobs(
+                dataset="fundamental", symbols=["AAPL"], dimension="ARQ"
+            )
+        ]
 
         assert len(jobs) == 1
         job = jobs[0]
@@ -111,9 +138,7 @@ class TestSharadarRouterUnit:
         jobs = [
             job
             async for job in router.generate_jobs(
-                dataset="price",
-                symbols=["AAPL", "MSFT", "TSLA"],
-                bulk_size=3
+                dataset="price", symbols=["AAPL", "MSFT", "TSLA"], bulk_size=3
             )
         ]
 
@@ -143,7 +168,9 @@ class TestSharadarRouterUnit:
         """Test that generate_jobs creates proper FetchJob instances for actions dataset."""
         jobs = [
             job
-            async for job in router.generate_jobs(dataset="actions", symbols=["AAPL", "MSFT"])
+            async for job in router.generate_jobs(
+                dataset="actions", symbols=["AAPL", "MSFT"]
+            )
         ]
 
         assert len(jobs) == 2
@@ -160,7 +187,9 @@ class TestSharadarRouterUnit:
         """Test that generate_jobs creates proper FetchJob instances for daily dataset."""
         jobs = [
             job
-            async for job in router.generate_jobs(dataset="daily", symbols=["AAPL", "MSFT"])
+            async for job in router.generate_jobs(
+                dataset="daily", symbols=["AAPL", "MSFT"]
+            )
         ]
 
         assert len(jobs) == 2
@@ -178,7 +207,9 @@ class TestSharadarRouterUnit:
         # SP500 dataset might be fetched for specific tickers or all
         jobs = [
             job
-            async for job in router.generate_jobs(dataset="sp500", symbols=["AAPL", "MSFT"])
+            async for job in router.generate_jobs(
+                dataset="sp500", symbols=["AAPL", "MSFT"]
+            )
         ]
 
         assert len(jobs) == 2
@@ -188,7 +219,9 @@ class TestSharadarRouterUnit:
         assert job.spec.url.endswith("SP500.json")
         assert job.spec.params.get("ticker") in ["AAPL", "MSFT"]
 
-    def test_parse_method_converts_json_to_dataframe(self, router: SharadarRouter) -> None:
+    def test_parse_method_converts_json_to_dataframe(
+        self, router: SharadarRouter
+    ) -> None:
         """Test that parse method correctly converts JSON payload to DataFrame."""
         # Arrange
         job = FetchJob(
@@ -197,10 +230,22 @@ class TestSharadarRouterUnit:
             symbol="AAPL",
             spec=RequestSpec(url="https://api.sharadar.com/SEP.json"),
         )
-        
+
         payload = {
             "datatable": {
-                "data": [["AAPL", "2024-01-02", "100.0", "101.0", "99.0", "100.5", "1000000", "100.5", "100.0"]],
+                "data": [
+                    [
+                        "AAPL",
+                        "2024-01-02",
+                        "100.0",
+                        "101.0",
+                        "99.0",
+                        "100.5",
+                        "1000000",
+                        "100.5",
+                        "100.0",
+                    ]
+                ],
                 "columns": [
                     {"name": "ticker"},
                     {"name": "date"},
@@ -214,14 +259,14 @@ class TestSharadarRouterUnit:
                 ],
             }
         }
-        
+
         # Act
         result = router.parse(job=job, payload=json.dumps(payload).encode("utf-8"))
 
         # Assert
         assert isinstance(result, ParseResult)
         assert len(result.packets) == 1
-        
+
         packet = result.packets[0]
         assert packet.provider == "sharadar"
         assert packet.table == "sharadar_sep"
@@ -239,9 +284,9 @@ class TestSharadarRouterUnit:
             symbol="AAPL",
             spec=RequestSpec(url="https://api.sharadar.com/SEP.json"),
         )
-        
+
         payload = {"datatable": {"data": [], "columns": []}}
-        
+
         # Act
         result = router.parse(job=job, payload=json.dumps(payload).encode("utf-8"))
 
@@ -249,7 +294,9 @@ class TestSharadarRouterUnit:
         assert isinstance(result, ParseResult)
         assert len(result.packets) == 0
 
-    def test_parse_creates_next_jobs_when_pagination_context_exists(self, router: SharadarRouter) -> None:
+    def test_parse_creates_next_jobs_when_pagination_context_exists(
+        self, router: SharadarRouter
+    ) -> None:
         """Test that parse method creates next_jobs when pagination context exists and next_cursor is returned."""
         # Arrange
         context = {
@@ -263,27 +310,27 @@ class TestSharadarRouterUnit:
             provider="sharadar",
             dataset="price",
             symbol="AAPL,MSFT",
-            spec=RequestSpec(url="https://api.sharadar.com/SEP.json", params={"ticker": "AAPL,MSFT"}),
+            spec=RequestSpec(
+                url="https://api.sharadar.com/SEP.json", params={"ticker": "AAPL,MSFT"}
+            ),
             context=context,
         )
-        
+
         payload = {
             "datatable": {
                 "data": [["AAPL", "2024-01-02", 100.0]],
                 "columns": [{"name": "ticker"}, {"name": "date"}, {"name": "close"}],
             },
-            "meta": {
-                "next_cursor_id": "cursor_12345"
-            }
+            "meta": {"next_cursor_id": "cursor_12345"},
         }
-        
+
         # Act
         result = router.parse(job=job, payload=json.dumps(payload).encode("utf-8"))
 
         # Assert
         assert isinstance(result, ParseResult)
         assert len(result.next_jobs) == 1
-        
+
         next_job = result.next_jobs[0]
         assert next_job.dataset == "price"
         assert next_job.spec.params.get("qopts.cursor_id") == "cursor_12345"
@@ -299,9 +346,9 @@ class TestSharadarRouterUnit:
             symbol="AAPL",
             spec=RequestSpec(url="https://api.sharadar.com/SEP.json"),
         )
-        
+
         malformed_payload = b"{invalid json"
-        
+
         # Act & Assert
         with pytest.raises(Exception):
             router.parse(job=job, payload=malformed_payload)
@@ -319,11 +366,15 @@ class TestRouterEdgeCases:
         )
 
     @pytest.mark.asyncio
-    async def test_router_handles_unknown_dataset_gracefully(self, router: SharadarRouter) -> None:
+    async def test_router_handles_unknown_dataset_gracefully(
+        self, router: SharadarRouter
+    ) -> None:
         """Test that router handles unknown dataset names gracefully."""
         # Act & Assert
         with pytest.raises(NotImplementedError, match="Unsupported dataset"):
-            async for _ in router.generate_jobs(dataset="unknown_dataset", symbols=["AAPL"]):
+            async for _ in router.generate_jobs(
+                dataset="unknown_dataset", symbols=["AAPL"]
+            ):
                 pass
 
     def test_router_maintains_api_rate_limits(self, router: SharadarRouter) -> None:

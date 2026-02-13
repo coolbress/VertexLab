@@ -15,7 +15,7 @@ from vertex_forager.routers import create_router
 __all__ = [
     "BaseClient",
     "BaseRouter",
-    "SharadarClient", 
+    "SharadarClient",
     "ForagerClient",
     "create_client",
     "create_router",

@@ -7,8 +7,10 @@ from typing import Any
 from vertex_forager.core.config import EngineConfig
 from vertex_forager.routers.base import BaseRouter
 from vertex_forager.providers.sharadar.router import SharadarRouter
-from vertex_forager.core.registries import routers as router_registry, RouterRegistration
-
+from vertex_forager.core.registries import (
+    routers as router_registry,
+    RouterRegistration,
+)
 
 
 # Register known providers
@@ -45,7 +47,7 @@ def create_router(
         KeyError: If provider is unknown.
     """
     registration = router_registry.get(provider)
-    
+
     # We pass explicit arguments that match the RouterFactory protocol/signature
     # assuming most routers will need these standard parameters.
     return registration.factory(
@@ -53,7 +55,7 @@ def create_router(
         rate_limit=config.requests_per_minute,
         start_date=start_date,
         end_date=end_date,
-        **kwargs
+        **kwargs,
     )
 
 

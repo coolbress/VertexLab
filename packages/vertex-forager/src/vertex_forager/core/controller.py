@@ -78,7 +78,9 @@ class GradientConcurrencyLimiter:
         if self.rtt_ema == 0:
             self.rtt_ema = rtt
         else:
-            self.rtt_ema = (self.rtt_ema * (1 - self.smoothing)) + (rtt * self.smoothing)
+            self.rtt_ema = (self.rtt_ema * (1 - self.smoothing)) + (
+                rtt * self.smoothing
+            )
 
         # Calculate Gradient
         # If RTT increases, gradient < 1 -> limit decreases
@@ -110,7 +112,9 @@ class GCRARateLimiter:
     - Allows short **Bursts** up to a defined limit, but strictly enforces the long-term average rate.
     """
 
-    def __init__(self, requests_per_minute: int, burst_limit: int | None = None) -> None:
+    def __init__(
+        self, requests_per_minute: int, burst_limit: int | None = None
+    ) -> None:
         if requests_per_minute <= 0:
             raise ValueError("requests_per_minute must be positive")
 
@@ -175,7 +179,9 @@ class FlowController:
             estimated = requests_per_minute // 10
             # Bounds: Min 10 (liveness), Max 50 (socket exhaustion prevention)
             concurrency_limit = max(10, min(50, estimated))
-            logger.info(f"Auto-configured concurrency: {concurrency_limit} (based on {requests_per_minute} RPM)")
+            logger.info(
+                f"Auto-configured concurrency: {concurrency_limit} (based on {requests_per_minute} RPM)"
+            )
 
         self._rate_limiter = GCRARateLimiter(
             requests_per_minute=requests_per_minute,

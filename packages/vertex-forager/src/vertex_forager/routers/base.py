@@ -10,8 +10,8 @@ class BaseRouter(ABC):
     """
     Vendor-agnostic base router abstraction for the Vertex Forager pipeline.
 
-    The Router acts as the protocol adapter between the generic pipeline engine and 
-    specific vendor APIs. It encapsulates all knowledge about URL construction, 
+    The Router acts as the protocol adapter between the generic pipeline engine and
+    specific vendor APIs. It encapsulates all knowledge about URL construction,
     request parameters, and response parsing logic.
 
     Key Responsibilities:
@@ -19,16 +19,16 @@ class BaseRouter(ABC):
        into concrete `FetchJob` objects containing fully formed HTTP request specifications.
        - Handles pagination logic (generating multiple jobs if needed).
        - Applies provider-specific query parameters.
-    2. **Response Parsing (`parse`)**: Converts raw HTTP response bytes into structured 
+    2. **Response Parsing (`parse`)**: Converts raw HTTP response bytes into structured
        `FramePacket`s (Polars DataFrames) normalized for the pipeline.
        - Handles CSV/JSON parsing.
        - Validates response schemas.
        - Maps vendor-specific field names to pipeline standards.
 
     Design Principles:
-    - **Statelessness**: Routers should be primarily stateless, processing inputs to outputs 
+    - **Statelessness**: Routers should be primarily stateless, processing inputs to outputs
       without maintaining complex internal state about the pipeline progress.
-    - **Isolation**: Each Router implementation (e.g., `SharadarRouter`) contains all 
+    - **Isolation**: Each Router implementation (e.g., `SharadarRouter`) contains all
       vendor-specific logic, keeping the core pipeline engine clean and generic.
     """
 
@@ -47,4 +47,3 @@ class BaseRouter(ABC):
     @abstractmethod
     def parse(self, *, job: FetchJob, payload: bytes) -> ParseResult:
         """Parse a raw HTTP response into data packets."""
-

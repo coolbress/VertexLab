@@ -34,7 +34,9 @@ class InMemoryBufferWriter(BaseWriter):
 
         return WriteResult(table=packet.table, rows=packet.frame.height, partitions={})
 
-    def collect_table(self, table: str, sort_cols: list[str] | None = None) -> pl.DataFrame:
+    def collect_table(
+        self, table: str, sort_cols: list[str] | None = None
+    ) -> pl.DataFrame:
         """Concatenate all buffered parts for a table into a single DataFrame.
 
         Args:
@@ -48,7 +50,7 @@ class InMemoryBufferWriter(BaseWriter):
             parts = self._tables.get(table) or []
             if not parts:
                 return pl.DataFrame()
-            
+
             if len(parts) == 1:
                 df = parts[0]
             else:
@@ -59,5 +61,5 @@ class InMemoryBufferWriter(BaseWriter):
                 valid_sort_cols = [c for c in sort_cols if c in df.columns]
                 if valid_sort_cols:
                     df = df.sort(valid_sort_cols)
-                
+
             return df

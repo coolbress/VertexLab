@@ -57,7 +57,6 @@ class FetchJob(BaseModel):
     context: dict[str, Any] = Field(default_factory=dict)
 
 
-
 class FramePacket(BaseModel):
     """Polars frame packet passed from provider to sink."""
 
@@ -73,7 +72,7 @@ class FramePacket(BaseModel):
 
 class EngineConfig(BaseModel):
     """Unified pipeline execution configuration (Simple & Flat).
-    
+
     Consolidates all tuning parameters into a single configuration object.
     Automatically calculates optimal concurrency based on RPM if not provided.
     """
@@ -81,13 +80,13 @@ class EngineConfig(BaseModel):
     # 1. Core Parameters
     requests_per_minute: int
     concurrency: int | None = None
-    
+
     # 2. Retry Configuration
     retry: RetryConfig = Field(default_factory=RetryConfig)
 
     # 3. Advanced Tuning (Internal Defaults)
     flush_threshold_rows: int = 500_000  # ~40MB buffer
-    
+
     @property
     def fetch_concurrency(self) -> int | None:
         """Alias for concurrency to maintain semantic clarity."""
@@ -100,14 +99,14 @@ class EngineConfig(BaseModel):
         """
         try:
             # SC_PHYS_PAGES * SC_PAGE_SIZE = Total Memory in Bytes
-            total_ram = os.sysconf('SC_PHYS_PAGES') * os.sysconf('SC_PAGE_SIZE')
-            
+            total_ram = os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
+
             # Target: 5% of RAM / Estimate: 5MB per packet
             target_buffer_bytes = total_ram * 0.05
             packet_size_est = 5 * 1024 * 1024
-            
+
             calc_size = int(target_buffer_bytes / packet_size_est)
-            
+
             # Bounds: Min 100, Max 2000
             return max(100, min(2000, calc_size))
         except (ValueError, AttributeError, ImportError):

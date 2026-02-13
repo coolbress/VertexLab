@@ -53,14 +53,13 @@ def sharadar_client_config() -> dict[str, Any]:
 
 @pytest.fixture
 def sharadar_client(
-    sharadar_client_config: dict[str, Any], 
+    sharadar_client_config: dict[str, Any],
     mock_http_executor: HttpExecutor,
-    mock_async_client: AsyncMock
+    mock_async_client: AsyncMock,
 ) -> Generator[SharadarClient, None, None]:
     """Sharadar client instance with mocked HttpExecutor."""
     from unittest.mock import patch
-    import sys
-    
+
     # Define a no-op decorator to bypass jupyter_safe
     def no_op_decorator(func):
         return func
@@ -69,29 +68,32 @@ def sharadar_client(
     with patch("vertex_forager.utils.jupyter_safe", side_effect=no_op_decorator):
         # Reload the client module to apply the patched decorator
         import vertex_forager.providers.sharadar.client as client_module
+
         importlib.reload(client_module)
-            
+
         from vertex_forager.providers.sharadar.client import SharadarClient
 
         # Patch HttpExecutor in the base client module (where _run is defined)
         # This ensures that when the client creates an HttpExecutor, it gets our mock
         with patch("vertex_forager.clients.base.HttpExecutor") as MockHttpExecutorClass:
             MockHttpExecutorClass.return_value = mock_http_executor
-            
+
             # Also patch default_async_client in base client to prevent actual network connections
-            with patch("vertex_forager.clients.base.default_async_client") as mock_default_client:
+            with patch(
+                "vertex_forager.clients.base.default_async_client"
+            ) as mock_default_client:
                 mock_default_client.return_value = mock_async_client
                 # Ensure mock_async_client supports async context manager protocol
                 mock_async_client.__aenter__.return_value = mock_async_client
                 mock_async_client.__aexit__.return_value = None
-                
+
                 # Create real client
                 client = SharadarClient(
                     api_key=sharadar_client_config["api_key"],
                     rate_limit=sharadar_client_config["rate_limit"],
-                    base_url=sharadar_client_config["base_url"]
+                    base_url=sharadar_client_config["base_url"],
                 )
-                
+
                 yield client
 
 
@@ -110,8 +112,28 @@ def sample_price_data() -> dict[str, Any]:
     return {
         "datatable": {
             "data": [
-                ["AAPL", "2024-01-02", "100.0", "101.0", "99.5", "100.5", "123", "100.5", "100.5"],
-                ["AAPL", "2024-01-03", "101.0", "102.0", "100.0", "101.5", "456", "101.5", "101.5"],
+                [
+                    "AAPL",
+                    "2024-01-02",
+                    "100.0",
+                    "101.0",
+                    "99.5",
+                    "100.5",
+                    "123",
+                    "100.5",
+                    "100.5",
+                ],
+                [
+                    "AAPL",
+                    "2024-01-03",
+                    "101.0",
+                    "102.0",
+                    "100.0",
+                    "101.5",
+                    "456",
+                    "101.5",
+                    "101.5",
+                ],
             ],
             "columns": [
                 {"name": "ticker"},
@@ -175,13 +197,15 @@ def create_test_fetch_job() -> FetchJob:
 
 def create_test_frame_packet() -> FramePacket:
     """Create test FramePacket."""
-    frame = pl.DataFrame({
-        "ticker": ["AAPL"],
-        "date": ["2024-01-02"],
-        "open": [100.0],
-        "close": [101.0],
-    })
-    
+    frame = pl.DataFrame(
+        {
+            "ticker": ["AAPL"],
+            "date": ["2024-01-02"],
+            "open": [100.0],
+            "close": [101.0],
+        }
+    )
+
     return FramePacket(
         provider="sharadar",
         table="sharadar_sep",

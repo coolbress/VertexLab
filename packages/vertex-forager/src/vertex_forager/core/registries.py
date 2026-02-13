@@ -72,9 +72,12 @@ class Registry(Generic[T]):
 # Writer Registry
 # =============================================================================
 
+
 class WriterFactory(Protocol):
     """Protocol for writer factory functions."""
+
     def __call__(self, uri: str) -> "BaseWriter": ...
+
 
 # Registry for Writer Factories
 # Key: URI scheme (e.g., "duckdb", "memory")
@@ -85,22 +88,27 @@ writers = Registry[Callable[[str], "BaseWriter"]]("writer")
 # Router Registry
 # =============================================================================
 
+
 class RouterFactory(Protocol):
     """Protocol for router factory functions or classes."""
+
     def __call__(
-        self, 
-        *, 
-        api_key: str, 
-        rate_limit: int, 
-        start_date: str | None = None, 
-        end_date: str | None = None, 
-        **kwargs: Any
+        self,
+        *,
+        api_key: str,
+        rate_limit: int,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        **kwargs: Any,
     ) -> "BaseRouter": ...
+
 
 @dataclass(frozen=True, slots=True)
 class RouterRegistration:
     """Metadata for a registered provider router."""
+
     factory: RouterFactory
+
 
 # Registry for Router Registrations
 # Key: Provider name (e.g., "sharadar")
@@ -111,15 +119,22 @@ routers = Registry[RouterRegistration]("router")
 # Client Registry
 # =============================================================================
 
+
 class ClientFactory(Protocol):
     """Protocol for client factory functions or classes."""
-    def __call__(self, api_key: str, rate_limit: int, **kwargs: Any) -> "BaseClient": ...
+
+    def __call__(
+        self, api_key: str, rate_limit: int, **kwargs: Any
+    ) -> "BaseClient": ...
+
 
 @dataclass(frozen=True, slots=True)
 class ClientRegistration:
     """Metadata for a registered provider client."""
+
     env_api_key: str | None
     factory: ClientFactory
+
 
 # Registry for Client Registrations
 # Key: Provider name (e.g., "sharadar")

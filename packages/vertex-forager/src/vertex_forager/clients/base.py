@@ -64,9 +64,9 @@ class BaseClient(ABC):
         # Enforce rate_limit into EngineConfig
         config_params = kwargs.copy()
         config_params["requests_per_minute"] = rate_limit
-        
+
         self._config = EngineConfig(**config_params)
-        
+
         # Initialize FlowController for global rate limiting
         self.controller = FlowController(
             requests_per_minute=self._config.requests_per_minute,
@@ -188,14 +188,11 @@ class BaseClient(ABC):
                 config=self._config,
                 controller=self.controller,
             )
-            
+
             run_kwargs = kwargs.copy()
-            
+
             return await pipeline.run(
-                dataset=dataset, 
-                symbols=symbols, 
-                on_progress=on_progress,
-                **run_kwargs
+                dataset=dataset, symbols=symbols, on_progress=on_progress, **run_kwargs
             )
 
     @asynccontextmanager

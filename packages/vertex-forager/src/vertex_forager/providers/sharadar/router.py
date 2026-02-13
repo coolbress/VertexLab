@@ -31,6 +31,7 @@ from copy import deepcopy
 
 logger = logging.getLogger("vertex_forager.providers.sharadar.router")
 
+
 class SharadarRouter(BaseRouter):
     """Data Router implementation for Sharadar (Nasdaq Data Link)."""
 
@@ -128,7 +129,9 @@ class SharadarRouter(BaseRouter):
         # Unified pagination handling:
         # - tickers: paginated only when symbols not provided
         # - sp500: paginated only when symbols not provided
-        if (dataset == "tickers" and not symbols) or (dataset == "sp500" and not symbols):
+        if (dataset == "tickers" and not symbols) or (
+            dataset == "sp500" and not symbols
+        ):
             try:
                 raw_per_page = kwargs.get("per_page", 10000)
                 # Ensure it's not None/Empty and is numeric
@@ -136,7 +139,7 @@ class SharadarRouter(BaseRouter):
                     per_page = 10000
                 else:
                     per_page = int(raw_per_page)
-                
+
                 # Enforce sensible bounds
                 if per_page < 1:
                     per_page = 1
@@ -153,13 +156,13 @@ class SharadarRouter(BaseRouter):
             return
 
         symbol_list = list(symbols)
-        
+
         raw_dimension = kwargs.get("dimension")
         if not raw_dimension or str(raw_dimension).strip() == "":
             dimension = "MRT"
         else:
             dimension = str(raw_dimension)
-        
+
         # Simplified 1-to-1 Mapping:
         # The Client is responsible for all bulk packing (Smart Bulk Packing or Simple Chunking).
         # The Router simply creates one job per input symbol string.
@@ -187,13 +190,13 @@ class SharadarRouter(BaseRouter):
         # OPTIMIZATION: Try Polars native JSON parsing first (Release GIL, Zero-Copy)
         frame = pl.DataFrame()
         meta = {}
-        
+
         try:
             # pl.read_json is significantly faster than json.loads for large data
             # It expects a file-like object or bytes (if simple json)
             # For Sharadar's nested structure, it returns a Struct.
             json_df = pl.read_json(io.BytesIO(payload))
-            
+
             # Check for API Error
             if "quandl_error" in json_df.columns:
                 err = json_df.select(pl.col("quandl_error")).item(0)
@@ -215,46 +218,53 @@ class SharadarRouter(BaseRouter):
 
             # Extract Data using Pure Polars operations (avoiding Python round-trip)
             # This is significantly faster (approx 1.6x) for large payloads
-            
+
             # 1. Get Column Names (Metadata is small, safe to extract to Python)
             # 'columns' is List[Struct] in the JSON
             # We use item(0, 0) to get the first row, first column safely
-            cols_val = json_df.select(pl.col("datatable").struct.field("columns")).item(0, 0)
-            
+            cols_val = json_df.select(pl.col("datatable").struct.field("columns")).item(
+                0, 0
+            )
+
             # Handle Polars Series return type (for List columns)
             if isinstance(cols_val, pl.Series):
                 cols_list = cols_val.to_list()
             else:
                 cols_list = cols_val
-            
+
             cols_list = cols_list or []
 
             col_names = []
             for i, c in enumerate(cols_list):
                 name = c.get("name")
-                col_names.append(name if isinstance(name, str) and name else f"column_{i}")
-            
+                col_names.append(
+                    name if isinstance(name, str) and name else f"column_{i}"
+                )
+
             # 2. Explode and Unnest 'data' (Heavy part, keep in Polars)
             # 'data' is List[List[str]] (or mixed, coerced to str by read_json)
             frame = (
                 json_df.select(pl.col("datatable").struct.field("data").alias("row"))
                 .explode("row")
-                .select(
-                    pl.col("row").list.to_struct(fields=col_names).struct.unnest()
-                )
+                .select(pl.col("row").list.to_struct(fields=col_names).struct.unnest())
             )
-            
+
             # 3. Cast columns that were coerced to String (Polars JSON mixed-type list behavior)
-            # We rely on SchemaMapper to do the final strict validation, 
+            # We rely on SchemaMapper to do the final strict validation,
             # but here we can do a quick pass if needed, or just let SchemaMapper handle it.
             # Ideally, we should hint types here if we knew them, but Sharadar columns vary.
             # SchemaMapper will handle the actual casting/validation.
-            
-        except (pl.exceptions.PolarsError, ValueError, TypeError, json.JSONDecodeError) as e:
+
+        except (
+            pl.exceptions.PolarsError,
+            ValueError,
+            TypeError,
+            json.JSONDecodeError,
+        ) as e:
             # Fallback to standard parsing if Polars fails (e.g., unexpected format)
             logger.warning(
-                f"Polars JSON parse failed for {job.dataset}, falling back to json.loads. Error: {e}", 
-                exc_info=True
+                f"Polars JSON parse failed for {job.dataset}, falling back to json.loads. Error: {e}",
+                exc_info=True,
             )
             decoded = self._decode_payload(payload)
             frame = self._datatable_to_frame(decoded, dataset=job.dataset)
@@ -264,7 +274,9 @@ class SharadarRouter(BaseRouter):
             return ParseResult(packets=[], next_jobs=[])
 
         observed_at = datetime.now(tz=timezone.utc)
-        table, frame = self._to_table_frame(job=job, frame=frame, observed_at=observed_at)
+        table, frame = self._to_table_frame(
+            job=job, frame=frame, observed_at=observed_at
+        )
         if frame.is_empty():
             return ParseResult(packets=[], next_jobs=[])
 
@@ -286,7 +298,11 @@ class SharadarRouter(BaseRouter):
                 cursor_param = pagination.get("cursor_param")
                 next_cursor = meta.get(meta_key) if meta_key else None
 
-                if next_cursor and cursor_param and next_cursor != job.spec.params.get(cursor_param):
+                if (
+                    next_cursor
+                    and cursor_param
+                    and next_cursor != job.spec.params.get(cursor_param)
+                ):
                     new_job = job.model_copy(deep=True)
                     new_job.spec.params[cursor_param] = next_cursor
                     # Important: Each paginated request counts as a separate API call.
@@ -343,10 +359,7 @@ class SharadarRouter(BaseRouter):
         if not schema:
             return ""
 
-        cols = [
-            col for col in schema.schema.keys()
-            if col not in INTERNAL_COLS
-        ]
+        cols = [col for col in schema.schema.keys() if col not in INTERNAL_COLS]
         return ",".join(cols)
 
     def _build_pagination_job(self, *, dataset: str, per_page: int = 10000) -> FetchJob:
@@ -386,7 +399,9 @@ class SharadarRouter(BaseRouter):
             context=context,
         )
 
-    def _build_per_symbol_job(self, *, dataset: str, symbol: str, dimension: str = "MRT") -> FetchJob:
+    def _build_per_symbol_job(
+        self, *, dataset: str, symbol: str, dimension: str = "MRT"
+    ) -> FetchJob:
         """Build a fetch job for a specific symbol (or batch of symbols).
 
         Args:
@@ -398,20 +413,20 @@ class SharadarRouter(BaseRouter):
             FetchJob: Job configured for the specific symbol(s).
         """
         params: dict[str, str] = {}
-        
+
         # Explicitly validate symbol to prevent empty ticker requests (which trigger bulk)
         if not isinstance(symbol, str) or not symbol.strip():
-             # Should be caught upstream, but as a safeguard
-             # We can't easily raise 400 here without disrupting the flow, 
-             # but returning None or raising ValueError is appropriate for internal logic.
-             # Since this is an internal builder, let's assume valid input or raise.
-             # However, the user asked to "raise/return a 400-like error or skip".
-             # Raising ValueError seems safest to stop this job creation.
-             raise ValueError(f"Invalid symbol for per-symbol job: '{symbol}'")
+            # Should be caught upstream, but as a safeguard
+            # We can't easily raise 400 here without disrupting the flow,
+            # but returning None or raising ValueError is appropriate for internal logic.
+            # Since this is an internal builder, let's assume valid input or raise.
+            # However, the user asked to "raise/return a 400-like error or skip".
+            # Raising ValueError seems safest to stop this job creation.
+            raise ValueError(f"Invalid symbol for per-symbol job: '{symbol}'")
 
         clean_symbol = symbol.strip()
         params["ticker"] = clean_symbol
-        
+
         if dataset == "price":
             params["qopts.columns"] = self._get_request_columns("price")
         elif dataset == "fundamental":
@@ -433,10 +448,10 @@ class SharadarRouter(BaseRouter):
             params=params,
             auth=self._auth(),
         )
-        
+
         # Add pagination context for all datasets that support it
         context = self._PAGINATION_CONTEXT.copy()
-        
+
         return FetchJob(
             provider=self.provider,
             dataset=dataset,
@@ -494,8 +509,10 @@ class SharadarRouter(BaseRouter):
         # If target schema is known, load everything as Utf8 first to prevent inference errors
         # (e.g., empty strings in numeric columns). If unknown, rely on Polars inference.
         target_schema = DATASET_SCHEMA.get(dataset)
-        schema_arg = {name: pl.Utf8 for name in col_names} if target_schema else col_names
-        
+        schema_arg = (
+            {name: pl.Utf8 for name in col_names} if target_schema else col_names
+        )
+
         frame = pl.DataFrame(records, schema=schema_arg, orient="row")
 
         # 2. Apply strict schema casting if available
@@ -513,7 +530,7 @@ class SharadarRouter(BaseRouter):
         #
         #     if cast_exprs:
         #         frame = frame.with_columns(cast_exprs)
-        
+
         return frame
 
     # --------------------------------------------------------------------------
@@ -541,9 +558,7 @@ class SharadarRouter(BaseRouter):
         if table is None:
             raise NotImplementedError(f"Unsupported dataset: {job.dataset}")
 
-        return table, self._normalize_frame(
-            frame=frame, observed_at=observed_at
-        )
+        return table, self._normalize_frame(frame=frame, observed_at=observed_at)
 
     def _normalize_frame(
         self, *, frame: pl.DataFrame, observed_at: datetime
@@ -568,7 +583,9 @@ class SharadarRouter(BaseRouter):
     # Utility Helpers
     # --------------------------------------------------------------------------
 
-    def _iter_symbol_batches(self, symbols: Sequence[str], batch_size: int) -> Iterator[list[str]]:
+    def _iter_symbol_batches(
+        self, symbols: Sequence[str], batch_size: int
+    ) -> Iterator[list[str]]:
         """Yield batches of symbols from the sequence.
 
         Args:

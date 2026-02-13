@@ -14,6 +14,7 @@ from __future__ import annotations
 import polars as pl
 import pytest
 import json
+import httpx
 from unittest.mock import patch, MagicMock, AsyncMock
 
 from vertex_forager.core.config import RunResult
@@ -25,21 +26,24 @@ class TestClientVisualization:
     @pytest.mark.asyncio
     async def test_get_ticker_info_uses_spinner(self, sharadar_client):
         """Test that get_ticker_info (ambiguous task) uses Spinner."""
-        
+
         # Patch dependencies
         # 1. Pipeline run to avoid actual execution
         # 2. Spinner to verify usage
-        with patch("vertex_forager.clients.base.VertexForager") as MockPipeline, \
-            patch("vertex_forager.providers.sharadar.client.Spinner") as MockSpinner:
-            
+        with (
+            patch("vertex_forager.clients.base.VertexForager") as MockPipeline,
+            patch("vertex_forager.providers.sharadar.client.Spinner") as MockSpinner,
+        ):
             # Setup mock pipeline run return value
             mock_pipeline_instance = MockPipeline.return_value
-            mock_pipeline_instance.run = AsyncMock(return_value=MagicMock())  # Return dummy result
+            mock_pipeline_instance.run = AsyncMock(
+                return_value=MagicMock()
+            )  # Return dummy result
 
             # Setup mock spinner context manager
             mock_spinner_instance = MockSpinner.return_value
             mock_spinner_instance.__enter__.return_value = mock_spinner_instance
-            
+
             # Act
             await sharadar_client.get_ticker_info()
 
@@ -53,11 +57,12 @@ class TestClientVisualization:
     @pytest.mark.asyncio
     async def test_get_price_data_uses_tqdm(self, sharadar_client, tmp_path):
         """Test that get_price_data (per-ticker task) uses tqdm."""
-        
+
         # Patch dependencies
-        with patch("vertex_forager.clients.base.VertexForager") as MockPipeline, \
-            patch("vertex_forager.providers.sharadar.client.tqdm") as MockTqdm:
-            
+        with (
+            patch("vertex_forager.clients.base.VertexForager") as MockPipeline,
+            patch("vertex_forager.providers.sharadar.client.tqdm") as MockTqdm,
+        ):
             # Setup mock pipeline run return value
             mock_pipeline_instance = MockPipeline.return_value
             mock_pipeline_instance.run = AsyncMock(return_value=MagicMock())
@@ -65,7 +70,7 @@ class TestClientVisualization:
             # Setup mock tqdm context manager
             mock_tqdm_instance = MockTqdm.return_value
             mock_tqdm_instance.__enter__.return_value = mock_tqdm_instance
-            
+
             # Act
             tickers = ["AAPL", "GOOGL"]
             await sharadar_client.get_price_data(
@@ -73,7 +78,7 @@ class TestClientVisualization:
                 start_date="2024-01-01",
                 end_date="2024-01-10",
                 persist=True,
-                db_path=str(tmp_path / "test.db")
+                db_path=str(tmp_path / "test.db"),
             )
 
             # Assert
@@ -90,10 +95,10 @@ class TestClientVisualization:
                     price_call_found = True
                     break
             assert price_call_found
-            
+
             # Verify tqdm was used
             # Refactored implementation does not use context manager, but try/finally with close()
-            # mock_tqdm_instance.__enter__.assert_called() 
+            # mock_tqdm_instance.__enter__.assert_called()
             mock_tqdm_instance.close.assert_called()
 
 
@@ -108,15 +113,13 @@ class TestClientIntegration:
         # Arrange
         mock_response = json.dumps(sample_price_data).encode()
         mock_http_executor.fetch.return_value = mock_response
-        
-
 
         # Act
         result = await sharadar_client.get_price_data(
-            tickers=["AAPL"], 
+            tickers=["AAPL"],
             start_date="2024-01-01",
             end_date="2024-01-31",
-            connect_db=None
+            connect_db=None,
         )
 
         # Assert
@@ -141,7 +144,7 @@ class TestClientIntegration:
             tickers=["AAPL"],
             start_date="2024-01-01",
             end_date="2024-01-31",
-            connect_db=tmp_path / "test.db"
+            connect_db=tmp_path / "test.db",
         )
 
         # Assert
@@ -194,10 +197,10 @@ class TestClientIntegration:
 
         # Act
         result = await sharadar_client.get_daily_metrics(
-            tickers=["AAPL"], 
+            tickers=["AAPL"],
             start_date="2024-01-01",
             end_date="2024-01-31",
-            connect_db=None
+            connect_db=None,
         )
 
         # Assert
@@ -229,10 +232,10 @@ class TestClientIntegration:
 
         # Act
         result = await sharadar_client.get_corporate_actions(
-            tickers=["AAPL"], 
+            tickers=["AAPL"],
             start_date="2024-01-01",
             end_date="2024-01-31",
-            connect_db=None
+            connect_db=None,
         )
 
         # Assert
@@ -240,8 +243,6 @@ class TestClientIntegration:
         assert result.height == 1
         assert result.get_column("action").to_list() == ["dividend"]
 
-
-import httpx
 
 @pytest.mark.asyncio
 class TestClientErrorHandling:
@@ -258,10 +259,10 @@ class TestClientErrorHandling:
 
         # Act
         result = await sharadar_client.get_price_data(
-            tickers=["AAPL"], 
+            tickers=["AAPL"],
             start_date="2024-01-01",
             end_date="2024-01-31",
-            connect_db=None
+            connect_db=None,
         )
 
         # Assert
@@ -279,10 +280,10 @@ class TestClientErrorHandling:
 
         # Act
         result = await sharadar_client.get_price_data(
-            tickers=["AAPL"], 
+            tickers=["AAPL"],
             start_date="2024-01-01",
             end_date="2024-01-31",
-            connect_db=None
+            connect_db=None,
         )
 
         # Assert
@@ -301,16 +302,16 @@ class TestClientErrorHandling:
 
         # Act
         result1 = await sharadar_client.get_price_data(
-            tickers=["AAPL"], 
+            tickers=["AAPL"],
             start_date="2024-01-01",
             end_date="2024-01-31",
-            connect_db=None
+            connect_db=None,
         )
         result2 = await sharadar_client.get_price_data(
-            tickers=["MSFT"], 
+            tickers=["MSFT"],
             start_date="2024-01-01",
             end_date="2024-01-31",
-            connect_db=None
+            connect_db=None,
         )
 
         # Assert

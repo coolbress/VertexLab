@@ -49,7 +49,7 @@ def create_writer(connect_db: str | Path | None) -> BaseWriter:
     # Fix: Only treat as URI if it contains '://' to avoid misinterpreting Windows paths
     if isinstance(connect_db, str) and "://" in connect_db:
         parsed = urlparse(connect_db)
-        
+
         # 1. URI with Scheme (e.g., duckdb://)
         if parsed.scheme:
             try:

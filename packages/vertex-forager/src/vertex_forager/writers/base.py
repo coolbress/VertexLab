@@ -20,22 +20,22 @@ class BaseWriter(ABC):
     """
     Abstract Base Class for Data Writers.
 
-    The Writer component acts as the final destination in the data pipeline, responsible 
+    The Writer component acts as the final destination in the data pipeline, responsible
     for persisting normalized `FramePacket`s (Polars DataFrames) to a durable storage backend.
 
     Key Responsibilities:
     1. **Persistence**: Efficiently writing data to disk (DuckDB, Parquet) or memory.
-    2. **Concurrency Safety**: Managing thread/async safety for storage engines that require 
+    2. **Concurrency Safety**: Managing thread/async safety for storage engines that require
        single-writer access (e.g., DuckDB).
-    3. **Bulk Processing**: Implementing `write_bulk` to optimize throughput by reducing 
+    3. **Bulk Processing**: Implementing `write_bulk` to optimize throughput by reducing
        transaction overhead.
-    4. **Resource Management**: Handling connections, file handles, and proper cleanup via 
+    4. **Resource Management**: Handling connections, file handles, and proper cleanup via
        async context managers (`__aenter__`, `__aexit__`).
 
     Design Principles:
-    - **Schema-Agnostic**: Writers receive already-normalized data. They trust the upstream 
+    - **Schema-Agnostic**: Writers receive already-normalized data. They trust the upstream
       `SchemaMapper` and do not perform schema validation.
-    - **Fail-Fast**: Errors during write operations should propagate immediately to stop 
+    - **Fail-Fast**: Errors during write operations should propagate immediately to stop
       the pipeline or trigger retry logic.
     """
 
@@ -87,9 +87,11 @@ class BaseWriter(ABC):
         """Async context manager entry."""
         return self
 
-    async def __aexit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
+    async def __aexit__(
+        self, exc_type: object, exc_val: object, exc_tb: object
+    ) -> None:
         """Async context manager exit.
-        
+
         Ensures resources are closed even if an error occurs.
         """
         await self.close()

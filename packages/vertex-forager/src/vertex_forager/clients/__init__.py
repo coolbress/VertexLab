@@ -5,11 +5,15 @@ from __future__ import annotations
 import os
 
 from vertex_forager.clients.base import BaseClient
-from vertex_forager.core.registries import clients as client_registry, ClientRegistration
+from vertex_forager.core.registries import (
+    clients as client_registry,
+    ClientRegistration,
+)
 
 
 def _register_sharadar() -> None:
     from vertex_forager.providers.sharadar.client import SharadarClient
+
     # Register known providers
     client_registry.register(
         "sharadar",
@@ -22,6 +26,7 @@ def _register_sharadar() -> None:
 
 def _register_yfinance() -> None:
     from vertex_forager.providers.yfinance.client import YFinanceClient
+
     client_registry.register(
         "yfinance",
         ClientRegistration(
@@ -49,12 +54,12 @@ def create_client(
 
     Returns:
         Configured client instance inheriting from BaseClient.
-    
+
     Raises:
         ValueError: If API key is missing.
         KeyError: If provider is unknown.
     """
-    
+
     try:
         registration = client_registry.get(provider)
     except KeyError:
@@ -77,11 +82,7 @@ def create_client(
             f"Missing api_key (set api_key or {registration.env_api_key} in environment/.env)"
         )
 
-    return registration.factory(
-        api_key=resolved_key, 
-        rate_limit=rate_limit, 
-        **kwargs
-    )
+    return registration.factory(api_key=resolved_key, rate_limit=rate_limit, **kwargs)
 
 
 __all__ = ["BaseClient", "create_client"]

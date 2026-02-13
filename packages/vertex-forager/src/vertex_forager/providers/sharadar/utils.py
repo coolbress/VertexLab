@@ -75,6 +75,7 @@ INTERNAL_COLS: Final[set[str]] = {"provider", "fetched_at"}
 # Bulk Optimization
 # --------------------------------------------------------------------------
 
+
 class OptimizedBulkCalculator:
     """Optimizes ticker batches for Sharadar API to maximize density and minimize pagination."""
 
@@ -88,7 +89,9 @@ class OptimizedBulkCalculator:
     ) -> list[str]:
         """Optimize ticker batches using metadata to maximize density."""
         if metadata is None or metadata.is_empty():
-            logger.warning("No metadata provided. Falling back to heuristic bulk packing.")
+            logger.warning(
+                "No metadata provided. Falling back to heuristic bulk packing."
+            )
             return self._heuristic_bulk_packing(tickers)
 
         # 1. Determine columns based on table
@@ -96,7 +99,7 @@ class OptimizedBulkCalculator:
         # - Low Density (Quarterly/Sparse): SF1 (Fundamental), SF3 (Institutional), SF2 (Insider), ACTIONS
         # - High Density (Daily): SEP (Price), DAILY (Metrics), SP500
         # Note: SF2/ACTIONS are event-based but generally much sparser than daily price data, so we treat them as low density to pack more tickers.
-        
+
         table_lower = table_name.lower()
         is_low_density = any(x in table_lower for x in ("sf1", "sf3", "sf2", "actions"))
 
@@ -106,7 +109,7 @@ class OptimizedBulkCalculator:
         # 2. Build Metadata Map
         meta_map: dict[str, tuple[date, date]] = {}
         required_cols = {"ticker", start_col, end_col}
-        
+
         if not required_cols.issubset(set(metadata.columns)):
             logger.warning(
                 f"Metadata missing required columns {required_cols - set(metadata.columns)}. Falling back to heuristic."
@@ -117,7 +120,7 @@ class OptimizedBulkCalculator:
             t = row.get("ticker")
             s = row.get(start_col)
             e = row.get(end_col)
-            
+
             valid_t = isinstance(t, str)
             valid_s = isinstance(s, (str, date, datetime))
             valid_e = isinstance(e, (str, date, datetime))
@@ -128,7 +131,7 @@ class OptimizedBulkCalculator:
                         s = datetime.strptime(s, "%Y-%m-%d").date()
                     elif isinstance(s, datetime):
                         s = s.date()
-                    
+
                     if isinstance(e, str):
                         e = datetime.strptime(e, "%Y-%m-%d").date()
                     elif isinstance(e, datetime):
@@ -136,17 +139,23 @@ class OptimizedBulkCalculator:
 
                     meta_map[t] = (s, e)
                 except ValueError:
-                    logger.warning(f"Failed to parse date for ticker {t}: start={s}, end={e}. Skipping.")
+                    logger.warning(
+                        f"Failed to parse date for ticker {t}: start={s}, end={e}. Skipping."
+                    )
                     continue
             else:
-                logger.debug(f"Skipping metadata for {t}: {start_col}={s}, {end_col}={e}")
+                logger.debug(
+                    f"Skipping metadata for {t}: {start_col}={s}, {end_col}={e}"
+                )
 
         # 3. Bin Packing
         bulks: list[str] = []
         current_bulk: list[str] = []
         current_rows = 0
         MAX_ROWS = 9500  # Safety margin for 10k limit
-        MAX_TICKERS_PER_BULK = 100  # Safety margin for URL length (Sharadar recommendation)
+        MAX_TICKERS_PER_BULK = (
+            100  # Safety margin for URL length (Sharadar recommendation)
+        )
 
         try:
             req_start = (
@@ -158,7 +167,9 @@ class OptimizedBulkCalculator:
                 else date.today()
             )
         except ValueError as e:
-            logger.warning(f"Invalid date format in request: {e}. Defaulting to full range.")
+            logger.warning(
+                f"Invalid date format in request: {e}. Defaulting to full range."
+            )
             req_start = None
             req_end = date.today()
 
@@ -181,9 +192,9 @@ class OptimizedBulkCalculator:
                     else:
                         # Trading days approx 0.69
                         est = int(delta_days * 0.69)
-                    
+
                     est = max(1, est)
-                
+
                 # DEBUG LOG
                 logger.debug(f"Ticker {t}: {meta_start}~{meta_end} -> Est Rows: {est}")
             else:
@@ -227,12 +238,15 @@ class OptimizedBulkCalculator:
         return bulks
 
     def estimate_rows(
-        self, start_date: str | None, end_date: str | None, table_name: str = "sharadar_sep"
+        self,
+        start_date: str | None,
+        end_date: str | None,
+        table_name: str = "sharadar_sep",
     ) -> int:
         """Estimate the number of rows per ticker based on date range and table type."""
         table_lower = table_name.lower()
         is_low_density = any(x in table_lower for x in ("sf1", "sf3", "sf2", "actions"))
-        
+
         if start_date is None:
             # Full history assumption (e.g. 1998 ~ now) -> approx 25+ years
             if is_low_density:
@@ -261,7 +275,7 @@ class OptimizedBulkCalculator:
             else:
                 # Trading days approx 5/7 = ~0.71, minus holidays ~ 0.69
                 estimated_rows = int(delta_days * 0.69)
-            
+
             return max(1, estimated_rows)
         except ValueError:
             return 15000 if not is_low_density else 150
