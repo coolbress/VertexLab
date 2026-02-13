@@ -27,6 +27,8 @@ from vertex_forager.providers.sharadar.utils import (
 )
 
 
+from copy import deepcopy
+
 logger = logging.getLogger("vertex_forager.providers.sharadar.router")
 
 class SharadarRouter(BaseRouter):
@@ -375,7 +377,7 @@ class SharadarRouter(BaseRouter):
             params=params,
             auth=self._auth(),
         )
-        context = self._PAGINATION_CONTEXT
+        context = deepcopy(self._PAGINATION_CONTEXT)
         return FetchJob(
             provider=self.provider,
             dataset=dataset,

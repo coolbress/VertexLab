@@ -14,7 +14,7 @@ class TableSchema:
         table: Canonical table name (e.g., "sharadar_sep").
         schema: Mapping of column names to Polars DataTypes.
         unique_key: Tuple of column names that form the primary key (for deduplication).
-        analysis_date_col: Optional column name used as the analysis/timestamp column for time-based processing. Defaults to None.
+        analysis_date_col: (str | None) Optional column name used as the analysis/timestamp column for time-based processing. Defaults to None.
     """
     table: str
     schema: dict[str, pl.DataType]

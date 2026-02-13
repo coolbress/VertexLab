@@ -128,7 +128,7 @@ class CompactLevelFormatter(logging.Formatter):
 
 class ListHandler(logging.Handler):
     """로그 레코드를 메모리에 저장하는 핸들러."""
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.records: list[logging.LogRecord] = []
 
@@ -239,19 +239,19 @@ class Spinner:
         sys.stderr.write(f"\r{' ' * (columns - 1)}\r")
         sys.stderr.flush()
 
-    def _hide_cursor(self):
+    def _hide_cursor(self) -> None:
         """Hide the cursor."""
         if self._is_tty:
             sys.stderr.write("\033[?25l")
             sys.stderr.flush()
 
-    def _show_cursor(self):
+    def _show_cursor(self) -> None:
         """Show the cursor."""
         if self._is_tty:
             sys.stderr.write("\033[?25h")
             sys.stderr.flush()
 
-    def __enter__(self):
+    def __enter__(self) -> "Spinner":
         # Setup logging capture like before
         self.root_logger = logging.getLogger()
         self.original_handlers = self.root_logger.handlers[:]

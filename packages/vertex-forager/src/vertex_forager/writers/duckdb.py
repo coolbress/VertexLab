@@ -63,6 +63,12 @@ class DuckDBWriter(BaseWriter):
         """
         Write a single packet to DuckDB immediately.
         Stateless implementation (no buffering).
+
+        Args:
+            packet: FramePacket containing the table name and DataFrame to write.
+
+        Returns:
+            WriteResult: Result object containing table name and number of rows written.
         """
         if packet.frame.is_empty():
             return WriteResult(table=packet.table, rows=0)
@@ -74,6 +80,12 @@ class DuckDBWriter(BaseWriter):
         """
         Write a bulk of packets to DuckDB immediately.
         Stateless implementation (no buffering).
+
+        Args:
+            packets: List of FramePackets to write.
+
+        Returns:
+            list[WriteResult]: List of result objects for each written packet.
         """
         if not packets:
             return []
@@ -152,6 +164,12 @@ class DuckDBWriter(BaseWriter):
         """
         Optimize database storage.
         Runs VACUUM and CHECKPOINT to reclaim space and enforce compression.
+
+        Args:
+            None
+
+        Returns:
+            None
         """
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(self._executor, self._compact_sync)
@@ -169,6 +187,12 @@ class DuckDBWriter(BaseWriter):
         
         Acquires the lock to ensure no write operations are in progress
         before closing the connection.
+
+        Args:
+            None
+
+        Returns:
+            None
         """
         # Flush any remaining data first (outside lock to avoid deadlock)
         # await self.flush() (no-op, removed to avoid recursive lock wait)
@@ -232,28 +256,29 @@ class DuckDBWriter(BaseWriter):
             # Register the dataframe as a view to infer schema
             conn.register('temp_df_view', df)
             
-            # Create the table structure
-            q_table = self._quote_identifier(table_name)
-            conn.execute(f'CREATE TABLE {q_table} AS SELECT * FROM temp_df_view WHERE 1=0')
-            
-            # Apply Primary Key constraint from Schema Registry
-            pk_cols = self._get_primary_keys(table_name)
-            
-            if pk_cols:
-                # Check if all PK columns exist in the dataframe
-                if all(col in df.columns for col in pk_cols):
-                    pk_str = ", ".join(self._quote_identifier(c) for c in pk_cols)
-                    try:
-                        idx_name = self._quote_identifier(f"idx_{table_name}_pk")
-                        conn.execute(f'CREATE UNIQUE INDEX IF NOT EXISTS {idx_name} ON {q_table} ({pk_str})')
-                        self._logger.info(f"Created UNIQUE INDEX on {table_name}({pk_str})")
-                    except Exception as e:
-                        self._logger.warning(f"Failed to create unique index on {table_name}: {e}")
-                else:
-                    missing = [col for col in pk_cols if col not in df.columns]
-                    self._logger.warning(f"Skipping UNIQUE INDEX for {table_name}: Missing PK columns {missing} in dataframe")
-            
-            conn.unregister('temp_df_view')
+            try:
+                # Create the table structure
+                q_table = self._quote_identifier(table_name)
+                conn.execute(f'CREATE TABLE {q_table} AS SELECT * FROM temp_df_view WHERE 1=0')
+                
+                # Apply Primary Key constraint from Schema Registry
+                pk_cols = self._get_primary_keys(table_name)
+                
+                if pk_cols:
+                    # Check if all PK columns exist in the dataframe
+                    if all(col in df.columns for col in pk_cols):
+                        pk_str = ", ".join(self._quote_identifier(c) for c in pk_cols)
+                        try:
+                            idx_name = self._quote_identifier(f"idx_{table_name}_pk")
+                            conn.execute(f'CREATE UNIQUE INDEX IF NOT EXISTS {idx_name} ON {q_table} ({pk_str})')
+                            self._logger.info(f"Created UNIQUE INDEX on {table_name}({pk_str})")
+                        except Exception as e:
+                            self._logger.warning(f"Failed to create unique index on {table_name}: {e}")
+                    else:
+                        missing = [col for col in pk_cols if col not in df.columns]
+                        self._logger.warning(f"Skipping UNIQUE INDEX for {table_name}: Missing PK columns {missing} in dataframe")
+            finally:
+                conn.unregister('temp_df_view')
             
             # Update Cache
             self._table_schemas[table_name] = set(df.columns)

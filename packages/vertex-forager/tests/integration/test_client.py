@@ -51,7 +51,7 @@ class TestClientVisualization:
             mock_spinner_instance.__exit__.assert_called()
 
     @pytest.mark.asyncio
-    async def test_get_price_data_uses_tqdm(self, sharadar_client):
+    async def test_get_price_data_uses_tqdm(self, sharadar_client, tmp_path):
         """Test that get_price_data (per-ticker task) uses tqdm."""
         
         # Patch dependencies
@@ -73,7 +73,7 @@ class TestClientVisualization:
                 start_date="2024-01-01",
                 end_date="2024-01-10",
                 persist=True,
-                db_path="/tmp/test.db"
+                db_path=str(tmp_path / "test.db")
             )
 
             # Assert
@@ -241,8 +241,11 @@ class TestClientIntegration:
         assert result.get_column("action").to_list() == ["dividend"]
 
 
+import httpx
+
+@pytest.mark.asyncio
 class TestClientErrorHandling:
-    """Tests for client error handling scenarios."""
+    """Test suite for client error handling scenarios."""
 
     @pytest.mark.asyncio
     async def test_client_handles_empty_response_gracefully(
@@ -272,7 +275,7 @@ class TestClientErrorHandling:
     ) -> None:
         """Test that client handles API errors gracefully."""
         # Arrange - Mock http executor to raise exception
-        mock_http_executor.fetch.side_effect = Exception("API Error")
+        mock_http_executor.fetch.side_effect = httpx.RequestError("API Error")
 
         # Act
         result = await sharadar_client.get_price_data(

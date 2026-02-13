@@ -66,7 +66,7 @@ def create_client(
             _register_yfinance()
             registration = client_registry.get(provider)
         else:
-            raise
+            raise KeyError(f"Unsupported client: {provider}") from None
 
     resolved_key = api_key
     if not resolved_key and registration.env_api_key:

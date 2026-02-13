@@ -394,7 +394,26 @@ class SharadarClient(BaseClient):
         end_date: str | None = None,
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
-        """Fetch price data (SEP)."""
+        """Get price data for specified tickers.
+
+        This method delegates to `_fetch_by_tickers` to retrieve price data.
+
+        Args:
+            tickers: List of ticker symbols to fetch data for.
+            connect_db: Path to DuckDB database file for storing results.
+            start_date: Start date for data fetching (YYYY-MM-DD).
+            end_date: End date for data fetching (YYYY-MM-DD).
+            **kwargs: Additional arguments passed to the fetcher.
+
+        Returns:
+            polars.DataFrame | RunResult: DataFrame if fetching in-memory, 
+            or RunResult object if storing to database.
+
+        Raises:
+            ValueError: If neither tickers nor connect_db is provided.
+            httpx.RequestError: If a network error occurs.
+            httpx.HTTPStatusError: If the API returns a non-success status code.
+        """
         return await self._fetch_by_tickers(
             dataset="price",
             desc="Fetching price data",

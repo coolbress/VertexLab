@@ -10,7 +10,7 @@ def main():
 @main.command()
 @click.option('--symbol', '-s', multiple=True, help="수집할 종목 코드 (예: AAPL)")
 @click.option('--source', type=click.Choice(['yfinance', 'sharadar']), default='yfinance')
-def collect(symbol, source):
+def collect(symbol: tuple[str, ...], source: str) -> None:
     """지정한 소스로부터 금융 데이터를 수집합니다."""
     if not symbol:
         click.echo("⚠️ 수집할 종목(--symbol)을 입력해주세요.")

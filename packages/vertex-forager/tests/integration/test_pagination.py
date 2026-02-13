@@ -5,7 +5,8 @@ from vertex_forager.providers.sharadar.client import SharadarClient
 from vertex_forager.providers.sharadar import client as client_module
 
 @pytest.fixture
-def mock_client():
+def mock_client() -> SharadarClient:
+    """Fixture that returns a SharadarClient with a mocked _run method."""
     client = SharadarClient(api_key="test_key", rate_limit=100)
     client._run = AsyncMock(return_value=MagicMock())  # Mock _run to avoid actual execution
     return client
@@ -31,7 +32,8 @@ async def test_fetch_pagination_show_progress_true(mock_client):
         )
         # Check if tqdm was called with disable=False (or disable=not True -> False)
         # Note: disable=False is default, but we passed disable=not show_progress
-        call_kwargs = mock_tqdm.call_args.kwargs if mock_tqdm.call_args else {}
+        assert mock_tqdm.called, "tqdm should have been called"
+        call_kwargs = mock_tqdm.call_args.kwargs
         assert call_kwargs.get("disable") is False
 
 @pytest.mark.asyncio

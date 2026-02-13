@@ -55,10 +55,15 @@ class SchemaMapper:
         if table_schema is None or packet.frame.is_empty():
             return packet
 
+        # Check for 'date' column in the ORIGINAL frame before casting
+        # Casting might inject a null 'date', so we must check beforehand
+        original_has_date = "date" in packet.frame.columns
+
         frame = self._cast_to_schema(packet.frame, table_schema.schema)
         
         # Guarantee 'date' column existence
-        if "date" not in frame.columns:
+        # Only derive/create if it wasn't in the original frame
+        if not original_has_date:
             # Check for common timestamp aliases
             timestamp_cols = ["timestamp", "created_at", "datetime", "calendardate"]
             found_ts = next((col for col in timestamp_cols if col in frame.columns), None)
@@ -68,11 +73,16 @@ class SchemaMapper:
                 frame = frame.with_columns(
                     pl.col(found_ts).cast(pl.Date).alias("date")
                 )
-            else:
-                # Create null date column
-                frame = frame.with_columns(
+            elif "date" not in frame.columns:
+                # Create null date column if it doesn't exist at all
+                # (Note: _cast_to_schema might have created it as null if it was in schema but missing in data)
+                # But if it wasn't in schema either, we add it here.
+                 frame = frame.with_columns(
                     pl.lit(None, dtype=pl.Date).alias("date")
                 )
+        
+        # If original had date, _cast_to_schema preserved it (or cast it).
+        # We don't overwrite it.
 
         # Reorder columns to put unique key (PK) first for better readability
         frame = self._reorder_columns(frame, table_schema.unique_key)

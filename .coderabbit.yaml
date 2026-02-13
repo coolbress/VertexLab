@@ -19,7 +19,7 @@ reviews:
       - "!**/.pytest_cache/**"
       - "!**/examples/**"
       - "!**/.ipynb_checkpoints/**"
-      - "!dist/**"
+      - "!**/dist/**"
    auto_review:
       enabled: true
 

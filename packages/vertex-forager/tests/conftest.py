@@ -11,8 +11,9 @@ Test fixtures and utilities for vertex-forager tests.
 from __future__ import annotations
 
 import json
+import importlib
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Generator
 from unittest.mock import AsyncMock
 
 import polars as pl
@@ -22,6 +23,7 @@ from httpx import AsyncClient
 from vertex_forager.core.config import FetchJob, FramePacket, RequestSpec
 from vertex_forager.core.http import HttpExecutor
 from vertex_forager.providers.sharadar.router import SharadarRouter
+from vertex_forager.providers.sharadar.client import SharadarClient
 
 
 @pytest.fixture
@@ -54,7 +56,7 @@ def sharadar_client(
     sharadar_client_config: dict[str, Any], 
     mock_http_executor: HttpExecutor,
     mock_async_client: AsyncMock
-) -> Any:
+) -> Generator[SharadarClient, None, None]:
     """Sharadar client instance with mocked HttpExecutor."""
     from unittest.mock import patch
     import sys
@@ -65,9 +67,9 @@ def sharadar_client(
 
     # Patch jupyter_safe in the utils module where it is defined
     with patch("vertex_forager.utils.jupyter_safe", side_effect=no_op_decorator):
-        # Force reload of the client module to apply the patched decorator
-        if "vertex_forager.providers.sharadar.client" in sys.modules:
-            del sys.modules["vertex_forager.providers.sharadar.client"]
+        # Reload the client module to apply the patched decorator
+        import vertex_forager.providers.sharadar.client as client_module
+        importlib.reload(client_module)
             
         from vertex_forager.providers.sharadar.client import SharadarClient
 
