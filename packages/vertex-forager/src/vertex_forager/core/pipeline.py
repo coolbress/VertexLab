@@ -415,7 +415,7 @@ class VertexForager:
                 if not frames:
                     return
 
-                merged_frame = pl.concat(frames)
+                merged_frame = pl.concat(frames, how="vertical")
 
                 # Create merged packet (use metadata from the first packet)
                 first = packets[0]
@@ -447,8 +447,9 @@ class VertexForager:
                 async with result_lock:
                     result.errors.append(f"Writer:{e}")
                 logger.error(f"WRITER: Error flushing {table}: {e}")
-                # Do NOT clear buffer on failure, allowing for potential retry or manual recovery
-                # For now, we just keep it in memory (potentially dangerous if repeated failures occur)
+                # Do NOT clear buffer on failure.
+                # Propagate error to avoid unbounded memory growth/silent failure
+                raise
 
         while True:
             packet = await pkt_q.get()
