@@ -169,7 +169,15 @@ class DuckDBWriter(BaseWriter):
         return WriteResult(table=table_name, rows=0)
 
     async def flush(self) -> None:
-        """Flush is now no-op as we write immediately."""
+        """
+        Flush is now no-op as we write immediately.
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
         pass
 
     async def compact(self) -> None:
@@ -214,7 +222,7 @@ class DuckDBWriter(BaseWriter):
             if self._conn:
                 try:
                     self._conn.close()
-                except Exception as e:
+                except duckdb.Error as e:
                     self._logger.warning(f"Error closing DuckDB connection: {e}")
                 finally:
                     self._conn = None

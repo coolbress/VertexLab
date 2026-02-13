@@ -6,6 +6,7 @@ import logging
 import time
 import itertools
 import functools
+import httpx
 from typing import Any, TYPE_CHECKING
 from collections.abc import Iterable, Sequence, Callable
 
@@ -366,7 +367,7 @@ class VertexForager:
                         # Use monotonic time as tie breaker.
                         await req_q.put((0, time.monotonic_ns(), next_job))
 
-            except Exception as exc:
+            except httpx.HTTPStatusError as exc:
                 worker_exc = exc
                 async with result_lock:
                     result.errors.append(
@@ -374,6 +375,33 @@ class VertexForager:
                     )
                 logger.error(
                     f"[Worker-{worker_id}] Error processing {job.symbol}: {exc}"
+                )
+            except httpx.RequestError as exc:
+                worker_exc = exc
+                async with result_lock:
+                    result.errors.append(
+                        f"{job.provider}:{job.dataset}:{job.symbol}:{exc}"
+                    )
+                logger.error(
+                    f"[Worker-{worker_id}] Error processing {job.symbol}: {exc}"
+                )
+            except ValueError as exc:
+                worker_exc = exc
+                async with result_lock:
+                    result.errors.append(
+                        f"{job.provider}:{job.dataset}:{job.symbol}:{exc}"
+                    )
+                logger.error(
+                    f"[Worker-{worker_id}] Error processing {job.symbol}: {exc}"
+                )
+            except Exception as exc:
+                worker_exc = exc
+                async with result_lock:
+                    result.errors.append(
+                        f"Unexpected:{job.provider}:{job.dataset}:{job.symbol}:{exc}"
+                    )
+                logger.exception(
+                    f"[Worker-{worker_id}] Unexpected error processing {job.symbol}: {exc}"
                 )
             finally:
                 req_q.task_done()
@@ -443,7 +471,7 @@ class VertexForager:
                         result.tables.get(write_result.table, 0) + write_result.rows
                     )
 
-                # Clear buffer ONLY after successful write
+                # Clear buffer only after successful write
                 buffers[table] = []
                 buffer_rows[table] = 0
 
@@ -453,8 +481,7 @@ class VertexForager:
                 async with result_lock:
                     result.errors.append(f"Writer:{e}")
                 logger.error(f"WRITER: Error flushing {table}: {e}")
-                # Do NOT clear buffer on failure.
-                # Propagate error to avoid unbounded memory growth/silent failure
+                # 재시도 정책에 맞게 버퍼 유지 또는 명시적 전파
                 raise
 
         while True:
