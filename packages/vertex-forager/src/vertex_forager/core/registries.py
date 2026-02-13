@@ -142,7 +142,11 @@ class RouterFactory(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class RouterRegistration:
-    """Metadata for a registered provider router."""
+    """Metadata for a registered provider router.
+
+    Attributes:
+        factory: Factory callable that creates a router instance.
+    """
 
     factory: RouterFactory
 
