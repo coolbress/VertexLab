@@ -61,7 +61,7 @@ class DuckDBWriter(BaseWriter):
             # OPTIMIZATION: Increased WAL limit to 1GB to reduce checkpointing overhead during burst writes
             try:
                 self._conn.execute("PRAGMA wal_autocheckpoint='1GB'")
-            except Exception as e:
+            except duckdb.Error as e:
                 self._logger.warning(f"Failed to set wal_autocheckpoint: {e}")
         return self._conn
 
@@ -291,7 +291,7 @@ class DuckDBWriter(BaseWriter):
                             self._logger.info(
                                 f"Created UNIQUE INDEX on {table_name}({pk_str})"
                             )
-                        except Exception as e:
+                        except duckdb.Error as e:
                             self._logger.warning(
                                 f"Failed to create unique index on {table_name}: {e}"
                             )
@@ -355,7 +355,7 @@ class DuckDBWriter(BaseWriter):
                 conn.execute(f"ALTER TABLE {q_table} ADD COLUMN {q_col} {sql_type}")
                 # Update Cache
                 self._table_schemas[table_name].add(col_name)
-            except Exception as e:
+            except duckdb.Error as e:
                 self._logger.error(
                     f"Failed to add column {col_name} to {table_name}: {e}"
                 )

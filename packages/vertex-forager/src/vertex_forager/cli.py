@@ -28,7 +28,7 @@ def main() -> None:
 @main.command()
 @click.option("--symbol", "-s", multiple=True, help="수집할 종목 코드 (예: AAPL)")
 @click.option(
-    "--source", type=click.Choice(["yfinance", "sharadar"]), default="yfinance"
+    "--source", type=click.Choice(["yfinance", "sharadar"]), default="sharadar"
 )
 def collect(symbol: tuple[str, ...], source: str) -> None:
     """
@@ -125,8 +125,8 @@ def status() -> None:
         try:
             if f.is_file():
                 size += f.stat().st_size
-        except Exception:
-            # Skip files that cannot be accessed
+        except (PermissionError, OSError) as exc:
+            logger.warning("Failed to stat file during size calc: %s", exc)
             continue
 
     click.echo(f"📊 Total Data Size: {size / (1024 * 1024):.2f} MB")

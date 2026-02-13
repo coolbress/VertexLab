@@ -18,10 +18,12 @@ dependencies = [
     "pyarrow>=23.0.0,<24.0.0",
     "pydantic>=2.12.5,<3.0.0",
     "python-dotenv>=1.2.1,<2.0.0",
-    "requests>=2.32.5,<3.0.0",
     "tenacity>=9.1.4,<10.0.0",
     "tqdm>=4.67.3,<5.0.0",
 ]
+
+[project.scripts]
+vertex-forager = "vertex_forager.cli:main"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

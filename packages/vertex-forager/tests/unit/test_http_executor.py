@@ -202,8 +202,8 @@ class TestHttpExecutorConcurrency:
 
         mock_async_client.request.return_value = success_response
 
-        spec1 = RequestSpec(url="https://api.example.com/data1")
-        spec2 = RequestSpec(url="https://api.example.com/data2")
+        spec1 = RequestSpec(url="https://api.example.com/data1", method=HttpMethod.GET)
+        spec2 = RequestSpec(url="https://api.example.com/data2", method=HttpMethod.GET)
 
         # Act - execute requests concurrently
         results = await asyncio.gather(executor.fetch(spec1), executor.fetch(spec2))
