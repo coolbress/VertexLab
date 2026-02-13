@@ -1,7 +1,7 @@
 [project]
 name = "vertex-forager"
 version = "0.1.0"
-description = "Add your description here"
+description = "High-performance asynchronous financial data scraping engine using Polars and DuckDB."
 readme = "README.md"
 authors = [
     { name = "coolbress", email = "81678322+coolbress@users.noreply.github.com" }
