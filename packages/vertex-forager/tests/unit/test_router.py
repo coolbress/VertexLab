@@ -53,11 +53,16 @@ class TestSharadarRouterUnit:
         ]
 
         assert len(jobs) == 2
-        job = jobs[0]
-        assert job.provider == "sharadar"
-        assert job.dataset == "price"
-        assert isinstance(job.spec, RequestSpec)
-        assert job.spec.params.get("ticker") in ["AAPL", "MSFT"]
+        
+        # Verify job properties for all jobs
+        for job in jobs:
+            assert job.provider == "sharadar"
+            assert job.dataset == "price"
+            assert isinstance(job.spec, RequestSpec)
+
+        # Verify all requested tickers are present (order-independent)
+        tickers = {job.spec.params.get("ticker") for job in jobs}
+        assert tickers == {"AAPL", "MSFT"}
 
     @pytest.mark.asyncio
     async def test_generate_jobs_handles_empty_symbols_list(
@@ -372,11 +377,7 @@ class TestRouterEdgeCases:
                 pass
 
     def test_router_maintains_api_rate_limits(self, router: SharadarRouter) -> None:
-        """Test that router respects rate limiting configuration.
-        
-        Args:
-            router: SharadarRouter fixture.
-        """
+        """Test that router respects rate limiting configuration."""
         # This would typically be tested with integration tests
         # For unit tests, we verify that the rate limit config is properly set
         assert hasattr(router, "rate_limit")

@@ -64,7 +64,7 @@ class Registry(Generic[T]):
 
     def list_keys(self) -> list[str]:
         """List all registered keys."""
-        return list(self._registry.keys())
+        return list(self._registry)
 
     def __contains__(self, key: str) -> bool:
         """Check if a key exists in the registry."""
@@ -140,6 +140,7 @@ class ClientRegistration:
     """Metadata for a registered provider client."""
 
     env_api_key: str | None
+    """Name of the environment variable containing the API key (e.g. 'SHARADAR_API_KEY')."""
     factory: ClientFactory
 
 

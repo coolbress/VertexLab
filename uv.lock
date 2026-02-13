@@ -2426,7 +2426,7 @@ dev = [
     { name = "jupyterlab", specifier = ">=4.5.3,<5.0.0" },
     { name = "numpy", specifier = ">=2.2.6,<3.0.0" },
     { name = "pytest", specifier = ">=8.3.4,<10.0.0" },
-    { name = "pytest-asyncio", specifier = ">=0.25.3,<2.0.0" },
+    { name = "pytest-asyncio", specifier = ">=0.26.0,<2.0.0" },
 ]
 
 [[package]]

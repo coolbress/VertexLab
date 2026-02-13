@@ -197,7 +197,7 @@ class VertexForager:
             for _ in writer_tasks:
                 await pkt_q.put(None)
             logger.info("PIPELINE: Waiting for writer tasks to complete...")
-            await asyncio.gather(*writer_tasks)
+            await asyncio.gather(*writer_tasks, return_exceptions=True)
 
             # Flush any buffered data in the writer
             logger.info("PIPELINE: Flushing writer buffer...")
@@ -483,42 +483,60 @@ class VertexForager:
                 logger.error(f"WRITER: Error flushing {table}: {e}")
                 # 재시도 정책에 맞게 버퍼 유지 또는 명시적 전파
                 raise
+            finally:
+                # Always mark task done to prevent deadlock
+                # if this flush was triggered by a queue item
+                # Note: flush() is called from two places:
+                # 1. Main loop (triggered by packet) -> needs task_done() in main loop
+                # 2. Shutdown (triggered by None) -> needs task_done() in main loop
+                # 3. Explicit flush() calls -> this helper doesn't consume queue item
+                pass
 
         while True:
             packet = await pkt_q.get()
+            try:
+                if packet is None:
+                    # Flush all remaining buffers
+                    logger.debug(
+                        "WRITER: Received shutdown signal. Flushing remaining buffers..."
+                    )
+                    try:
+                        for table in list(buffers.keys()):
+                            await flush(table)
+                    except Exception as e:
+                        logger.error(f"WRITER: Error during shutdown flush: {e}")
+                        raise
+                    return
 
-            if packet is None:
-                # Flush all remaining buffers
-                logger.debug(
-                    "WRITER: Received shutdown signal. Flushing remaining buffers..."
-                )
-                for table in list(buffers.keys()):
+                # Add to buffer
+                table = packet.table
+                if table not in buffers:
+                    buffers[table] = []
+                    buffer_rows[table] = 0
+
+                buffers[table].append(packet)
+                previous_rows = buffer_rows[table]
+                current_rows = previous_rows + len(packet.frame)
+                buffer_rows[table] = current_rows
+
+                # Log progress every 100k rows to assure user it's working
+                if (current_rows // 100_000) > (previous_rows // 100_000):
+                    logger.debug(
+                        f"WRITER: Buffering {table}... {current_rows:,} / {threshold:,} rows"
+                    )
+
+                if current_rows >= threshold:
                     await flush(table)
+
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                async with result_lock:
+                    result.errors.append(f"Writer:Unexpected:{e}")
+                logger.exception(f"WRITER: Unexpected error: {e}")
+                raise
+            finally:
                 pkt_q.task_done()
-                return
-
-            # Add to buffer
-            table = packet.table
-            if table not in buffers:
-                buffers[table] = []
-                buffer_rows[table] = 0
-
-            buffers[table].append(packet)
-            previous_rows = buffer_rows[table]
-            current_rows = previous_rows + len(packet.frame)
-            buffer_rows[table] = current_rows
-
-            # Log progress every 100k rows to assure user it's working
-            if (current_rows // 100_000) > (previous_rows // 100_000):
-                logger.debug(
-                    f"WRITER: Buffering {table}... {current_rows:,} / {threshold:,} rows"
-                )
-
-            # Check threshold
-            if buffer_rows[table] >= threshold:
-                await flush(table)
-
-            pkt_q.task_done()
 
     async def _fetch_with_retry(self, job: FetchJob) -> bytes:
         """Execute a fetch job with rate limiting and exponential backoff retry.

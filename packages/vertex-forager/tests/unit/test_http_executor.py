@@ -56,7 +56,7 @@ class TestHttpExecutor:
         response.headers = {"Content-Type": "application/json"}
 
         # Mock raise_for_status to raise HTTPStatusError for error responses
-        def raise_for_status():
+        def raise_for_status() -> None:
             raise httpx.HTTPStatusError(
                 "Server error", request=MagicMock(), response=response
             )

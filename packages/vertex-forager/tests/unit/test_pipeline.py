@@ -9,7 +9,6 @@ Unit tests for pipeline internal components (Worker, etc).
 
 import asyncio
 from datetime import datetime
-from typing import Any
 import polars as pl
 import pytest
 from unittest.mock import AsyncMock, MagicMock
@@ -27,7 +26,7 @@ async def test_adaptive_batching_worker_drains_queue_correctly() -> None:
     mock_writer = AsyncMock(spec=BaseWriter)
 
     # Mock write to return a WriteResult, as required by the pipeline
-    async def mock_write(pkt: Any) -> WriteResult:
+    async def mock_write(pkt: FramePacket) -> WriteResult:
         return WriteResult(table=pkt.table, rows=len(pkt.frame))
 
     mock_writer.write.side_effect = mock_write
