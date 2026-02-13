@@ -29,6 +29,9 @@ import polars as pl
 from vertex_forager.core.config import FramePacket
 from vertex_forager.writers.base import BaseWriter, WriteResult
 
+# Module-level cache for schema getter to avoid circular imports
+_get_table_schema = None
+
 
 class DuckDBWriter(BaseWriter):
     """DuckDB writer implementation.
@@ -212,11 +215,14 @@ class DuckDBWriter(BaseWriter):
 
     def _compact_sync(self) -> None:
         """Synchronous implementation of compact logic."""
-        if self._conn:
-            self._logger.info("Compacting DuckDB database...")
-            self._conn.execute("VACUUM")
-            self._conn.execute("CHECKPOINT")
-            self._logger.info("Compaction completed.")
+        if not self._conn:
+            self._logger.info("No DuckDB connection; skipping compaction")
+            return
+
+        self._logger.info("Compacting DuckDB database...")
+        self._conn.execute("VACUUM")
+        self._conn.execute("CHECKPOINT")
+        self._logger.info("Compaction completed.")
 
     async def close(self) -> None:
         """Close the database connection.
@@ -252,9 +258,17 @@ class DuckDBWriter(BaseWriter):
         This replaces the hardcoded KNOWN_PRIMARY_KEYS dictionary.
         Now the schema definition controls the deduplication logic.
         """
-        from vertex_forager.schema.registry import get_table_schema
+        global _get_table_schema
+        if _get_table_schema is None:
+            try:
+                from vertex_forager.schema.registry import get_table_schema
 
-        schema = get_table_schema(table_name)
+                _get_table_schema = get_table_schema
+            except ImportError:
+                # Should not happen in normal execution
+                return ()
+
+        schema = _get_table_schema(table_name)
         if schema and schema.unique_key:
             return schema.unique_key
         return ()
@@ -382,7 +396,8 @@ class DuckDBWriter(BaseWriter):
                 self._logger.error(
                     f"Failed to add column {col_name} to {table_name}: {e}"
                 )
-                # We continue to try adding other columns, though this might cause insert failure later
+                # Fail fast to prevent data integrity issues
+                raise
 
     def _map_polars_type_to_sql(self, dtype: pl.DataType) -> str:
         """Map Polars DataType to DuckDB SQL type string."""
@@ -435,6 +450,9 @@ class DuckDBWriter(BaseWriter):
             return "VARCHAR"
         elif isinstance(dtype, (pl.Struct, pl.List)):
             # Complex types fallback to VARCHAR
+            self._logger.warning(
+                f"Coercing complex type {dtype} to VARCHAR. Nested structure may be lost."
+            )
             return "VARCHAR"
         else:
             return "VARCHAR"  # Default fallback

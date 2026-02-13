@@ -21,7 +21,7 @@ import itertools
 import functools
 import httpx
 from typing import Any, TYPE_CHECKING
-from collections.abc import Iterable, Sequence, Callable
+from collections.abc import Sequence, Callable
 from collections import defaultdict
 
 import polars as pl
@@ -51,7 +51,6 @@ except ImportError:
 logger = logging.getLogger("vertex_forager.debug")
 
 Symbols = Sequence[str]
-Packets = Iterable[FramePacket]
 
 
 class VertexForager:
@@ -63,15 +62,13 @@ class VertexForager:
     (Writer Workers).
 
     Attributes:
-        req_queue (asyncio.Queue): Queue for pending fetch jobs.
-        pkt_queue (asyncio.Queue): Queue for processed data packets.
-        http_executor (HttpExecutor): Handles HTTP requests.
-        schema_mapper (SchemaMapper): Normalizes data schemas.
-        provider (str): Name of the data provider (e.g., 'sharadar').
-        rate_limiter (FlowController): Controls request rate and concurrency.
-        logger (logging.Logger): Logger instance.
-        fetch_workers (list[asyncio.Task]): List of fetch worker tasks.
-        writer_workers (list[asyncio.Task]): List of writer worker tasks.
+        _router (BaseRouter): Router/Queue manager for fetch jobs.
+        _http (HttpExecutor): Handles HTTP requests.
+        _writer (BaseWriter): Writer task manager.
+        _mapper (SchemaMapper): Normalizes data schemas.
+        _config (EngineConfig): Configuration object.
+        controller (FlowController): Rate limiter and concurrency controller.
+        _flush_threshold (int): Row count threshold for flushing buffers.
 
     Public Methods:
         run(symbols: list[str]) -> RunResult: Execute the full collection pipeline.

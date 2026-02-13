@@ -132,7 +132,7 @@ class RouterFactory(Protocol):
     def __call__(
         self,
         *,
-        api_key: str,
+        api_key: str | None,
         rate_limit: int,
         start_date: str | None = None,
         end_date: str | None = None,
@@ -161,7 +161,7 @@ class ClientFactory(Protocol):
     """Protocol for client factory functions or classes."""
 
     def __call__(
-        self, api_key: str, rate_limit: int, **kwargs: Any
+        self, *, api_key: str | None = None, rate_limit: int, **kwargs: Any
     ) -> "BaseClient": ...
 
 
