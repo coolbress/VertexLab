@@ -145,7 +145,7 @@ class TestHttpExecutor:
 
         # Create spec with custom timeout
         spec_with_timeout = RequestSpec(
-            method="GET", url="https://api.example.com/data", timeout_s=10.0
+            method=HttpMethod.GET, url="https://api.example.com/data", timeout_s=10.0
         )
 
         # Act

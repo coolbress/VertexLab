@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import os
+import psutil
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import Enum
@@ -160,8 +160,8 @@ class EngineConfig(BaseModel):
             int: Calculated maximum queue size (clamped between 100 and 2000).
         """
         try:
-            # SC_PHYS_PAGES * SC_PAGE_SIZE = Total Memory in Bytes
-            total_ram = os.sysconf("SC_PHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
+            # Total Memory in Bytes using psutil for cross-platform support
+            total_ram = psutil.virtual_memory().total
 
             # Target: 5% of RAM / Estimate: 5MB per packet
             target_buffer_bytes = total_ram * 0.05

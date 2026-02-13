@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime
+from pathlib import Path
 
 import duckdb
 import polars as pl
@@ -14,7 +15,7 @@ class TestDuckDBWriter:
     """Test suite for DuckDBWriter."""
 
     @pytest.mark.asyncio
-    async def test_writer_initialization_and_creation(self, tmp_path) -> None:
+    async def test_writer_initialization_and_creation(self, tmp_path: Path) -> None:
         """Test that create_writer returns a DuckDBWriter for duckdb:// scheme."""
         db_path = tmp_path / "test.duckdb"
         uri = f"duckdb://{db_path}"
@@ -24,7 +25,7 @@ class TestDuckDBWriter:
         assert writer.db_path == str(db_path)
 
     @pytest.mark.asyncio
-    async def test_write_single_packet(self, tmp_path) -> None:
+    async def test_write_single_packet(self, tmp_path: Path) -> None:
         """Test writing a single data packet to DuckDB."""
         db_path = tmp_path / "test.duckdb"
         async with DuckDBWriter(db_path) as writer:
@@ -84,7 +85,7 @@ class TestDuckDBWriter:
         conn.close()
 
     @pytest.mark.asyncio
-    async def test_upsert_behavior(self, tmp_path) -> None:
+    async def test_upsert_behavior(self, tmp_path: Path) -> None:
         """Test that data is UPSERTED (deduplicated) when PK is known."""
         db_path = tmp_path / "upsert.duckdb"
         async with DuckDBWriter(db_path) as writer:

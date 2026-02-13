@@ -154,7 +154,7 @@ class DuckDBWriter(BaseWriter):
 
                 results.append(WriteResult(table=table_name, rows=rows_affected))
 
-            except Exception as e:
+            except duckdb.Error as e:
                 self._logger.error(f"Failed to write batch for {table_name}: {e}")
                 raise
 
@@ -404,8 +404,10 @@ class DuckDBWriter(BaseWriter):
             return "BOOLEAN"
         elif dtype == pl.Date:
             return "DATE"
-        elif dtype in (pl.Datetime, pl.Duration):
+        elif dtype == pl.Datetime:
             return "TIMESTAMP"
+        elif dtype == pl.Duration:
+            return "INTERVAL"
         elif dtype in (pl.Utf8, pl.String, pl.Categorical):
             return "VARCHAR"
         elif isinstance(dtype, (pl.Struct, pl.List)):

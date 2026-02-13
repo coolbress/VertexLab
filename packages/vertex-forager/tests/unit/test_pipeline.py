@@ -53,11 +53,17 @@ async def test_adaptive_batching_worker_drains_queue_correctly() -> None:
 
     # Fill Queue with 10 small packets
     # Each packet has 1 row
-    for i in range(10):
-        df = pl.DataFrame({"id": [i]})
-        packet = FramePacket(
-            provider="test", table="batch_test", frame=df, observed_at=datetime.now()
+    packets = [
+        FramePacket(
+            provider="test",
+            table="batch_test",
+            frame=pl.DataFrame({"id": [i]}),
+            observed_at=datetime.now(),
         )
+        for i in range(10)
+    ]
+
+    for packet in packets:
         pkt_q.put_nowait(packet)
 
     # Add None to stop the worker
@@ -74,10 +80,7 @@ async def test_adaptive_batching_worker_drains_queue_correctly() -> None:
 
     # Verify total rows processed
     # We can inspect the arguments passed to write to ensure no data was lost
-    total_rows = 0
-    for call in mock_writer.write.call_args_list:
-        packet = call[0][0]  # First arg is packet
-        total_rows += len(packet.frame)
+    total_rows = sum(len(call[0][0].frame) for call in mock_writer.write.call_args_list)
 
     assert total_rows == 10
 

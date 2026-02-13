@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Protocol, TYPE_CHECKING, Generic, TypeVar, Callable
+from typing import Any, Protocol, TYPE_CHECKING, Generic, TypeVar
 from dataclasses import dataclass
 
 if TYPE_CHECKING:
@@ -80,7 +80,7 @@ class WriterFactory(Protocol):
 
 # Registry for Writer Factories
 # Key: URI scheme (e.g., "duckdb", "memory")
-writers = Registry[Callable[[str], "BaseWriter"]]("writer")
+writers = Registry[WriterFactory]("writer")
 
 
 # =============================================================================

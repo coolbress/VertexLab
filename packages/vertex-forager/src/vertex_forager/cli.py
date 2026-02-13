@@ -1,6 +1,7 @@
 import click
 import httpx
 import logging
+from typing import Any, Optional
 from pathlib import Path
 from .utils import get_app_root, get_cache_dir, clear_app_cache
 
@@ -66,7 +67,7 @@ def collect(symbol: tuple[str, ...], source: str) -> None:
                 click.echo(f"⚠️ {api_key_env} 환경변수가 설정되지 않았습니다.")
                 return
 
-        async def _run_collect():
+        async def _run_collect() -> Optional[Any]:
             async with create_client(
                 provider=source, api_key=api_key, rate_limit=120
             ) as client:
@@ -76,8 +77,7 @@ def collect(symbol: tuple[str, ...], source: str) -> None:
                     result = await client.get_price_data(tickers=list(symbol))
                     return result
                 else:
-                    click.echo(f"⚠️ {source} is not fully implemented yet.")
-                    return None
+                    raise NotImplementedError(f"{source} is not fully implemented yet.")
 
         result = asyncio.run(_run_collect())
 
@@ -120,7 +120,15 @@ def status() -> None:
     click.echo(f"📦 Cache Dir: {get_cache_dir()}")
 
     # 데이터 용량 확인 등 유용한 정보 추가 가능
-    size: int = sum(f.stat().st_size for f in root.glob("**/*") if f.is_file())
+    size = 0
+    for f in root.glob("**/*"):
+        try:
+            if f.is_file():
+                size += f.stat().st_size
+        except Exception:
+            # Skip files that cannot be accessed
+            continue
+
     click.echo(f"📊 Total Data Size: {size / (1024 * 1024):.2f} MB")
 
 

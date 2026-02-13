@@ -2407,7 +2407,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "click", specifier = ">=8.3.1" },
+    { name = "click", specifier = ">=8.3.1,<9.0.0" },
     { name = "duckdb", specifier = ">=1.4.4,<2.0.0" },
     { name = "httpx", specifier = ">=0.28.1,<1.0.0" },
     { name = "nest-asyncio", specifier = ">=1.6.0,<2.0.0" },

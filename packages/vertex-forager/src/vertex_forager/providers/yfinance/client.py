@@ -53,7 +53,22 @@ class YFinanceClient(BaseClient):
         end_date: str | None = None,
         **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
-        """Fetch price data (Not implemented)."""
+        """
+        Fetch price data (Not implemented).
+
+        Args:
+            tickers: List of ticker symbols to fetch.
+            connect_db: Database connection string or path.
+            start_date: Start date for data fetch (YYYY-MM-DD).
+            end_date: End date for data fetch (YYYY-MM-DD).
+            **kwargs: Additional provider-specific arguments.
+
+        Returns:
+            pl.DataFrame | RunResult: Result of the data fetch operation.
+
+        Raises:
+            NotImplementedError: Always raised as this method is a stub.
+        """
         raise NotImplementedError("YFinance support is not yet implemented")
 
     async def get_tickers(
@@ -63,5 +78,18 @@ class YFinanceClient(BaseClient):
         connect_db: str | Path | None = None,
         **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
-        """Fetch ticker metadata (Not implemented)."""
+        """
+        Fetch ticker metadata (Not implemented).
+
+        Args:
+            tickers: Optional list of tickers to filter.
+            connect_db: Database connection string or path.
+            **kwargs: Additional provider-specific arguments.
+
+        Returns:
+            pl.DataFrame | RunResult: Ticker metadata.
+
+        Raises:
+            NotImplementedError: Always raised as this method is a stub.
+        """
         raise NotImplementedError("YFinance support is not yet implemented")

@@ -437,14 +437,18 @@ class VertexForager:
                         result.tables.get(write_result.table, 0) + write_result.rows
                     )
 
+                # Clear buffer ONLY after successful write
+                buffers[table] = []
+                buffer_rows[table] = 0
+
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 async with result_lock:
                     result.errors.append(f"Writer:{e}")
                 logger.error(f"WRITER: Error flushing {table}: {e}")
-            finally:
-                # Clear buffer regardless of success
-                buffers[table] = []
-                buffer_rows[table] = 0
+                # Do NOT clear buffer on failure, allowing for potential retry or manual recovery
+                # For now, we just keep it in memory (potentially dangerous if repeated failures occur)
 
         while True:
             packet = await pkt_q.get()

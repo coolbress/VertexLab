@@ -1,11 +1,12 @@
 """
 Unit tests for router functionality.
 
-현업 테스트 패턴:
-- 단위 테스트는 가능한 한 격리된 상태로 작성
-- Mocking을 통한 외부 의존성 제거
-- 인터페이스 계약 테스트
-- 에지 케이스 및 오류 조건 테스트
+Summary:
+    Tests for SharadarRouter class, covering job generation, parsing, and edge cases.
+
+Notes:
+    - Mocking is used to isolate router logic from network calls.
+    - Interface contracts are verified against FetchJob and RequestSpec definitions.
 """
 
 from __future__ import annotations
@@ -378,8 +379,12 @@ class TestRouterEdgeCases:
                 pass
 
     def test_router_maintains_api_rate_limits(self, router: SharadarRouter) -> None:
-        """Test that router respects rate limiting configuration."""
+        """Test that router respects rate limiting configuration.
+        
+        Args:
+            router: SharadarRouter fixture.
+        """
         # This would typically be tested with integration tests
         # For unit tests, we verify that the rate limit config is properly set
-        assert hasattr(router, "_rate_limit")
-        assert router._rate_limit == 500
+        assert hasattr(router, "rate_limit")
+        assert router.rate_limit == 500
