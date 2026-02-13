@@ -137,10 +137,15 @@ class ClientFactory(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class ClientRegistration:
-    """Metadata for a registered provider client."""
+    """Metadata for a registered provider client.
+
+    Attributes:
+        env_api_key: Name of the environment variable containing the API key,
+            or None if the provider does not require an API key.
+        factory: Factory callable that creates a client instance.
+    """
 
     env_api_key: str | None
-    """Name of the environment variable containing the API key (e.g. 'SHARADAR_API_KEY')."""
     factory: ClientFactory
 
 
