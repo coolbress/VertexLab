@@ -57,28 +57,40 @@ def sharadar_client(
 ) -> Any:
     """Sharadar client instance with mocked HttpExecutor."""
     from unittest.mock import patch
-    from vertex_forager.providers.sharadar.client import SharadarClient
+    import sys
+    
+    # Define a no-op decorator to bypass jupyter_safe
+    def no_op_decorator(func):
+        return func
 
-    # Patch HttpExecutor in the base client module (where _run is defined)
-    # This ensures that when the client creates an HttpExecutor, it gets our mock
-    with patch("vertex_forager.clients.base.HttpExecutor") as MockHttpExecutorClass:
-        MockHttpExecutorClass.return_value = mock_http_executor
-        
-        # Also patch default_async_client in base client to prevent actual network connections
-        with patch("vertex_forager.clients.base.default_async_client") as mock_default_client:
-            mock_default_client.return_value = mock_async_client
-            # Ensure mock_async_client supports async context manager protocol
-            mock_async_client.__aenter__.return_value = mock_async_client
-            mock_async_client.__aexit__.return_value = None
+    # Patch jupyter_safe in the utils module where it is defined
+    with patch("vertex_forager.utils.jupyter_safe", side_effect=no_op_decorator):
+        # Force reload of the client module to apply the patched decorator
+        if "vertex_forager.providers.sharadar.client" in sys.modules:
+            del sys.modules["vertex_forager.providers.sharadar.client"]
             
-            # Create real client
-            client = SharadarClient(
-                api_key=sharadar_client_config["api_key"],
-                rate_limit=sharadar_client_config["rate_limit"],
-                base_url=sharadar_client_config["base_url"]
-            )
+        from vertex_forager.providers.sharadar.client import SharadarClient
+
+        # Patch HttpExecutor in the base client module (where _run is defined)
+        # This ensures that when the client creates an HttpExecutor, it gets our mock
+        with patch("vertex_forager.clients.base.HttpExecutor") as MockHttpExecutorClass:
+            MockHttpExecutorClass.return_value = mock_http_executor
             
-            yield client
+            # Also patch default_async_client in base client to prevent actual network connections
+            with patch("vertex_forager.clients.base.default_async_client") as mock_default_client:
+                mock_default_client.return_value = mock_async_client
+                # Ensure mock_async_client supports async context manager protocol
+                mock_async_client.__aenter__.return_value = mock_async_client
+                mock_async_client.__aexit__.return_value = None
+                
+                # Create real client
+                client = SharadarClient(
+                    api_key=sharadar_client_config["api_key"],
+                    rate_limit=sharadar_client_config["rate_limit"],
+                    base_url=sharadar_client_config["base_url"]
+                )
+                
+                yield client
 
 
 @pytest.fixture

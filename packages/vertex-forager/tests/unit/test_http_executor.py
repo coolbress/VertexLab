@@ -9,6 +9,7 @@ Tests for HTTP executor functionality.
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -195,7 +196,6 @@ class TestHttpExecutorConcurrency:
         spec2 = RequestSpec(url="https://api.example.com/data2")
 
         # Act - execute requests concurrently
-        import asyncio
         results = await asyncio.gather(
             executor.fetch(spec1),
             executor.fetch(spec2)

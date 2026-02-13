@@ -22,15 +22,18 @@ def collect(symbol, source):
         from vertex_forager.clients import create_client
         import asyncio
         import os
+        import polars as pl
+        from collections.abc import Mapping
 
         # API Key lookup
-        api_key_env = "SHARADAR_API_KEY" if source == "sharadar" else f"{source.upper()}_API_KEY"
-        api_key = os.getenv(api_key_env)
+        api_key = None
+        if source == "sharadar":
+            api_key_env = "SHARADAR_API_KEY"
+            api_key = os.getenv(api_key_env)
+            if not api_key:
+                click.echo(f"⚠️ {api_key_env} 환경변수가 설정되지 않았습니다.")
+                return
         
-        if not api_key:
-            click.echo(f"⚠️ {api_key_env} 환경변수가 설정되지 않았습니다.")
-            return
-
         async def _run_collect():
             async with create_client(provider=source, api_key=api_key, rate_limit=120) as client:
                 if source == "sharadar":
@@ -46,11 +49,13 @@ def collect(symbol, source):
         
         if result:
             # Show summary
-            if hasattr(result, "tables"):
+            if hasattr(result, "tables") and isinstance(result.tables, Mapping):
                 total_rows = sum(result.tables.values())
                 click.echo(f"✅ 수집 완료: 총 {total_rows}개 행이 처리되었습니다.")
                 for table, count in result.tables.items():
                     click.echo(f"  - {table}: {count} rows")
+            elif isinstance(result, pl.DataFrame):
+                click.echo(f"✅ 수집 완료: 총 {len(result)}개 행이 처리되었습니다.")
             else:
                 # Fallback for other result types
                 click.echo(f"✅ 수집 완료: {result}")

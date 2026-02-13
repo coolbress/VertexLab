@@ -92,19 +92,25 @@ def create_pbar_updater(pbar: tqdm) -> Callable:
 
         # Calculate number of symbols in this batch
         # Filter out empty strings from split result (e.g. "AAPL,," -> ["AAPL"])
-        count = len([s for s in symbol.split(",") if s.strip()])
+        tokens = [s.strip() for s in symbol.split(",") if s.strip()]
+        count = len(tokens)
         
+        # Use a safe display value (first token)
+        display_symbol = tokens[0] if tokens else "Unknown"
+        if len(tokens) > 1:
+            display_symbol += f" (+{len(tokens)-1})"
+
         # Check for pagination
         # If next_jobs exist, this logical request is not yet complete.
         next_jobs = getattr(parse_result, "next_jobs", None) if parse_result else None
         
         if next_jobs:
             # Paging in progress: Update status only
-            pbar.set_postfix_str(f"Paging: {symbol[:20]}..", refresh=True)
+            pbar.set_postfix_str(f"Paging: {display_symbol}..", refresh=True)
         else:
             # Batch Complete (Fully Processed): Update progress count
             pbar.update(count)
-            pbar.set_postfix_str(f"Done: {symbol[:20]}..", refresh=True)
+            pbar.set_postfix_str(f"Done: {display_symbol}..", refresh=True)
     
     return _update_pbar
 
@@ -301,16 +307,28 @@ def clear_app_cache():
     app_root = get_app_root().resolve()
     cache_dir = get_cache_dir().resolve()
 
-    # Safety check: ensure cache_dir is a subdirectory of app_root
+    # 1. Check existence and type
+    if not cache_dir.exists():
+        return
+    if not cache_dir.is_dir():
+        logging.error(f"Cache path exists but is not a directory: {cache_dir}")
+        return
+
+    # 2. Safety check: ensure cache_dir is a descendant of app_root
     try:
         cache_dir.relative_to(app_root)
     except ValueError:
-        logging.warning(f"Safety check failed: Cache dir {cache_dir} is not inside app root {app_root}")
+        logging.error(f"Safety check failed: Cache dir {cache_dir} is not inside app root {app_root}")
         return
 
-    if cache_dir.exists():
-        shutil.rmtree(cache_dir)
-        cache_dir.mkdir(parents=True, exist_ok=True)
+    # 3. Safety check: prevent deleting root or home
+    if cache_dir == Path("/").resolve() or cache_dir == Path.home().resolve():
+        logging.error(f"Safety check failed: Attempting to delete root or home directory: {cache_dir}")
+        return
+
+    # Safe to delete
+    shutil.rmtree(cache_dir)
+    cache_dir.mkdir(parents=True, exist_ok=True)
 
 
 def load_env_file(env_file: Path | None = None) -> None:

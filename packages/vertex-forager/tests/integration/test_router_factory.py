@@ -35,7 +35,7 @@ class TestRouterFactory:
         """Test error when provider is invalid."""
         config = EngineConfig(requests_per_minute=100)
         
-        with pytest.raises(NotImplementedError, match="Unsupported router: invalid_provider"):
+        with pytest.raises(KeyError, match="Unsupported router: invalid_provider"):
             create_router(
                 provider="invalid_provider",
                 api_key="key",

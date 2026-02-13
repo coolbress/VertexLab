@@ -2,6 +2,8 @@ import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
 from vertex_forager.providers.sharadar.client import SharadarClient
 
+from vertex_forager.providers.sharadar import client as client_module
+
 @pytest.fixture
 def mock_client():
     client = SharadarClient(api_key="test_key", rate_limit=100)
@@ -10,9 +12,9 @@ def mock_client():
 
 @pytest.mark.asyncio
 async def test_fetch_pagination_show_progress_true(mock_client):
-    with patch("vertex_forager.providers.sharadar.client.tqdm") as mock_tqdm, \
-         patch("vertex_forager.providers.sharadar.client.create_writer") as mock_create_writer, \
-         patch("vertex_forager.providers.sharadar.client.create_router"):
+    with patch.object(client_module, "tqdm") as mock_tqdm, \
+        patch("vertex_forager.providers.sharadar.client.create_writer") as mock_create_writer, \
+        patch("vertex_forager.providers.sharadar.client.create_router"):
         
         # Setup mocks
         mock_writer = MagicMock()
@@ -29,12 +31,12 @@ async def test_fetch_pagination_show_progress_true(mock_client):
         )
         # Check if tqdm was called with disable=False (or disable=not True -> False)
         # Note: disable=False is default, but we passed disable=not show_progress
-        call_kwargs = mock_tqdm.call_args.kwargs
+        call_kwargs = mock_tqdm.call_args.kwargs if mock_tqdm.call_args else {}
         assert call_kwargs.get("disable") is False
 
 @pytest.mark.asyncio
 async def test_fetch_pagination_show_progress_false(mock_client):
-    with patch("vertex_forager.providers.sharadar.client.tqdm") as mock_tqdm, \
+    with patch.object(client_module, "tqdm") as mock_tqdm, \
          patch("vertex_forager.providers.sharadar.client.create_writer") as mock_create_writer, \
          patch("vertex_forager.providers.sharadar.client.create_router"):
         

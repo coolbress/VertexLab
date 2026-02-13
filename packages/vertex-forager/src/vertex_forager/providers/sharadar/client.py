@@ -75,16 +75,25 @@ class SharadarClient(BaseClient):
     # Internal Helpers & Core Patterns
     # ----------------------------------------------------------------
     def _validate_input(
-        self, symbols: list[str] | None, connect_db: str | Path | None
+        self, 
+        symbols: list[str] | None, 
+        connect_db: str | Path | None,
+        dataset: str | None = None
     ) -> None:
         """Validate input and check memory safety."""
+        # Allow full fetch in-memory only for small metadata datasets
         if symbols is None and connect_db is None:
-            raise ValueError("Either tickers or connect_db must be provided")
+            if dataset != "tickers":
+                raise ValueError("Either tickers or connect_db must be provided")
 
         if connect_db is not None:
             return
 
-        BYTES_PER_TICKER = 1 * 1024 * 1024  # 1MB
+        if dataset == "tickers":
+            BYTES_PER_TICKER = 1024  # 1KB for metadata
+        else:
+            BYTES_PER_TICKER = 1 * 1024 * 1024  # 1MB for price/financials
+
         ESTIMATED_TOTAL_TICKERS = 15_000
 
         num_tickers = len(symbols) if symbols else ESTIMATED_TOTAL_TICKERS
@@ -208,7 +217,7 @@ class SharadarClient(BaseClient):
             try:
                 run_result = await run_func(writer, pbar_updater)
             finally:
-                if pbar:
+                if pbar is not None:
                     pbar.close()
 
             self.last_run = run_result
@@ -286,8 +295,11 @@ class SharadarClient(BaseClient):
         """Pattern 2: Fetch specific tickers with Smart Batching (Auto)."""
         symbols = process_symbols(tickers)
         
+        # Unconditionally check memory safety. 
+        # If symbols is None (full request), _validate_input handles it (using default estimate).
+        self._validate_input(symbols, connect_db, dataset=dataset)
+
         if symbols:
-            self._validate_input(symbols, connect_db)
             total_tickers = len(symbols)
             symbols = await self._create_optimized_bulk(
                 symbols, dataset, table_name, start_date, end_date, **kwargs

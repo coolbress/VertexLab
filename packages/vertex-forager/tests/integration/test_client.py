@@ -41,7 +41,7 @@ class TestClientVisualization:
             mock_spinner_instance.__enter__.return_value = mock_spinner_instance
             
             # Act
-            sharadar_client.get_ticker_info()
+            await sharadar_client.get_ticker_info()
 
             # Assert
             # Verify Spinner was initialized
@@ -68,7 +68,7 @@ class TestClientVisualization:
             
             # Act
             tickers = ["AAPL", "GOOGL"]
-            sharadar_client.get_price_data(
+            await sharadar_client.get_price_data(
                 tickers=tickers,
                 start_date="2024-01-01",
                 end_date="2024-01-10",
@@ -112,7 +112,7 @@ class TestClientIntegration:
 
 
         # Act
-        result = sharadar_client.get_price_data(
+        result = await sharadar_client.get_price_data(
             tickers=["AAPL"], 
             start_date="2024-01-01",
             end_date="2024-01-31",
@@ -137,7 +137,7 @@ class TestClientIntegration:
         mock_http_executor.fetch.return_value = mock_response
 
         # Act
-        result = sharadar_client.get_price_data(
+        result = await sharadar_client.get_price_data(
             tickers=["AAPL"],
             start_date="2024-01-01",
             end_date="2024-01-31",
@@ -163,7 +163,7 @@ class TestClientIntegration:
         mock_http_executor.fetch.return_value = mock_response
 
         # Act
-        result = sharadar_client.get_ticker_info(connect_db=None)
+        result = await sharadar_client.get_ticker_info(connect_db=None)
 
         # Assert
         assert isinstance(result, pl.DataFrame)
@@ -193,7 +193,7 @@ class TestClientIntegration:
         mock_http_executor.fetch.return_value = json.dumps(mock_response).encode()
 
         # Act
-        result = sharadar_client.get_daily_metrics(
+        result = await sharadar_client.get_daily_metrics(
             tickers=["AAPL"], 
             start_date="2024-01-01",
             end_date="2024-01-31",
@@ -207,6 +207,7 @@ class TestClientIntegration:
         # Polars infers or converts to float for financial metrics
         assert result.get_column("ev").to_list() == [100.0]
 
+    @pytest.mark.asyncio
     async def test_get_corporate_actions_processes_dividend_events(
         self, sharadar_client, mock_http_executor
     ) -> None:
@@ -227,7 +228,7 @@ class TestClientIntegration:
         mock_http_executor.fetch.return_value = json.dumps(mock_response).encode()
 
         # Act
-        result = sharadar_client.get_corporate_actions(
+        result = await sharadar_client.get_corporate_actions(
             tickers=["AAPL"], 
             start_date="2024-01-01",
             end_date="2024-01-31",
@@ -243,6 +244,7 @@ class TestClientIntegration:
 class TestClientErrorHandling:
     """Tests for client error handling scenarios."""
 
+    @pytest.mark.asyncio
     async def test_client_handles_empty_response_gracefully(
         self, sharadar_client, mock_http_executor
     ) -> None:
@@ -252,7 +254,7 @@ class TestClientErrorHandling:
         mock_http_executor.fetch.return_value = json.dumps(mock_response).encode()
 
         # Act
-        result = sharadar_client.get_price_data(
+        result = await sharadar_client.get_price_data(
             tickers=["AAPL"], 
             start_date="2024-01-01",
             end_date="2024-01-31",
@@ -264,6 +266,7 @@ class TestClientErrorHandling:
         assert isinstance(result, pl.DataFrame)
         assert result.height == 0
 
+    @pytest.mark.asyncio
     async def test_client_handles_api_error_gracefully(
         self, sharadar_client, mock_http_executor
     ) -> None:
@@ -272,7 +275,7 @@ class TestClientErrorHandling:
         mock_http_executor.fetch.side_effect = Exception("API Error")
 
         # Act
-        result = sharadar_client.get_price_data(
+        result = await sharadar_client.get_price_data(
             tickers=["AAPL"], 
             start_date="2024-01-01",
             end_date="2024-01-31",
@@ -284,6 +287,7 @@ class TestClientErrorHandling:
         assert isinstance(result, pl.DataFrame)
         assert result.height == 0
 
+    @pytest.mark.asyncio
     async def test_client_maintains_rate_limiting(
         self, sharadar_client, mock_http_executor, sample_price_data
     ) -> None:
@@ -293,13 +297,13 @@ class TestClientErrorHandling:
         mock_http_executor.fetch.return_value = mock_response
 
         # Act
-        result1 = sharadar_client.get_price_data(
+        result1 = await sharadar_client.get_price_data(
             tickers=["AAPL"], 
             start_date="2024-01-01",
             end_date="2024-01-31",
             connect_db=None
         )
-        result2 = sharadar_client.get_price_data(
+        result2 = await sharadar_client.get_price_data(
             tickers=["MSFT"], 
             start_date="2024-01-01",
             end_date="2024-01-31",

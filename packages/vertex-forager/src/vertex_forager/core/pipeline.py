@@ -327,7 +327,13 @@ class VertexForager:
                 logger.error(f"[Worker-{worker_id}] Error processing {job.symbol}: {exc}")
             finally:
                 req_q.task_done()
-                await handler(job, payload, worker_exc, parse_result)
+                try:
+                    await handler(job, payload, worker_exc, parse_result)
+                except Exception as e:
+                    # Swallowing exception from callback to prevent worker crash
+                    logger.error(
+                        f"[Worker-{worker_id}] Error in result handler for {job.provider}:{job.dataset}:{job.symbol}: {e}"
+                    )
 
     async def _writer_worker(
         self,

@@ -38,7 +38,11 @@ class SchemaMapper:
         Enforce schema conformance on a data packet.
 
         This method transforms a raw DataFrame into a schema-compliant DataFrame.
-        It also ensures a standard 'date' column is available for downstream consumption.
+        It guarantees a standard 'date' column is available for downstream consumption:
+        - If 'date' exists, it is preserved.
+        - If 'date' is missing but a timestamp-like column exists, it is converted.
+        - Otherwise, a 'date' column is created with null values.
+        
         If no schema is registered for the table, the packet is returned strictly as-is.
 
         Args:
@@ -53,6 +57,23 @@ class SchemaMapper:
 
         frame = self._cast_to_schema(packet.frame, table_schema.schema)
         
+        # Guarantee 'date' column existence
+        if "date" not in frame.columns:
+            # Check for common timestamp aliases
+            timestamp_cols = ["timestamp", "created_at", "datetime", "calendardate"]
+            found_ts = next((col for col in timestamp_cols if col in frame.columns), None)
+            
+            if found_ts:
+                # Create date from timestamp
+                frame = frame.with_columns(
+                    pl.col(found_ts).cast(pl.Date).alias("date")
+                )
+            else:
+                # Create null date column
+                frame = frame.with_columns(
+                    pl.lit(None, dtype=pl.Date).alias("date")
+                )
+
         # Reorder columns to put unique key (PK) first for better readability
         frame = self._reorder_columns(frame, table_schema.unique_key)
         

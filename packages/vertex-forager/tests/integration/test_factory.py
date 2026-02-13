@@ -10,7 +10,6 @@ from unittest.mock import patch
 import pytest
 
 from vertex_forager.api import create_client
-from vertex_forager.providers.sharadar.client import SharadarClient
 
 
 class TestClientFactory:
@@ -25,7 +24,7 @@ class TestClientFactory:
             rate_limit=100
         )
         
-        assert isinstance(client, SharadarClient)
+        assert client.__class__.__name__ == "SharadarClient"
         # Verify internal config using private attributes if necessary, 
         # or check public properties if available. 
         # Here we just check type as that confirms factory worked.
@@ -37,7 +36,7 @@ class TestClientFactory:
                 provider="sharadar",
                 rate_limit=100
             )
-            assert isinstance(client, SharadarClient)
+            assert client.__class__.__name__ == "SharadarClient"
 
     def test_create_client_missing_api_key(self):
         """Test error when API key is missing."""
@@ -53,7 +52,7 @@ class TestClientFactory:
 
     def test_create_client_invalid_provider(self):
         """Test error when provider is invalid."""
-        with pytest.raises(NotImplementedError, match="Unsupported client: invalid_provider"):
+        with pytest.raises(KeyError, match="Unsupported client: invalid_provider"):
             create_client(
                 provider="invalid_provider",
                 api_key="key",

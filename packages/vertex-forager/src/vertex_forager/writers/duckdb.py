@@ -4,6 +4,7 @@ import asyncio
 import logging
 import time
 import functools
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Sequence
 
@@ -34,6 +35,8 @@ class DuckDBWriter(BaseWriter):
         """
         self.db_path = str(db_path)
         self._lock = asyncio.Lock()
+        # Single-threaded executor for DuckDB thread safety
+        self._executor = ThreadPoolExecutor(max_workers=1)
         self._conn: duckdb.DuckDBPyConnection | None = None
         self._logger = logging.getLogger(__name__)
         # Cache for table existence and schema (table_name -> set of column names)
@@ -86,7 +89,7 @@ class DuckDBWriter(BaseWriter):
         """
         async with self._lock:
             loop = asyncio.get_running_loop()
-            return await loop.run_in_executor(None, functools.partial(self._write_sync, packets))
+            return await loop.run_in_executor(self._executor, functools.partial(self._write_sync, packets))
 
     def _write_sync(self, packets: Sequence[FramePacket]) -> list[WriteResult]:
         """Synchronous implementation of write logic for offloading."""
@@ -130,7 +133,7 @@ class DuckDBWriter(BaseWriter):
                 
             except Exception as e:
                 self._logger.error(f"Failed to write batch for {table_name}: {e}")
-                raise e
+                raise
         
         t1 = time.monotonic()
         self._logger.debug(f"DUCKDB: Finished sync write in {t1 - t0:.3f}s. Results: {len(results)}")
@@ -145,11 +148,16 @@ class DuckDBWriter(BaseWriter):
         pass
 
 
-    def compact(self) -> None:
+    async def compact(self) -> None:
         """
         Optimize database storage.
         Runs VACUUM and CHECKPOINT to reclaim space and enforce compression.
         """
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(self._executor, self._compact_sync)
+
+    def _compact_sync(self) -> None:
+        """Synchronous implementation of compact logic."""
         if self._conn:
             self._logger.info("Compacting DuckDB database...")
             self._conn.execute("VACUUM")
@@ -173,6 +181,9 @@ class DuckDBWriter(BaseWriter):
                     self._logger.warning(f"Error closing DuckDB connection: {e}")
                 finally:
                     self._conn = None
+        
+        # Shutdown executor
+        self._executor.shutdown(wait=True)
 
     def _get_primary_keys(self, table_name: str) -> tuple[str, ...]:
         """
@@ -233,7 +244,8 @@ class DuckDBWriter(BaseWriter):
                 if all(col in df.columns for col in pk_cols):
                     pk_str = ", ".join(self._quote_identifier(c) for c in pk_cols)
                     try:
-                        conn.execute(f'CREATE UNIQUE INDEX IF NOT EXISTS "idx_{table_name}_pk" ON {q_table} ({pk_str})')
+                        idx_name = self._quote_identifier(f"idx_{table_name}_pk")
+                        conn.execute(f'CREATE UNIQUE INDEX IF NOT EXISTS {idx_name} ON {q_table} ({pk_str})')
                         self._logger.info(f"Created UNIQUE INDEX on {table_name}({pk_str})")
                     except Exception as e:
                         self._logger.warning(f"Failed to create unique index on {table_name}: {e}")
@@ -338,43 +350,49 @@ class DuckDBWriter(BaseWriter):
         
         q_table = self._quote_identifier(table_name)
         
-        # If no PK, simple append
-        if not pk_cols:
-            conn.register('temp_batch_view', df)
-            # Use explicit column names to handle schema evolution (new columns in table but not in this batch)
-            cols_str = ", ".join(self._quote_identifier(c) for c in df.columns)
-            conn.execute(f'INSERT INTO {q_table} ({cols_str}) SELECT {cols_str} FROM temp_batch_view')
-            conn.unregister('temp_batch_view')
-            return len(df)
-            
-        # If PK exists, perform Upsert
-        # DuckDB's INSERT OR REPLACE / ON CONFLICT logic
         conn.register('temp_batch_view', df)
-        
-        pk_str = ", ".join(self._quote_identifier(c) for c in pk_cols)
-        cols = df.columns
-        cols_str = ", ".join(self._quote_identifier(c) for c in cols)
-        
-        # Using INSERT OR IGNORE or INSERT OR REPLACE
-        # For financial data, we typically want REPLACE to update corrections
-        # Explicitly list columns to ensure order independence and handle missing columns in batch
-        
-        # If there are no columns to update (only PK columns), we do NOTHING
-        if all(col in pk_cols for col in cols):
-            query = f"""
-            INSERT INTO {q_table} ({cols_str})
-            SELECT {cols_str} FROM temp_batch_view
-            ON CONFLICT ({pk_str}) DO NOTHING
-            """
-        else:
-            update_set = ", ".join([f'{self._quote_identifier(col)} = EXCLUDED.{self._quote_identifier(col)}' for col in cols if col not in pk_cols])
-            query = f"""
-            INSERT INTO {q_table} ({cols_str})
-            SELECT {cols_str} FROM temp_batch_view
-            ON CONFLICT ({pk_str}) DO UPDATE SET {update_set}
-            """
+        try:
+            # If no PK, simple append
+            if not pk_cols:
+                # Use explicit column names to handle schema evolution (new columns in table but not in this batch)
+                cols_str = ", ".join(self._quote_identifier(c) for c in df.columns)
+                conn.execute(f'INSERT INTO {q_table} ({cols_str}) SELECT {cols_str} FROM temp_batch_view')
+                return len(df)
+                
+            # If PK exists, perform Upsert
+            # DuckDB's INSERT OR REPLACE / ON CONFLICT logic
             
-        conn.execute(query)
-        conn.unregister('temp_batch_view')
-        
-        return len(df)
+            # Validation: Check if all PK columns exist in the dataframe
+            missing_pk = [c for c in pk_cols if c not in df.columns]
+            if missing_pk:
+                msg = f"Missing PK columns {missing_pk} in dataframe for table {table_name}"
+                self._logger.error(msg)
+                raise ValueError(msg)
+            
+            pk_str = ", ".join(self._quote_identifier(c) for c in pk_cols)
+            cols = df.columns
+            cols_str = ", ".join(self._quote_identifier(c) for c in cols)
+            
+            # Using INSERT OR IGNORE or INSERT OR REPLACE
+            # For financial data, we typically want REPLACE to update corrections
+            # Explicitly list columns to ensure order independence and handle missing columns in batch
+            
+            # If there are no columns to update (only PK columns), we do NOTHING
+            if all(col in pk_cols for col in cols):
+                query = f"""
+                INSERT INTO {q_table} ({cols_str})
+                SELECT {cols_str} FROM temp_batch_view
+                ON CONFLICT ({pk_str}) DO NOTHING
+                """
+            else:
+                update_set = ", ".join([f'{self._quote_identifier(col)} = EXCLUDED.{self._quote_identifier(col)}' for col in cols if col not in pk_cols])
+                query = f"""
+                INSERT INTO {q_table} ({cols_str})
+                SELECT {cols_str} FROM temp_batch_view
+                ON CONFLICT ({pk_str}) DO UPDATE SET {update_set}
+                """
+                
+            conn.execute(query)
+            return len(df)
+        finally:
+            conn.unregister('temp_batch_view')

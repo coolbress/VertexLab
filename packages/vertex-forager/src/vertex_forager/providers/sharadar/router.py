@@ -151,7 +151,12 @@ class SharadarRouter(BaseRouter):
             return
 
         symbol_list = list(symbols)
-        dimension = str(kwargs.get("dimension", "MRT"))
+        
+        raw_dimension = kwargs.get("dimension")
+        if not raw_dimension or str(raw_dimension).strip() == "":
+            dimension = "MRT"
+        else:
+            dimension = str(raw_dimension)
         
         # Simplified 1-to-1 Mapping:
         # The Client is responsible for all bulk packing (Smart Bulk Packing or Simple Chunking).
@@ -391,8 +396,19 @@ class SharadarRouter(BaseRouter):
             FetchJob: Job configured for the specific symbol(s).
         """
         params: dict[str, str] = {}
-        if isinstance(symbol, str) and symbol.strip():
-            params["ticker"] = symbol
+        
+        # Explicitly validate symbol to prevent empty ticker requests (which trigger bulk)
+        if not isinstance(symbol, str) or not symbol.strip():
+             # Should be caught upstream, but as a safeguard
+             # We can't easily raise 400 here without disrupting the flow, 
+             # but returning None or raising ValueError is appropriate for internal logic.
+             # Since this is an internal builder, let's assume valid input or raise.
+             # However, the user asked to "raise/return a 400-like error or skip".
+             # Raising ValueError seems safest to stop this job creation.
+             raise ValueError(f"Invalid symbol for per-symbol job: '{symbol}'")
+
+        clean_symbol = symbol.strip()
+        params["ticker"] = clean_symbol
         
         if dataset == "price":
             params["qopts.columns"] = self._get_request_columns("price")

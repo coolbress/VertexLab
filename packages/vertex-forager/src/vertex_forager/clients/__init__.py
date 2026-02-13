@@ -20,6 +20,17 @@ def _register_sharadar() -> None:
     )
 
 
+def _register_yfinance() -> None:
+    from vertex_forager.providers.yfinance.client import YFinanceClient
+    client_registry.register(
+        "yfinance",
+        ClientRegistration(
+            env_api_key=None,
+            factory=YFinanceClient,
+        ),
+    )
+
+
 def create_client(
     *,
     provider: str,
@@ -41,21 +52,27 @@ def create_client(
     
     Raises:
         ValueError: If API key is missing.
-        NotImplementedError: If provider is unknown.
+        KeyError: If provider is unknown.
     """
     
     try:
         registration = client_registry.get(provider)
-    except NotImplementedError:
+    except KeyError:
         # Lazy loading for known internal providers to avoid circular imports
         if provider == "sharadar":
             _register_sharadar()
             registration = client_registry.get(provider)
+        elif provider == "yfinance":
+            _register_yfinance()
+            registration = client_registry.get(provider)
         else:
             raise
 
-    resolved_key = api_key or os.getenv(registration.env_api_key)
-    if not resolved_key:
+    resolved_key = api_key
+    if not resolved_key and registration.env_api_key:
+        resolved_key = os.getenv(registration.env_api_key)
+
+    if not resolved_key and registration.env_api_key:
         raise ValueError(
             f"Missing api_key (set api_key or {registration.env_api_key} in environment/.env)"
         )

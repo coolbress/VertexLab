@@ -19,6 +19,9 @@ class TestPbarUpdater:
         # Case 1: Normal batch
         updater(job=mock_job, parse_result=None)
         mock_pbar.update.assert_called_with(3)
+        # Verify display string
+        args, _ = mock_pbar.set_postfix_str.call_args
+        assert "Done: AAPL (+2).." in args[0]
         
         # Case 2: Empty string in batch (e.g. trailing comma or double comma)
         mock_job.symbol = "AAPL,,MSFT, ,GOOG"
@@ -26,6 +29,8 @@ class TestPbarUpdater:
         updater(job=mock_job, parse_result=None)
         # Should count "AAPL", "MSFT", "GOOG" -> 3
         mock_pbar.update.assert_called_with(3)
+        args, _ = mock_pbar.set_postfix_str.call_args
+        assert "Done: AAPL (+2).." in args[0]
 
     def test_update_pbar_handles_pagination(self):
         """Test that update_pbar does not update count if pagination is active."""
@@ -45,7 +50,7 @@ class TestPbarUpdater:
         mock_pbar.update.assert_not_called()
         # Should update postfix
         mock_pbar.set_postfix_str.assert_called()
-        assert "Paging" in mock_pbar.set_postfix_str.call_args[0][0]
+        assert "Paging: AAPL.." in mock_pbar.set_postfix_str.call_args[0][0]
 
 
 class TestCacheUtils:
@@ -62,14 +67,15 @@ class TestCacheUtils:
         mock_get_root.return_value = root_path
         mock_get_cache.return_value = cache_path
         
-        # Mock existence
+        # Mock existence and is_dir
         with patch.object(Path, "exists", return_value=True):
-             with patch.object(Path, "mkdir") as mock_mkdir:
-                clear_app_cache()
-                
-                # Should verify relative_to and call rmtree
-                mock_rmtree.assert_called_once_with(cache_path)
-                mock_mkdir.assert_called_once()
+            with patch.object(Path, "is_dir", return_value=True):
+                with patch.object(Path, "mkdir") as mock_mkdir:
+                    clear_app_cache()
+                    
+                    # Should verify relative_to and call rmtree
+                    mock_rmtree.assert_called_once_with(cache_path)
+                    mock_mkdir.assert_called_once()
 
     @patch("vertex_forager.utils.get_app_root")
     @patch("vertex_forager.utils.get_cache_dir")

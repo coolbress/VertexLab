@@ -56,11 +56,11 @@ class Registry(Generic[T]):
             The registered item.
 
         Raises:
-            NotImplementedError: If the key is not found (following existing convention).
+            KeyError: If the key is not found.
         """
         item = self._registry.get(key)
         if item is None:
-            raise NotImplementedError(f"Unsupported {self._name}: {key}")
+            raise KeyError(f"Unsupported {self._name}: {key}")
         return item
 
     def list_keys(self) -> list[str]:
@@ -118,7 +118,7 @@ class ClientFactory(Protocol):
 @dataclass(frozen=True, slots=True)
 class ClientRegistration:
     """Metadata for a registered provider client."""
-    env_api_key: str
+    env_api_key: str | None
     factory: ClientFactory
 
 # Registry for Client Registrations
