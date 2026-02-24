@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Sequence
-from datetime import datetime
+from datetime import datetime, timezone
 
 import polars as pl
 
@@ -164,10 +164,10 @@ class BaseRouter(ABC):
             return None
             
         try:
-            start = datetime.strptime(start_date, "%Y-%m-%d")
-            end = datetime.now()
+            start = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            end = datetime.now(timezone.utc)
             if end_date:
-                end = datetime.strptime(end_date, "%Y-%m-%d")
+                end = datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
             return start, end
         except (ValueError, TypeError):
             return None
@@ -181,5 +181,20 @@ class BaseRouter(ABC):
         Returns:
             pl.DataFrame: DataFrame with standardized column names.
         """
-        new_columns = [c.lower().strip().replace(" ", "_") for c in frame.columns]
-        return frame.rename(dict(zip(frame.columns, new_columns)))
+        normalized = [c.lower().strip().replace(" ", "_") for c in frame.columns]
+        seen: dict[str, int] = {}
+        unique_names: list[str] = []
+        for name in normalized:
+            count = seen.get(name, 0)
+            if count == 0:
+                unique_names.append(name)
+                seen[name] = 1
+            else:
+                new_name = f"{name}_{count}"
+                while new_name in seen:
+                    count += 1
+                    new_name = f"{name}_{count}"
+                unique_names.append(new_name)
+                seen[name] = count + 1
+                seen[new_name] = 1
+        return frame.rename(dict(zip(frame.columns, unique_names)))

@@ -36,6 +36,7 @@ class TestRouterFactory:
             create_router(provider="invalid_provider", api_key="key", config=config)
 
     def test_create_yfinance_router_success(self) -> None:
+        """Verify create_router returns a configured YFinanceRouter with default rate limit."""
         config = EngineConfig(requests_per_minute=60)
         router = create_router(provider="yfinance", api_key=None, config=config)
         assert isinstance(router, YFinanceRouter)

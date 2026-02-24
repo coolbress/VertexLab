@@ -1,3 +1,4 @@
+"""Unit tests for YFinanceRouter behavior and parsing."""
 from __future__ import annotations
 
 import pickle
@@ -12,6 +13,11 @@ from vertex_forager.providers.yfinance.router import YFinanceRouter
 
 @pytest.fixture
 def yf_router() -> YFinanceRouter:
+    """Provide a configured YFinanceRouter for unit tests.
+    
+    Returns:
+        YFinanceRouter: Router with rate_limit=500.
+    """
     return YFinanceRouter(rate_limit=500)
 
 

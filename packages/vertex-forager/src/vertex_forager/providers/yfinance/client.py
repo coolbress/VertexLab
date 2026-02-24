@@ -55,7 +55,20 @@ class YFinanceClient(BaseClient):
         connect_db: str | Path | None = None,
         **kwargs: Any
     ) -> pl.DataFrame | RunResult:
-        """Fetch ticker metadata/info."""
+        """Fetch ticker metadata/info.
+        
+        Args:
+            tickers: List of ticker symbols.
+            connect_db: Optional DuckDB connection string/path for persistence.
+            **kwargs: Additional provider-specific options.
+        
+        Returns:
+            Polars DataFrame in memory or RunResult when persisting.
+        
+        Raises:
+            ValueError: If tickers list is empty.
+            RuntimeError: If pipeline execution fails.
+        """
         return await self._fetch_per_ticker(
             dataset="info",
             symbols=tickers,
@@ -174,6 +187,16 @@ class YFinanceClient(BaseClient):
             kind: Type of action ('dividends' or 'splits').
             tickers: List of ticker symbols.
             connect_db: Optional DuckDB connection string.
+            start_date: Optional start date (YYYY-MM-DD).
+            end_date: Optional end date (YYYY-MM-DD).
+            **kwargs: Additional provider-specific options.
+        
+        Returns:
+            Polars DataFrame in memory or RunResult when persisting.
+        
+        Raises:
+            ValueError: If tickers list is empty.
+            RuntimeError: If pipeline execution fails.
         """
         return await self._fetch_per_ticker(
             dataset=kind,
@@ -205,6 +228,14 @@ class YFinanceClient(BaseClient):
             kind: Type of holder ('institutional', 'mutualfund').
             tickers: List of ticker symbols.
             connect_db: Optional DuckDB connection string.
+            **kwargs: Additional provider-specific options.
+        
+        Returns:
+            Polars DataFrame in memory or RunResult when persisting.
+        
+        Raises:
+            ValueError: If tickers list is empty.
+            RuntimeError: If pipeline execution fails.
         """
         dataset = f"{kind}_holders"
         return await self._fetch_per_ticker(
@@ -226,7 +257,20 @@ class YFinanceClient(BaseClient):
         connect_db: str | Path | None = None,
         **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
-        """Fetch major holders summary metrics."""
+        """Fetch major holders summary metrics.
+        
+        Args:
+            tickers: List of ticker symbols.
+            connect_db: Optional DuckDB connection string.
+            **kwargs: Additional provider-specific options.
+        
+        Returns:
+            Polars DataFrame in memory or RunResult when persisting.
+        
+        Raises:
+            ValueError: If tickers list is empty.
+            RuntimeError: If pipeline execution fails.
+        """
         return await self._fetch_per_ticker(
             dataset="major_holders",
             symbols=tickers,
@@ -248,7 +292,20 @@ class YFinanceClient(BaseClient):
         connect_db: str | Path | None = None,
         **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
-        """Fetch insider roster holders."""
+        """Fetch insider roster holders.
+        
+        Args:
+            tickers: List of ticker symbols.
+            connect_db: Optional DuckDB connection string.
+            **kwargs: Additional provider-specific options.
+        
+        Returns:
+            Polars DataFrame in memory or RunResult when persisting.
+        
+        Raises:
+            ValueError: If tickers list is empty.
+            RuntimeError: If pipeline execution fails.
+        """
         return await self._fetch_per_ticker(
             dataset="insider_roster_holders",
             symbols=tickers,
@@ -268,7 +325,20 @@ class YFinanceClient(BaseClient):
         connect_db: str | Path | None = None,
         **kwargs: Any
     ) -> pl.DataFrame | RunResult:
-        """Fetch insider purchases."""
+        """Fetch insider purchases.
+        
+        Args:
+            tickers: List of ticker symbols.
+            connect_db: Optional DuckDB connection string.
+            **kwargs: Additional provider-specific options.
+        
+        Returns:
+            Polars DataFrame in memory or RunResult when persisting.
+        
+        Raises:
+            ValueError: If tickers list is empty.
+            RuntimeError: If pipeline execution fails.
+        """
         return await self._fetch_per_ticker(
             dataset="insider_purchases",
             symbols=tickers,
@@ -290,7 +360,20 @@ class YFinanceClient(BaseClient):
         connect_db: str | Path | None = None,
         **kwargs: Any
     ) -> pl.DataFrame | RunResult:
-        """Fetch earnings calendar."""
+        """Fetch earnings calendar.
+        
+        Args:
+            tickers: List of ticker symbols.
+            connect_db: Optional DuckDB connection string.
+            **kwargs: Additional provider-specific options.
+        
+        Returns:
+            Polars DataFrame in memory or RunResult when persisting.
+        
+        Raises:
+            ValueError: If tickers list is empty.
+            RuntimeError: If pipeline execution fails.
+        """
         return await self._fetch_per_ticker(
             dataset="calendar",
             symbols=tickers,
@@ -312,7 +395,20 @@ class YFinanceClient(BaseClient):
         connect_db: str | Path | None = None,
         **kwargs: Any
     ) -> pl.DataFrame | RunResult:
-        """Fetch analyst recommendations."""
+        """Fetch analyst recommendations.
+        
+        Args:
+            tickers: List of ticker symbols.
+            connect_db: Optional DuckDB connection string.
+            **kwargs: Additional provider-specific options.
+        
+        Returns:
+            Polars DataFrame in memory or RunResult when persisting.
+        
+        Raises:
+            ValueError: If tickers list is empty.
+            RuntimeError: If pipeline execution fails.
+        """
         return await self._fetch_per_ticker(
             dataset="recommendations",
             symbols=tickers,
@@ -334,7 +430,20 @@ class YFinanceClient(BaseClient):
         connect_db: str | Path | None = None,
         **kwargs: Any
     ) -> pl.DataFrame | RunResult:
-        """Fetch ticker news."""
+        """Fetch ticker news.
+        
+        Args:
+            tickers: List of ticker symbols.
+            connect_db: Optional DuckDB connection string.
+            **kwargs: Additional provider-specific options.
+        
+        Returns:
+            Polars DataFrame in memory or RunResult when persisting.
+        
+        Raises:
+            ValueError: If tickers list is empty.
+            RuntimeError: If pipeline execution fails.
+        """
         return await self._fetch_per_ticker(
             dataset="news",
             symbols=tickers,
@@ -393,7 +502,7 @@ class YFinanceClient(BaseClient):
         Returns:
             pl.DataFrame for in-memory mode, RunResult for database mode
         """
-        bytes_per_item = 1024 if dataset == "info" else 500 * 1024
+        bytes_per_item = 30 * 1024 if dataset == "info" else 500 * 1024
         validate_memory_usage(
             symbols=symbols,
             connect_db=connect_db,
@@ -408,12 +517,12 @@ class YFinanceClient(BaseClient):
             show_progress=show_progress,
         )
         
-        result_obj: pl.DataFrame | RunResult
-        async with self.managed_writer(connect_db, show_progress=show_progress) as writer:
-            try:
+        result_obj: pl.DataFrame | RunResult = pl.DataFrame()
+        try:
+            async with self.managed_writer(connect_db, show_progress=show_progress) as writer:
                 router = create_router(
                     "yfinance",
-                    api_key=self.api_key or "dummy",
+                    api_key=self.api_key or "",
                     config=self._config,
                     start_date=start_date,
                     end_date=end_date,
@@ -435,7 +544,7 @@ class YFinanceClient(BaseClient):
                     table_name=table_name,
                     connect_db=connect_db,
                 )
-            finally:
-                if pbar is not None:
-                    pbar.close()
+        finally:
+            if pbar is not None:
+                pbar.close()
         return result_obj

@@ -1,3 +1,5 @@
+"""Unit tests for YFinance client and router behavior."""
+
 from __future__ import annotations
 
 import pytest
@@ -8,6 +10,7 @@ from vertex_forager.providers.yfinance.router import YFinanceRouter
 
 
 class TestYFinanceClientDefaults:
+    """Verify default configuration and client creation behavior."""
     def test_client_init_defaults(self) -> None:
         client = YFinanceClient()
         assert client.api_key is None
@@ -27,6 +30,7 @@ class TestYFinanceClientDefaults:
 
 
 class TestYFinanceRouterDateParams:
+    """Verify date-parameter behavior for YFinanceRouter price jobs."""
     @pytest.mark.asyncio
     async def test_price_jobs_without_dates_omit_start_end(self) -> None:
         router = YFinanceRouter(rate_limit=60, start_date=None, end_date=None)

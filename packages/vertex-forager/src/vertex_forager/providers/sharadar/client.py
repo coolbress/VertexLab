@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import Any
+from dataclasses import dataclass, field
 
 import polars as pl
 import duckdb
@@ -19,6 +20,20 @@ from vertex_forager.utils import (
 from vertex_forager.providers.sharadar.schema import DATASET_TABLE
 
 logger = logging.getLogger(__name__)
+
+@dataclass(slots=True)
+class FetchConfig:
+    dataset: str
+    symbols: list[str] | None
+    connect_db: str | Path | None
+    desc: str
+    table_name: str
+    show_progress: bool = True
+    total_items: int | None = None
+    unit: str = "tickers"
+    start_date: str | None = None
+    end_date: str | None = None
+    extra: dict[str, Any] = field(default_factory=dict)
 
 
 class SharadarClient(BaseClient):
@@ -66,41 +81,7 @@ class SharadarClient(BaseClient):
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Fetch metadata for all or specific tickers (TICKERS)."""
-        if tickers:
-            result = await self._fetch_per_ticker(
-                dataset="tickers",
-                symbols=tickers,
-                connect_db=connect_db,
-                desc="Fetching tickers metadata",
-                table_name=DATASET_TABLE["tickers"],
-                show_progress=False,
-                total_items=len(tickers),
-                **kwargs,
-            )
-        else:
-            result = await self._fetch_pagination(
-                dataset="tickers",
-                connect_db=connect_db,
-                desc="Fetching all tickers metadata",
-                table_name=DATASET_TABLE["tickers"],
-                show_progress=False,
-                **kwargs,
-            )
-        # Auto-cache ticker metadata: in-memory when result is a DataFrame, or load from DuckDB when connected.
-        if isinstance(result, pl.DataFrame):
-            self._metadata_cache = result
-        elif connect_db:
-            try:
-                table = DATASET_TABLE["tickers"]
-                conn = duckdb.connect(str(connect_db))
-                df_pd = conn.execute(
-                    f"SELECT ticker, firstpricedate, lastpricedate FROM {table}"
-                ).fetch_df()
-                conn.close()
-                self._metadata_cache = pl.from_pandas(df_pd)
-            except Exception:
-                pass
-        return result
+        return await self._get_ticker_info_impl(tickers=tickers, connect_db=connect_db, **kwargs)
 
     @jupyter_safe
     async def get_sp500_history(
@@ -110,14 +91,20 @@ class SharadarClient(BaseClient):
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Fetch S&P 500 component history."""
-        # SP500 is typically full history fetch, best suited for pagination
-        return await self._fetch_pagination(
+        cfg = FetchConfig(
             dataset="sp500",
+            symbols=None,
             connect_db=connect_db,
             desc="Fetching S&P 500 history",
             table_name=DATASET_TABLE["sp500"],
-            **kwargs,
+            show_progress=True,
+            total_items=None,
+            unit="pages",
+            start_date=None,
+            end_date=None,
+            extra=dict(kwargs),
         )
+        return await self._fetch_pagination(cfg)
 
     @jupyter_safe
     async def get_price_data(
@@ -149,17 +136,20 @@ class SharadarClient(BaseClient):
             httpx.RequestError: If a network error occurs.
             httpx.HTTPStatusError: If the API returns a non-success status code.
         """
-        return await self._fetch_per_ticker(
+        cfg = FetchConfig(
             dataset="price",
             symbols=tickers,
             connect_db=connect_db,
             desc="Fetching price data",
             table_name=DATASET_TABLE["price"],
+            show_progress=True,
+            total_items=len(tickers),
+            unit="tickers",
             start_date=start_date,
             end_date=end_date,
-            total_items=len(tickers),
-            **kwargs,
+            extra=dict(kwargs),
         )
+        return await self._fetch_per_ticker(cfg)
 
     @jupyter_safe
     async def get_fundamental_data(
@@ -173,18 +163,20 @@ class SharadarClient(BaseClient):
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Fetch fundamental data (SF1)."""
-        return await self._fetch_per_ticker(
+        cfg = FetchConfig(
             dataset="fundamental",
             symbols=tickers,
             connect_db=connect_db,
             desc="Fetching fundamental data",
             table_name=DATASET_TABLE["fundamental"],
+            show_progress=True,
+            total_items=len(tickers),
+            unit="tickers",
             start_date=start_date,
             end_date=end_date,
-            total_items=len(tickers),
-            dimension=dimension,
-            **kwargs,
+            extra={**dict(kwargs), "dimension": dimension},
         )
+        return await self._fetch_per_ticker(cfg)
 
     @jupyter_safe
     async def get_daily_metrics(
@@ -197,18 +189,20 @@ class SharadarClient(BaseClient):
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Fetch daily metrics (DAILY)."""
-        return await self._fetch_per_ticker(
+        cfg = FetchConfig(
             dataset="daily",
             symbols=tickers,
+            connect_db=connect_db,
             desc="Fetching daily metrics",
             table_name=DATASET_TABLE["daily"],
-            connect_db=connect_db,
-            start_date=start_date,
-            end_date=end_date,
             show_progress=True,
             total_items=len(tickers),
-            **kwargs,
+            unit="tickers",
+            start_date=start_date,
+            end_date=end_date,
+            extra=dict(kwargs),
         )
+        return await self._fetch_per_ticker(cfg)
 
     @jupyter_safe
     async def get_corporate_actions(
@@ -221,17 +215,20 @@ class SharadarClient(BaseClient):
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Fetch corporate actions (ACTIONS)."""
-        return await self._fetch_per_ticker(
+        cfg = FetchConfig(
             dataset="actions",
             symbols=tickers,
             connect_db=connect_db,
             desc="Fetching corporate actions",
             table_name=DATASET_TABLE["actions"],
+            show_progress=True,
+            total_items=len(tickers),
+            unit="tickers",
             start_date=start_date,
             end_date=end_date,
-            total_items=len(tickers),
-            **kwargs,
+            extra=dict(kwargs),
         )
+        return await self._fetch_per_ticker(cfg)
 
     @jupyter_safe
     async def get_insider_trading(
@@ -244,17 +241,20 @@ class SharadarClient(BaseClient):
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Fetch insider trading data (SF2)."""
-        return await self._fetch_per_ticker(
+        cfg = FetchConfig(
             dataset="insider",
             symbols=tickers,
             connect_db=connect_db,
             desc="Fetching insider trading data",
             table_name=DATASET_TABLE["insider"],
+            show_progress=True,
+            total_items=len(tickers),
+            unit="tickers",
             start_date=start_date,
             end_date=end_date,
-            total_items=len(tickers),
-            **kwargs,
+            extra=dict(kwargs),
         )
+        return await self._fetch_per_ticker(cfg)
 
     @jupyter_safe
     async def get_institutional_ownership(
@@ -267,36 +267,80 @@ class SharadarClient(BaseClient):
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Fetch institutional ownership data (SF3)."""
-        return await self._fetch_per_ticker(
+        cfg = FetchConfig(
             dataset="institutional",
             symbols=tickers,
             connect_db=connect_db,
             desc="Fetching institutional ownership",
             table_name=DATASET_TABLE["institutional"],
+            show_progress=True,
+            total_items=len(tickers),
+            unit="tickers",
             start_date=start_date,
             end_date=end_date,
-            total_items=len(tickers),
-            **kwargs,
+            extra=dict(kwargs),
         )
+        return await self._fetch_per_ticker(cfg)
 
     # ----------------------------------------------------------------
     # Internal Data Fetchers 
     # ----------------------------------------------------------------
-    async def _fetch_per_ticker(
+    
+    async def _get_ticker_info_impl(
         self,
         *,
-        dataset: str,
-        symbols: list[str] | None,
-        connect_db: str | Path | None,
-        desc: str,
-        table_name: str,
-        show_progress: bool = True,
-        total_items: int | None = None,
-        unit: str = "tickers",
-        start_date: str | None = None,
-        end_date: str | None = None,
-        **kwargs: Any,
+        tickers: list[str] | None = None,
+        connect_db: str | Path | None = None,
+        **kwargs: object,
     ) -> pl.DataFrame | RunResult:
+        if tickers is not None and len(tickers) > 0:
+            cfg = FetchConfig(
+                dataset="tickers",
+                symbols=tickers,
+                connect_db=connect_db,
+                desc="Fetching tickers metadata",
+                table_name=DATASET_TABLE["tickers"],
+                show_progress=False,
+                total_items=len(tickers),
+                unit="tickers",
+                start_date=None,
+                end_date=None,
+                extra=dict(kwargs),
+            )
+            result = await self._fetch_per_ticker(cfg)
+        else:
+            cfg = FetchConfig(
+                dataset="tickers",
+                symbols=None,
+                connect_db=connect_db,
+                desc="Fetching all tickers metadata",
+                table_name=DATASET_TABLE["tickers"],
+                show_progress=False,
+                total_items=None,
+                unit="pages",
+                start_date=None,
+                end_date=None,
+                extra=dict(kwargs),
+            )
+            result = await self._fetch_pagination(cfg)
+        if isinstance(result, pl.DataFrame):
+            self._metadata_cache = result
+        elif connect_db:
+            try:
+                table = DATASET_TABLE["tickers"]
+                with duckdb.connect(str(connect_db)) as conn:
+                    df_pl = conn.execute(
+                        f"SELECT ticker, firstpricedate, lastpricedate FROM {table}"
+                    ).pl()
+                self._metadata_cache = df_pl
+            except duckdb.Error as e:
+                logger.error("DuckDB error while loading ticker metadata cache: %s", e)
+            except Exception as e:
+                logger.error("Error while loading ticker metadata cache: %s", e)
+        return result
+
+    
+    async def _fetch_per_ticker(self, config: "FetchConfig") -> pl.DataFrame | RunResult:
         """Fetch data for specific tickers using per-ticker batching.
         
         This method implements the per-ticker fetching pattern using BaseClient's
@@ -325,6 +369,22 @@ class SharadarClient(BaseClient):
         Returns:
             pl.DataFrame for in-memory mode, RunResult for database mode
         """
+        dataset = config.dataset
+        symbols = config.symbols
+        connect_db = config.connect_db
+        desc = config.desc
+        table_name = config.table_name
+        show_progress = config.show_progress
+        unit = config.unit
+        start_date = config.start_date
+        end_date = config.end_date
+        kwargs = dict(config.extra)
+
+        if symbols is not None and len(symbols) == 0:
+            if connect_db is not None:
+                return RunResult(provider="sharadar")
+            return pl.DataFrame()
+
         bytes_per_item = (
             self.BYTES_PER_TICKER_METADATA if dataset == "tickers" else self.BYTES_PER_TICKER_FULL
         )
@@ -339,20 +399,16 @@ class SharadarClient(BaseClient):
             logger.info("Metadata cache miss. Fetching ticker metadata first...")
             try:
                 with Spinner("Prefetching metadata for smart batching..."):
-                    meta_result = await self.get_ticker_info.__wrapped__(self, tickers=None, connect_db=None)
+                    meta_result = await self._get_ticker_info_impl(tickers=None, connect_db=None)
                     if isinstance(meta_result, pl.DataFrame):
                         self._metadata_cache = meta_result
                         logger.info(f"Metadata cached: {len(self._metadata_cache)} tickers")
             except Exception as e:
                 logger.warning(f"Failed to prefetch metadata: {e}. Smart batching will be disabled.")
 
-        # Sharadar-specific: Determine total items for progress
-        if symbols:
-            total_items = len(symbols)
-        elif dataset == "tickers":
-            total_items = self.ESTIMATED_TOTAL_TICKERS
-        else:
-            total_items = None
+        total_items = (
+            len(symbols) if symbols else (self.ESTIMATED_TOTAL_TICKERS if dataset == "tickers" else None)
+        )
 
         # Use BaseClient's common infrastructure
         pbar, pbar_updater = self.create_progress_tracker(
@@ -362,7 +418,9 @@ class SharadarClient(BaseClient):
             show_progress=show_progress,
         )
         
-        result_obj: pl.DataFrame | RunResult
+        result_obj: pl.DataFrame | RunResult = (
+            RunResult(provider="sharadar") if connect_db is not None else pl.DataFrame()
+        )
         async with self.managed_writer(connect_db, show_progress=show_progress) as writer:
             try:
                 router = create_router(
@@ -399,17 +457,7 @@ class SharadarClient(BaseClient):
                     pbar.close()
         return result_obj
 
-    async def _fetch_pagination(
-        self,
-        *,
-        dataset: str,
-        connect_db: str | Path | None,
-        desc: str,
-        table_name: str,
-        show_progress: bool = True,
-        unit: str = "pages",
-        **kwargs: Any,
-    ) -> pl.DataFrame | RunResult:
+    async def _fetch_pagination(self, config: "FetchConfig") -> pl.DataFrame | RunResult:
         """Fetch full dataset via pagination (e.g., SP500, All Tickers).
         
         This method implements the pagination fetching pattern using BaseClient's
@@ -434,6 +482,14 @@ class SharadarClient(BaseClient):
             pl.DataFrame for in-memory mode, RunResult for database mode
         """
 
+        dataset = config.dataset
+        connect_db = config.connect_db
+        desc = config.desc
+        table_name = config.table_name
+        show_progress = config.show_progress
+        unit = config.unit
+        kwargs = dict(config.extra)
+
         use_pbar = show_progress and dataset not in ("sp500", "tickers")
         if use_pbar:
             pbar, pbar_updater = self.create_progress_tracker(
@@ -445,7 +501,9 @@ class SharadarClient(BaseClient):
         else:
             pbar, pbar_updater = None, None
         
-        result_obj: pl.DataFrame | RunResult
+        result_obj: pl.DataFrame | RunResult = (
+            RunResult(provider="sharadar") if connect_db is not None else pl.DataFrame()
+        )
         async with self.managed_writer(connect_db, show_progress=show_progress) as writer:
             try:
                 router = create_router(

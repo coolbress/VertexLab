@@ -1,3 +1,26 @@
+"""YFinance schema definitions for vertex_forager provider.
+
+This module declares public table schemas for datasets fetched via the
+Yahoo Finance (yfinance) integration. Schemas define table names,
+column types, unique keys, and date-related columns for storage and
+analysis with Polars.
+
+Exports:
+    TableSchema: Schema configuration dataclass used across providers.
+    YFINANCE_INFO_SCHEMA: Schema for ticker info/metadata.
+    YFINANCE_PRICE_SCHEMA: Schema for historical OHLCV downloads.
+    YFINANCE_FINANCIALS_SCHEMA: Schema for financial statements (income, balance, cashflow).
+    YFINANCE_HOLDERS_SCHEMA: Schema for institutional/mutual fund holders.
+    YFINANCE_MAJOR_HOLDERS_SCHEMA: Schema for major holders summary.
+    YFINANCE_INSIDER_ROSTER_SCHEMA: Schema for insider roster holders.
+    YFINANCE_INSIDER_PURCHASES_SCHEMA: Schema for insider purchases.
+    YFINANCE_CALENDAR_SCHEMA: Schema for earnings calendar entries.
+    YFINANCE_NEWS_SCHEMA: Schema for ticker news articles.
+
+Notes:
+    - Polars (pl) is used for column types.
+    - All timestamps should be UTC where applicable.
+"""
 from __future__ import annotations
 
 from typing import Final

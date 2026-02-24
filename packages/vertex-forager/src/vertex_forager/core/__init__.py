@@ -9,14 +9,23 @@ This module contains the fundamental components of the scraping engine:
 - `retry`: Retry strategies.
 """
 
+from typing import TYPE_CHECKING, Any
 from vertex_forager.core.config import EngineConfig, FetchJob, FramePacket, RunResult
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor
-# from vertex_forager.core.pipeline import VertexForager  # Circular import fix
 from . import retry
 
+if TYPE_CHECKING:
+    from vertex_forager.core.pipeline import VertexForager
+
+def __getattr__(name: str) -> Any:
+    if name == "VertexForager":
+        from vertex_forager.core.pipeline import VertexForager
+        return VertexForager
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 __all__ = [
-    # "VertexForager",
+    "VertexForager",
     "EngineConfig",
     "FetchJob",
     "FramePacket",

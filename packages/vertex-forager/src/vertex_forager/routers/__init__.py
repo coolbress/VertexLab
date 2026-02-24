@@ -13,11 +13,11 @@ from vertex_forager.core.registries import (
     RouterRegistration,
 )
 
-def _sharadar_factory(**kwargs):
+def _sharadar_factory(**kwargs: Any) -> BaseRouter:
     from vertex_forager.providers.sharadar.router import SharadarRouter
     return SharadarRouter(**kwargs)
 
-def _yfinance_factory(**kwargs):
+def _yfinance_factory(**kwargs: Any) -> BaseRouter:
     from vertex_forager.providers.yfinance.router import YFinanceRouter
     return YFinanceRouter(**kwargs)
 

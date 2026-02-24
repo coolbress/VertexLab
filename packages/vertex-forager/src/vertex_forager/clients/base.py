@@ -4,7 +4,9 @@ import logging
 import sys
 from abc import ABC
 import warnings
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, AsyncExitStack
+from functools import partial
 from pathlib import Path
 from typing import Any, Callable, AsyncGenerator
 
@@ -144,14 +146,14 @@ class BaseClient(ABC):
             raise RuntimeError("Client not initialized. Use 'async with client:'")
         return self._client
 
-    async def run_async(self, *args, **kwargs) -> httpx.Response:
+    async def run_async(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         """Execute a standard async HTTP request using the underlying client.
         
         Delegates directly to client.request().
         """
         if self._client is None:
             raise RuntimeError("Client not initialized. Use 'async with client:'")
-        return await self._client.request(*args, **kwargs)
+        return await self._client.request(method, url, **kwargs)
 
     async def run_sync(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         """Execute a blocking (synchronous) function in a separate thread.
@@ -159,9 +161,6 @@ class BaseClient(ABC):
         This wrapper ensures that blocking library calls (like yfinance, pandas I/O)
         do not freeze the main asyncio event loop.
         """
-        import asyncio
-        from functools import partial
-        
         pfunc = partial(func, *args, **kwargs)
         return await asyncio.to_thread(pfunc)
 
@@ -206,7 +205,6 @@ class BaseClient(ABC):
 
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=FutureWarning)
-                warnings.simplefilter("ignore", category=UserWarning)
                 self.last_run = await pipeline.run(
                     dataset=dataset, symbols=symbols, on_progress=on_progress, **run_kwargs
                 )
@@ -256,32 +254,24 @@ class BaseClient(ABC):
                 # Use writer for data collection
                 result = await self.run_pipeline(..., writer=writer)
         """
-        writer = create_writer(connect_db)
-        await writer.__aenter__()
+        stack = AsyncExitStack()
+        await stack.__aenter__()
+        writer = await stack.enter_async_context(create_writer(connect_db))
         try:
             yield writer
         except BaseException:
-            # Propagate exception to writer's __aexit__
-            exc_info = sys.exc_info()
-            # Standard pattern: If __aexit__ returns True, exception is suppressed.
-            if not await writer.__aexit__(*exc_info):
-                raise
+            await stack.__aexit__(*sys.exc_info())
+            raise
         else:
-            # Normal exit
             if show_progress:
-                if sys.stderr.isatty():
-                    with Spinner("Finalizing database writes..."):
-                        await writer.__aexit__(None, None, None)
-                else:
-                    with Spinner("Finalizing database writes..."):
-                        await writer.__aexit__(None, None, None)
+                with Spinner("Finalizing database writes..."):
+                    await stack.__aexit__(None, None, None)
             else:
-                await writer.__aexit__(None, None, None)
+                await stack.__aexit__(None, None, None)
             run = self.last_run
             if run and run.errors:
-                print("Errors:")
                 for err in run.errors:
-                    print(f"- {err}")
+                    logger.error("%s", err)
 
     def create_progress_tracker(
         self,
@@ -341,6 +331,11 @@ class BaseClient(ABC):
         """
         if connect_db is not None:
             # Database mode: return RunResult from pipeline
+            if self.last_run is None:
+                raise RuntimeError(
+                    f"No pipeline result available for table '{table_name}'. "
+                    "Ensure run_pipeline completed before collecting database results."
+                )
             return self.last_run
             
         # In-memory mode: collect DataFrame from writer

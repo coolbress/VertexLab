@@ -14,9 +14,6 @@ from typing import Any, Callable
 import nest_asyncio
 from tqdm.auto import tqdm
 import psutil
-from IPython import get_ipython  # type: ignore
-from ipywidgets import HTML  # type: ignore
-from IPython.display import display  # type: ignore
 
 from dotenv import load_dotenv
 
@@ -181,11 +178,12 @@ class Spinner:
         self._is_tty = sys.stderr.isatty()
         ip = None
         try:
+            from IPython import get_ipython  # type: ignore
             ip = get_ipython()
         except Exception:
             ip = None
         self._is_notebook = bool(ip and ip.__class__.__name__ == "ZMQInteractiveShell")
-        self._widget_label: HTML | None = None
+        self._widget_label: object | None = None
 
         self.spinner_chars = itertools.cycle(
             ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
@@ -225,12 +223,26 @@ class Spinner:
         self.busy = True
 
         if self._is_notebook:
-            self._widget_label = HTML(value=f"⏳ {self.message}")
-            display(self._widget_label)
-            self.update_thread = threading.Thread(
-                target=self._notebook_task, daemon=True
-            )
-            self.update_thread.start()
+            try:
+                from ipywidgets import HTML  # type: ignore
+                from IPython.display import display  # type: ignore
+                self._widget_label = HTML(value=f"⏳ {self.message}")
+                display(self._widget_label)
+                self.update_thread = threading.Thread(
+                    target=self._notebook_task, daemon=True
+                )
+                self.update_thread.start()
+            except ImportError:
+                self._is_notebook = False
+                if self._is_tty:
+                    self._hide_cursor()
+                    self.update_thread = threading.Thread(
+                        target=self._spinner_task, daemon=True
+                    )
+                    self.update_thread.start()
+                else:
+                    sys.stderr.write(f"{self.message}\n")
+                    sys.stderr.flush()
         elif self._is_tty:
             self._hide_cursor()
             self.update_thread = threading.Thread(
@@ -338,14 +350,20 @@ class Spinner:
         return False
 
     def _notebook_task(self) -> None:
+        failures = 0
         while self.busy and self._widget_label is not None:
             ch = next(self.spinner_chars)
             with self._message_lock:
                 msg = self.message
             try:
+                # type: ignore[attr-defined]
                 self._widget_label.value = f"{ch} {msg}"
+                failures = 0
             except Exception:
-                pass
+                failures += 1
+                if failures >= 3:
+                    self.busy = False
+                    break
             time.sleep(self.delay)
 
 

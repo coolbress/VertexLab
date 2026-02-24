@@ -201,10 +201,20 @@ def create_test_fetch_job() -> FetchJob:
 
 @pytest.fixture
 def yfinance_router() -> YFinanceRouter:
+    """Return a YFinanceRouter configured with a 500ms rate limit.
+    
+    Returns:
+        YFinanceRouter: Router instance with conservative rate limiting.
+    """
     return YFinanceRouter(rate_limit=500)
 
 @pytest.fixture
 def yf_price_df() -> pd.DataFrame:
+    """Provide a sample price DataFrame for tests.
+    
+    Returns:
+        pandas.DataFrame: Columns include date, open, high, low, close, volume, ticker.
+    """
     return pd.DataFrame(
         {
             "date": pd.to_datetime(["2024-01-02", "2024-01-03"]),

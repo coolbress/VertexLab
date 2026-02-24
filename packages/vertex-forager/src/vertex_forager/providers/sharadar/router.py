@@ -126,13 +126,10 @@ class SharadarRouter(BaseRouter):
                 pl.col("lastpricedate").is_not_null()
             )
             
-            # Using iter_rows is slow for large DF, but metadata is small (~15k).
-            # Optimization: create dict directly
-            data = valid_df.select(["ticker", "firstpricedate", "lastpricedate"]).to_dicts()
-            self._ticker_ranges = {
-                row["ticker"]: (row["firstpricedate"], row["lastpricedate"]) 
-                for row in data
-            }
+            tickers = valid_df.get_column("ticker").to_list()
+            starts = valid_df.get_column("firstpricedate").to_list()
+            ends = valid_df.get_column("lastpricedate").to_list()
+            self._ticker_ranges = {t: (s, e) for t, s, e in zip(tickers, starts, ends)}
             logger.debug(f"Processed metadata for {len(self._ticker_ranges)} tickers.")
             
         except Exception as e:
@@ -228,7 +225,10 @@ class SharadarRouter(BaseRouter):
             for symbol in symbol_list:
                 est_rows = self._estimate_ticker_rows(symbol, dataset)
                 
-                # If adding this symbol exceeds limit, flush current batch
+                if est_rows > max_rows:
+                    yield self._build_per_symbol_job(dataset=dataset, symbol=symbol, dimension=dimension)
+                    continue
+                
                 if (current_rows + est_rows > max_rows) or (len(current_batch) >= max_batch_size):
                     if current_batch:
                         yield self._build_per_symbol_job(
@@ -256,8 +256,7 @@ class SharadarRouter(BaseRouter):
             # Heuristic Batching Mode (Original Refactor)
             batch_size = self._calculate_batch_size(dataset)
             
-            for i in range(0, len(symbol_list), batch_size):
-                chunk = symbol_list[i : i + batch_size]
+            for chunk in self._iter_symbol_batches(symbol_list, batch_size):
                 if not chunk:
                     continue
                 batch_symbol_str = ",".join(chunk)
@@ -355,11 +354,6 @@ class SharadarRouter(BaseRouter):
         # Add provider metadata
         frame = self._add_provider_metadata(frame=frame, observed_at=observed_at)
         
-        # Validate frame again after metadata addition
-        empty_result = self._check_empty_response(frame=frame)
-        if empty_result:
-            return empty_result
-
         packets = [
             FramePacket(
                 provider=self.provider,

@@ -85,22 +85,19 @@ class HttpExecutor:
         try:
             # 1. Execute provider-specific library call
             def _execute():
-                if scheme == "yfinance":
-                    ticker_symbol = payload
-                    endpoint = params.get("endpoint")
-                    if endpoint == "download":
-                        download_kwargs = {**params}
-                        download_kwargs.pop("dataset", None)
-                        download_kwargs.pop("endpoint", None)
-                        return yf.download(tickers=ticker_symbol, **download_kwargs)
-                    if endpoint == "ticker":
-                        ticker = yf.Ticker(ticker_symbol)
-                        if not hasattr(ticker, dataset):
-                            raise ValueError(f"Unknown yfinance dataset: {dataset}")
-                        return getattr(ticker, dataset)
-                    if not hasattr(ticker, dataset):
-                        raise ValueError(f"Unknown yfinance dataset: {dataset}")
-                    return getattr(ticker, dataset)
+                if scheme != "yfinance":
+                    raise ValueError(f"Unsupported library scheme: {scheme}")
+                ticker_symbol = payload
+                endpoint = params.get("endpoint")
+                if endpoint == "download":
+                    download_kwargs = {**params}
+                    download_kwargs.pop("dataset", None)
+                    download_kwargs.pop("endpoint", None)
+                    return yf.download(tickers=ticker_symbol, **download_kwargs)
+                ticker = yf.Ticker(ticker_symbol)
+                if not hasattr(ticker, dataset):
+                    raise ValueError(f"Unknown yfinance dataset: {dataset}")
+                return getattr(ticker, dataset)
 
             # Use the client's run_sync method
             data = await self._client.run_sync(_execute)
@@ -109,7 +106,7 @@ class HttpExecutor:
             # This allows the Router to handle normalization and schema mapping properly.
             return pickle.dumps(data)
 
-        except Exception as e:
+        except (ValueError, TypeError) as e:
             logger.error(f"Library fetch failed for scheme={scheme}, dataset={dataset}: {e}")
             raise
 

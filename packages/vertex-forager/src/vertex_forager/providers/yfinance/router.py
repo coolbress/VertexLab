@@ -22,37 +22,31 @@ logger = logging.getLogger("vertex_forager.providers.yfinance.router")
 
 
 class YFinanceRouter(BaseRouter):
-    """Data Router implementation for Yahoo Finance (via yfinance library).
-
-    **Request Characteristics:**
+    """Router for Yahoo Finance datasets (via yfinance).
     
-    1. **Ticker-based Batching Strategy**:
-       - Price data: 500-ticker bulk batches for maximum throughput
-       - Other datasets (financials, holders): 1 ticker per job due to API constraints
-       - No authentication required (free API)
-       - Conservative rate limiting (60 req/min) to prevent IP bans
+    Summary:
+        - Processes all datasets per-symbol (no bulk price batching).
+        - Applies conservative rate limiting to avoid IP bans.
+        - Converts pickle/pandas outputs to Polars, flattens MultiIndex,
+          and normalizes wide→long structures where needed.
+        - Executes via YFinanceHttpExecutor for thread-safe calls.
     
-    2. **Dataset-specific Optimization**:
-       - Price: Bulk processing for high-volume efficiency
-       - Financials: Sequential per-ticker due to API limitations
-       - Info/Holders: Single-ticker requests for data quality
+    Args:
+        api_key: Optional, unused (free API).
+        rate_limit: Requests per minute (default 60).
+        start_date: Optional start date (YYYY-MM-DD) for price dataset.
+        end_date: Optional end date (YYYY-MM-DD) for price dataset.
+        **kwargs: Additional configuration (e.g., price_batch_size).
     
-    **Response Characteristics:**
+    Attributes:
+        PRICE_BATCH_SIZE: Default suggested batch size for internal heuristics.
+        THREADS_THRESHOLD: Concurrency threshold for execution strategy.
     
-    1. **Pickle Serialization**: Raw yfinance results serialized as pickle bytes
-    2. **Pandas Objects**: DataFrame/Series/Dict formats from yfinance library
-    3. **MultiIndex Structure**: Complex hierarchical indexes requiring flattening
-    4. **Wide Format**: Financial data with dates as columns (requires unpivoting)
-    
-    **Implementation Status:**
-    
-    - ✅ Optimized batching strategies implemented
-    - ✅ Pickle deserialization and Pandas→Polars conversion
-    - ✅ MultiIndex flattening and structure normalization
-    - ✅ Wide→Long format transformation for financials
-    - ✅ Structure transformation only, type casting delegated to SchemaMapper
-    
-    Note: Works with YFinanceHttpExecutor for thread-safe execution"""
+    Implementation Notes:
+        - generate_jobs yields one job per symbol across datasets.
+        - Request params for price include interval/group_by and optional date filters.
+        - Non-price datasets use Ticker properties; date filters are not applied.
+    """
 
     # Constants for batching and processing
     PRICE_BATCH_SIZE: Final[int] = 250
@@ -83,7 +77,8 @@ class YFinanceRouter(BaseRouter):
         raw_bs = kwargs.get("price_batch_size", self.PRICE_BATCH_SIZE)
         try:
             bs_int = int(raw_bs)
-        except Exception:
+        except (ValueError, TypeError):
+            logger.debug(f"Failed to parse price_batch_size='{raw_bs}', using default={self.PRICE_BATCH_SIZE}")
             bs_int = self.PRICE_BATCH_SIZE
         self._price_batch_size = max(1, min(500, bs_int))
 
@@ -99,13 +94,19 @@ class YFinanceRouter(BaseRouter):
     async def generate_jobs(
         self, *, dataset: str, symbols: Sequence[str] | None, **kwargs: object
     ) -> AsyncIterator[FetchJob]:
-        """Generate fetch jobs for the pipeline.
-
-        Strategy:
-            - 'price': Per-ticker jobs only (no bulk download).
-            - Others: Creates 1 Job per Ticker.
-            - Uses `yfinance://{ticker_or_batch}` pseudo-URL scheme.
-            - Passes 'dataset' as a query parameter.
+        """Generate fetch jobs.
+        
+        Args:
+            dataset: Target dataset name (e.g., 'price', 'financials').
+            symbols: Sequence of ticker symbols, or None for unsupported bulk operations.
+            **kwargs: Additional parameters forwarded to request construction.
+        
+        Returns:
+            AsyncIterator[FetchJob]: Stream of jobs constructed per symbol.
+        
+        Raises:
+            NotImplementedError: If bulk ticker listing is requested.
+            ValueError: If required 'symbols' are missing for a dataset.
         """
         # -------- Validate Symbols --------
         
@@ -135,7 +136,18 @@ class YFinanceRouter(BaseRouter):
             yield self._build_single_symbol_job(symbol=symbol, dataset=dataset)
 
     def parse(self, *, job: FetchJob, payload: bytes) -> ParseResult:
-        """Parse the raw pickled payload into FramePacket."""
+        """Parse raw pickled payload into structured packets.
+        
+        Args:
+            job: Fetch job that produced this payload.
+            payload: Raw response bytes (pickle-serialized).
+        
+        Returns:
+            ParseResult: Normalized packets and any next jobs.
+        
+        Raises:
+            Exception: Unexpected errors are re-raised after logging.
+        """
         try:
             # Check empty payload using BaseRouter helper
             empty_result = self._check_empty_response(payload=payload)
@@ -213,10 +225,13 @@ class YFinanceRouter(BaseRouter):
             )
 
             return ParseResult(packets=[packet], next_jobs=[])
-
-        except Exception as e:
-            logger.debug(f"Failed to parse payload for job {job}: {e}")
+        
+        except (pickle.UnpicklingError, ValueError, TypeError):
+            logger.exception("parse failed for job %s", job)
             return ParseResult(packets=[], next_jobs=[])
+        except Exception:
+            logger.exception("Unexpected error in parse for job %s", job)
+            raise
         
     # --------------------------------------
     # Generate Jobs Helpers
