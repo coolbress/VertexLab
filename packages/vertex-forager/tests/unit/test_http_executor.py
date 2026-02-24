@@ -75,14 +75,14 @@ class TestHttpExecutor:
     ) -> None:
         """Test successful HTTP request execution."""
         # Arrange
-        mock_async_client.request.return_value = success_response
+        mock_async_client.run_async.return_value = success_response
 
         # Act
         result = await http_executor.fetch(sample_request_spec)
 
         # Assert
         assert result == b'{"data": "success"}'
-        mock_async_client.request.assert_called_once_with(
+        mock_async_client.run_async.assert_called_once_with(
             "GET",
             "https://api.example.com/data",
             params={"ticker": "AAPL"},
@@ -100,7 +100,7 @@ class TestHttpExecutor:
         success_response: Response,
     ) -> None:
         """Verify Bearer token injection."""
-        mock_async_client.request.return_value = success_response
+        mock_async_client.run_async.return_value = success_response
         spec = RequestSpec(
             url="http://test.com",
             method=HttpMethod.GET,
@@ -109,7 +109,7 @@ class TestHttpExecutor:
 
         await http_executor.fetch(spec)
 
-        kwargs = mock_async_client.request.call_args.kwargs
+        kwargs = mock_async_client.run_async.call_args.kwargs
         assert kwargs["headers"]["Authorization"] == "Bearer secret_token"
 
     @pytest.mark.asyncio
@@ -120,7 +120,7 @@ class TestHttpExecutor:
         success_response: Response,
     ) -> None:
         """Verify Query parameter auth injection."""
-        mock_async_client.request.return_value = success_response
+        mock_async_client.run_async.return_value = success_response
         spec = RequestSpec(
             url="http://test.com",
             method=HttpMethod.GET,
@@ -129,7 +129,7 @@ class TestHttpExecutor:
 
         await http_executor.fetch(spec)
 
-        kwargs = mock_async_client.request.call_args.kwargs
+        kwargs = mock_async_client.run_async.call_args.kwargs
         assert kwargs["params"]["api_key"] == "12345"
 
     @pytest.mark.asyncio
@@ -140,7 +140,7 @@ class TestHttpExecutor:
         success_response: Response,
     ) -> None:
         """Verify Custom Header auth injection."""
-        mock_async_client.request.return_value = success_response
+        mock_async_client.run_async.return_value = success_response
         spec = RequestSpec(
             url="http://test.com",
             method=HttpMethod.GET,
@@ -149,7 +149,7 @@ class TestHttpExecutor:
 
         await http_executor.fetch(spec)
 
-        kwargs = mock_async_client.request.call_args.kwargs
+        kwargs = mock_async_client.run_async.call_args.kwargs
         assert kwargs["headers"]["X-API-KEY"] == "secret"
 
     @pytest.mark.asyncio
@@ -162,7 +162,7 @@ class TestHttpExecutor:
     ) -> None:
         """Test that HTTP errors are properly handled."""
         # Arrange
-        mock_async_client.request.return_value = error_response
+        mock_async_client.run_async.return_value = error_response
 
         # Act & Assert
         with pytest.raises(httpx.HTTPStatusError):
@@ -177,7 +177,7 @@ class TestHttpExecutor:
     ) -> None:
         """Test that network errors are properly handled."""
         # Arrange
-        mock_async_client.request.side_effect = httpx.RequestError(
+        mock_async_client.run_async.side_effect = httpx.RequestError(
             "Network error", request=MagicMock()
         )
 
@@ -195,7 +195,7 @@ class TestHttpExecutor:
     ) -> None:
         """Test that timeout configuration is respected."""
         # Arrange
-        mock_async_client.request.return_value = success_response
+        mock_async_client.run_async.return_value = success_response
 
         # Create spec with custom timeout
         spec_with_timeout = RequestSpec(
@@ -206,7 +206,7 @@ class TestHttpExecutor:
         await http_executor.fetch(spec_with_timeout)
 
         # Assert
-        mock_async_client.request.assert_called_once_with(
+        mock_async_client.run_async.assert_called_once_with(
             "GET",
             "https://api.example.com/data",
             params={},
@@ -230,7 +230,7 @@ class TestHttpExecutor:
         empty_response.content = b""
         empty_response.headers = {}
 
-        mock_async_client.request.return_value = empty_response
+        mock_async_client.run_async.return_value = empty_response
 
         # Act
         result = await http_executor.fetch(sample_request_spec)
@@ -254,7 +254,7 @@ class TestHttpExecutorConcurrency:
         success_response.status_code = 200
         success_response.content = b'{"data": "success"}'
 
-        mock_async_client.request.return_value = success_response
+        mock_async_client.run_async.return_value = success_response
 
         spec1 = RequestSpec(url="https://api.example.com/data1", method=HttpMethod.GET)
         spec2 = RequestSpec(url="https://api.example.com/data2", method=HttpMethod.GET)
@@ -266,4 +266,4 @@ class TestHttpExecutorConcurrency:
         assert len(results) == 2
         assert results[0] == b'{"data": "success"}'
         assert results[1] == b'{"data": "success"}'
-        assert mock_async_client.request.call_count == 2
+        assert mock_async_client.run_async.call_count == 2

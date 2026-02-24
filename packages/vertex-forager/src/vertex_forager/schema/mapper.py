@@ -20,11 +20,11 @@ class SchemaMapper:
 
     Key Responsibilities:
     1. **Schema Lookup**: Retrieves the authoritative `TableSchema` for a given table name
-       from the central registry.
+        from the central registry.
     2. **Type Casting**: forcibly casts all columns to the strict Polars data types
-       defined in the schema.
+        defined in the schema.
     3. **Missing Column Handling**: Automatically adds missing schema columns with `null`
-       values to ensure downstream systems receive complete records.
+        values to ensure downstream systems receive complete records.
     4. **Column Ordering**: Reorders columns to match the canonical schema definition.
 
     Usage:
@@ -54,29 +54,14 @@ class SchemaMapper:
         if table_schema is None or packet.frame.is_empty():
             return packet
 
-        # Check for 'date' column in the ORIGINAL frame before casting
-        # Casting might inject a null 'date', so we must check beforehand
-        original_has_date = "date" in packet.frame.columns
-
         frame = self._cast_to_schema(packet.frame, table_schema.schema)
 
-        # Guarantee 'date' column existence
-        # Only derive/create if it wasn't in the original frame
-        if not original_has_date:
-            # Check for common timestamp aliases
-            timestamp_cols = ["timestamp", "created_at", "datetime", "calendardate"]
-            found_ts = next(
-                (col for col in timestamp_cols if col in frame.columns), None
-            )
-
-            if found_ts:
-                # Create date from timestamp
-                frame = frame.with_columns(pl.col(found_ts).cast(pl.Date).alias("date"))
-            elif "date" not in frame.columns:
-                # Create null date column if it doesn't exist at all
-                # (Note: _cast_to_schema might have created it as null if it was in schema but missing in data)
-                # But if it wasn't in schema either, we add it here.
-                frame = frame.with_columns(pl.lit(None, dtype=pl.Date).alias("date"))
+        if table_schema.analysis_date_col is not None:
+            target_col = table_schema.analysis_date_col
+            target_dtype = table_schema.schema.get(target_col, pl.Date)
+            if target_col in frame.columns:
+                frame = frame.with_columns(pl.col(target_col).cast(target_dtype, strict=False).alias(target_col))
+                frame = frame.sort(target_col)
 
         # If original had date, _cast_to_schema preserved it (or cast it).
         # We don't overwrite it.

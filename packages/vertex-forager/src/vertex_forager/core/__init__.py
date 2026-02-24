@@ -12,11 +12,11 @@ This module contains the fundamental components of the scraping engine:
 from vertex_forager.core.config import EngineConfig, FetchJob, FramePacket, RunResult
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor
-from vertex_forager.core.pipeline import VertexForager
+# from vertex_forager.core.pipeline import VertexForager  # Circular import fix
 from . import retry
 
 __all__ = [
-    "VertexForager",
+    # "VertexForager",
     "EngineConfig",
     "FetchJob",
     "FramePacket",

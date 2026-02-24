@@ -40,7 +40,7 @@ def create_client(
     *,
     provider: str,
     api_key: str | None = None,
-    rate_limit: int,
+    rate_limit: int | None = None,
     **kwargs: object,
 ) -> BaseClient:
     """
@@ -82,6 +82,10 @@ def create_client(
             f"Missing api_key (set api_key or {registration.env_api_key} in environment/.env)"
         )
 
+    if provider == "yfinance":
+        return registration.factory(api_key=None, rate_limit=60, **kwargs)
+    if rate_limit is None:
+        raise ValueError("Missing rate_limit for provider '{provider}'")
     return registration.factory(api_key=resolved_key, rate_limit=rate_limit, **kwargs)
 
 

@@ -103,7 +103,7 @@ class TestSharadarRouterUnit:
         assert len(jobs) == 1
         job = jobs[0]
         assert job.dataset == "tickers"
-        assert job.spec.params.get("qopts.per_page") == "500"
+        assert job.spec.params.get("qopts.per_page") == "10000"
 
     @pytest.mark.asyncio
     async def test_generate_jobs_passes_kwargs_for_fundamental_dataset(

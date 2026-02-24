@@ -18,18 +18,23 @@ from unittest.mock import AsyncMock
 
 import polars as pl
 import pytest
+import pandas as pd
 from httpx import AsyncClient
 
 from vertex_forager.core.config import FetchJob, FramePacket, RequestSpec
 from vertex_forager.core.http import HttpExecutor
 from vertex_forager.providers.sharadar.router import SharadarRouter
 from vertex_forager.providers.sharadar.client import SharadarClient
+from vertex_forager.providers.yfinance.router import YFinanceRouter
 
 
 @pytest.fixture
 def mock_async_client() -> AsyncMock:
-    """Mock AsyncClient fixture."""
-    return AsyncMock(spec=AsyncClient)
+    """Mock AsyncClient fixture with run_async method."""
+    mock = AsyncMock(spec=AsyncClient)
+    # Add run_async method that HTTP executor expects
+    mock.run_async = AsyncMock()
+    return mock
 
 
 @pytest.fixture
@@ -192,6 +197,24 @@ def create_test_fetch_job() -> FetchJob:
             url="https://api.sharadar.com/SEP.json",
             params={"ticker": "AAPL"},
         ),
+    )
+
+@pytest.fixture
+def yfinance_router() -> YFinanceRouter:
+    return YFinanceRouter(rate_limit=500)
+
+@pytest.fixture
+def yf_price_df() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2024-01-02", "2024-01-03"]),
+            "open": [100.0, 101.0],
+            "high": [101.0, 102.0],
+            "low": [99.5, 100.0],
+            "close": [100.5, 101.5],
+            "volume": [123.0, 456.0],
+            "ticker": ["AAPL", "AAPL"],
+        }
     )
 
 

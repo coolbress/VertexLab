@@ -8,6 +8,7 @@ import pytest
 from vertex_forager.core.config import EngineConfig
 from vertex_forager.routers import create_router
 from vertex_forager.providers.sharadar.router import SharadarRouter
+from vertex_forager.providers.yfinance.router import YFinanceRouter
 
 
 class TestRouterFactory:
@@ -26,7 +27,6 @@ class TestRouterFactory:
         # Verify internal attributes via public interface
         assert router.api_key == api_key
         assert router.rate_limit == 100
-        assert router.start_date == "2024-01-01"
 
     def test_create_router_invalid_provider(self):
         """Test error when provider is invalid."""
@@ -34,3 +34,9 @@ class TestRouterFactory:
 
         with pytest.raises(KeyError, match="Unsupported router: invalid_provider"):
             create_router(provider="invalid_provider", api_key="key", config=config)
+
+    def test_create_yfinance_router_success(self) -> None:
+        config = EngineConfig(requests_per_minute=60)
+        router = create_router(provider="yfinance", api_key=None, config=config)
+        assert isinstance(router, YFinanceRouter)
+        assert router.rate_limit == 60

@@ -5,7 +5,7 @@ from typing import Final
 import json
 import io
 from collections.abc import AsyncIterator, Iterator, Sequence
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 import polars as pl
 
@@ -18,22 +18,39 @@ from vertex_forager.core.config import (
     RequestSpec,
 )
 from vertex_forager.routers.base import BaseRouter
-from vertex_forager.providers.sharadar.utils import (
-    DATASET_ENDPOINT,
+from vertex_forager.providers.sharadar.schema import (
     DATASET_SCHEMA,
     DATASET_TABLE,
+    DATASET_ENDPOINT,
     DATE_FILTER_COL,
     INTERNAL_COLS,
 )
 
 
-from copy import deepcopy
-
 logger = logging.getLogger("vertex_forager.providers.sharadar.router")
 
 
 class SharadarRouter(BaseRouter):
-    """Data Router implementation for Sharadar (Nasdaq Data Link)."""
+    """Data Router implementation for Sharadar (Nasdaq Data Link).
+
+    **Request Characteristics:**
+    
+    1. **Smart Batching**: Uses ticker metadata cache (first/last trading dates) to efficiently pack multiple tickers within 10,000-row API limit
+    2. **Cursor-based Pagination**: Uses `next_cursor_id` for complete large dataset collection
+    
+    **Response Characteristics:**
+    
+    1. **JSON Format**: Standard Nasdaq Data Link API responses
+    2. **Row-based Data**: Ticker-specific time series data
+    3. **Efficient Conversion**: Polars native JSON parsing with GIL release
+    
+    **Implementation Status:**
+    
+    - ✅ Smart batching with metadata cache utilization
+    - ✅ Polars native JSON parsing applied
+    - ✅ Cursor-based pagination auto-handling
+    - ✅ Structure transformation only, type casting delegated to SchemaMapper
+    """
 
     _BASE_URL: Final[str] = "https://data.nasdaq.com/api/v3/datatables/SHARADAR"
 
@@ -56,6 +73,13 @@ class SharadarRouter(BaseRouter):
         }
     }
 
+    # Constants for batch calculation and API limits
+    MAX_ROWS_PER_REQUEST: Final[int] = 10000
+    DEFAULT_BATCH_SIZE: Final[int] = 100
+    MIN_BATCH_SIZE: Final[int] = 1
+    TRADING_DAYS_RATIO: Final[float] = 0.7  # ~252 trading days per year (252/365)
+    QUARTERLY_DAYS_RATIO: Final[float] = 1/90  # ~4 quarters per year
+
     def __init__(
         self,
         *,
@@ -63,6 +87,7 @@ class SharadarRouter(BaseRouter):
         rate_limit: int,
         start_date: str | None = None,
         end_date: str | None = None,
+        ticker_metadata: pl.DataFrame | None = None,
         **kwargs: object,
     ) -> None:
         """Initialize SharadarRouter.
@@ -72,15 +97,50 @@ class SharadarRouter(BaseRouter):
             rate_limit: Rate limit (requests per minute).
             start_date: Optional start date filter (YYYY-MM-DD).
             end_date: Optional end date filter (YYYY-MM-DD).
+            ticker_metadata: Cached metadata DataFrame (for smart batching).
             **kwargs: Additional configuration parameters.
         """
         self._api_key = api_key
         self._rate_limit = rate_limit
         self._start_date = start_date
         self._end_date = end_date
+        
+        # Process metadata into efficient lookup if available
+        self._ticker_ranges: dict[str, tuple[date, date]] | None = None
+        if ticker_metadata is not None and not ticker_metadata.is_empty():
+            self._process_ticker_metadata(ticker_metadata)
+
+    def _process_ticker_metadata(self, df: pl.DataFrame) -> None:
+        """Convert metadata DataFrame to efficient lookup dict."""
+        try:
+            # Check required columns
+            required = {"ticker", "firstpricedate", "lastpricedate"}
+            if not required.issubset(df.columns):
+                logger.warning(f"Metadata missing required columns {required}. Smart batching disabled.")
+                return
+
+            # Convert to dict: {ticker: (start, end)}
+            # Filter only valid dates
+            valid_df = df.filter(
+                pl.col("firstpricedate").is_not_null() & 
+                pl.col("lastpricedate").is_not_null()
+            )
+            
+            # Using iter_rows is slow for large DF, but metadata is small (~15k).
+            # Optimization: create dict directly
+            data = valid_df.select(["ticker", "firstpricedate", "lastpricedate"]).to_dicts()
+            self._ticker_ranges = {
+                row["ticker"]: (row["firstpricedate"], row["lastpricedate"]) 
+                for row in data
+            }
+            logger.debug(f"Processed metadata for {len(self._ticker_ranges)} tickers.")
+            
+        except Exception as e:
+            logger.warning(f"Failed to process ticker metadata: {e}. Smart batching disabled.")
+            self._ticker_ranges = None
 
     # --------------------------------------------------------------------------
-    # Public API (BaseRouter Implementation)
+    # Properties 
     # --------------------------------------------------------------------------
 
     @property
@@ -102,10 +162,9 @@ class SharadarRouter(BaseRouter):
         """Get the configured rate limit."""
         return self._rate_limit
 
-    @property
-    def start_date(self) -> str | None:
-        """Get the configured start date filter."""
-        return self._start_date
+    # --------------------------------------------------------------------------
+    # Abstract Methods (BaseRouter Implementation)
+    # --------------------------------------------------------------------------
 
     async def generate_jobs(
         self, *, dataset: str, symbols: Sequence[str] | None, **kwargs: object
@@ -126,36 +185,25 @@ class SharadarRouter(BaseRouter):
         Yields:
             FetchJob: A job object containing the request specification.
         """
+        # -------- Build Pagination Jobs --------
+        
         # Unified pagination handling:
         # - tickers: paginated only when symbols not provided
         # - sp500: paginated only when symbols not provided
         if (dataset == "tickers" and not symbols) or (
             dataset == "sp500" and not symbols
         ):
-            try:
-                raw_per_page = kwargs.get("per_page", 10000)
-                # Ensure it's not None/Empty and is numeric
-                if raw_per_page is None or str(raw_per_page).strip() == "":
-                    per_page = 10000
-                else:
-                    per_page = int(raw_per_page)
-
-                # Enforce sensible bounds
-                if per_page < 1:
-                    per_page = 1
-                elif per_page > 100000:  # Reasonable upper limit for Sharadar
-                    per_page = 100000
-            except (ValueError, TypeError):
-                # Fallback on failure
-                per_page = 10000
-
+            # Sharadar API limit: maximum 10,000 rows per response
+            per_page = self.MAX_ROWS_PER_REQUEST
             yield self._build_pagination_job(dataset=dataset, per_page=per_page)
             return
 
         if not symbols:
             return
 
-        symbol_list = list(symbols)
+        # -------- Build Per-Symbol Jobs --------
+        
+        symbol_list = [s.strip() for s in symbols if isinstance(s, str) and s.strip()]
 
         raw_dimension = kwargs.get("dimension")
         if not raw_dimension or str(raw_dimension).strip() == "":
@@ -163,16 +211,60 @@ class SharadarRouter(BaseRouter):
         else:
             dimension = str(raw_dimension)
 
-        # Simplified 1-to-1 Mapping:
-        # The Client is responsible for all bulk packing (Smart Bulk Packing or Simple Chunking).
-        # The Router simply creates one job per input symbol string.
-        # This removes the need for 'bulk_size' logic in the Router.
-        for symbol in symbol_list:
-            if not symbol:
-                continue
-            yield self._build_per_symbol_job(
-                dataset=dataset, symbol=symbol, dimension=dimension
-            )
+        # Refactored Strategy: Router-driven Batching with Dynamic Sizing
+        # Two modes:
+        # 1. Smart Batching (if metadata available): Pack based on exact row counts.
+        # 2. Heuristic Batching (fallback): Fixed batch size based on date range.
+
+        if self._ticker_ranges:
+            # -------- Smart Batching Mode --------
+            
+            # Smart Batching Mode
+            current_batch: list[str] = []
+            current_rows = 0
+            max_rows = self.MAX_ROWS_PER_REQUEST
+            max_batch_size = self.DEFAULT_BATCH_SIZE  # API URL length safety
+            
+            for symbol in symbol_list:
+                est_rows = self._estimate_ticker_rows(symbol, dataset)
+                
+                # If adding this symbol exceeds limit, flush current batch
+                if (current_rows + est_rows > max_rows) or (len(current_batch) >= max_batch_size):
+                    if current_batch:
+                        yield self._build_per_symbol_job(
+                            dataset=dataset, 
+                            symbol=",".join(current_batch), 
+                            dimension=dimension
+                        )
+                    current_batch = []
+                    current_rows = 0
+                
+                current_batch.append(symbol)
+                current_rows += est_rows
+                
+            # Flush remaining
+            if current_batch:
+                yield self._build_per_symbol_job(
+                    dataset=dataset, 
+                    symbol=",".join(current_batch), 
+                    dimension=dimension
+                )
+                
+        else:
+            # -------- Heuristic Batching Mode --------
+            
+            # Heuristic Batching Mode (Original Refactor)
+            batch_size = self._calculate_batch_size(dataset)
+            
+            for i in range(0, len(symbol_list), batch_size):
+                chunk = symbol_list[i : i + batch_size]
+                if not chunk:
+                    continue
+                batch_symbol_str = ",".join(chunk)
+                
+                yield self._build_per_symbol_job(
+                    dataset=dataset, symbol=batch_symbol_str, dimension=dimension
+                )
 
     def parse(self, *, job: FetchJob, payload: bytes) -> ParseResult:
         """Parse the API response payload into structured data.
@@ -187,17 +279,18 @@ class SharadarRouter(BaseRouter):
         Returns:
             ParseResult: Result containing data packets and any subsequent jobs.
         """
+        # -------- Parse Response Payload --------
+        
         # OPTIMIZATION: Try Polars native JSON parsing first (Release GIL, Zero-Copy)
         frame = pl.DataFrame()
         meta = {}
 
         try:
             # pl.read_json is significantly faster than json.loads for large data
-            # It expects a file-like object or bytes (if simple json)
-            # For Sharadar's nested structure, it returns a Struct.
             json_df = pl.read_json(io.BytesIO(payload))
 
-            # Check for API Error
+            # -------- Handle API Errors --------
+            
             if "quandl_error" in json_df.columns:
                 err = json_df.select(pl.col("quandl_error")).item(0)
                 if err:
@@ -205,63 +298,39 @@ class SharadarRouter(BaseRouter):
                     message = err.get("message", "Unknown error")
                     raise ValueError(f"Sharadar API error {code}: {message}")
 
+            # -------- Extract & Transform Data --------
+            
             # Extract Metadata
             if "meta" in json_df.columns and not json_df.is_empty():
-                # Safe extraction handling potential nulls/empty frames
                 meta_col = json_df.select(pl.col("meta"))
                 if not meta_col.is_empty():
-                    # For DataFrame with 1 column, item(0, 0) is safer in recent Polars
                     try:
                         meta = meta_col.item(0, 0) or {}
                     except (ValueError, TypeError):
                         meta = {}
 
-            # Extract Data using Pure Polars operations (avoiding Python round-trip)
-            # This is significantly faster (approx 1.6x) for large payloads
-
-            # 1. Get Column Names (Metadata is small, safe to extract to Python)
-            # 'columns' is List[Struct] in the JSON
-            # We use item(0, 0) to get the first row, first column safely
-            cols_val = json_df.select(pl.col("datatable").struct.field("columns")).item(
-                0, 0
-            )
-
-            # Handle Polars Series return type (for List columns)
+            # Extract column names from datatable structure
+            cols_val = json_df.select(pl.col("datatable").struct.field("columns")).item(0, 0)
             if isinstance(cols_val, pl.Series):
                 cols_list = cols_val.to_list()
             else:
                 cols_list = cols_val
-
             cols_list = cols_list or []
 
             col_names = []
             for i, c in enumerate(cols_list):
                 name = c.get("name")
-                col_names.append(
-                    name if isinstance(name, str) and name else f"column_{i}"
-                )
+                col_names.append(name if isinstance(name, str) and name else f"column_{i}")
 
-            # 2. Explode and Unnest 'data' (Heavy part, keep in Polars)
-            # 'data' is List[List[str]] (or mixed, coerced to str by read_json)
+            # Convert nested data to flat DataFrame
             frame = (
                 json_df.select(pl.col("datatable").struct.field("data").alias("row"))
                 .explode("row")
                 .select(pl.col("row").list.to_struct(fields=col_names).struct.unnest())
             )
 
-            # 3. Cast columns that were coerced to String (Polars JSON mixed-type list behavior)
-            # We rely on SchemaMapper to do the final strict validation,
-            # but here we can do a quick pass if needed, or just let SchemaMapper handle it.
-            # Ideally, we should hint types here if we knew them, but Sharadar columns vary.
-            # SchemaMapper will handle the actual casting/validation.
-
-        except (
-            pl.exceptions.PolarsError,
-            ValueError,
-            TypeError,
-            json.JSONDecodeError,
-        ) as e:
-            # Fallback to standard parsing if Polars fails (e.g., unexpected format)
+        except (pl.exceptions.PolarsError, ValueError, TypeError, json.JSONDecodeError) as e:
+            # Fallback to standard JSON parsing if Polars fails
             logger.warning(
                 f"Polars JSON parse failed for {job.dataset}, falling back to json.loads. Error: {e}",
                 exc_info=True,
@@ -270,15 +339,26 @@ class SharadarRouter(BaseRouter):
             frame = self._datatable_to_frame(decoded, dataset=job.dataset)
             meta = decoded.get("meta") or {}
 
-        if frame.is_empty():
-            return ParseResult(packets=[], next_jobs=[])
+        # -------- Validate & Standardize Frame --------
+        
+        # Validate non-empty frame
+        empty_result = self._check_empty_response(frame=frame)
+        if empty_result:
+            return empty_result
 
+        # Map dataset to table name
         observed_at = datetime.now(tz=timezone.utc)
-        table, frame = self._to_table_frame(
-            job=job, frame=frame, observed_at=observed_at
-        )
-        if frame.is_empty():
-            return ParseResult(packets=[], next_jobs=[])
+        table = DATASET_TABLE.get(job.dataset)
+        if table is None:
+            raise NotImplementedError(f"Unsupported dataset: {job.dataset}")
+        
+        # Add provider metadata
+        frame = self._add_provider_metadata(frame=frame, observed_at=observed_at)
+        
+        # Validate frame again after metadata addition
+        empty_result = self._check_empty_response(frame=frame)
+        if empty_result:
+            return empty_result
 
         packets = [
             FramePacket(
@@ -290,6 +370,8 @@ class SharadarRouter(BaseRouter):
             )
         ]
 
+        # -------- Handle Pagination --------
+        
         next_jobs = []
         if meta and isinstance(meta, dict):
             pagination = job.context.get("pagination")
@@ -305,16 +387,15 @@ class SharadarRouter(BaseRouter):
                 ):
                     new_job = job.model_copy(deep=True)
                     new_job.spec.params[cursor_param] = next_cursor
-                    # Important: Each paginated request counts as a separate API call.
-                    # The rate limiter in the pipeline will enforce limits for each of these subsequent jobs.
                     next_jobs.append(new_job)
 
         return ParseResult(packets=packets, next_jobs=next_jobs)
 
-    # --------------------------------------------------------------------------
-    # API Integration (Request Building)
-    # --------------------------------------------------------------------------
-
+    # --------------------------------------
+    # Generate Jobs Helpers
+    # --------------------------------------
+    
+    # ------ Authentication: add API key as query parameter ------
     def _auth(self) -> RequestAuth:
         """Generate authentication details for the request.
 
@@ -327,6 +408,7 @@ class SharadarRouter(BaseRouter):
             query_param="api_key",
         )
 
+    # ------ URL resolution: build dataset-specific endpoint ------
     def _dataset_url(self, dataset: str) -> str:
         """Resolve the full API URL for a given dataset.
 
@@ -344,6 +426,7 @@ class SharadarRouter(BaseRouter):
             raise NotImplementedError(f"Unsupported dataset: {dataset}")
         return f"{self._BASE_URL}/{endpoint}.json"
 
+    # ------ Column selection: derive request columns from schema ------
     def _get_request_columns(self, dataset: str) -> str:
         """Get the comma-separated list of columns to request from the API.
 
@@ -362,6 +445,7 @@ class SharadarRouter(BaseRouter):
         cols = [col for col in schema.schema.keys() if col not in INTERNAL_COLS]
         return ",".join(cols)
 
+    # ------ Build pagination job: apply per_page/columns/date filters ------
     def _build_pagination_job(self, *, dataset: str, per_page: int = 10000) -> FetchJob:
         """Build a fetch job with pagination support for tickers or sp500.
 
@@ -390,7 +474,7 @@ class SharadarRouter(BaseRouter):
             params=params,
             auth=self._auth(),
         )
-        context = deepcopy(self._PAGINATION_CONTEXT)
+        context = self._PAGINATION_CONTEXT.copy()
         return FetchJob(
             provider=self.provider,
             dataset=dataset,
@@ -399,6 +483,7 @@ class SharadarRouter(BaseRouter):
             context=context,
         )
 
+    # ------ Build per-symbol job: validate ticker and set dataset params ------
     def _build_per_symbol_job(
         self, *, dataset: str, symbol: str, dimension: str = "MRT"
     ) -> FetchJob:
@@ -414,14 +499,8 @@ class SharadarRouter(BaseRouter):
         """
         params: dict[str, str] = {}
 
-        # Explicitly validate symbol to prevent empty ticker requests (which trigger bulk)
+        # Validate symbol to prevent empty ticker requests
         if not isinstance(symbol, str) or not symbol.strip():
-            # Should be caught upstream, but as a safeguard
-            # We can't easily raise 400 here without disrupting the flow,
-            # but returning None or raising ValueError is appropriate for internal logic.
-            # Since this is an internal builder, let's assume valid input or raise.
-            # However, the user asked to "raise/return a 400-like error or skip".
-            # Raising ValueError seems safest to stop this job creation.
             raise ValueError(f"Invalid symbol for per-symbol job: '{symbol}'")
 
         clean_symbol = symbol.strip()
@@ -459,11 +538,126 @@ class SharadarRouter(BaseRouter):
             spec=req,
             context=context,
         )
+        
+    # ------ Rows per ticker: convert days→rows by dataset characteristics ------
+    def _calculate_rows_per_ticker(self, days: int, dataset: str) -> int:
+        """Calculate estimated rows per ticker based on dataset type and days."""
+        if dataset in ("price", "daily"):
+            return max(1, int(days * self.TRADING_DAYS_RATIO))
+        elif dataset in ("fundamental", "insider", "institutional"):
+            return max(1, int(days * self.QUARTERLY_DAYS_RATIO))
+        else:
+            return days
 
-    # --------------------------------------------------------------------------
-    # Response Parsing & Decoding
-    # --------------------------------------------------------------------------
+    # ------ Batch size: optimize to respect 10,000-row API limit ------
+    def _calculate_batch_size(self, dataset: str) -> int:
+        """Calculate optimal batch size based on date range and dataset.
+        
+        Estimates the number of rows per ticker to keep the total response size
+        under the 10,000 row limit per request (Sharadar API limit).
+        
+        Args:
+            dataset: The dataset name (e.g., 'price', 'fundamental').
+            
+        Returns:
+            int: The calculated batch size (number of tickers per request).
+        """
+        # If no date range provided, assume full history -> strict batching
+        if not self._start_date:
+            return self.MIN_BATCH_SIZE
+            
+        # Use BaseRouter helper to parse date range
+        date_range = self._parse_date_range(self._start_date, self._end_date)
+        if date_range is None:
+            return self.MIN_BATCH_SIZE
+            
+        start, end = date_range
+        days = (end - start).days
+        days = max(1, days)  # Ensure at least 1 day
+            
+        # Use common calculation method
+        rows_per_ticker = self._calculate_rows_per_ticker(days, dataset)
+        
+        # Calculate batch size
+        # Example: 1 year daily data = ~250 rows. 10000 / 250 = 40 tickers.
+        batch_size = self.MAX_ROWS_PER_REQUEST // rows_per_ticker
+        
+        # Apply bounds (1 <= batch_size <= 100)
+        # Sharadar recommends max 100 tickers per request for URL length safety
+        return max(self.MIN_BATCH_SIZE, min(self.DEFAULT_BATCH_SIZE, batch_size))
 
+    # ------ Rows estimate (metadata): compute overlap of request vs. ticker range ------
+    def _estimate_ticker_rows(self, ticker: str, dataset: str) -> int:
+        """Estimate exact row count for a specific ticker using metadata."""
+        # Fallback to heuristic if no metadata or ticker not found
+        if not self._ticker_ranges or ticker not in self._ticker_ranges:
+            if not self._start_date:
+                return self.MAX_ROWS_PER_REQUEST  # Assume full history is huge -> forces single batch
+                
+            # Use BaseRouter helper to parse date range
+            date_range = self._parse_date_range(self._start_date, self._end_date)
+            if date_range is None:
+                return self.MAX_ROWS_PER_REQUEST
+                
+            start, end = date_range
+            days = (end - start).days
+            days = max(1, days)  # Ensure at least 1 day
+            
+            return self._calculate_rows_per_ticker(days, dataset)
+
+        # Smart Calculation using metadata
+        ticker_start, ticker_end = self._ticker_ranges[ticker]
+        
+        # Ensure ticker dates are date objects (handle datetime)
+        if isinstance(ticker_start, datetime):
+            ticker_start = ticker_start.date()
+        if isinstance(ticker_end, datetime):
+            ticker_end = ticker_end.date()
+
+        # Parse request range
+        req_range = self._parse_date_range(self._start_date, self._end_date)
+        if req_range is None:
+            req_start, req_end = date.min, date.today()
+        else:
+            req_start, req_end = req_range
+            if isinstance(req_start, datetime):
+                req_start = req_start.date()
+            if isinstance(req_end, datetime):
+                req_end = req_end.date()
+        
+        # Calculate overlap
+        overlap_start = max(req_start, ticker_start)
+        overlap_end = min(req_end, ticker_end)
+        
+        if overlap_start > overlap_end:
+            return 0  # No data in range
+            
+        days = (overlap_end - overlap_start).days
+        days = max(1, days)  # Ensure at least 1 day for inclusive calculation
+        
+        return self._calculate_rows_per_ticker(days, dataset)
+
+    # ------ Batch splitting: split symbol sequence into fixed-size chunks ------
+    def _iter_symbol_batches(
+        self, symbols: Sequence[str], batch_size: int
+    ) -> Iterator[list[str]]:
+        """Yield batches of symbols from the sequence.
+
+        Args:
+            symbols: Sequence of symbols.
+            batch_size: Size of each batch.
+
+        Yields:
+            list[str]: A list of symbols for the current batch.
+        """
+        for idx in range(0, len(symbols), batch_size):
+            yield list(symbols[idx : idx + batch_size])
+
+    # --------------------------------------
+    # Parse Helpers 
+    # --------------------------------------
+
+    # ------ Payload decode: JSON→dict and API error checks ------
     def _decode_payload(self, payload: bytes) -> dict:
         """Decode the response bytes into a dictionary.
 
@@ -484,6 +678,7 @@ class SharadarRouter(BaseRouter):
             raise ValueError(f"Sharadar API error {code}: {message}")
         return decoded
 
+    # ------ Frame load: datatable(columns/data)→Polars DataFrame ------
     def _datatable_to_frame(self, decoded: dict, dataset: str) -> pl.DataFrame:
         """Convert the 'datatable' portion of the response to a DataFrame.
 
@@ -515,85 +710,7 @@ class SharadarRouter(BaseRouter):
 
         frame = pl.DataFrame(records, schema=schema_arg, orient="row")
 
-        # 2. Apply strict schema casting if available
-        # OPTIMIZATION: Delegated to SchemaMapper.normalize() to avoid double casting.
-        # if target_schema:
-        #     cast_exprs = []
-        #     for col_name, dtype in target_schema.schema.items():
-        #         if col_name in frame.columns:
-        #             # Special handling for Date types if they are strings
-        #             if dtype == pl.Date:
-        #                 cast_exprs.append(pl.col(col_name).str.to_date(strict=False).alias(col_name))
-        #             # Standard casting for other types
-        #             else:
-        #                 cast_exprs.append(pl.col(col_name).cast(dtype, strict=False).alias(col_name))
-        #
-        #     if cast_exprs:
-        #         frame = frame.with_columns(cast_exprs)
-
         return frame
-
-    # --------------------------------------------------------------------------
-    # Data Normalization & Validation
-    # --------------------------------------------------------------------------
-
-    def _to_table_frame(
-        self, *, job: FetchJob, frame: pl.DataFrame, observed_at: datetime
-    ) -> tuple[str, pl.DataFrame]:
-        """Map dataset to table name and normalize the DataFrame.
-
-        Args:
-            job: Fetch job.
-            frame: Raw DataFrame.
-            observed_at: Timestamp of observation.
-
-        Returns:
-            tuple[str, pl.DataFrame]: Table name and normalized DataFrame.
-
-        Raises:
-            NotImplementedError: If dataset is not supported.
-            ValueError: If required columns are missing (for price dataset).
-        """
-        table = DATASET_TABLE.get(job.dataset)
-        if table is None:
-            raise NotImplementedError(f"Unsupported dataset: {job.dataset}")
-
-        return table, self._normalize_frame(frame=frame, observed_at=observed_at)
-
-    def _normalize_frame(
-        self, *, frame: pl.DataFrame, observed_at: datetime
-    ) -> pl.DataFrame:
-        """Add provider metadata to the DataFrame.
-
-        Args:
-            frame: Input DataFrame.
-            observed_at: Fetch timestamp.
-
-        Returns:
-            pl.DataFrame: DataFrame with metadata columns.
-        """
-        return frame.with_columns(
-            [
-                pl.lit(self.provider).alias("provider"),
-                pl.lit(observed_at).alias("fetched_at"),
-            ]
-        )
-
-    # --------------------------------------------------------------------------
-    # Utility Helpers
-    # --------------------------------------------------------------------------
-
-    def _iter_symbol_batches(
-        self, symbols: Sequence[str], batch_size: int
-    ) -> Iterator[list[str]]:
-        """Yield batches of symbols from the sequence.
-
-        Args:
-            symbols: Sequence of symbols.
-            batch_size: Size of each batch.
-
-        Yields:
-            list[str]: A list of symbols for the current batch.
-        """
-        for idx in range(0, len(symbols), batch_size):
-            yield list(symbols[idx : idx + batch_size])
+    
+    
+    

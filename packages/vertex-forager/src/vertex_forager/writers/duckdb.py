@@ -237,10 +237,10 @@ class DuckDBWriter(BaseWriter):
             self._logger.info("No DuckDB connection; skipping compaction")
             return
 
-        self._logger.info("Compacting DuckDB database...")
+        self._logger.debug("Compacting DuckDB database...")
         self._conn.execute("VACUUM")
         self._conn.execute("CHECKPOINT")
-        self._logger.info("Compaction completed.")
+        self._logger.debug("Compaction completed.")
 
     async def close(self) -> None:
         """Close the database connection.
@@ -320,7 +320,7 @@ class DuckDBWriter(BaseWriter):
         )
 
         if not exists:
-            self._logger.info(f"Creating table '{table_name}' in DuckDB")
+            self._logger.debug(f"Creating table '{table_name}' in DuckDB")
             # Register the dataframe as a view to infer schema
             conn.register("temp_df_view", df)
 
@@ -343,7 +343,7 @@ class DuckDBWriter(BaseWriter):
                             conn.execute(
                                 f"CREATE UNIQUE INDEX IF NOT EXISTS {idx_name} ON {q_table} ({pk_str})"
                             )
-                            self._logger.info(
+                            self._logger.debug(
                                 f"Created UNIQUE INDEX on {table_name}({pk_str})"
                             )
                         except duckdb.Error as e:
@@ -392,7 +392,7 @@ class DuckDBWriter(BaseWriter):
         if not new_cols:
             return
 
-        self._logger.info(
+        self._logger.debug(
             f"Schema evolution: Adding {len(new_cols)} new columns to {table_name}"
         )
 
@@ -404,7 +404,7 @@ class DuckDBWriter(BaseWriter):
             q_col = self._quote_identifier(col_name)
 
             try:
-                self._logger.info(
+                self._logger.debug(
                     f"Adding column {col_name} ({sql_type}) to {table_name}"
                 )
                 conn.execute(f"ALTER TABLE {q_table} ADD COLUMN {q_col} {sql_type}")

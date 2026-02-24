@@ -313,3 +313,53 @@ TABLES: Final[dict[str, TableSchema]] = {
         SHARADAR_SP500,
     ]
 }
+
+# Dataset→Table name mapping (used by Router/Client)
+DATASET_TABLE: Final[dict[str, str]] = {
+    "price": "sharadar_sep",
+    "tickers": "sharadar_tickers",
+    "fundamental": "sharadar_sf1",
+    "daily": "sharadar_daily",
+    "actions": "sharadar_actions",
+    "insider": "sharadar_sf2",
+    "institutional": "sharadar_sf3",
+    "sp500": "sharadar_sp500",
+}
+
+# Dataset→Schema mapping
+DATASET_SCHEMA: Final[dict[str, TableSchema]] = {
+    "price": SHARADAR_SEP,
+    "tickers": SHARADAR_TICKERS,
+    "fundamental": SHARADAR_SF1,
+    "insider": SHARADAR_SF2,
+    "institutional": SHARADAR_SF3,
+    "actions": SHARADAR_ACTIONS,
+    "daily": SHARADAR_DAILY,
+    "sp500": SHARADAR_SP500,
+}
+
+# Endpoint mapping for provider API
+DATASET_ENDPOINT: Final[dict[str, str]] = {
+    "price": "SEP",
+    "fundamental": "SF1",
+    "daily": "DAILY",
+    "tickers": "TICKERS",
+    "actions": "ACTIONS",
+    "insider": "SF2",
+    "institutional": "SF3",
+    "sp500": "SP500",
+}
+
+# Date filter column per dataset
+DATE_FILTER_COL: Final[dict[str, str]] = {
+    "price": "date",
+    "fundamental": "calendardate",
+    "daily": "date",
+    "actions": "date",
+    "insider": "filingdate",
+    "institutional": "calendardate",
+    "sp500": "date",
+}
+
+# Columns to exclude from request/normalization
+INTERNAL_COLS: Final[set[str]] = {"provider", "fetched_at"}

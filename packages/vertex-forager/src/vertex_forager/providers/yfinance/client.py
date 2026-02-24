@@ -1,95 +1,441 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import polars as pl
 
 from vertex_forager.clients.base import BaseClient
 from vertex_forager.core.config import RunResult
+from vertex_forager.routers import create_router
+from vertex_forager.utils import jupyter_safe, validate_memory_usage
+from vertex_forager.schema.mapper import SchemaMapper
 
 
 class YFinanceClient(BaseClient):
     """YFinance client implementation.
 
     Provides access to Yahoo Finance data via the unofficial API.
+    All methods use the VertexForager pipeline (Router -> HttpExecutor -> Writer)
+    to ensure consistent rate limiting, logging, and error handling.
 
     Characteristics:
         - Free API: No authentication required.
-        - Rate Limiting: Default is 120 requests per minute to avoid IP bans.
+        - Rate Limiting: Default is 60 requests per minute to avoid IP bans.
         - Data Quality: Real-time data may be delayed; historical data accuracy is best-effort.
-        - API Key: The `api_key` field is present for interface compatibility but is unused.
-
-    Note:
-        `get_price_data` and `get_tickers` are currently stubs and will raise NotImplementedError.
+        - Limitations: Financial statements (annual/quarterly) expose only recent periods; full historical coverage is not provided.
     """
 
     def __init__(
         self,
         *,
         api_key: str | None = None,
-        rate_limit: int = 120,
+        rate_limit: int = 60,
         **kwargs: Any,
     ) -> None:
-        """Initialize the YFinance client.
-
-        Args:
-            api_key: Not used for YFinance but kept for interface compatibility.
-            rate_limit: Requests per minute (default: 120).
-            **kwargs: Additional configuration parameters.
-        """
         super().__init__(
-            api_key=api_key,
-            rate_limit=rate_limit,
+            api_key=None,
+            rate_limit=60,
             **kwargs,
         )
+        self._mapper = SchemaMapper()
+        
+        
+    # ----------------------------------------------------------------
+    # Public User Methods
+    # ----------------------------------------------------------------
+    
+    # --- Reference Data ---
+    
+    @jupyter_safe
+    async def get_info(
+        self,
+        *,
+        tickers: list[str],
+        connect_db: str | Path | None = None,
+        **kwargs: Any
+    ) -> pl.DataFrame | RunResult:
+        """Fetch ticker metadata/info."""
+        return await self._fetch_per_ticker(
+            dataset="info",
+            symbols=tickers,
+            connect_db=connect_db,
+            desc="Fetching YFinance info",
+            table_name="yfinance_info",
+            show_progress=True,
+            total_items=len(tickers),
+            **kwargs,
+        )
+        
+    # --- Market Data ---
 
+    @jupyter_safe
     async def get_price_data(
         self,
         *,
-        tickers: list[str] | None = None,
+        tickers: list[str],
         connect_db: str | Path | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
         **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
-        """
-        Fetch price data (Not implemented).
-
+        """Fetch historical price data (OHLCV).
+        
         Args:
-            tickers: List of ticker symbols to fetch.
-            connect_db: Database connection string or path.
-            start_date: Start date for data fetch (YYYY-MM-DD).
-            end_date: End date for data fetch (YYYY-MM-DD).
-            **kwargs: Additional provider-specific arguments.
-
+            tickers: List of ticker symbols.
+            connect_db: Database connection string.
+            start_date: Start date (YYYY-MM-DD). If None, fetches all available history.
+            end_date: End date (YYYY-MM-DD). If None, fetches up to latest available date.
+        
         Returns:
-            pl.DataFrame | RunResult: Result of the data fetch operation.
-
-        Raises:
-            NotImplementedError: Always raised as this method is a stub.
+            Polars DataFrame in memory or RunResult when persisting.
+        
+        Notes:
+            Date filters (start/end) apply to price only; other datasets ignore date filters.
         """
-        raise NotImplementedError("YFinance support is not yet implemented")
+        return await self._fetch_per_ticker(
+            dataset="price",
+            symbols=tickers,
+            connect_db=connect_db,
+            desc="Fetching YFinance price data",
+            table_name="yfinance_price",
+            show_progress=True,
+            total_items=len(tickers),
+            start_date=start_date,
+            end_date=end_date,
+            **kwargs,
+        )
 
-    async def get_tickers(
+    # --- Financials ---
+
+    @jupyter_safe
+    async def get_financials(
         self,
         *,
-        tickers: list[str] | None = None,
+        kind: Literal["balance_sheet", "income_stmt", "cashflow", "earnings"] = "income_stmt",
+        period: Literal["annual", "quarterly"] = "annual",
+        tickers: list[str],
+        connect_db: str | Path | None = None,
+        **kwargs: Any
+    ) -> pl.DataFrame | RunResult:
+        """Fetch financial statements (Unified Method).
+        
+        Args:
+            kind: Type of financial statement ('balance_sheet', 'income_stmt', 'cashflow', 'earnings').
+            period: Reporting period ('annual' or 'quarterly').
+            tickers: List of ticker symbols.
+            connect_db: Optional DuckDB connection string.
+        
+        Returns:
+            Polars DataFrame in memory or RunResult when persisting.
+        
+        Notes:
+            - yfinance provides only recent periods for financials (e.g., last few years/quarters).
+            - Date filters (start/end) are not applicable to financials/earnings endpoints.
+            - Financial endpoints do not accept date parameters; start/end/period are ignored. Only a fixed recent set of periods is available (no full-history).
+            - For full historical coverage, prefer institutional sources like Sharadar SF1 (ARY/ARQ).
+        """
+        # Map 'income_stmt' to 'financials' if needed, or keep consistent with yfinance
+        # yfinance uses 'financials' property for income statement.
+        # But we can support 'income_stmt' alias for clarity.
+        target_kind = "financials" if kind == "income_stmt" else kind
+        
+        if period == "quarterly":
+            dataset = f"quarterly_{target_kind}"
+        else:
+            dataset = target_kind
+        return await self._fetch_per_ticker(
+            dataset=dataset,
+            symbols=tickers,
+            connect_db=connect_db,
+            desc=f"Fetching YFinance {dataset}",
+            table_name="yfinance_financials",
+            show_progress=True,
+            total_items=len(tickers),
+            **kwargs,
+        )
+
+    # --- Corporate Actions ---
+
+    @jupyter_safe
+    async def get_actions(
+        self,
+        *,
+        kind: Literal["dividends", "splits"] = "dividends",
+        tickers: list[str],
+        connect_db: str | Path | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        **kwargs: Any
+    ) -> pl.DataFrame | RunResult:
+        """Fetch corporate actions (Unified Method: dividends or splits).
+        
+        Args:
+            kind: Type of action ('dividends' or 'splits').
+            tickers: List of ticker symbols.
+            connect_db: Optional DuckDB connection string.
+        """
+        return await self._fetch_per_ticker(
+            dataset=kind,
+            symbols=tickers,
+            connect_db=connect_db,
+            desc=f"Fetching YFinance {kind}",
+            table_name=f"yfinance_{kind}",
+            show_progress=True,
+            total_items=len(tickers),
+            start_date=start_date,
+            end_date=end_date,
+            **kwargs,
+        )
+
+    # --- Holders ---
+    
+    @jupyter_safe
+    async def get_holders(
+        self,
+        *,
+        kind: Literal["institutional", "mutualfund"] = "institutional",
+        tickers: list[str],
+        connect_db: str | Path | None = None,
+        **kwargs: Any
+    ) -> pl.DataFrame | RunResult:
+        """Fetch holders information (Unified Method).
+        
+        Args:
+            kind: Type of holder ('institutional', 'mutualfund').
+            tickers: List of ticker symbols.
+            connect_db: Optional DuckDB connection string.
+        """
+        dataset = f"{kind}_holders"
+        return await self._fetch_per_ticker(
+            dataset=dataset,
+            symbols=tickers,
+            connect_db=connect_db,
+            desc=f"Fetching YFinance {dataset}",
+            table_name="yfinance_holders",
+            show_progress=True,
+            total_items=len(tickers),
+            **kwargs,
+        )
+    
+    @jupyter_safe
+    async def get_major_holders(
+        self,
+        *,
+        tickers: list[str],
         connect_db: str | Path | None = None,
         **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
-        """
-        Fetch ticker metadata (Not implemented).
+        """Fetch major holders summary metrics."""
+        return await self._fetch_per_ticker(
+            dataset="major_holders",
+            symbols=tickers,
+            connect_db=connect_db,
+            desc="Fetching YFinance major_holders",
+            table_name="yfinance_major_holders",
+            show_progress=True,
+            total_items=len(tickers),
+            **kwargs,
+        )
+    
+    # --- Insider ---
+    
+    @jupyter_safe
+    async def get_insider_roster_holders(
+        self,
+        *,
+        tickers: list[str],
+        connect_db: str | Path | None = None,
+        **kwargs: Any,
+    ) -> pl.DataFrame | RunResult:
+        """Fetch insider roster holders."""
+        return await self._fetch_per_ticker(
+            dataset="insider_roster_holders",
+            symbols=tickers,
+            connect_db=connect_db,
+            desc="Fetching YFinance insider_roster_holders",
+            table_name="yfinance_insider_roster_holders",
+            show_progress=True,
+            total_items=len(tickers),
+            **kwargs,
+        )
+    
+    @jupyter_safe
+    async def get_insider_purchases(
+        self,
+        *,
+        tickers: list[str],
+        connect_db: str | Path | None = None,
+        **kwargs: Any
+    ) -> pl.DataFrame | RunResult:
+        """Fetch insider purchases."""
+        return await self._fetch_per_ticker(
+            dataset="insider_purchases",
+            symbols=tickers,
+            connect_db=connect_db,
+            desc="Fetching YFinance insider_purchases",
+            table_name="yfinance_insider_purchases",
+            show_progress=True,
+            total_items=len(tickers),
+            **kwargs,
+        )
 
+    # --- Calendar ---
+    
+    @jupyter_safe
+    async def get_calendar(
+        self,
+        *,
+        tickers: list[str],
+        connect_db: str | Path | None = None,
+        **kwargs: Any
+    ) -> pl.DataFrame | RunResult:
+        """Fetch earnings calendar."""
+        return await self._fetch_per_ticker(
+            dataset="calendar",
+            symbols=tickers,
+            connect_db=connect_db,
+            desc="Fetching YFinance calendar",
+            table_name="yfinance_calendar",
+            show_progress=True,
+            total_items=len(tickers),
+            **kwargs,
+        )
+
+    # --- Analyst Recommendations ---
+    
+    @jupyter_safe
+    async def get_recommendations(
+        self,
+        *,
+        tickers: list[str],
+        connect_db: str | Path | None = None,
+        **kwargs: Any
+    ) -> pl.DataFrame | RunResult:
+        """Fetch analyst recommendations."""
+        return await self._fetch_per_ticker(
+            dataset="recommendations",
+            symbols=tickers,
+            connect_db=connect_db,
+            desc="Fetching YFinance recommendations",
+            table_name="yfinance_recommendations",
+            show_progress=True,
+            total_items=len(tickers),
+            **kwargs,
+        )
+
+    # --- news ---
+    
+    @jupyter_safe
+    async def get_news(
+        self,
+        *,
+        tickers: list[str],
+        connect_db: str | Path | None = None,
+        **kwargs: Any
+    ) -> pl.DataFrame | RunResult:
+        """Fetch ticker news."""
+        return await self._fetch_per_ticker(
+            dataset="news",
+            symbols=tickers,
+            connect_db=connect_db,
+            desc="Fetching YFinance news",
+            table_name="yfinance_news",
+            show_progress=True,
+            total_items=len(tickers),
+            **kwargs,
+        )
+
+    # ----------------------------------------------------------------
+    # Internal Data Fetchers 
+    # ----------------------------------------------------------------
+    
+    async def _fetch_per_ticker(
+        self,
+        *,
+        dataset: str,
+        symbols: list[str] | None,
+        connect_db: str | Path | None,
+        desc: str,
+        table_name: str,
+        show_progress: bool = True,
+        total_items: int | None = None,
+        unit: str = "tickers",
+        start_date: str | None = None,
+        end_date: str | None = None,
+        **kwargs: Any,
+    ) -> pl.DataFrame | RunResult:
+        """Fetch data for specific tickers using per-ticker batching.
+        
+        This method implements the per-ticker fetching pattern using BaseClient's
+        common infrastructure while maintaining YFinance-specific logic for
+        memory validation and rate limiting optimization.
+        
+        YFinance-specific characteristics:
+        - Free API with no authentication required
+        - Conservative rate limiting to avoid IP bans (60 req/min default)
+        - Compact data format (smaller memory footprint than premium APIs)
+        - Limited ticker universe compared to institutional providers
+        
         Args:
-            tickers: Optional list of tickers to filter.
-            connect_db: Database connection string or path.
-            **kwargs: Additional provider-specific arguments.
-
+            dataset: Dataset name (e.g., "price", "financials", "info")
+            symbols: List of symbols to fetch, or None for all symbols
+            connect_db: Database connection string/path, or None for in-memory
+            desc: Progress bar description
+            table_name: Table name for result collection
+            show_progress: Whether to show progress indicators
+            total_items: Total number of items (for progress bar)
+            unit: Unit label for progress bar (default: "tickers")
+            start_date: Start date for data fetch
+            end_date: End date for data fetch
+            **kwargs: Additional provider-specific arguments
+            
         Returns:
-            pl.DataFrame | RunResult: Ticker metadata.
-
-        Raises:
-            NotImplementedError: Always raised as this method is a stub.
+            pl.DataFrame for in-memory mode, RunResult for database mode
         """
-        raise NotImplementedError("YFinance support is not yet implemented")
+        bytes_per_item = 1024 if dataset == "info" else 500 * 1024
+        validate_memory_usage(
+            symbols=symbols,
+            connect_db=connect_db,
+            bytes_per_item=bytes_per_item,
+        )
+
+        # Use BaseClient's common infrastructure
+        pbar, pbar_updater = self.create_progress_tracker(
+            total_items=total_items,
+            unit=unit,
+            desc=desc,
+            show_progress=show_progress,
+        )
+        
+        result_obj: pl.DataFrame | RunResult
+        async with self.managed_writer(connect_db, show_progress=show_progress) as writer:
+            try:
+                router = create_router(
+                    "yfinance",
+                    api_key=self.api_key or "dummy",
+                    config=self._config,
+                    start_date=start_date,
+                    end_date=end_date,
+                    **kwargs,
+                )
+                
+                await self.run_pipeline(
+                    router=router,
+                    dataset=dataset,
+                    symbols=symbols,
+                    writer=writer,
+                    mapper=self._mapper,
+                    on_progress=pbar_updater,
+                    **kwargs,
+                )
+                
+                result_obj = await self.collect_results(
+                    writer=writer,
+                    table_name=table_name,
+                    connect_db=connect_db,
+                )
+            finally:
+                if pbar is not None:
+                    pbar.close()
+        return result_obj
