@@ -68,7 +68,7 @@ class RequestSpec(BaseModel):
 
     method: HttpMethod = HttpMethod.GET
     url: str
-    params: dict[str, str] = Field(default_factory=dict)
+    params: dict[str, Any] = Field(default_factory=dict)
     headers: dict[str, str] = Field(default_factory=dict)
     json_body: dict[str, Any] | None = None
     data: bytes | None = None

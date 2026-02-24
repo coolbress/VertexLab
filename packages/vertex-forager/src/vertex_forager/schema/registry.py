@@ -11,10 +11,12 @@ from typing import Final
 
 from vertex_forager.schema.config import TableSchema
 from vertex_forager.providers.sharadar.schema import TABLES as SHARADAR_TABLES
+from vertex_forager.providers.yfinance.schema import TABLES as YFINANCE_TABLES
 
 
 TABLES: Final[dict[str, TableSchema]] = {
     **SHARADAR_TABLES,
+    **YFINANCE_TABLES,
 }
 
 

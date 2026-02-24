@@ -1,12 +1,18 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from contextlib import asynccontextmanager
+import logging
+import sys
+from abc import ABC
+import warnings
+import asyncio
+from contextlib import asynccontextmanager, AsyncExitStack
+from functools import partial
 from pathlib import Path
 from typing import Any, Callable, AsyncGenerator
 
 import httpx
 import polars as pl
+from tqdm.autonotebook import tqdm as auto_tqdm  # type: ignore
 
 from vertex_forager.core.http import HttpExecutor, default_async_client
 from vertex_forager.core.config import EngineConfig, RunResult
@@ -14,7 +20,14 @@ from vertex_forager.core.pipeline import VertexForager
 from vertex_forager.core.controller import FlowController
 from vertex_forager.routers.base import BaseRouter
 from vertex_forager.schema.mapper import SchemaMapper
+from vertex_forager.schema.registry import get_table_schema
 from vertex_forager.writers.base import BaseWriter
+from vertex_forager.writers import create_writer
+from vertex_forager.utils import Spinner, create_pbar_updater
+
+tqdm = auto_tqdm
+
+logger = logging.getLogger(__name__)
 
 
 class BaseClient(ABC):
@@ -40,9 +53,34 @@ class BaseClient(ABC):
     - **Composition over Inheritance**: While this is a base class, it primarily delegates work to
       composed components (FlowController, VertexForager) rather than relying on deep inheritance chains.
 
+    Standardized Provider Implementation Pattern:
+    All provider clients should follow this consistent structure for extensibility:
+    
+    1. **execute_collection()** - Unified data collection pipeline with:
+       - Router creation with provider-specific configuration
+       - Writer lifecycle management (DB storage or in-memory)
+       - Progress tracking and result collection
+       - Memory safety validation
+    
+    2. **Provider-specific characteristics** documented in docstrings:
+       - API rate limits and batching strategies
+       - Data source characteristics (coverage, update frequency)
+       - Special handling requirements
+       - Performance optimization techniques
+    
+    3. **Memory management** via common utilities:
+       - validate_memory_usage() for safety checks
+       - Provider-specific memory parameters
+    
+    4. **Error handling patterns**:
+       - Rate limit handling via FlowController
+       - Network retry logic via HttpExecutor
+       - Graceful degradation for missing data
+
     Usage:
         Subclasses must implement specific methods (e.g., `get_price_data`) that define *what* to fetch,
-        delegating the *how* to `self._run()`.
+        delegating the *how* to `self.run_pipeline()`. Follow the standardized patterns above for
+        consistency across all providers.
     """
 
     def __init__(
@@ -108,51 +146,25 @@ class BaseClient(ABC):
             raise RuntimeError("Client not initialized. Use 'async with client:'")
         return self._client
 
-    @abstractmethod
-    async def get_price_data(
-        self,
-        *,
-        tickers: list[str] | None = None,
-        connect_db: str | Path | None = None,
-        start_date: str | None = None,
-        end_date: str | None = None,
-        **kwargs: Any,
-    ) -> pl.DataFrame | RunResult:
-        """Fetch price data.
-
-        Args:
-            tickers: List of ticker symbols.
-            connect_db: Database connection string or path.
-            start_date: Start date (YYYY-MM-DD).
-            end_date: End date (YYYY-MM-DD).
-            **kwargs: Additional provider-specific arguments.
-
-        Returns:
-            Polars DataFrame containing price data or RunResult.
+    async def run_async(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+        """Execute a standard async HTTP request using the underlying client.
+        
+        Delegates directly to client.request().
         """
-        raise NotImplementedError
+        if self._client is None:
+            raise RuntimeError("Client not initialized. Use 'async with client:'")
+        return await self._client.request(method, url, **kwargs)
 
-    @abstractmethod
-    async def get_tickers(
-        self,
-        *,
-        tickers: list[str] | None = None,
-        connect_db: str | Path | None = None,
-        **kwargs: Any,
-    ) -> pl.DataFrame | RunResult:
-        """Fetch ticker metadata.
-
-        Args:
-            tickers: List of ticker symbols.
-            connect_db: Database connection string or path.
-            **kwargs: Additional provider-specific arguments.
-
-        Returns:
-            Polars DataFrame containing ticker metadata or RunResult.
+    async def run_sync(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+        """Execute a blocking (synchronous) function in a separate thread.
+        
+        This wrapper ensures that blocking library calls (like yfinance, pandas I/O)
+        do not freeze the main asyncio event loop.
         """
-        raise NotImplementedError
+        pfunc = partial(func, *args, **kwargs)
+        return await asyncio.to_thread(pfunc)
 
-    async def _run(
+    async def run_pipeline(
         self,
         *,
         router: BaseRouter,
@@ -178,8 +190,8 @@ class BaseClient(ABC):
         Returns:
             RunResult: Summary of the pipeline run, including success/failure status.
         """
-        async with self._http_client() as http_client:
-            http = HttpExecutor(client=http_client)
+        async with self._http_client():
+            http = HttpExecutor(client=self)
             pipeline = VertexForager(
                 router=router,
                 http=http,
@@ -191,9 +203,12 @@ class BaseClient(ABC):
 
             run_kwargs = kwargs.copy()
 
-            return await pipeline.run(
-                dataset=dataset, symbols=symbols, on_progress=on_progress, **run_kwargs
-            )
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=FutureWarning)
+                self.last_run = await pipeline.run(
+                    dataset=dataset, symbols=symbols, on_progress=on_progress, **run_kwargs
+                )
+            return self.last_run
 
     @asynccontextmanager
     async def _http_client(self) -> AsyncGenerator[httpx.AsyncClient, None]:
@@ -208,6 +223,127 @@ class BaseClient(ABC):
 
         client = default_async_client()
         try:
+            self._client = client
             yield client
         finally:
             await client.aclose()
+            if self._client is client:
+                self._client = None
+
+    @asynccontextmanager
+    async def managed_writer(
+        self,
+        connect_db: str | Path | None,
+        *,
+        show_progress: bool = True,
+    ) -> AsyncGenerator[BaseWriter, None]:
+        """Manage writer lifecycle with proper resource cleanup.
+        
+        This is a common infrastructure component that all providers can use
+        to ensure consistent writer lifecycle management.
+        
+        Args:
+            connect_db: Database connection string/path, or None for in-memory
+            show_progress: Whether to show progress indicators
+            
+        Yields:
+            BaseWriter: Properly initialized writer instance
+            
+        Example:
+            async with self.managed_writer(connect_db, show_progress=True) as writer:
+                # Use writer for data collection
+                result = await self.run_pipeline(..., writer=writer)
+        """
+        stack = AsyncExitStack()
+        await stack.__aenter__()
+        writer = await stack.enter_async_context(create_writer(connect_db))
+        try:
+            yield writer
+        except BaseException:
+            await stack.__aexit__(*sys.exc_info())
+            raise
+        else:
+            if show_progress:
+                with Spinner("Finalizing database writes..."):
+                    await stack.__aexit__(None, None, None)
+            else:
+                await stack.__aexit__(None, None, None)
+            run = self.last_run
+            if run and run.errors:
+                for err in run.errors:
+                    logger.error("%s", err)
+
+    def create_progress_tracker(
+        self,
+        *,
+        total_items: int | None = None,
+        unit: str = "it",
+        desc: str = "Processing",
+        show_progress: bool = True,
+    ) -> tuple[Any, Callable | None]:
+        """Create progress tracking infrastructure.
+        
+        Common progress tracking setup that can be used by all providers.
+        
+        Args:
+            total_items: Total number of items to process
+            unit: Unit label (e.g., "tickers", "pages", "it")
+            desc: Description for the progress bar
+            show_progress: Whether to show progress bar
+            
+        Returns:
+            tuple: (progress_bar_object, progress_updater_callback)
+            Both will be None if show_progress is False
+        """
+        if not show_progress:
+            return None, None
+            
+        pbar = tqdm(
+            total=total_items,
+            unit=unit,
+            desc=desc,
+            leave=True,
+            disable=False,
+        )
+        pbar_updater = create_pbar_updater(pbar)
+        return pbar, pbar_updater
+
+    async def collect_results(
+        self,
+        writer: BaseWriter,
+        table_name: str,
+        connect_db: str | Path | None,
+        *,
+        sort_by_unique_key: bool = True,
+    ) -> pl.DataFrame | RunResult:
+        """Collect and return results from writer.
+        
+        Common result collection logic that handles both database and in-memory scenarios.
+        
+        Args:
+            writer: Writer instance to collect from
+            table_name: Name of the table to collect
+            connect_db: Database connection (determines collection mode)
+            sort_by_unique_key: Whether to sort by schema's unique key if available
+            
+        Returns:
+            pl.DataFrame if in-memory mode, RunResult if database mode
+        """
+        if connect_db is not None:
+            # Database mode: return RunResult from pipeline
+            if self.last_run is None:
+                raise RuntimeError(
+                    f"No pipeline result available for table '{table_name}'. "
+                    "Ensure run_pipeline completed before collecting database results."
+                )
+            return self.last_run
+            
+        # In-memory mode: collect DataFrame from writer
+        sort_cols = None
+        if sort_by_unique_key:
+            # Use schema unique_key for deterministic sorting if available
+            schema = get_table_schema(table_name)
+            if schema and schema.unique_key:
+                sort_cols = list(schema.unique_key)
+                
+        return writer.collect_table(table_name, sort_cols=sort_cols)

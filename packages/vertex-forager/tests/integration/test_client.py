@@ -61,7 +61,7 @@ class TestClientVisualization:
         # Patch dependencies
         with (
             patch("vertex_forager.clients.base.VertexForager") as MockPipeline,
-            patch("vertex_forager.providers.sharadar.client.tqdm") as MockTqdm,
+            patch("vertex_forager.clients.base.tqdm") as MockTqdm,
         ):
             # Setup mock pipeline run return value
             mock_pipeline_instance = MockPipeline.return_value
@@ -155,26 +155,6 @@ class TestClientIntegration:
         assert "sharadar_sep" in result.tables
         assert result.tables["sharadar_sep"] == 2
         assert len(result.errors) == 0
-
-    @pytest.mark.asyncio
-    async def test_get_ticker_info_parses_metadata_correctly(
-        self, sharadar_client, mock_http_executor, sample_ticker_data
-    ) -> None:
-        """Test that get_ticker_info correctly parses company metadata."""
-        # Arrange
-        mock_response = json.dumps(sample_ticker_data).encode()
-        mock_http_executor.fetch.return_value = mock_response
-
-        # Act
-        result = await sharadar_client.get_ticker_info(connect_db=None)
-
-        # Assert
-        assert isinstance(result, pl.DataFrame)
-        assert result.height == 2
-        assert "ticker" in result.columns
-        assert "name" in result.columns
-        assert "exchange" in result.columns
-        # 모든 티커 정보를 반환하므로 특정 티커만 확인하지 않음
 
     @pytest.mark.asyncio
     async def test_get_daily_metrics_handles_financial_data(

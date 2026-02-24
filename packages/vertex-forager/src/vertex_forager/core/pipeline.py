@@ -25,7 +25,6 @@ import inspect
 import logging
 import time
 import itertools
-import functools
 import httpx
 from typing import Any, TYPE_CHECKING
 from collections.abc import Sequence, Callable
@@ -271,14 +270,14 @@ class VertexForager:
             await orchestrator
 
             # Wait for writers to complete (graceful shutdown)
-            logger.info("PIPELINE: Waiting for writer tasks to complete...")
+            logger.debug("PIPELINE: Waiting for writer tasks to complete...")
             await writer_monitor
 
             # Flush any buffered data in the writer
-            logger.info("PIPELINE: Flushing writer buffer...")
+            logger.debug("PIPELINE: Flushing writer buffer...")
             await self._writer.flush()
 
-            logger.info(f"PIPELINE: Run completed. Total errors: {len(result.errors)}")
+            logger.debug(f"PIPELINE: Run completed. Total errors: {len(result.errors)}")
             return result
         finally:
             await self.stop()
@@ -292,7 +291,7 @@ class VertexForager:
         if not self._active_tasks:
             return
 
-        logger.info("PIPELINE: Stopping pipeline...")
+        logger.debug("PIPELINE: Stopping pipeline...")
         for task in self._active_tasks:
             if not task.done():
                 task.cancel()
@@ -302,7 +301,7 @@ class VertexForager:
             await asyncio.gather(*self._active_tasks, return_exceptions=True)
         
         self._active_tasks.clear()
-        logger.info("PIPELINE: Pipeline stopped.")
+        logger.debug("PIPELINE: Pipeline stopped.")
 
     async def _producer(
         self,
@@ -319,7 +318,7 @@ class VertexForager:
         """
         counter = itertools.count()
         job_count = 0
-        logger.info(
+        logger.debug(
             f"PRODUCER: Starting job generation for dataset={dataset}, symbols={len(symbols) if symbols else 'all'}"
         )
 
@@ -332,7 +331,7 @@ class VertexForager:
             if job_count % 100 == 0:
                 logger.debug(f"PRODUCER: Generated {job_count} jobs so far...")
 
-        logger.info(f"PRODUCER: Completed job generation. Total jobs: {job_count}")
+        logger.debug(f"PRODUCER: Completed job generation. Total jobs: {job_count}")
 
     async def _fetch_worker(
         self,
@@ -430,11 +429,8 @@ class VertexForager:
                 )
 
                 # Offload CPU-bound parsing to a thread pool
-                loop = asyncio.get_running_loop()
-                parse_result = await loop.run_in_executor(
-                    None,  # Use default ThreadPoolExecutor
-                    functools.partial(self._router.parse, job=job, payload=payload),
-                )
+                # For yfinance, this includes unpickling and normalization
+                parse_result = await asyncio.to_thread(self._router.parse, job=job, payload=payload)
                 t2 = time.monotonic()
                 logger.debug(
                     f"[Worker-{worker_id}] Parsed {job.symbol} in {t2 - t1:.3f}s. Packets: {len(parse_result.packets)}, Next Jobs: {len(parse_result.next_jobs)}"
@@ -443,9 +439,7 @@ class VertexForager:
                 for packet in parse_result.packets:
                     # Normalize packet schema (enforce types, fill missing cols)
                     # Also CPU-bound, so we offload it
-                    normalized_packet = await loop.run_in_executor(
-                        None, functools.partial(self._mapper.normalize, packet=packet)
-                    )
+                    normalized_packet = await asyncio.to_thread(self._mapper.normalize, packet=packet)
                     await pkt_q.put(normalized_packet)
 
                 if parse_result.next_jobs:
@@ -524,8 +518,11 @@ class VertexForager:
             try:
                 # Merge frames
                 frames = [p.frame for p in packets]
-
-                merged_frame = pl.concat(frames, how="vertical")
+                
+                # Use diagonal concatenation to handle schema evolution/mismatches safely.
+                # - For rigid schemas (Sharadar): Works identically to vertical concat.
+                # - For flexible schemas (YFinance): Allows merging frames with varying columns (missing cols become null).
+                merged_frame = pl.concat(frames, how="diagonal")
 
                 # Create merged packet (use metadata from the first packet)
                 first = packets[0]
@@ -554,17 +551,17 @@ class VertexForager:
             except (ComputeError, ValidationError) as e:
                 async with result_lock:
                     result.errors.append(f"WriterError:{table}:{e}")
-                logger.error(f"WRITER: Error writing batch for {table}: {e}")
+                logger.debug(f"WRITER: Error writing batch for {table}: {e}")
             except Exception as e:
                 # Check for DuckDB Error if available
                 if duckdb and isinstance(e, duckdb.Error):
                     async with result_lock:
                         result.errors.append(f"DuckDBError:{table}:{e}")
-                    logger.error(f"WRITER: DuckDB error for {table}: {e}")
+                    logger.debug(f"WRITER: DuckDB error for {table}: {e}")
                 else:
                     async with result_lock:
                         result.errors.append(f"UnexpectedWriterError:{table}:{e}")
-                    logger.exception(f"WRITER: Unexpected error writing batch for {table}: {e}")
+                    logger.debug(f"WRITER: Unexpected error writing batch for {table}: {e}")
                     raise
 
         while True:
@@ -579,7 +576,7 @@ class VertexForager:
                         for table in list(buffers.keys()):
                             await flush(table)
                     except Exception as e:
-                        logger.error(f"WRITER: Error during shutdown flush: {e}")
+                        logger.debug(f"WRITER: Error during shutdown flush: {e}")
                         raise
                     return
 
@@ -605,7 +602,7 @@ class VertexForager:
             except Exception as e:
                 async with result_lock:
                     result.errors.append(f"Writer:Unexpected:{e}")
-                logger.exception(f"WRITER: Unexpected error: {e}")
+                logger.debug(f"WRITER: Unexpected error: {e}")
                 raise
             finally:
                 pkt_q.task_done()
