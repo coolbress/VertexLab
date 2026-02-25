@@ -583,22 +583,22 @@ class VertexForager:
             except (ComputeError, ValidationError) as e:
                 async with result_lock:
                     result.errors.append(f"WriterError:{table}:{e}")
-                    buffers[table] = []
-                    buffer_rows[table] = 0
+                buffers[table] = []
+                buffer_rows[table] = 0
                 logger.error(f"WRITER: Error writing batch for {table}: {e}")
             except Exception as e:
                 # Check for DuckDB Error if available
                 if duckdb and isinstance(e, duckdb.Error):
                     async with result_lock:
                         result.errors.append(f"DuckDBError:{table}:{e}")
-                        buffers[table] = []
-                        buffer_rows[table] = 0
+                    buffers[table] = []
+                    buffer_rows[table] = 0
                     logger.exception(f"WRITER: DuckDB error for {table}: {e}")
                 else:
                     async with result_lock:
                         result.errors.append(f"UnexpectedWriterError:{table}:{e}")
-                        buffers[table] = []
-                        buffer_rows[table] = 0
+                    buffers[table] = []
+                    buffer_rows[table] = 0
                     logger.exception(f"WRITER: Unexpected error writing batch for {table}: {e}")
                     raise
 

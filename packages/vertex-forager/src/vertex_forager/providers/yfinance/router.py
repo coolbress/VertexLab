@@ -356,7 +356,9 @@ class YFinanceRouter(BaseRouter):
                 return self._from_list(data)
             if hasattr(data, "to_dict"):
                 return self._from_object_with_to_dict(data)
-            return pl.DataFrame([data] if data else [])
+            if data is None:
+                return pl.DataFrame([])
+            return pl.DataFrame([data])
         except (ValueError, TypeError, ComputeError) as e:
             logger.error("Failed to convert data to Polars: %s", e)
             raise
@@ -475,11 +477,11 @@ class YFinanceRouter(BaseRouter):
         cols = []
         if "content" in frame.columns:
             cols.extend([
-                pl.col("content").map_elements(lambda x: _extract_from_candidates(x, [["title"]])).alias("title"),
-                pl.col("content").map_elements(lambda x: _extract_from_candidates(x, [["provider","displayName"], ["publisher"]])).alias("publisher"),
-                pl.col("content").map_elements(lambda x: _extract_from_candidates(x, [["contentType"]])).alias("type"),
-                pl.col("content").map_elements(lambda x: _extract_from_candidates(x, [["canonicalUrl","url"], ["clickThroughUrl","url"], ["previewUrl"]])).alias("link"),
-                pl.col("content").map_elements(lambda x: _parse_dt(x)).alias("published_at"),
+                pl.col("content").map_elements(lambda x: _extract_from_candidates(x, [["title"]]), return_dtype=pl.Utf8).alias("title"),
+                pl.col("content").map_elements(lambda x: _extract_from_candidates(x, [["provider","displayName"], ["publisher"]]), return_dtype=pl.Utf8).alias("publisher"),
+                pl.col("content").map_elements(lambda x: _extract_from_candidates(x, [["contentType"]]), return_dtype=pl.Utf8).alias("type"),
+                pl.col("content").map_elements(lambda x: _extract_from_candidates(x, [["canonicalUrl","url"], ["clickThroughUrl","url"], ["previewUrl"]]), return_dtype=pl.Utf8).alias("link"),
+                pl.col("content").map_elements(lambda x: _parse_dt(x), return_dtype=pl.Datetime(time_zone="UTC")).alias("published_at"),
             ])
             frame = frame.with_columns(cols)
         keep = [c for c in ["id", "title", "publisher", "type", "link", "published_at"] if c in frame.columns]

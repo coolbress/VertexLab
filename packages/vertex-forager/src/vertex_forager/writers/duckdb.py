@@ -27,6 +27,7 @@ import duckdb
 import polars as pl
 
 from vertex_forager.core.config import FramePacket
+from polars.exceptions import ComputeError
 from vertex_forager.writers.base import BaseWriter, WriteResult
 
 # Module-level cache for schema getter to avoid circular imports
@@ -172,8 +173,17 @@ class DuckDBWriter(BaseWriter):
                 try:
                     merged_df = pl.concat(frames, how="vertical")
                 except pl.exceptions.PolarsError as e:
-                    provider = entries[0][1].provider
-                    if provider != "yfinance":
+                    # Use schema flexible flag to decide diagonal fallback
+                    global _get_table_schema
+                    if _get_table_schema is None:
+                        try:
+                            from vertex_forager.schema.registry import get_table_schema
+                            _get_table_schema = get_table_schema
+                        except ImportError:
+                            _get_table_schema = None
+                    schema = _get_table_schema(table_name) if _get_table_schema else None
+                    is_flexible = bool(schema and getattr(schema, "flexible_schema", False))
+                    if not is_flexible:
                         raise
                     self._logger.warning(
                         "WRITER: Schema mismatch for %s: %s. Falling back to diagonal concat",
@@ -185,7 +195,8 @@ class DuckDBWriter(BaseWriter):
                 if pk_cols:
                     for c in pk_cols:
                         if c not in merged_df.columns:
-                            self._logger.warning("WRITER: Missing PK column '%s' for table '%s'. Columns=%s", c, table_name, merged_df.columns)
+                            self._logger.error("WRITER: Missing PK column '%s' for table '%s'. Columns=%s", c, table_name, merged_df.columns)
+                            raise ComputeError(f"PKMissing:{table_name}:{c}")
                         elif merged_df.get_column(c).null_count() > 0:
                             self._logger.error(
                                 "WRITER: Nulls detected in PK column '%s' for table '%s'. rows=%d, columns=%s",

@@ -170,11 +170,11 @@ class BaseRouter(ABC):
             end = datetime.now(timezone.utc)
             if end_date:
                 end = datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-            if end < start:
-                raise ValueError("End date is earlier than start date")
-            return start, end
         except (ValueError, TypeError):
             return None
+        if end < start:
+            raise ValueError("End date is earlier than start date")
+        return start, end
 
     def _normalize_columns(self, frame: pl.DataFrame) -> pl.DataFrame:
         """Standardize column names to lowercase snake_case.
