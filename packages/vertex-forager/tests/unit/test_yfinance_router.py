@@ -75,3 +75,64 @@ class TestYFinanceRouterUnit:
         result = yfinance_router.parse(job=job, payload=payload)
         assert isinstance(result, ParseResult)
         assert len(result.packets) == 0
+
+    def test_transform_financials_melts_and_normalizes_date(self, yfinance_router: YFinanceRouter) -> None:
+        df = pd.DataFrame({"breakdown": ["Revenue", "NetIncome"], "2024-01-01 00:00:00": [1, 2], "2024-02-01": [3, 4]})
+        payload = pickle.dumps(df)
+        job = FetchJob(
+            provider="yfinance",
+            dataset="financials",
+            symbol="AAPL",
+            spec=RequestSpec(url="yfinance://AAPL", params={"dataset": "financials"}),
+            context={"symbol": "AAPL"},
+        )
+        result = yfinance_router.parse(job=job, payload=payload)
+        assert isinstance(result, ParseResult)
+        assert len(result.packets) == 1
+        frame = result.packets[0].frame
+        assert "date" in frame.columns
+        assert "metric" in frame.columns
+        dates = frame.get_column("date").cast(pl.Utf8, strict=False).to_list()
+        assert all((" " not in (d or "")) and ("T" not in (d or "")) for d in dates)
+
+    def test_transform_news_defensive_paths(self, yfinance_router: YFinanceRouter) -> None:
+        good = [{"id": 1, "content": {"title": "T", "provider": {"displayName": "P"}, "contentType": "story", "canonicalUrl": {"url": "u"}, "pubDate": "2025-01-05T09:23:45Z"}}]
+        bad = [{"id": 2, "content": {"title": "X"}}]
+        payload = pickle.dumps(good + bad)
+        job = FetchJob(
+            provider="yfinance",
+            dataset="news",
+            symbol="AAPL",
+            spec=RequestSpec(url="yfinance://AAPL", params={"dataset": "news"}),
+            context={"symbol": "AAPL"},
+        )
+        result = yfinance_router.parse(job=job, payload=payload)
+        assert isinstance(result, ParseResult)
+        frame = result.packets[0].frame
+        assert {"title", "publisher", "type", "link", "published_at"}.issubset(set(frame.columns))
+        assert frame.height == 2
+
+    def test_transform_calendar_list_to_first(self, yfinance_router: YFinanceRouter) -> None:
+        payload = pickle.dumps([{"earnings_date": ["2024-01-01", "2024-01-02"]}])
+        job = FetchJob(
+            provider="yfinance",
+            dataset="calendar",
+            symbol="AAPL",
+            spec=RequestSpec(url="yfinance://AAPL", params={"dataset": "calendar"}),
+            context={"symbol": "AAPL"},
+        )
+        result = yfinance_router.parse(job=job, payload=payload)
+        assert isinstance(result, ParseResult)
+        frame = result.packets[0].frame
+        assert "earnings_date" in frame.columns
+
+    def test_parse_invalid_payload_raises(self, yfinance_router: YFinanceRouter) -> None:
+        job = FetchJob(
+            provider="yfinance",
+            dataset="price",
+            symbol="AAPL",
+            spec=RequestSpec(url="yfinance://AAPL", params={"dataset": "price"}),
+            context={"symbol": "AAPL"},
+        )
+        with pytest.raises(Exception):
+            _ = yfinance_router.parse(job=job, payload=b"not a pickle")

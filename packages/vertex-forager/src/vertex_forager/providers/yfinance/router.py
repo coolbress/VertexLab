@@ -21,8 +21,17 @@ from vertex_forager.providers.yfinance.schema import DATASET_TABLE, DATASET_ENDP
 
 logger = logging.getLogger("vertex_forager.providers.yfinance.router")
 
+class _Metrics:
+    def __init__(self) -> None:
+        self._counters: dict[str, int] = {}
+    def increment(self, name: str) -> None:
+        self._counters[name] = self._counters.get(name, 0) + 1
+
+metrics = _Metrics()
+
 
 class YFinanceRouter(BaseRouter):
+    flexible_schema: bool = True
     """Router for Yahoo Finance datasets (via yfinance).
     
     Summary:
@@ -83,7 +92,7 @@ class YFinanceRouter(BaseRouter):
         try:
             bs_int = int(raw_bs)
         except (ValueError, TypeError):
-            logger.debug(f"Failed to parse price_batch_size='{raw_bs}', using default={self.PRICE_BATCH_SIZE}")
+            logger.debug("Failed to parse price_batch_size='%s', using default=%d", raw_bs, self.PRICE_BATCH_SIZE)
             bs_int = self.PRICE_BATCH_SIZE
         self._price_batch_size = max(1, min(500, bs_int))
 
@@ -175,6 +184,7 @@ class YFinanceRouter(BaseRouter):
 
             # -------- Deserialize Pickle --------
             
+            # SECURITY WARNING: pickle.loads can execute arbitrary code; only use with trusted sources.
             # Raw Data from HttpExecutor
             data = pickle.loads(payload)
 
@@ -274,9 +284,7 @@ class YFinanceRouter(BaseRouter):
                 kwargs["start"] = self._start_date
             if self._end_date:
                 kwargs["end"] = self._end_date
-            if not self._start_date and not self._end_date:
-                kwargs["period"] = "max"
-            elif not self._start_date and self._end_date:
+            if not self._start_date:
                 kwargs["period"] = "max"
             # Single-ticker history call is preferred over download for stability
             params["lib"] = {"type": "ticker_attr", "attr": mapped, "kwargs": kwargs}
@@ -304,75 +312,61 @@ class YFinanceRouter(BaseRouter):
     # Parse Helpers 
     # --------------------------------------
     
-    def _convert_to_polars(self, data: Any, is_batch: bool = False) -> pl.DataFrame:
-        """Convert raw yfinance data to Polars DataFrame."""
-        try:
-            # Case A: Pandas DataFrame or Series
-            if isinstance(data, (pd.DataFrame, pd.Series)):
-                if data.empty:
-                    return pl.DataFrame()
-                
-                # Handle Series
-                if isinstance(data, pd.Series):
-                    data = data.to_frame()
-                
-                # Handle MultiIndex Columns (e.g. yf.download with group_by='ticker')
-                if isinstance(data.columns, pd.MultiIndex):
-                    if is_batch:
-                        # Strategy: Stack Ticker to column for Bulk Data
-                        # Input: Index=Date, Cols=(Ticker, Metric)
-                        # Output: Index=Row, Cols=(Date, Ticker, Metric...)
-                        
-                        # Check nlevels
-                        if data.columns.nlevels >= 2:
-                            # Stack the top level (Ticker)
-                            # Note: yfinance typically returns (Ticker, Price) if group_by='ticker'
-                            try:
-                                data = data.stack(level=0, future_stack=True)
-                            except TypeError:
-                                data = data.stack(level=0)
-                            
-                            # If stacking resulted in Series (unlikely for OHLCV but possible), convert to Frame
-                            if isinstance(data, pd.Series):
-                                data = data.to_frame()
-                    else:
-                        # Strategy: Flatten by dropping the top level (Ticker) since we inject it later.
-                        if data.columns.nlevels >= 2:
-                            data.columns = data.columns.droplevel(0)
-                        else:
-                            data.columns = ['_'.join(map(str, col)).strip() for col in data.columns.values]
+    def _normalize_multiindex(self, data: pd.DataFrame, is_batch: bool) -> pd.DataFrame:
+        if isinstance(data.columns, pd.MultiIndex):
+            if is_batch:
+                if data.columns.nlevels >= 2:
+                    try:
+                        data = data.stack(level=0, future_stack=True)
+                    except TypeError:
+                        data = data.stack(level=0)
+                    if isinstance(data, pd.Series):
+                        data = data.to_frame()
+            else:
+                if data.columns.nlevels >= 2:
+                    data.columns = data.columns.droplevel(0)
+                else:
+                    data.columns = ['_'.join(map(str, col)).strip() for col in data.columns.values]
+        return data
 
-                # Handle Index (Date/Row Label)
-                data = data.reset_index()
-                
-                # Convert to Polars
-                try:
-                    return pl.from_pandas(data)
-                except (ValueError, TypeError, ComputeError):
-                    return pl.from_pandas(pd.DataFrame(data.to_dict()))
-
-            # Case B: Dictionary (e.g. info)
-            elif isinstance(data, dict):
-                # Ensure values are supported types (str, int, float, bool, None, list, dict, date, datetime)
-                # Note: yfinance calendar returns dates in lists or as objects
-                allowed_types = (str, int, float, bool, type(None), list, dict, date, datetime)
-                clean_data = {k: v for k, v in data.items() if isinstance(v, allowed_types)}
-                return pl.DataFrame([clean_data])
-            
-            # Case C: List
-            elif isinstance(data, list):
-                return pl.DataFrame(data)
-
-            # Case D: Object with to_dict
-            elif hasattr(data, "to_dict"):
-                return pl.DataFrame([data.to_dict()])
-            
-            # Default
-            return pl.DataFrame([data] if data else [])
-
-        except (ValueError, TypeError, ComputeError) as e:
-            logger.warning(f"Failed to convert data to Polars: {e}")
+    def _from_pandas(self, data: pd.DataFrame | pd.Series, is_batch: bool) -> pl.DataFrame:
+        if isinstance(data, pd.Series):
+            data = data.to_frame()
+        if hasattr(data, "empty") and data.empty:
             return pl.DataFrame()
+        data = self._normalize_multiindex(data, is_batch)
+        data = data.reset_index()
+        try:
+            return pl.from_pandas(data)
+        except (ValueError, TypeError, ComputeError):
+            return pl.from_pandas(pd.DataFrame(data.to_dict()))
+
+    def _from_dict(self, data: dict) -> pl.DataFrame:
+        allowed_types = (str, int, float, bool, type(None), list, dict, date, datetime)
+        clean_data = {k: v for k, v in data.items() if isinstance(v, allowed_types)}
+        return pl.DataFrame([clean_data])
+
+    def _from_list(self, data: list) -> pl.DataFrame:
+        return pl.DataFrame(data)
+
+    def _from_object_with_to_dict(self, data: Any) -> pl.DataFrame:
+        return pl.DataFrame([data.to_dict()])
+
+    def _convert_to_polars(self, data: Any, is_batch: bool = False) -> pl.DataFrame:
+        try:
+            if isinstance(data, (pd.DataFrame, pd.Series)):
+                return self._from_pandas(data, is_batch)
+            if isinstance(data, dict):
+                return self._from_dict(data)
+            if isinstance(data, list):
+                return self._from_list(data)
+            if hasattr(data, "to_dict"):
+                return self._from_object_with_to_dict(data)
+            return pl.DataFrame([data] if data else [])
+        except (ValueError, TypeError, ComputeError) as e:
+            logger.error("Failed to convert data to Polars: %s", e)
+            metrics.increment("yfinance_convert_failure")
+            raise
         except Exception:
             logger.exception("Unexpected failure converting data to Polars")
             raise
@@ -459,22 +453,40 @@ class YFinanceRouter(BaseRouter):
         return frame
 
     def _transform_news(self, frame: pl.DataFrame) -> pl.DataFrame:
+        def _extract_from_candidates(x: Any, candidates: list[list[str]]) -> Any:
+            for path in candidates:
+                cur = x
+                ok = True
+                for key in path:
+                    if not isinstance(cur, dict):
+                        ok = False
+                        break
+                    cur = cur.get(key)
+                    if cur is None:
+                        ok = False
+                        break
+                if ok:
+                    return cur
+            return None
+        def _parse_dt(x: Any) -> Any:
+            s = _extract_from_candidates(x, [["pubDate"]])
+            if isinstance(s, str):
+                try:
+                    if s.endswith("Z"):
+                        s = s.replace("Z", "+00:00")
+                    dt = datetime.fromisoformat(s)
+                    return dt.astimezone(timezone.utc)
+                except Exception:
+                    return None
+            return None
         cols = []
         if "content" in frame.columns:
             cols.extend([
-                pl.col("content").struct.field("title").alias("title"),
-                pl.col("content").struct.field("provider").struct.field("displayName").alias("publisher"),
-                pl.col("content").struct.field("contentType").alias("type"),
-                pl.coalesce(
-                    pl.col("content").struct.field("canonicalUrl").struct.field("url"),
-                    pl.col("content").struct.field("clickThroughUrl").struct.field("url"),
-                    pl.col("content").struct.field("previewUrl"),
-                ).alias("link"),
-                pl.col("content")
-                .struct.field("pubDate")
-                .str.strptime(pl.Datetime, format="%+", strict=False)
-                .dt.replace_time_zone("UTC")
-                .alias("published_at"),
+                pl.col("content").map_elements(lambda x: _extract_from_candidates(x, [["title"]])).alias("title"),
+                pl.col("content").map_elements(lambda x: _extract_from_candidates(x, [["provider","displayName"], ["publisher"]])).alias("publisher"),
+                pl.col("content").map_elements(lambda x: _extract_from_candidates(x, [["contentType"]])).alias("type"),
+                pl.col("content").map_elements(lambda x: _extract_from_candidates(x, [["canonicalUrl","url"], ["clickThroughUrl","url"], ["previewUrl"]])).alias("link"),
+                pl.col("content").map_elements(lambda x: _parse_dt(x)).alias("published_at"),
             ])
             frame = frame.with_columns(cols)
         keep = [c for c in ["id", "title", "publisher", "type", "link", "published_at"] if c in frame.columns]

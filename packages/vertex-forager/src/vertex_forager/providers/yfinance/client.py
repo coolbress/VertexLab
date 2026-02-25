@@ -39,9 +39,17 @@ class YFinanceClient(BaseClient):
         rate_limit: int = 60,
         **kwargs: Any,
     ) -> None:
-        if rate_limit > 60:
-            logger.warning("YFinance rate_limit %d exceeds 60; API may throttle.", rate_limit)
-        super().__init__(api_key=api_key, rate_limit=rate_limit, **kwargs)
+        normalized = rate_limit
+        if isinstance(normalized, int):
+            if normalized <= 0:
+                logger.warning("YFinance rate_limit %d is invalid; falling back to 60.", normalized)
+                normalized = 60
+            elif normalized > 60:
+                logger.warning("YFinance rate_limit %d exceeds 60; API may throttle.", normalized)
+        else:
+            logger.warning("YFinance rate_limit '%s' is invalid; falling back to 60.", normalized)
+            normalized = 60
+        super().__init__(api_key=api_key, rate_limit=normalized, **kwargs)
         self._mapper = SchemaMapper()
         
         
@@ -73,14 +81,12 @@ class YFinanceClient(BaseClient):
             ValueError: If tickers list is empty.
             RuntimeError: If pipeline execution fails.
         """
-        return await self._fetch_per_ticker(
+        return await self._dispatch_fetch(
             dataset="info",
-            symbols=tickers,
+            tickers=tickers,
             connect_db=connect_db,
             desc="Fetching YFinance info",
             table_name="yfinance_info",
-            show_progress=True,
-            total_items=len(tickers),
             **kwargs,
         )
         
@@ -111,14 +117,12 @@ class YFinanceClient(BaseClient):
         Notes:
             Date filters (start/end) apply to price only; other datasets ignore date filters.
         """
-        return await self._fetch_per_ticker(
+        return await self._dispatch_fetch(
             dataset="price",
-            symbols=tickers,
+            tickers=tickers,
             connect_db=connect_db,
             desc="Fetching YFinance price data",
             table_name="yfinance_price",
-            show_progress=True,
-            total_items=len(tickers),
             start_date=start_date,
             end_date=end_date,
             **kwargs,
@@ -155,17 +159,17 @@ class YFinanceClient(BaseClient):
         """
         # Map 'income_stmt' alias to 'financials' and prevent deprecated quarterly_earnings.
         target_kind = "financials" if kind in ("income_stmt", "earnings") else kind
+        if kind == "earnings":
+            logger.warning("YFinance 'earnings' maps to 'financials' (income statements). Annual earnings requests are redirected.")
         if kind == "earnings" and period == "quarterly":
             raise ValueError("quarterly_earnings is deprecated in yfinance; use income_stmt with period='quarterly'.")
         dataset = f"quarterly_{target_kind}" if period == "quarterly" else target_kind
-        return await self._fetch_per_ticker(
+        return await self._dispatch_fetch(
             dataset=dataset,
-            symbols=tickers,
+            tickers=tickers,
             connect_db=connect_db,
             desc=f"Fetching YFinance {dataset}",
             table_name="yfinance_financials",
-            show_progress=True,
-            total_items=len(tickers),
             **kwargs,
         )
 
@@ -199,14 +203,12 @@ class YFinanceClient(BaseClient):
             ValueError: If tickers list is empty.
             RuntimeError: If pipeline execution fails.
         """
-        return await self._fetch_per_ticker(
+        return await self._dispatch_fetch(
             dataset=kind,
-            symbols=tickers,
+            tickers=tickers,
             connect_db=connect_db,
             desc=f"Fetching YFinance {kind}",
             table_name=f"yfinance_{kind}",
-            show_progress=True,
-            total_items=len(tickers),
             start_date=start_date,
             end_date=end_date,
             **kwargs,
@@ -239,14 +241,12 @@ class YFinanceClient(BaseClient):
             RuntimeError: If pipeline execution fails.
         """
         dataset = f"{kind}_holders"
-        return await self._fetch_per_ticker(
+        return await self._dispatch_fetch(
             dataset=dataset,
-            symbols=tickers,
+            tickers=tickers,
             connect_db=connect_db,
             desc=f"Fetching YFinance {dataset}",
             table_name="yfinance_holders",
-            show_progress=True,
-            total_items=len(tickers),
             **kwargs,
         )
     
@@ -272,14 +272,12 @@ class YFinanceClient(BaseClient):
             ValueError: If tickers list is empty.
             RuntimeError: If pipeline execution fails.
         """
-        return await self._fetch_per_ticker(
+        return await self._dispatch_fetch(
             dataset="major_holders",
-            symbols=tickers,
+            tickers=tickers,
             connect_db=connect_db,
             desc="Fetching YFinance major_holders",
             table_name="yfinance_major_holders",
-            show_progress=True,
-            total_items=len(tickers),
             **kwargs,
         )
     
@@ -307,14 +305,12 @@ class YFinanceClient(BaseClient):
             ValueError: If tickers list is empty.
             RuntimeError: If pipeline execution fails.
         """
-        return await self._fetch_per_ticker(
+        return await self._dispatch_fetch(
             dataset="insider_roster_holders",
-            symbols=tickers,
+            tickers=tickers,
             connect_db=connect_db,
             desc="Fetching YFinance insider_roster_holders",
             table_name="yfinance_insider_roster_holders",
-            show_progress=True,
-            total_items=len(tickers),
             **kwargs,
         )
     
@@ -340,14 +336,12 @@ class YFinanceClient(BaseClient):
             ValueError: If tickers list is empty.
             RuntimeError: If pipeline execution fails.
         """
-        return await self._fetch_per_ticker(
+        return await self._dispatch_fetch(
             dataset="insider_purchases",
-            symbols=tickers,
+            tickers=tickers,
             connect_db=connect_db,
             desc="Fetching YFinance insider_purchases",
             table_name="yfinance_insider_purchases",
-            show_progress=True,
-            total_items=len(tickers),
             **kwargs,
         )
 
@@ -375,14 +369,12 @@ class YFinanceClient(BaseClient):
             ValueError: If tickers list is empty.
             RuntimeError: If pipeline execution fails.
         """
-        return await self._fetch_per_ticker(
+        return await self._dispatch_fetch(
             dataset="calendar",
-            symbols=tickers,
+            tickers=tickers,
             connect_db=connect_db,
             desc="Fetching YFinance calendar",
             table_name="yfinance_calendar",
-            show_progress=True,
-            total_items=len(tickers),
             **kwargs,
         )
 
@@ -410,14 +402,12 @@ class YFinanceClient(BaseClient):
             ValueError: If tickers list is empty.
             RuntimeError: If pipeline execution fails.
         """
-        return await self._fetch_per_ticker(
+        return await self._dispatch_fetch(
             dataset="recommendations",
-            symbols=tickers,
+            tickers=tickers,
             connect_db=connect_db,
             desc="Fetching YFinance recommendations",
             table_name="yfinance_recommendations",
-            show_progress=True,
-            total_items=len(tickers),
             **kwargs,
         )
 
@@ -445,14 +435,12 @@ class YFinanceClient(BaseClient):
             ValueError: If tickers list is empty.
             RuntimeError: If pipeline execution fails.
         """
-        return await self._fetch_per_ticker(
+        return await self._dispatch_fetch(
             dataset="news",
-            symbols=tickers,
+            tickers=tickers,
             connect_db=connect_db,
             desc="Fetching YFinance news",
             table_name="yfinance_news",
-            show_progress=True,
-            total_items=len(tickers),
             **kwargs,
         )
 
@@ -574,3 +562,30 @@ class YFinanceClient(BaseClient):
             if pbar is not None:
                 pbar.close()
         return result_obj
+
+    async def _dispatch_fetch(
+        self,
+        *,
+        dataset: str,
+        tickers: list[str],
+        connect_db: str | Path | None,
+        desc: str,
+        table_name: str,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        **kwargs: Any,
+    ) -> pl.DataFrame | RunResult:
+        show_progress = True
+        total_items = len(tickers)
+        return await self._fetch_per_ticker(
+            dataset=dataset,
+            symbols=tickers,
+            connect_db=connect_db,
+            desc=desc,
+            table_name=table_name,
+            show_progress=show_progress,
+            total_items=total_items,
+            start_date=start_date,
+            end_date=end_date,
+            **kwargs,
+        )

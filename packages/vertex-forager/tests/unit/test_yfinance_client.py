@@ -22,7 +22,7 @@ class TestYFinanceClientDefaults:
         assert client.api_key is None
         assert client._config.requests_per_minute == 1_000
     
-    def test_create_client_ignores_user_rate_limit_and_api_key(self) -> None:
+    def test_create_client_ignores_user_api_key(self) -> None:
         client = create_client(provider="yfinance", api_key="user_supplied", rate_limit=5)
         assert isinstance(client, YFinanceClient)
         assert client.api_key is None
@@ -38,5 +38,6 @@ class TestYFinanceRouterDateParams:
         assert len(jobs) == 2
         for job in jobs:
             params = job.spec.params
-            assert "start" not in params
-            assert "end" not in params
+            lib_kwargs = params.get("lib", {}).get("kwargs", {})
+            assert "start" not in lib_kwargs
+            assert "end" not in lib_kwargs

@@ -212,6 +212,9 @@ class DuckDBWriter(BaseWriter):
             except duckdb.Error as e:
                 self._logger.error(f"Failed to write batch for {table_name}: {e}")
                 raise
+            except ValueError as e:
+                self._logger.error(f"Validation error writing batch for {table_name}: {e}")
+                raise
 
         # Fill any remaining None (should be covered by empty check or loop, but safe guard)
         # Actually my type hint says list[WriteResult | None] but return is list[WriteResult]
@@ -262,10 +265,10 @@ class DuckDBWriter(BaseWriter):
             self._logger.info("No DuckDB connection; skipping compaction")
             return
 
-        self._logger.debug("Compacting DuckDB database...")
+        self._logger.info("Compacting DuckDB database...")
         self._conn.execute("VACUUM")
         self._conn.execute("CHECKPOINT")
-        self._logger.debug("Compaction completed.")
+        self._logger.info("Compaction completed.")
 
     async def close(self) -> None:
         """Close the database connection.

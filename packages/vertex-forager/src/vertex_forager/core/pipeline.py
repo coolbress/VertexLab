@@ -27,6 +27,7 @@ import time
 import itertools
 import httpx
 from typing import Any, TYPE_CHECKING
+from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Sequence, Callable
 from collections import defaultdict
 
@@ -142,6 +143,17 @@ class VertexForager:
                 "PIPELINE: Detected InMemoryBufferWriter. Disabled intermediate flushing."
             )
 
+        workers = getattr(self.controller, "concurrency_limit", None)
+        try:
+            w_int = int(workers) if workers is not None else None
+            if w_int is not None and w_int <= 0:
+                w_int = None
+        except Exception:
+            w_int = None
+        self._parse_executor = ThreadPoolExecutor(
+            max_workers=w_int,
+            thread_name_prefix="vertex-forager:parse",
+        )
     async def run(
         self,
         *,
@@ -302,6 +314,10 @@ class VertexForager:
             await asyncio.gather(*self._active_tasks, return_exceptions=True)
         
         self._active_tasks.clear()
+        try:
+            self._parse_executor.shutdown(wait=False)
+        except Exception:
+            pass
         logger.debug("PIPELINE: Pipeline stopped.")
 
     async def _producer(
@@ -429,9 +445,9 @@ class VertexForager:
                     f"[Worker-{worker_id}] Fetched {job.symbol} ({len(payload) if payload else 0} bytes) in {fetch_latency:.3f}s"
                 )
 
-                # Offload CPU-bound parsing to a thread pool
-                # For yfinance, this includes unpickling and normalization
-                parse_result = await asyncio.to_thread(self._router.parse, job=job, payload=payload)
+                # Offload CPU-bound parsing to a dedicated thread pool
+                loop = asyncio.get_running_loop()
+                parse_result = await loop.run_in_executor(self._parse_executor, lambda: self._router.parse(job=job, payload=payload))
                 t2 = time.monotonic()
                 logger.debug(
                     f"[Worker-{worker_id}] Parsed {job.symbol} in {t2 - t1:.3f}s. Packets: {len(parse_result.packets)}, Next Jobs: {len(parse_result.next_jobs)}"
@@ -439,7 +455,6 @@ class VertexForager:
 
                 for packet in parse_result.packets:
                     # Normalize packet schema (enforce types, fill missing cols)
-                    # Also CPU-bound, so we offload it
                     normalized_packet = await asyncio.to_thread(self._mapper.normalize, packet=packet)
                     await pkt_q.put(normalized_packet)
 
@@ -523,7 +538,11 @@ class VertexForager:
                     merged_frame = pl.concat(frames, how="vertical")
                 except pl.exceptions.PolarsError as e:
                     first = packets[0]
-                    if first.provider != "yfinance":
+                    schema_obj = get_table_schema(first.table)
+                    is_flexible = getattr(self._router, "flexible_schema", False) or (
+                        schema_obj is not None and getattr(schema_obj, "flexible_schema", False)
+                    )
+                    if not is_flexible:
                         raise
                     logger.warning("WRITER: Schema mismatch for %s: %s. Falling back to diagonal concat", first.table, e)
                     merged_frame = pl.concat(frames, how="diagonal")
@@ -531,9 +550,9 @@ class VertexForager:
                 if schema and schema.unique_key:
                     for col in schema.unique_key:
                         if col not in merged_frame.columns:
-                            raise ValueError(f"PKMissing:{packets[0].table}:{col}")
+                            raise ComputeError(f"PKMissing:{packets[0].table}:{col}")
                         if merged_frame.get_column(col).null_count() > 0:
-                            raise ValueError(f"PKNull:{packets[0].table}:{col}")
+                            raise ComputeError(f"PKNull:{packets[0].table}:{col}")
 
                 # Create merged packet (use metadata from the first packet)
                 first = packets[0]

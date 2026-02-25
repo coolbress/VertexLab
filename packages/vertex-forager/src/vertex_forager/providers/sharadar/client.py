@@ -110,19 +110,19 @@ class SharadarClient(BaseClient):
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Fetch S&P 500 component history."""
-        cfg = FetchConfig(
+        cfg = self._build_fetch_config(
             dataset="sp500",
             symbols=None,
             connect_db=connect_db,
             desc="Fetching S&P 500 history",
             table_name=DATASET_TABLE["sp500"],
-            show_progress=True,
-            use_progress_bar=False,
             total_items=None,
             unit="pages",
             start_date=None,
             end_date=None,
             extra=dict(kwargs),
+            show_progress=True,
+            use_progress_bar=False,
         )
         return await self._fetch_pagination(cfg)
 
@@ -152,22 +152,24 @@ class SharadarClient(BaseClient):
             or RunResult object if storing to database.
 
         Raises:
-            ValueError: If neither tickers nor connect_db is provided.
+            ValueError: If both tickers is empty and connect_db is not provided.
             httpx.RequestError: If a network error occurs.
             httpx.HTTPStatusError: If the API returns a non-success status code.
         """
-        cfg = FetchConfig(
+        if (not tickers) and (connect_db is None):
+            raise ValueError("Either provide non-empty tickers or a connect_db for persistence")
+        cfg = self._build_fetch_config(
             dataset="price",
             symbols=tickers,
             connect_db=connect_db,
             desc="Fetching price data",
             table_name=DATASET_TABLE["price"],
-            show_progress=True,
-            total_items=len(tickers),
+            total_items=None,
             unit="tickers",
             start_date=start_date,
             end_date=end_date,
             extra=dict(kwargs),
+            show_progress=True,
         )
         return await self._fetch_per_ticker(cfg)
 
@@ -183,18 +185,19 @@ class SharadarClient(BaseClient):
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Fetch fundamental data (SF1)."""
-        cfg = FetchConfig(
+        extras = {**dict(kwargs), "dimension": dimension}
+        cfg = self._build_fetch_config(
             dataset="fundamental",
             symbols=tickers,
             connect_db=connect_db,
             desc="Fetching fundamental data",
             table_name=DATASET_TABLE["fundamental"],
-            show_progress=True,
-            total_items=len(tickers),
+            total_items=None,
             unit="tickers",
             start_date=start_date,
             end_date=end_date,
-            extra={**dict(kwargs), "dimension": dimension},
+            extra=extras,
+            show_progress=True,
         )
         return await self._fetch_per_ticker(cfg)
 
@@ -209,18 +212,18 @@ class SharadarClient(BaseClient):
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Fetch daily metrics (DAILY)."""
-        cfg = FetchConfig(
+        cfg = self._build_fetch_config(
             dataset="daily",
             symbols=tickers,
             connect_db=connect_db,
             desc="Fetching daily metrics",
             table_name=DATASET_TABLE["daily"],
-            show_progress=True,
-            total_items=len(tickers),
+            total_items=None,
             unit="tickers",
             start_date=start_date,
             end_date=end_date,
             extra=dict(kwargs),
+            show_progress=True,
         )
         return await self._fetch_per_ticker(cfg)
 
@@ -235,18 +238,18 @@ class SharadarClient(BaseClient):
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Fetch corporate actions (ACTIONS)."""
-        cfg = FetchConfig(
+        cfg = self._build_fetch_config(
             dataset="actions",
             symbols=tickers,
             connect_db=connect_db,
             desc="Fetching corporate actions",
             table_name=DATASET_TABLE["actions"],
-            show_progress=True,
-            total_items=len(tickers),
+            total_items=None,
             unit="tickers",
             start_date=start_date,
             end_date=end_date,
             extra=dict(kwargs),
+            show_progress=True,
         )
         return await self._fetch_per_ticker(cfg)
 
@@ -261,18 +264,18 @@ class SharadarClient(BaseClient):
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Fetch insider trading data (SF2)."""
-        cfg = FetchConfig(
+        cfg = self._build_fetch_config(
             dataset="insider",
             symbols=tickers,
             connect_db=connect_db,
             desc="Fetching insider trading data",
             table_name=DATASET_TABLE["insider"],
-            show_progress=True,
-            total_items=len(tickers),
+            total_items=None,
             unit="tickers",
             start_date=start_date,
             end_date=end_date,
             extra=dict(kwargs),
+            show_progress=True,
         )
         return await self._fetch_per_ticker(cfg)
 
@@ -287,18 +290,18 @@ class SharadarClient(BaseClient):
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Fetch institutional ownership data (SF3)."""
-        cfg = FetchConfig(
+        cfg = self._build_fetch_config(
             dataset="institutional",
             symbols=tickers,
             connect_db=connect_db,
             desc="Fetching institutional ownership",
             table_name=DATASET_TABLE["institutional"],
-            show_progress=True,
-            total_items=len(tickers),
+            total_items=None,
             unit="tickers",
             start_date=start_date,
             end_date=end_date,
             extra=dict(kwargs),
+            show_progress=True,
         )
         return await self._fetch_per_ticker(cfg)
 
@@ -311,6 +314,7 @@ class SharadarClient(BaseClient):
         *,
         tickers: list[str] | None = None,
         connect_db: str | Path | None = None,
+        show_spinner: bool = True,
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         if tickers is not None and len(tickers) > 0:
@@ -328,7 +332,8 @@ class SharadarClient(BaseClient):
                 end_date=None,
                 extra=dict(kwargs),
             )
-            with Spinner("Fetching tickers metadata", persist=True):
+            spinner_ctx = Spinner("Fetching tickers metadata", persist=True) if show_spinner else nullcontext()
+            with spinner_ctx:
                 result = await self._fetch_per_ticker(cfg)
         else:
             cfg = FetchConfig(
@@ -345,7 +350,8 @@ class SharadarClient(BaseClient):
                 end_date=None,
                 extra=dict(kwargs),
             )
-            with Spinner("Fetching all tickers metadata", persist=True):
+            spinner_ctx = Spinner("Fetching all tickers metadata", persist=True) if show_spinner else nullcontext()
+            with spinner_ctx:
                 result = await self._fetch_pagination(cfg)
         if isinstance(result, pl.DataFrame):
             self._metadata_cache = result
@@ -409,7 +415,7 @@ class SharadarClient(BaseClient):
             logger.info("Metadata cache miss. Fetching ticker metadata first...")
             try:
                 with Spinner("Prefetching metadata for smart batching..."):
-                    meta_result = await self._get_ticker_info_impl(tickers=None, connect_db=config.connect_db)
+                    meta_result = await self._get_ticker_info_impl(tickers=None, connect_db=config.connect_db, show_spinner=False)
                     if isinstance(meta_result, pl.DataFrame):
                         logger.info("Metadata cached: %d tickers", len(meta_result))
             except httpx.RequestError as e:
@@ -529,3 +535,37 @@ class SharadarClient(BaseClient):
         finally:
             if pbar is not None:
                 pbar.close()
+
+    def _build_fetch_config(
+        self,
+        *,
+        dataset: str,
+        symbols: list[str] | None,
+        connect_db: str | Path | None,
+        desc: str,
+        table_name: str,
+        total_items: int | None = None,
+        unit: str = "tickers",
+        start_date: str | None = None,
+        end_date: str | None = None,
+        extra: dict[str, Any] | None = None,
+        show_progress: bool = True,
+        use_progress_bar: bool | None = None,
+    ) -> FetchConfig:
+        computed_total = total_items
+        if computed_total is None and symbols is not None:
+            computed_total = len(symbols)
+        return FetchConfig(
+            dataset=dataset,
+            symbols=symbols,
+            connect_db=connect_db,
+            desc=desc,
+            table_name=table_name,
+            show_progress=show_progress,
+            use_progress_bar=True if use_progress_bar is None else use_progress_bar,
+            total_items=computed_total,
+            unit=unit,
+            start_date=start_date,
+            end_date=end_date,
+            extra=dict(extra or {}),
+        )

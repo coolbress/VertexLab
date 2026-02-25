@@ -35,6 +35,8 @@ class BaseRouter(ABC):
       vendor-specific logic, keeping the core pipeline engine clean and generic.
     """
 
+    flexible_schema: bool = False
+    
     @property
     @abstractmethod
     def provider(self) -> str:

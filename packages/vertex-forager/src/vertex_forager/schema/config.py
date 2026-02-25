@@ -21,3 +21,4 @@ class TableSchema:
     schema: dict[str, pl.DataType]
     unique_key: tuple[str, ...] = ()
     analysis_date_col: str | None = None
+    flexible_schema: bool = False
