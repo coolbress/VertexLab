@@ -184,7 +184,24 @@ class SharadarClient(BaseClient):
         dimension: str = "MRT",
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
-        """Fetch fundamental data (SF1)."""
+        """Fetch fundamental data (SF1).
+        
+        Args:
+            tickers: List of ticker symbols to fetch.
+            connect_db: Optional DuckDB connection string/path for persistence.
+            start_date: Optional start date filter (YYYY-MM-DD).
+            end_date: Optional end date filter (YYYY-MM-DD).
+            dimension: SF1 dimension (e.g., 'MRT', 'ARQ', 'ARY').
+            **kwargs: Additional provider-specific options.
+        
+        Returns:
+            pl.DataFrame in memory mode; RunResult when persisting to DuckDB.
+            Rows include SF1 metrics keyed by ticker and calendardate.
+        
+        Raises:
+            ValueError: If tickers are empty or invalid.
+            RuntimeError: If pipeline execution or configuration validation fails.
+        """
         extras = {**dict(kwargs), "dimension": dimension}
         cfg = self._build_fetch_config(
             dataset="fundamental",
@@ -211,7 +228,23 @@ class SharadarClient(BaseClient):
         end_date: str | None = None,
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
-        """Fetch daily metrics (DAILY)."""
+        """Fetch daily metrics (DAILY).
+        
+        Args:
+            tickers: List of ticker symbols to fetch.
+            connect_db: Optional DuckDB connection string/path.
+            start_date: Optional start date (YYYY-MM-DD).
+            end_date: Optional end date (YYYY-MM-DD).
+            **kwargs: Additional provider-specific options.
+        
+        Returns:
+            pl.DataFrame in memory mode; RunResult when persisting.
+            Data includes per-day metrics keyed by ticker and date.
+        
+        Raises:
+            ValueError: If tickers are empty or invalid.
+            RuntimeError: If pipeline execution fails.
+        """
         cfg = self._build_fetch_config(
             dataset="daily",
             symbols=tickers,
@@ -237,7 +270,23 @@ class SharadarClient(BaseClient):
         end_date: str | None = None,
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
-        """Fetch corporate actions (ACTIONS)."""
+        """Fetch corporate actions (ACTIONS).
+        
+        Args:
+            tickers: List of ticker symbols.
+            connect_db: Optional DuckDB connection string/path.
+            start_date: Optional start date (YYYY-MM-DD).
+            end_date: Optional end date (YYYY-MM-DD).
+            **kwargs: Additional provider-specific options.
+        
+        Returns:
+            pl.DataFrame in memory; RunResult when persisting.
+            Rows include dividends/splits keyed by ticker and date.
+        
+        Raises:
+            ValueError: If tickers are empty or invalid.
+            RuntimeError: If pipeline execution fails.
+        """
         cfg = self._build_fetch_config(
             dataset="actions",
             symbols=tickers,
@@ -263,7 +312,23 @@ class SharadarClient(BaseClient):
         end_date: str | None = None,
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
-        """Fetch insider trading data (SF2)."""
+        """Fetch insider trading data (SF2).
+        
+        Args:
+            tickers: List of ticker symbols.
+            connect_db: Optional DuckDB connection string/path.
+            start_date: Optional start date (YYYY-MM-DD).
+            end_date: Optional end date (YYYY-MM-DD).
+            **kwargs: Additional provider-specific options.
+        
+        Returns:
+            pl.DataFrame in memory; RunResult when persisting.
+            Data includes insider transactions keyed by ticker and filingdate.
+        
+        Raises:
+            ValueError: If tickers are empty or invalid.
+            RuntimeError: If pipeline execution fails.
+        """
         cfg = self._build_fetch_config(
             dataset="insider",
             symbols=tickers,
@@ -289,7 +354,23 @@ class SharadarClient(BaseClient):
         end_date: str | None = None,
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
-        """Fetch institutional ownership data (SF3)."""
+        """Fetch institutional ownership data (SF3).
+        
+        Args:
+            tickers: List of ticker symbols.
+            connect_db: Optional DuckDB connection string/path.
+            start_date: Optional start date (YYYY-MM-DD).
+            end_date: Optional end date (YYYY-MM-DD).
+            **kwargs: Additional provider-specific options.
+        
+        Returns:
+            pl.DataFrame in memory; RunResult when persisting.
+            Data includes institutional positions keyed by ticker and calendardate.
+        
+        Raises:
+            ValueError: If tickers are empty or invalid.
+            RuntimeError: If pipeline execution fails.
+        """
         cfg = self._build_fetch_config(
             dataset="institutional",
             symbols=tickers,
@@ -421,7 +502,7 @@ class SharadarClient(BaseClient):
             except httpx.RequestError as e:
                 logger.warning("Failed to prefetch metadata: %s. Smart batching will be disabled.", e)
             except Exception as e:
-                logger.warning("Failed to prefetch metadata (unexpected): %s. Continuing without cache.", e)
+                logger.warning("Failed to prefetch metadata (unexpected): %s. Continuing without cache.", e, exc_info=True)
 
         total_items = (
             config.total_items

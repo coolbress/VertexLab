@@ -21,17 +21,7 @@ from vertex_forager.providers.yfinance.schema import DATASET_TABLE, DATASET_ENDP
 
 logger = logging.getLogger("vertex_forager.providers.yfinance.router")
 
-class _Metrics:
-    def __init__(self) -> None:
-        self._counters: dict[str, int] = {}
-    def increment(self, name: str) -> None:
-        self._counters[name] = self._counters.get(name, 0) + 1
-
-metrics = _Metrics()
-
-
 class YFinanceRouter(BaseRouter):
-    flexible_schema: bool = True
     """Router for Yahoo Finance datasets (via yfinance).
     
     Summary:
@@ -57,6 +47,7 @@ class YFinanceRouter(BaseRouter):
         - Request params for price include interval/group_by and optional date filters.
         - Non-price datasets use Ticker properties; date filters are not applied.
     """
+    flexible_schema: bool = True
 
     # Constants for batching and processing
     PRICE_BATCH_SIZE: Final[int] = 250
@@ -368,7 +359,6 @@ class YFinanceRouter(BaseRouter):
             return pl.DataFrame([data] if data else [])
         except (ValueError, TypeError, ComputeError) as e:
             logger.error("Failed to convert data to Polars: %s", e)
-            metrics.increment("yfinance_convert_failure")
             raise
         except Exception:
             logger.exception("Unexpected failure converting data to Polars")

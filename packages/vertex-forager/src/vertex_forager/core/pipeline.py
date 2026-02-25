@@ -148,12 +148,13 @@ class VertexForager:
             w_int = int(workers) if workers is not None else None
             if w_int is not None and w_int <= 0:
                 w_int = None
-        except Exception:
+        except (ValueError, TypeError):
             w_int = None
         self._parse_executor = ThreadPoolExecutor(
             max_workers=w_int,
             thread_name_prefix="vertex-forager:parse",
         )
+
     async def run(
         self,
         *,
@@ -536,19 +537,18 @@ class VertexForager:
             try:
                 # Merge frames
                 frames = [p.frame for p in packets]
+                schema = get_table_schema(packets[0].table)
                 try:
                     merged_frame = pl.concat(frames, how="vertical")
                 except pl.exceptions.PolarsError as e:
                     first = packets[0]
-                    schema_obj = get_table_schema(first.table)
                     is_flexible = getattr(self._router, "flexible_schema", False) or (
-                        schema_obj is not None and getattr(schema_obj, "flexible_schema", False)
+                        schema is not None and getattr(schema, "flexible_schema", False)
                     )
                     if not is_flexible:
                         raise
                     logger.warning("WRITER: Schema mismatch for %s: %s. Falling back to diagonal concat", first.table, e)
                     merged_frame = pl.concat(frames, how="diagonal")
-                schema = get_table_schema(packets[0].table)
                 if schema and schema.unique_key:
                     for col in schema.unique_key:
                         if col not in merged_frame.columns:
