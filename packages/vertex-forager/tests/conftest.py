@@ -208,10 +208,13 @@ def create_test_fetch_job() -> FetchJob:
 
 @pytest.fixture
 def yfinance_router() -> YFinanceRouter:
-    """Return a YFinanceRouter configured with a 500ms rate limit.
+    """Create a YFinanceRouter with explicit rate limiting.
+    
+    The rate_limit argument represents requests per minute. For example,
+    rate_limit=500 allows up to 500 requests per minute across jobs.
     
     Returns:
-        YFinanceRouter: Router instance with conservative rate limiting.
+        YFinanceRouter: Router instance configured with rate_limit=500 (requests/min).
     """
     return YFinanceRouter(rate_limit=500)
 

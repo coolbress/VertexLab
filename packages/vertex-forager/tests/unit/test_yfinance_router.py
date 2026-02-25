@@ -11,29 +11,20 @@ from vertex_forager.core.config import FetchJob, RequestSpec, ParseResult
 from vertex_forager.providers.yfinance.router import YFinanceRouter
 
 
-@pytest.fixture
-def yf_router() -> YFinanceRouter:
-    """Provide a configured YFinanceRouter for unit tests.
-    
-    Returns:
-        YFinanceRouter: Router with rate_limit=500.
-    """
-    return YFinanceRouter(rate_limit=500)
-
-
 class TestYFinanceRouterUnit:
     """Unit tests verifying YFinanceRouter job generation and parsing behavior."""
-    def test_provider_property(self, yf_router: YFinanceRouter) -> None:
+
+    def test_provider_property(self, yfinance_router: YFinanceRouter) -> None:
         """Verify provider property returns 'yfinance'.
         
         Returns:
             None
         """
-        assert yf_router.provider == "yfinance"
+        assert yfinance_router.provider == "yfinance"
 
     @pytest.mark.asyncio
     async def test_generate_jobs_requires_symbols_for_non_tickers(
-        self, yf_router: YFinanceRouter
+        self, yfinance_router: YFinanceRouter
     ) -> None:
         """Ensure ValueError when symbols are missing for non-tickers datasets.
         
@@ -41,11 +32,11 @@ class TestYFinanceRouterUnit:
             None
         """
         with pytest.raises(ValueError):
-            _ = [job async for job in yf_router.generate_jobs(dataset="price", symbols=None)]
+            _ = [job async for job in yfinance_router.generate_jobs(dataset="price", symbols=None)]
 
     @pytest.mark.asyncio
     async def test_generate_jobs_builds_per_symbol_jobs_for_price(
-        self, yf_router: YFinanceRouter
+        self, yfinance_router: YFinanceRouter
     ) -> None:
         """Ensure per-symbol jobs are generated for price dataset.
         
@@ -53,7 +44,7 @@ class TestYFinanceRouterUnit:
             None
         """
         symbols = ["AAPL", "MSFT", "TSLA"]
-        jobs = [job async for job in yf_router.generate_jobs(dataset="price", symbols=symbols)]
+        jobs = [job async for job in yfinance_router.generate_jobs(dataset="price", symbols=symbols)]
         assert len(jobs) == len(symbols)
         for i, sym in enumerate(symbols):
             job = jobs[i]
@@ -62,7 +53,7 @@ class TestYFinanceRouterUnit:
             assert job.spec.url == f"yfinance://{sym}"
             assert job.context.get("is_batch") is not True
 
-    def test_parse_returns_frame_for_price_dataset(self, yf_router: YFinanceRouter) -> None:
+    def test_parse_returns_frame_for_price_dataset(self, yfinance_router: YFinanceRouter) -> None:
         """Verify parse returns a populated frame for price payload.
         
         Returns:
@@ -87,7 +78,7 @@ class TestYFinanceRouterUnit:
             spec=RequestSpec(url="yfinance://AAPL", params={"dataset": "price"}),
             context={"symbol": "AAPL"},
         )
-        result = yf_router.parse(job=job, payload=payload)
+        result = yfinance_router.parse(job=job, payload=payload)
         assert isinstance(result, ParseResult)
         assert len(result.packets) == 1
         packet = result.packets[0]
@@ -97,7 +88,7 @@ class TestYFinanceRouterUnit:
         assert packet.frame.height == 2
         assert set(["date", "open", "close", "ticker"]).issubset(set(packet.frame.columns))
 
-    def test_parse_handles_empty_dataframe(self, yf_router: YFinanceRouter) -> None:
+    def test_parse_handles_empty_dataframe(self, yfinance_router: YFinanceRouter) -> None:
         """Verify parse returns zero packets for empty DataFrame payload.
         
         Returns:
@@ -112,6 +103,6 @@ class TestYFinanceRouterUnit:
             spec=RequestSpec(url="yfinance://AAPL", params={"dataset": "price"}),
             context={"symbol": "AAPL"},
         )
-        result = yf_router.parse(job=job, payload=payload)
+        result = yfinance_router.parse(job=job, payload=payload)
         assert isinstance(result, ParseResult)
         assert len(result.packets) == 0

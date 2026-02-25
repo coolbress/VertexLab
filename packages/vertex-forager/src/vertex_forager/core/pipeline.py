@@ -51,6 +51,7 @@ from vertex_forager.core.controller import FlowController
 from vertex_forager.core.retry import create_retry_controller
 from vertex_forager.routers.base import BaseRouter
 from vertex_forager.schema.mapper import SchemaMapper
+from vertex_forager.schema.registry import get_table_schema
 
 if TYPE_CHECKING:
     from vertex_forager.writers.base import BaseWriter
@@ -277,7 +278,7 @@ class VertexForager:
             logger.debug("PIPELINE: Flushing writer buffer...")
             await self._writer.flush()
 
-            logger.debug(f"PIPELINE: Run completed. Total errors: {len(result.errors)}")
+            logger.info(f"PIPELINE: Run completed. Total errors: {len(result.errors)}")
             return result
         finally:
             await self.stop()
@@ -518,11 +519,20 @@ class VertexForager:
             try:
                 # Merge frames
                 frames = [p.frame for p in packets]
-                
-                # Use diagonal concatenation to handle schema evolution/mismatches safely.
-                # - For rigid schemas (Sharadar): Works identically to vertical concat.
-                # - For flexible schemas (YFinance): Allows merging frames with varying columns (missing cols become null).
-                merged_frame = pl.concat(frames, how="diagonal")
+                try:
+                    merged_frame = pl.concat(frames, how="vertical")
+                except Exception:
+                    first = packets[0]
+                    if first.provider != "yfinance":
+                        raise
+                    logger.warning(f"WRITER: Schema mismatch for {first.table}, falling back to diagonal concat")
+                    merged_frame = pl.concat(frames, how="diagonal")
+                schema = get_table_schema(packets[0].table)
+                if schema and schema.unique_key:
+                    for col in schema.unique_key:
+                        if col in merged_frame.columns:
+                            if merged_frame.get_column(col).null_count() > 0:
+                                raise ValueError(f"PKNull:{packets[0].table}:{col}")
 
                 # Create merged packet (use metadata from the first packet)
                 first = packets[0]
@@ -551,17 +561,17 @@ class VertexForager:
             except (ComputeError, ValidationError) as e:
                 async with result_lock:
                     result.errors.append(f"WriterError:{table}:{e}")
-                logger.warning(f"WRITER: Error writing batch for {table}: {e}")
+                logger.error(f"WRITER: Error writing batch for {table}: {e}")
             except Exception as e:
                 # Check for DuckDB Error if available
                 if duckdb and isinstance(e, duckdb.Error):
                     async with result_lock:
                         result.errors.append(f"DuckDBError:{table}:{e}")
-                    logger.error(f"WRITER: DuckDB error for {table}: {e}")
+                    logger.exception(f"WRITER: DuckDB error for {table}: {e}")
                 else:
                     async with result_lock:
                         result.errors.append(f"UnexpectedWriterError:{table}:{e}")
-                    logger.error(f"WRITER: Unexpected error writing batch for {table}: {e}")
+                    logger.exception(f"WRITER: Unexpected error writing batch for {table}: {e}")
                     raise
 
         while True:
@@ -576,7 +586,7 @@ class VertexForager:
                         for table in list(buffers.keys()):
                             await flush(table)
                     except Exception as e:
-                        logger.error(f"WRITER: Error during shutdown flush: {e}")
+                        logger.exception(f"WRITER: Error during shutdown flush: {e}")
                         raise
                     return
 

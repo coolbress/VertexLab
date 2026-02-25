@@ -81,6 +81,7 @@ class HttpExecutor:
         scheme, payload = spec.url.split("://", 1)
         params = spec.params
         dataset = params.get("dataset", "price")
+        lib = params.get("lib")
 
         try:
             # 1. Execute provider-specific library call
@@ -88,16 +89,20 @@ class HttpExecutor:
                 if scheme != "yfinance":
                     raise ValueError(f"Unsupported library scheme: {scheme}")
                 ticker_symbol = payload
-                endpoint = params.get("endpoint")
-                if endpoint == "download":
-                    download_kwargs = {**params}
-                    download_kwargs.pop("dataset", None)
-                    download_kwargs.pop("endpoint", None)
-                    return yf.download(tickers=ticker_symbol, **download_kwargs)
-                ticker = yf.Ticker(ticker_symbol)
-                if not hasattr(ticker, dataset):
-                    raise ValueError(f"Unknown yfinance dataset: {dataset}")
-                return getattr(ticker, dataset)
+                if not isinstance(lib, dict):
+                    raise ValueError("Missing library call specification ('lib') in request params")
+                call_type = lib.get("type")
+                call_kwargs = dict(lib.get("kwargs") or {})
+                if call_type == "download":
+                    return yf.download(tickers=ticker_symbol, **call_kwargs)
+                if call_type == "ticker_attr":
+                    attr_name = lib.get("attr")
+                    ticker = yf.Ticker(ticker_symbol)
+                    if not attr_name or not hasattr(ticker, attr_name):
+                        raise ValueError(f"Unknown yfinance dataset: {dataset} -> {attr_name}")
+                    attr = getattr(ticker, attr_name)
+                    return attr(**call_kwargs) if callable(attr) else attr
+                raise ValueError(f"Unsupported library call type: {call_type}")
 
             # Use the client's run_sync method
             data = await self._client.run_sync(_execute)

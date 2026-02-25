@@ -169,7 +169,19 @@ class DuckDBWriter(BaseWriter):
         for table_name, entries in by_table.items():
             try:
                 frames = [p.frame for _, p in entries]
-                merged_df = pl.concat(frames, how="diagonal")
+                try:
+                    merged_df = pl.concat(frames, how="vertical")
+                except Exception:
+                    provider = entries[0][1].provider
+                    if provider != "yfinance":
+                        raise
+                    self._logger.warning(f"WRITER: Schema mismatch detected for {table_name}, falling back to diagonal concat")
+                    merged_df = pl.concat(frames, how="diagonal")
+                pk_cols = self._get_primary_keys(table_name)
+                if pk_cols:
+                    for c in pk_cols:
+                        if c in merged_df.columns and merged_df.get_column(c).null_count() > 0:
+                            raise ValueError(f"PKNull:{table_name}:{c}")
                 rows = len(merged_df)
                 
                 if rows > 0:
@@ -320,7 +332,7 @@ class DuckDBWriter(BaseWriter):
         )
 
         if not exists:
-            self._logger.debug(f"Creating table '{table_name}' in DuckDB")
+            self._logger.info(f"Creating table '{table_name}' in DuckDB")
             # Register the dataframe as a view to infer schema
             conn.register("temp_df_view", df)
 
@@ -343,7 +355,7 @@ class DuckDBWriter(BaseWriter):
                             conn.execute(
                                 f"CREATE UNIQUE INDEX IF NOT EXISTS {idx_name} ON {q_table} ({pk_str})"
                             )
-                            self._logger.debug(
+                            self._logger.info(
                                 f"Created UNIQUE INDEX on {table_name}({pk_str})"
                             )
                         except duckdb.Error as e:
@@ -392,7 +404,7 @@ class DuckDBWriter(BaseWriter):
         if not new_cols:
             return
 
-        self._logger.debug(
+        self._logger.info(
             f"Schema evolution: Adding {len(new_cols)} new columns to {table_name}"
         )
 

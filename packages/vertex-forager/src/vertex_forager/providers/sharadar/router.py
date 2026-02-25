@@ -5,6 +5,7 @@ from typing import Final
 import json
 import io
 from collections.abc import AsyncIterator, Iterator, Sequence
+import copy
 from datetime import date, datetime, timezone
 
 import polars as pl
@@ -120,9 +121,22 @@ class SharadarRouter(BaseRouter):
                 logger.warning(f"Metadata missing required columns {required}. Smart batching disabled.")
                 return
 
-            # Convert to dict: {ticker: (start, end)}
-            # Filter only valid dates
-            valid_df = df.filter(
+            # Normalize date types for reliable comparison
+            normalized = df.with_columns(
+                [
+                    pl.col("firstpricedate")
+                    .cast(pl.Utf8)
+                    .str.strptime(pl.Date, strict=False)
+                    .alias("firstpricedate"),
+                    pl.col("lastpricedate")
+                    .cast(pl.Utf8)
+                    .str.strptime(pl.Date, strict=False)
+                    .alias("lastpricedate"),
+                ]
+            )
+
+            # Filter only valid dates and build lookup
+            valid_df = normalized.filter(
                 pl.col("firstpricedate").is_not_null() & 
                 pl.col("lastpricedate").is_not_null()
             )
@@ -469,7 +483,7 @@ class SharadarRouter(BaseRouter):
             params=params,
             auth=self._auth(),
         )
-        context = self._PAGINATION_CONTEXT.copy()
+        context = copy.deepcopy(self._PAGINATION_CONTEXT)
         return FetchJob(
             provider=self.provider,
             dataset=dataset,
@@ -524,7 +538,7 @@ class SharadarRouter(BaseRouter):
         )
 
         # Add pagination context for all datasets that support it
-        context = self._PAGINATION_CONTEXT.copy()
+        context = copy.deepcopy(self._PAGINATION_CONTEXT)
 
         return FetchJob(
             provider=self.provider,

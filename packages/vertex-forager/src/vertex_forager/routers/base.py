@@ -168,6 +168,8 @@ class BaseRouter(ABC):
             end = datetime.now(timezone.utc)
             if end_date:
                 end = datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            if end < start:
+                raise ValueError("End date is earlier than start date")
             return start, end
         except (ValueError, TypeError):
             return None
@@ -181,7 +183,8 @@ class BaseRouter(ABC):
         Returns:
             pl.DataFrame: DataFrame with standardized column names.
         """
-        normalized = [c.lower().strip().replace(" ", "_") for c in frame.columns]
+        import re
+        normalized = [re.sub(r"[^0-9a-zA-Z]+", "_", c).lower().strip("_") for c in frame.columns]
         seen: dict[str, int] = {}
         unique_names: list[str] = []
         for name in normalized:

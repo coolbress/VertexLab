@@ -17,7 +17,7 @@ from vertex_forager.core.config import (
     RequestSpec,
 )
 from vertex_forager.routers.base import BaseRouter
-from vertex_forager.providers.yfinance.schema import DATASET_TABLE
+from vertex_forager.providers.yfinance.schema import DATASET_TABLE, DATASET_ENDPOINT
 
 logger = logging.getLogger("vertex_forager.providers.yfinance.router")
 
@@ -143,7 +143,12 @@ class YFinanceRouter(BaseRouter):
         
         # Create 1 job per ticker to leverage FlowController granularly
         for symbol in symbols:
-            yield self._build_single_symbol_job(symbol=symbol, dataset=dataset)
+            if not isinstance(symbol, str):
+                continue
+            clean = symbol.strip()
+            if not clean:
+                continue
+            yield self._build_single_symbol_job(symbol=clean, dataset=dataset)
 
     def parse(self, *, job: FetchJob, payload: bytes) -> ParseResult:
         """Parse raw pickled payload into structured packets.
@@ -248,30 +253,32 @@ class YFinanceRouter(BaseRouter):
     # --------------------------------------
     
     def _build_request_params(self, *, dataset: str) -> dict[str, object]:
-        """Unified parameter builder for yfinance library calls."""
+        """Unified parameter builder for yfinance library calls.
+        
+        Returns a dict that includes a 'lib' key describing the exact library
+        call the HttpExecutor should perform. This keeps HttpExecutor generic.
+        """
         params: dict[str, object] = {"dataset": dataset}
+        mapped = DATASET_ENDPOINT.get(dataset, dataset)
         if dataset == "price":
-            params.update({
+            kwargs: dict[str, object] = {
                 "interval": "1d",
-                "group_by": "ticker",
                 "auto_adjust": False,
                 "prepost": False,
-                "threads": False,
-                "progress": False,
-            })
+            }
             if self._start_date:
-                params["start"] = self._start_date
+                kwargs["start"] = self._start_date
             if self._end_date:
-                params["end"] = self._end_date
+                kwargs["end"] = self._end_date
             if not self._start_date and not self._end_date:
-                params["period"] = "max"
+                kwargs["period"] = "max"
             elif not self._start_date and self._end_date:
-                params["period"] = "max"
-            params["endpoint"] = "download"
+                kwargs["period"] = "max"
+            # Single-ticker history call is preferred over download for stability
+            params["lib"] = {"type": "ticker_attr", "attr": mapped, "kwargs": kwargs}
             return params
         # Default: property access on Ticker (non-price).
-        # No additional request parameters are supported; date filters are not applicable.
-        params["endpoint"] = "ticker"
+        params["lib"] = {"type": "ticker_attr", "attr": mapped, "kwargs": {}}
         return params
     
     # (Batch job removed: we no longer perform bulk downloads for price.)

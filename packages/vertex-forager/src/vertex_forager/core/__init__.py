@@ -19,6 +19,17 @@ if TYPE_CHECKING:
     from vertex_forager.core.pipeline import VertexForager
 
 def __getattr__(name: str) -> Any:
+    """Lazy-import module attributes.
+    
+    Args:
+        name: Attribute name to resolve.
+    
+    Returns:
+        The VertexForager class when name == "VertexForager".
+    
+    Raises:
+        AttributeError: If the requested attribute is not available.
+    """
     if name == "VertexForager":
         from vertex_forager.core.pipeline import VertexForager
         return VertexForager

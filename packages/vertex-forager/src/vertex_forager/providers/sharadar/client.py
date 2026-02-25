@@ -4,9 +4,11 @@ import logging
 from pathlib import Path
 from typing import Any
 from dataclasses import dataclass, field
+from contextlib import nullcontext
 
 import polars as pl
 import duckdb
+import httpx
 
 from vertex_forager.clients.base import BaseClient
 from vertex_forager.core.config import RunResult
@@ -32,6 +34,7 @@ class FetchConfig:
         desc (str): Description text for progress display.
         table_name (str): Destination table name per schema mapper.
         show_progress (bool): Whether to show progress indicators; Spinner/Progress if True.
+        use_progress_bar (bool): Whether to enable tqdm progress bar for this request.
         total_items (int | None): Expected item count (bars/pages/tickers); None if unknown.
         unit (str): Unit label for progress (e.g., "tickers", "pages").
         start_date (str | None): Start date (YYYY-MM-DD) for range datasets.
@@ -44,6 +47,7 @@ class FetchConfig:
     desc: str
     table_name: str
     show_progress: bool = True
+    use_progress_bar: bool = True
     total_items: int | None = None
     unit: str = "tickers"
     start_date: str | None = None
@@ -113,6 +117,7 @@ class SharadarClient(BaseClient):
             desc="Fetching S&P 500 history",
             table_name=DATASET_TABLE["sp500"],
             show_progress=True,
+            use_progress_bar=False,
             total_items=None,
             unit="pages",
             start_date=None,
@@ -316,6 +321,7 @@ class SharadarClient(BaseClient):
                 desc="Fetching tickers metadata",
                 table_name=DATASET_TABLE["tickers"],
                 show_progress=False,
+                use_progress_bar=False,
                 total_items=len(tickers),
                 unit="tickers",
                 start_date=None,
@@ -332,6 +338,7 @@ class SharadarClient(BaseClient):
                 desc="Fetching all tickers metadata",
                 table_name=DATASET_TABLE["tickers"],
                 show_progress=False,
+                use_progress_bar=False,
                 total_items=None,
                 unit="pages",
                 start_date=None,
@@ -345,15 +352,20 @@ class SharadarClient(BaseClient):
         elif connect_db:
             try:
                 table = DATASET_TABLE["tickers"]
+                allowed = set(DATASET_TABLE.values())
+                if table not in allowed:
+                    raise ValueError("Invalid table name for metadata cache query")
+                q_table = f'"{table}"'
                 with duckdb.connect(str(connect_db)) as conn:
                     df_pl = conn.execute(
-                        f"SELECT ticker, firstpricedate, lastpricedate FROM {table}"
+                        f"SELECT ticker, firstpricedate, lastpricedate FROM {q_table}"
                     ).pl()
                 self._metadata_cache = df_pl
             except duckdb.Error as e:
                 logger.error("DuckDB error while loading ticker metadata cache: %s", e)
-            except Exception as e:
-                logger.error("Error while loading ticker metadata cache: %s", e)
+            except Exception:
+                logger.exception("Unexpected error while loading ticker metadata cache")
+                raise
         return result
 
     
@@ -371,107 +383,67 @@ class SharadarClient(BaseClient):
         - Automatic metadata prefetch for optimal performance
         
         Args:
-            dataset: Dataset name (e.g., "price", "fundamental")
-            symbols: List of symbols to fetch, or None for all symbols
-            connect_db: Database connection string/path, or None for in-memory
-            desc: Progress bar description
-            table_name: Table name for result collection
-            show_progress: Whether to show progress indicators
-            total_items: Total number of items (for progress bar)
-            unit: Unit label for progress bar (default: "tickers")
-            start_date: Start date for data fetch
-            end_date: End date for data fetch
-            **kwargs: Additional provider-specific arguments
+            config: FetchConfig object containing all parameters
             
         Returns:
             pl.DataFrame for in-memory mode, RunResult for database mode
         """
-        dataset = config.dataset
         symbols = config.symbols
-        connect_db = config.connect_db
-        desc = config.desc
-        table_name = config.table_name
-        show_progress = config.show_progress
-        unit = config.unit
-        start_date = config.start_date
-        end_date = config.end_date
-        kwargs = dict(config.extra)
 
         if symbols is not None and len(symbols) == 0:
-            if connect_db is not None:
+            if config.connect_db is not None:
                 return RunResult(provider="sharadar")
             return pl.DataFrame()
 
         bytes_per_item = (
-            self.BYTES_PER_TICKER_METADATA if dataset == "tickers" else self.BYTES_PER_TICKER_FULL
+            self.BYTES_PER_TICKER_METADATA if config.dataset == "tickers" else self.BYTES_PER_TICKER_FULL
         )
         validate_memory_usage(
-            symbols=symbols,
-            connect_db=connect_db,
+            symbols=config.symbols,
+            connect_db=config.connect_db,
             bytes_per_item=bytes_per_item,
         )
 
         # Sharadar-specific: Metadata caching for smart batching
-        if self._metadata_cache is None and dataset != "tickers":
+        if self._metadata_cache is None and config.dataset != "tickers":
             logger.info("Metadata cache miss. Fetching ticker metadata first...")
             try:
                 with Spinner("Prefetching metadata for smart batching..."):
                     meta_result = await self._get_ticker_info_impl(tickers=None, connect_db=None)
                     if isinstance(meta_result, pl.DataFrame):
                         self._metadata_cache = meta_result
-                        logger.info(f"Metadata cached: {len(self._metadata_cache)} tickers")
-            except Exception as e:
-                logger.warning(f"Failed to prefetch metadata: {e}. Smart batching will be disabled.")
+                        logger.info("Metadata cached: %d tickers", len(self._metadata_cache))
+            except httpx.RequestError as e:
+                logger.warning("Failed to prefetch metadata: %s. Smart batching will be disabled.", e)
+            except Exception:
+                raise
 
         total_items = (
-            len(symbols) if symbols else (self.ESTIMATED_TOTAL_TICKERS if dataset == "tickers" else None)
+            config.total_items
+            if config.total_items is not None
+            else (
+                len(config.symbols)
+                if config.symbols
+                else (self.ESTIMATED_TOTAL_TICKERS if config.dataset == "tickers" else None)
+            )
         )
 
-        # Use BaseClient's common infrastructure
-        pbar, pbar_updater = self.create_progress_tracker(
+        router_kwargs = {
+            "start_date": config.start_date,
+            "end_date": config.end_date,
+        }
+        pipeline_kwargs = dict(config.extra)
+
+        result_obj = await self._run_sharadar_pipeline(
+            config=config,
             total_items=total_items,
-            unit=unit,
-            desc=desc,
-            show_progress=show_progress,
+            router_kwargs=router_kwargs,
+            pipeline_kwargs=pipeline_kwargs,
         )
-        
-        result_obj: pl.DataFrame | RunResult = (
-            RunResult(provider="sharadar") if connect_db is not None else pl.DataFrame()
-        )
-        try:
-            async with self.managed_writer(connect_db, show_progress=show_progress) as writer:
-                router = create_router(
-                    "sharadar",
-                    api_key=self.api_key,  # type: ignore[arg-type]
-                    config=self._config,
-                    start_date=start_date,
-                    end_date=end_date,
-                    ticker_metadata=self._metadata_cache,
-                    **kwargs,
-                )
-                
-                await self.run_pipeline(
-                    router=router,
-                    dataset=dataset,
-                    symbols=symbols,
-                    writer=writer,
-                    mapper=self._mapper,
-                    on_progress=pbar_updater,
-                    **kwargs,
-                )
-                
-                result_obj = await self.collect_results(
-                    writer=writer,
-                    table_name=table_name,
-                    connect_db=connect_db,
-                )
-                
-                if dataset == "tickers" and isinstance(result_obj, pl.DataFrame):
-                    logger.debug("Caching full metadata from explicit get_ticker_info() call.")
-                    self._metadata_cache = result_obj
-        finally:
-            if pbar is not None:
-                pbar.close()
+
+        if config.dataset == "tickers" and isinstance(result_obj, pl.DataFrame):
+            logger.debug("Caching full metadata from explicit get_ticker_info() call.")
+            self._metadata_cache = result_obj
         return result_obj
 
     async def _fetch_pagination(self, config: "FetchConfig") -> pl.DataFrame | RunResult:
@@ -499,66 +471,62 @@ class SharadarClient(BaseClient):
             pl.DataFrame for in-memory mode, RunResult for database mode
         """
 
-        dataset = config.dataset
-        connect_db = config.connect_db
-        desc = config.desc
-        table_name = config.table_name
-        show_progress = config.show_progress
-        unit = config.unit
-        kwargs = dict(config.extra)
+        router_kwargs = {
+            "start_date": config.start_date,
+            "end_date": config.end_date,
+        }
+        pipeline_kwargs = dict(config.extra)
 
-        use_pbar = show_progress and dataset not in ("sp500", "tickers")
-        if use_pbar:
-            pbar, pbar_updater = self.create_progress_tracker(
-                total_items=None,
-                unit=unit,
-                desc=desc,
-                show_progress=True,
-            )
-        else:
-            pbar, pbar_updater = None, None
-        
-        result_obj: pl.DataFrame | RunResult = (
-            RunResult(provider="sharadar") if connect_db is not None else pl.DataFrame()
+        result_obj = await self._run_sharadar_pipeline(
+            config=config,
+            total_items=None,
+            router_kwargs=router_kwargs,
+            pipeline_kwargs=pipeline_kwargs,
+        )
+        return result_obj
+
+    async def _run_sharadar_pipeline(
+        self,
+        *,
+        config: "FetchConfig",
+        total_items: int | None,
+        router_kwargs: dict[str, object],
+        pipeline_kwargs: dict[str, object],
+    ) -> pl.DataFrame | RunResult:
+        pbar, pbar_updater = self.create_progress_tracker(
+            total_items=total_items,
+            unit=config.unit,
+            desc=config.desc,
+            show_progress=config.show_progress and config.use_progress_bar,
         )
         try:
-            async with self.managed_writer(connect_db, show_progress=show_progress) as writer:
+            async with self.managed_writer(config.connect_db, show_progress=config.show_progress) as writer:
                 router = create_router(
                     "sharadar",
                     api_key=self.api_key,  # type: ignore[arg-type]
                     config=self._config,
                     ticker_metadata=self._metadata_cache,
-                    **kwargs,
+                    **router_kwargs,
                 )
-                
-                if use_pbar:
-                    with Spinner(desc, persist=True):
-                        await self.run_pipeline(
-                            router=router,
-                            dataset=dataset,
-                            symbols=None,
-                            writer=writer,
-                            mapper=self._mapper,
-                            on_progress=pbar_updater,
-                            **kwargs,
-                        )
-                else:
+
+                spinner_ctx = Spinner(config.desc, persist=True) if (config.show_progress and config.use_progress_bar) else nullcontext()
+                with spinner_ctx:
                     await self.run_pipeline(
                         router=router,
-                        dataset=dataset,
-                        symbols=None,
+                        dataset=config.dataset,
+                        symbols=config.symbols,
                         writer=writer,
                         mapper=self._mapper,
                         on_progress=pbar_updater,
-                        **kwargs,
+                        **pipeline_kwargs,
                     )
-                
+
                 result_obj = await self.collect_results(
                     writer=writer,
-                    table_name=table_name,
-                    connect_db=connect_db,
+                    table_name=config.table_name,
+                    connect_db=config.connect_db,
                 )
+                return result_obj
         finally:
             if pbar is not None:
                 pbar.close()
-        return result_obj

@@ -132,7 +132,6 @@ YFINANCE_RECOMMENDATIONS_SCHEMA = TableSchema(
     schema={
         "provider": pl.Utf8,
         "period": pl.Utf8,
-        "date": pl.Int64,
         "strongbuy": pl.Int64,
         "buy": pl.Int64,
         "hold": pl.Int64,
@@ -141,8 +140,8 @@ YFINANCE_RECOMMENDATIONS_SCHEMA = TableSchema(
         "ticker": pl.Utf8,
         "fetched_at": pl.Datetime(time_zone="UTC"),
     },
-    unique_key=("provider", "ticker", "period", "date"),
-    analysis_date_col="date",
+    unique_key=("provider", "ticker", "period"),
+    analysis_date_col=None,
 )
 
 # News
@@ -204,10 +203,10 @@ YFINANCE_MAJOR_HOLDERS_SCHEMA = TableSchema(
     schema={
         "provider": pl.Utf8,
         "ticker": pl.Utf8,
-        "insidersPercentHeld": pl.Float64,
-        "institutionsCount": pl.Float64,
-        "institutionsFloatPercentHeld": pl.Float64,
-        "institutionsPercentHeld": pl.Float64,
+        "insiders_percent_held": pl.Float64,
+        "institutions_count": pl.Float64,
+        "institutions_float_percent_held": pl.Float64,
+        "institutions_percent_held": pl.Float64,
         "fetched_at": pl.Datetime(time_zone="UTC"),
     },
     unique_key=("provider", "ticker"),
@@ -401,3 +400,29 @@ TABLES: Final[dict[str, TableSchema]] = {
         YFINANCE_INSIDER_PURCHASES_SCHEMA,
     ]
 }
+
+def _validate_mappings() -> None:
+    keys_table = set(DATASET_TABLE.keys())
+    keys_schema = set(DATASET_SCHEMA.keys())
+    keys_endpoint = set(DATASET_ENDPOINT.keys())
+    keys_date_filter = set(DATE_FILTER_COL.keys())
+    union = set().union(keys_table, keys_schema, keys_endpoint)
+    errors: list[str] = []
+    for name, keys in [
+        ("DATASET_TABLE", keys_table),
+        ("DATASET_SCHEMA", keys_schema),
+        ("DATASET_ENDPOINT", keys_endpoint),
+    ]:
+        if keys != union:
+            missing = sorted(union - keys)
+            extra = sorted(keys - union)
+            errors.append(f"{name}: missing={missing}, extra={extra}")
+    if not keys_date_filter.issubset(union):
+        missing = sorted(keys_date_filter - union)
+        errors.append(f"DATE_FILTER_COL must be subset of datasets; extra={missing}")
+    if errors:
+        raise RuntimeError(
+            "YFinance schema mapping keys inconsistent: " + "; ".join(errors)
+        )
+
+_validate_mappings()

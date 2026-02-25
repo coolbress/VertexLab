@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import polars as pl
+import logging
 
 from vertex_forager.clients.base import BaseClient
 from vertex_forager.core.config import RunResult
@@ -11,6 +12,7 @@ from vertex_forager.routers import create_router
 from vertex_forager.utils import jupyter_safe, validate_memory_usage
 from vertex_forager.schema.mapper import SchemaMapper
 
+logger = logging.getLogger(__name__)
 
 class YFinanceClient(BaseClient):
     """Client for Yahoo Finance datasets via yfinance.
@@ -37,11 +39,9 @@ class YFinanceClient(BaseClient):
         rate_limit: int = 60,
         **kwargs: Any,
     ) -> None:
-        super().__init__(
-            api_key=None,
-            rate_limit=60,
-            **kwargs,
-        )
+        if rate_limit > 60:
+            logger.warning("YFinance rate_limit %d exceeds 60; API may throttle.", rate_limit)
+        super().__init__(api_key=None, rate_limit=rate_limit, **kwargs)
         self._mapper = SchemaMapper()
         
         

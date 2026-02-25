@@ -49,6 +49,8 @@ def validate_memory_usage(
         return
     if symbols is None:
         return
+    if not isinstance(bytes_per_item, int) or bytes_per_item <= 0:
+        raise ValueError("bytes_per_item must be a positive integer")
     num_items = len(symbols)
     estimated_size = num_items * bytes_per_item
     available_memory = psutil.virtual_memory().available
@@ -185,7 +187,7 @@ class Spinner:
             ip = None
         except Exception as e:
             logger.error("Unexpected error during notebook detection: %s", e)
-            raise
+            ip = None
         self._is_notebook = bool(ip and ip.__class__.__name__ == "ZMQInteractiveShell")
         self._widget_label: object | None = None
 
@@ -263,7 +265,8 @@ class Spinner:
         if self._is_notebook:
             if self.update_thread:
                 try:
-                    self.update_thread.join(timeout=0.2)
+                    timeout = min(max(self.delay + 0.1, 0.1), 2.0)
+                    self.update_thread.join(timeout=timeout)
                 except Exception:
                     pass
             if self._widget_label:
@@ -277,7 +280,8 @@ class Spinner:
         elif self._is_tty:
             if self.update_thread:
                 try:
-                    self.update_thread.join(timeout=0.2)
+                    timeout = min(max(self.delay + 0.1, 0.1), 2.0)
+                    self.update_thread.join(timeout=timeout)
                 except Exception:
                     pass
             if self.persist:

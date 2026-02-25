@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import sys
 from abc import ABC
 import warnings
 import asyncio
@@ -204,7 +203,16 @@ class BaseClient(ABC):
             run_kwargs = kwargs.copy()
 
             with warnings.catch_warnings():
-                warnings.simplefilter("ignore", category=FutureWarning)
+                warnings.filterwarnings(
+                    "ignore",
+                    category=FutureWarning,
+                    module=r"pandas(\.|$)",
+                )
+                warnings.filterwarnings(
+                    "ignore",
+                    category=FutureWarning,
+                    module=r"yfinance(\.|$)",
+                )
                 self.last_run = await pipeline.run(
                     dataset=dataset, symbols=symbols, on_progress=on_progress, **run_kwargs
                 )
@@ -254,24 +262,27 @@ class BaseClient(ABC):
                 # Use writer for data collection
                 result = await self.run_pipeline(..., writer=writer)
         """
-        stack = AsyncExitStack()
-        await stack.__aenter__()
-        writer = await stack.enter_async_context(create_writer(connect_db))
-        try:
-            yield writer
-        except BaseException:
-            await stack.__aexit__(*sys.exc_info())
-            raise
+        if show_progress:
+            with Spinner("Finalizing database writes..."):
+                async with AsyncExitStack() as stack:
+                    writer = await stack.enter_async_context(create_writer(connect_db))
+                    try:
+                        yield writer
+                    finally:
+                        run = self.last_run
+                        if run and run.errors:
+                            for err in run.errors:
+                                logger.error("%s", err)
         else:
-            if show_progress:
-                with Spinner("Finalizing database writes..."):
-                    await stack.__aexit__(None, None, None)
-            else:
-                await stack.__aexit__(None, None, None)
-            run = self.last_run
-            if run and run.errors:
-                for err in run.errors:
-                    logger.error("%s", err)
+            async with AsyncExitStack() as stack:
+                writer = await stack.enter_async_context(create_writer(connect_db))
+                try:
+                    yield writer
+                finally:
+                    run = self.last_run
+                    if run and run.errors:
+                        for err in run.errors:
+                            logger.error("%s", err)
 
     def create_progress_tracker(
         self,
