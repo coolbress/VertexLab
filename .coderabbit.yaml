@@ -2,6 +2,7 @@ language: "ko-KR"
 
 reviews:
    profile: "assertive" # 엄격한 품질 및 성능 검토
+   review_details: true
    suggested_reviewers: true
    auto_assign_reviewers: true
    path_filters:
