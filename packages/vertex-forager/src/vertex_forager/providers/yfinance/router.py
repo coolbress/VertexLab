@@ -154,13 +154,16 @@ class YFinanceRouter(BaseRouter):
         
         # -------- Build Per-Symbol Jobs --------
         
-        # Create 1 job per ticker to leverage FlowController granularly
+        # Normalize symbols first, then validate
+        cleaned: list[str] = []
         for symbol in symbols:
-            if not isinstance(symbol, str):
-                continue
-            clean = symbol.strip()
-            if not clean:
-                continue
+            if isinstance(symbol, str):
+                clean = symbol.strip()
+                if clean:
+                    cleaned.append(clean)
+        if not cleaned:
+            raise ValueError("YFinanceRouter: no valid symbols provided")
+        for clean in cleaned:
             yield self._build_single_symbol_job(symbol=clean, dataset=dataset)
 
     def parse(self, *, job: FetchJob, payload: bytes) -> ParseResult:

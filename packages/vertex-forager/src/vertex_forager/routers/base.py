@@ -186,7 +186,10 @@ class BaseRouter(ABC):
             pl.DataFrame: DataFrame with standardized column names.
         """
         import re
-        normalized = [re.sub(r"[^0-9a-zA-Z]+", "_", c).lower().strip("_") for c in frame.columns]
+        normalized = [
+            (re.sub(r"[^0-9a-zA-Z]+", "_", c).lower().strip("_") or "column")
+            for c in frame.columns
+        ]
         seen: dict[str, int] = {}
         unique_names: list[str] = []
         for name in normalized:

@@ -454,26 +454,16 @@ class SharadarClient(BaseClient):
     async def _fetch_pagination(self, config: "FetchConfig") -> pl.DataFrame | RunResult:
         """Fetch full dataset via pagination (e.g., SP500, All Tickers).
         
-        This method implements the pagination fetching pattern using BaseClient's
-        common infrastructure while maintaining Sharadar-specific logic for
-        large dataset handling.
-        
-        Sharadar-specific characteristics:
-        - Memory validation for large dataset safety
-        - Pagination-based request scheduling
-        - Optimized for bulk data fetching
+        This method implements pagination using BaseClient infrastructure with
+        Sharadar-specific handling for large datasets.
         
         Args:
-            dataset: Dataset name (e.g., "sp500", "tickers")
-            connect_db: Database connection string/path, or None for in-memory
-            desc: Progress bar description
-            table_name: Table name for result collection
-            show_progress: Whether to show progress indicators
-            unit: Unit label for progress bar (default: "pages")
-            **kwargs: Additional provider-specific arguments
-            
+            config: FetchConfig containing dataset, symbols, connect_db, desc,
+                table_name, show_progress, use_progress_bar, total_items, unit,
+                start_date, end_date, and extra.
+        
         Returns:
-            pl.DataFrame for in-memory mode, RunResult for database mode
+            pl.DataFrame for in-memory mode, RunResult for database mode.
         """
 
         router_kwargs = {
