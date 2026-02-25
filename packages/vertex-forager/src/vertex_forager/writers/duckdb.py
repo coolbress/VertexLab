@@ -171,11 +171,15 @@ class DuckDBWriter(BaseWriter):
                 frames = [p.frame for _, p in entries]
                 try:
                     merged_df = pl.concat(frames, how="vertical")
-                except Exception:
+                except pl.exceptions.PolarsError as e:
                     provider = entries[0][1].provider
                     if provider != "yfinance":
                         raise
-                    self._logger.warning(f"WRITER: Schema mismatch detected for {table_name}, falling back to diagonal concat")
+                    self._logger.warning(
+                        "WRITER: Schema mismatch for %s: %s. Falling back to diagonal concat",
+                        table_name,
+                        e,
+                    )
                     merged_df = pl.concat(frames, how="diagonal")
                 pk_cols = self._get_primary_keys(table_name)
                 if pk_cols:

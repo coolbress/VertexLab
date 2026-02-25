@@ -72,7 +72,7 @@ class YFinanceRouter(BaseRouter):
             **kwargs: Additional arguments.
         """
         self._api_key = None
-        self._rate_limit = 60
+        self._rate_limit = rate_limit if isinstance(rate_limit, int) and rate_limit > 0 else 60
         self._start_date = start_date
         self._end_date = end_date
         raw_bs = kwargs.get("price_batch_size", self.PRICE_BATCH_SIZE)
@@ -243,7 +243,7 @@ class YFinanceRouter(BaseRouter):
         
         except (pickle.UnpicklingError, ValueError, TypeError):
             logger.exception("parse failed for job %s", job)
-            return ParseResult(packets=[], next_jobs=[])
+            raise
         except Exception:
             logger.exception("Unexpected error in parse for job %s", job)
             raise
@@ -413,6 +413,15 @@ class YFinanceRouter(BaseRouter):
                 df = df.pivot(index="_row", columns="metric", values="value").drop("_row")
                 if "ticker" in frame.columns and "ticker" not in df.columns:
                     df = df.with_columns(pl.lit(frame["ticker"][0]).alias("ticker"))
+                rename_map = {
+                    "Insiders Percent Held": "insiders_percent_held",
+                    "Institutions Count": "institutions_count",
+                    "Institutions Float Percent Held": "institutions_float_percent_held",
+                    "Institutions Percent Held": "institutions_percent_held",
+                }
+                present = {k: v for k, v in rename_map.items() if k in df.columns}
+                if present:
+                    df = df.rename(present)
                 return df
         return frame
     

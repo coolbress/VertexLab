@@ -53,24 +53,13 @@ class TestYFinanceRouterUnit:
             assert job.spec.url == f"yfinance://{sym}"
             assert job.context.get("is_batch") is not True
 
-    def test_parse_returns_frame_for_price_dataset(self, yfinance_router: YFinanceRouter) -> None:
+    def test_parse_returns_frame_for_price_dataset(self, yfinance_router: YFinanceRouter, yf_price_df: pd.DataFrame) -> None:
         """Verify parse returns a populated frame for price payload.
         
         Returns:
             None
         """
-        data = pd.DataFrame(
-            {
-                "date": pd.to_datetime(["2024-01-02", "2024-01-03"]),
-                "open": [100.0, 101.0],
-                "high": [101.0, 102.0],
-                "low": [99.5, 100.0],
-                "close": [100.5, 101.5],
-                "volume": [123.0, 456.0],
-                "ticker": ["AAPL", "AAPL"],
-            }
-        )
-        payload = pickle.dumps(data)
+        payload = pickle.dumps(yf_price_df)
         job = FetchJob(
             provider="yfinance",
             dataset="price",
@@ -86,7 +75,7 @@ class TestYFinanceRouterUnit:
         assert packet.table == "yfinance_price"
         assert isinstance(packet.frame, pl.DataFrame)
         assert packet.frame.height == 2
-        assert set(["date", "open", "close", "ticker"]).issubset(set(packet.frame.columns))
+        assert {"date", "open", "close", "ticker"}.issubset(set(packet.frame.columns))
 
     def test_parse_handles_empty_dataframe(self, yfinance_router: YFinanceRouter) -> None:
         """Verify parse returns zero packets for empty DataFrame payload.

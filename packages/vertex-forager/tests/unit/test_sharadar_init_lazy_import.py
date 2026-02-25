@@ -24,15 +24,14 @@ class TestSharadarInitLazyExport:
         with pytest.raises(AttributeError):
             getattr(mod, "DoesNotExist")
 
-    def test_modules_not_prematurely_imported(self) -> None:
-        sys.modules.pop("vertex_forager.providers.sharadar.client", None)
-        sys.modules.pop("vertex_forager.providers.sharadar.router", None)
+    def test_modules_not_prematurely_imported(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delitem(sys.modules, "vertex_forager.providers.sharadar.client", raising=False)
+        monkeypatch.delitem(sys.modules, "vertex_forager.providers.sharadar.router", raising=False)
         assert "vertex_forager.providers.sharadar.client" not in sys.modules
         assert "vertex_forager.providers.sharadar.router" not in sys.modules
         mod = importlib.import_module("vertex_forager.providers.sharadar")
         for attr in ("SharadarClient", "SharadarRouter"):
-            if attr in mod.__dict__:
-                del mod.__dict__[attr]
+            monkeypatch.delitem(mod.__dict__, attr, raising=False)
         _ = getattr(mod, "SharadarClient")
         _ = getattr(mod, "SharadarRouter")
         assert "vertex_forager.providers.sharadar.client" in sys.modules

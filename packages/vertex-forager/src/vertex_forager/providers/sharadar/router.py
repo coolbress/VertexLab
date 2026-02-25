@@ -118,7 +118,7 @@ class SharadarRouter(BaseRouter):
             # Check required columns
             required = {"ticker", "firstpricedate", "lastpricedate"}
             if not required.issubset(df.columns):
-                logger.warning(f"Metadata missing required columns {required}. Smart batching disabled.")
+                logger.warning("Metadata missing required columns %s. Smart batching disabled.", required)
                 return
 
             # Normalize date types for reliable comparison
@@ -145,10 +145,10 @@ class SharadarRouter(BaseRouter):
             starts = valid_df.get_column("firstpricedate").to_list()
             ends = valid_df.get_column("lastpricedate").to_list()
             self._ticker_ranges = {t: (s, e) for t, s, e in zip(tickers, starts, ends)}
-            logger.debug(f"Processed metadata for {len(self._ticker_ranges)} tickers.")
+            logger.debug("Processed metadata for %d tickers.", len(self._ticker_ranges))
             
         except (KeyError, TypeError, ValueError, PolarsError) as e:
-            logger.warning(f"Failed to process ticker metadata: {e}. Smart batching disabled.")
+            logger.warning("Failed to process ticker metadata: %s. Smart batching disabled.", e)
             self._ticker_ranges = None
 
     # --------------------------------------------------------------------------
@@ -324,6 +324,11 @@ class SharadarRouter(BaseRouter):
                         meta = {}
 
             # Extract column names from datatable structure
+            if "datatable" not in json_df.columns:
+                raise ValueError("Missing datatable in Sharadar response")
+            dt_col = json_df.get_column("datatable")
+            if dt_col.is_null().all():
+                raise ValueError("Missing datatable in Sharadar response")
             cols_val = json_df.select(pl.col("datatable").struct.field("columns")).item(0, 0)
             if isinstance(cols_val, pl.Series):
                 cols_list = cols_val.to_list()
@@ -346,7 +351,9 @@ class SharadarRouter(BaseRouter):
         except (pl.exceptions.PolarsError, ValueError, TypeError, json.JSONDecodeError) as e:
             # Fallback to standard JSON parsing if Polars fails
             logger.warning(
-                f"Polars JSON parse failed for {job.dataset}, falling back to json.loads. Error: {e}",
+                "Polars JSON parse failed for %s, falling back to json.loads. Error: %s",
+                job.dataset,
+                e,
                 exc_info=True,
             )
             decoded = self._decode_payload(payload)
@@ -571,13 +578,21 @@ class SharadarRouter(BaseRouter):
         Returns:
             int: The calculated batch size (number of tickers per request).
         """
-        # If no date range provided, assume full history -> strict batching
+        # If no date range provided, estimate full history days and compute batch size.
+        # Conservative cap applied to avoid overly small batches for long histories.
         if not self._start_date:
-            return self.MIN_BATCH_SIZE
+            est_days = min(30 * 252, 10_000)  # ~30 years of trading days capped
+            rows_per_ticker = self._calculate_rows_per_ticker(est_days, dataset)
+            batch_size = self.MAX_ROWS_PER_REQUEST // max(1, rows_per_ticker)
+            # Clamp between MIN and DEFAULT to avoid extremes.
+            clamped = max(self.MIN_BATCH_SIZE, min(self.DEFAULT_BATCH_SIZE, batch_size))
+            # Extremely large histories may still warrant MIN_BATCH_SIZE; keep conservative bound.
+            return clamped
             
         # Use BaseRouter helper to parse date range
         date_range = self._parse_date_range(self._start_date, self._end_date)
         if date_range is None:
+            # Default to conservative minimal batch when range parsing fails.
             return self.MIN_BATCH_SIZE
             
         start, end = date_range

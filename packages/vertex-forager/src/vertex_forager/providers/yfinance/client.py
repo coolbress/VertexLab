@@ -41,7 +41,7 @@ class YFinanceClient(BaseClient):
     ) -> None:
         if rate_limit > 60:
             logger.warning("YFinance rate_limit %d exceeds 60; API may throttle.", rate_limit)
-        super().__init__(api_key=None, rate_limit=rate_limit, **kwargs)
+        super().__init__(api_key=api_key, rate_limit=rate_limit, **kwargs)
         self._mapper = SchemaMapper()
         
         
@@ -103,6 +103,7 @@ class YFinanceClient(BaseClient):
             connect_db: Database connection string.
             start_date: Start date (YYYY-MM-DD). If None, fetches all available history.
             end_date: End date (YYYY-MM-DD). If None, fetches up to latest available date.
+            **kwargs: Additional provider-specific options forwarded to the pipeline/executor.
         
         Returns:
             Polars DataFrame in memory or RunResult when persisting.
@@ -139,7 +140,7 @@ class YFinanceClient(BaseClient):
         
         Args:
             kind: Type of financial statement ('balance_sheet', 'income_stmt', 'cashflow', 'earnings').
-            period: Reporting period ('annual' or 'quarterly').
+            period: Reporting period ('annual' or 'quarterly'). For 'earnings', quarterly is deprecated.
             tickers: List of ticker symbols.
             connect_db: Optional DuckDB connection string.
         
@@ -148,19 +149,15 @@ class YFinanceClient(BaseClient):
         
         Notes:
             - yfinance provides only recent periods for financials (e.g., last few years/quarters).
-            - Date filters (start/end) are not applicable to financials/earnings endpoints.
-            - Financial endpoints do not accept date parameters; start/end/period are ignored. Only a fixed recent set of periods is available (no full-history).
+            - Date filters (start/end) are not applicable to financials endpoints.
+            - Period selects quarterly vs annual datasets. yfinance no longer supports 'quarterly_earnings'.
             - For full historical coverage, prefer institutional sources like Sharadar SF1 (ARY/ARQ).
         """
-        # Map 'income_stmt' to 'financials' if needed, or keep consistent with yfinance
-        # yfinance uses 'financials' property for income statement.
-        # But we can support 'income_stmt' alias for clarity.
-        target_kind = "financials" if kind == "income_stmt" else kind
-        
-        if period == "quarterly":
-            dataset = f"quarterly_{target_kind}"
-        else:
-            dataset = target_kind
+        # Map 'income_stmt' alias to 'financials' and prevent deprecated quarterly_earnings.
+        target_kind = "financials" if kind in ("income_stmt", "earnings") else kind
+        if kind == "earnings" and period == "quarterly":
+            raise ValueError("quarterly_earnings is deprecated in yfinance; use income_stmt with period='quarterly'.")
+        dataset = f"quarterly_{target_kind}" if period == "quarterly" else target_kind
         return await self._fetch_per_ticker(
             dataset=dataset,
             symbols=tickers,
@@ -506,7 +503,30 @@ class YFinanceClient(BaseClient):
         Returns:
             pl.DataFrame for in-memory mode, RunResult for database mode
         """
-        bytes_per_item = 30 * 1024 if dataset == "info" else 500 * 1024
+        if not symbols or len(symbols) == 0:
+            raise ValueError("tickers list cannot be empty")
+        size_map: dict[str, int] = {
+            "info": 30 * 1024,
+            "price": 600 * 1024,
+            "financials": 200 * 1024,
+            "quarterly_financials": 220 * 1024,
+            "balance_sheet": 180 * 1024,
+            "quarterly_balance_sheet": 200 * 1024,
+            "cashflow": 180 * 1024,
+            "quarterly_cashflow": 200 * 1024,
+            "earnings": 120 * 1024,
+            "dividends": 40 * 1024,
+            "splits": 40 * 1024,
+            "major_holders": 50 * 1024,
+            "institutional_holders": 80 * 1024,
+            "mutualfund_holders": 80 * 1024,
+            "insider_roster_holders": 80 * 1024,
+            "insider_purchases": 120 * 1024,
+            "recommendations": 100 * 1024,
+            "calendar": 24 * 1024,
+            "news": 300 * 1024,
+        }
+        bytes_per_item = size_map.get(dataset, 200 * 1024)
         validate_memory_usage(
             symbols=symbols,
             connect_db=connect_db,
@@ -532,7 +552,7 @@ class YFinanceClient(BaseClient):
                     config=self._config,
                     start_date=start_date,
                     end_date=end_date,
-                    **kwargs,
+                    **{k: v for k, v in kwargs.items() if k in {"price_batch_size"}},
                 )
                 
                 await self.run_pipeline(
@@ -542,7 +562,7 @@ class YFinanceClient(BaseClient):
                     writer=writer,
                     mapper=self._mapper,
                     on_progress=pbar_updater,
-                    **kwargs,
+                    **{k: v for k, v in kwargs.items() if k not in {"router","dataset","symbols","writer","mapper","on_progress","price_batch_size"}},
                 )
                 
                 result_obj = await self.collect_results(

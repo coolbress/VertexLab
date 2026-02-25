@@ -530,9 +530,10 @@ class VertexForager:
                 schema = get_table_schema(packets[0].table)
                 if schema and schema.unique_key:
                     for col in schema.unique_key:
-                        if col in merged_frame.columns:
-                            if merged_frame.get_column(col).null_count() > 0:
-                                raise ValueError(f"PKNull:{packets[0].table}:{col}")
+                        if col not in merged_frame.columns:
+                            raise ValueError(f"PKMissing:{packets[0].table}:{col}")
+                        if merged_frame.get_column(col).null_count() > 0:
+                            raise ValueError(f"PKNull:{packets[0].table}:{col}")
 
                 # Create merged packet (use metadata from the first packet)
                 first = packets[0]

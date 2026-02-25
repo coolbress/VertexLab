@@ -233,7 +233,6 @@ YFINANCE_INSIDER_ROSTER_SCHEMA = TableSchema(
     schema={
         "provider": pl.Utf8,
         "ticker": pl.Utf8,
-        "date": pl.Date,
         "name": pl.Utf8,
         "position": pl.Utf8,
         "url": pl.Utf8,
@@ -243,7 +242,7 @@ YFINANCE_INSIDER_ROSTER_SCHEMA = TableSchema(
         "position_direct_date": pl.Datetime(time_zone="UTC"),
         "fetched_at": pl.Datetime(time_zone="UTC"),
     },
-    unique_key=("provider", "ticker", "name", "position", "date", "latest_transaction_date"),
+    unique_key=("provider", "ticker", "name", "position", "latest_transaction_date"),
     analysis_date_col="latest_transaction_date",
 )
 
@@ -268,7 +267,7 @@ DATASET_ENDPOINT: Final[dict[str, str]] = {
     "major_holders": "major_holders",
     "institutional_holders": "institutional_holders",
     "mutualfund_holders": "mutualfund_holders",
-    "insider_roster_holders": "insider_roster",
+    "insider_roster_holders": "insider_roster_holders",
     "insider_purchases": "insider_purchases",
     "recommendations": "recommendations",
     "calendar": "calendar",

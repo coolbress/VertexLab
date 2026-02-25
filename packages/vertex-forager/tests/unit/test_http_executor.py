@@ -18,6 +18,7 @@ from httpx import Response
 
 from vertex_forager.core.config import RequestSpec, HttpMethod, RequestAuth
 from vertex_forager.core.http import HttpExecutor
+import pickle
 
 
 class TestHttpExecutor:
@@ -238,6 +239,92 @@ class TestHttpExecutor:
         # Assert
         assert result == b""
 
+class TestHttpExecutorYFinance:
+    """Tests for yfinance:// library branch behavior."""
+    @pytest.fixture
+    def http_executor(self, mock_async_client: AsyncMock) -> HttpExecutor:
+        return HttpExecutor(client=mock_async_client)
+
+    @pytest.mark.asyncio
+    async def test_fetch_yfinance_ticker_attr_success(
+        self,
+        http_executor: HttpExecutor,
+        mock_async_client: AsyncMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        class DummyTicker:
+            def __init__(self, symbol: str) -> None:
+                self.symbol = symbol
+            def info(self) -> dict[str, str]:
+                return {"ok": "yes"}
+        class DummyYF:
+            def __init__(self) -> None:
+                pass
+            def Ticker(self, sym: str) -> DummyTicker:  # type: ignore[override]
+                return DummyTicker(sym)
+        monkeypatch.setattr("vertex_forager.core.http.yf", DummyYF())
+        mock_async_client.run_sync = AsyncMock(side_effect=lambda func: func())
+        spec = RequestSpec(
+            method=HttpMethod.GET,
+            url="yfinance://AAPL",
+            params={"dataset": "info", "lib": {"type": "ticker_attr", "attr": "info", "kwargs": {}}},
+        )
+        result = await http_executor.fetch(spec)
+        assert result == pickle.dumps({"ok": "yes"})
+        mock_async_client.run_async.assert_not_called()
+        assert mock_async_client.run_sync.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_fetch_yfinance_download_success(
+        self,
+        http_executor: HttpExecutor,
+        mock_async_client: AsyncMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        class DummyYF:
+            def download(self, **kwargs: object) -> str:  # type: ignore[override]
+                return "downloaded"
+        monkeypatch.setattr("vertex_forager.core.http.yf", DummyYF())
+        mock_async_client.run_sync = AsyncMock(side_effect=lambda func: func())
+        spec = RequestSpec(
+            method=HttpMethod.GET,
+            url="yfinance://AAPL",
+            params={"dataset": "price", "lib": {"type": "download", "kwargs": {"period": "1d"}}},
+        )
+        result = await http_executor.fetch(spec)
+        assert result == pickle.dumps("downloaded")
+        mock_async_client.run_async.assert_not_called()
+        assert mock_async_client.run_sync.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_fetch_yfinance_raises_on_unknown_call_type(
+        self,
+        http_executor: HttpExecutor,
+        mock_async_client: AsyncMock,
+    ) -> None:
+        mock_async_client.run_sync = AsyncMock(side_effect=lambda func: func())
+        spec = RequestSpec(
+            method=HttpMethod.GET,
+            url="yfinance://AAPL",
+            params={"dataset": "price", "lib": {"type": "unknown", "kwargs": {}}},
+        )
+        with pytest.raises(ValueError):
+            await http_executor.fetch(spec)
+
+    @pytest.mark.asyncio
+    async def test_fetch_unsupported_library_scheme_raises(
+        self,
+        http_executor: HttpExecutor,
+        mock_async_client: AsyncMock,
+    ) -> None:
+        mock_async_client.run_sync = AsyncMock(side_effect=lambda func: func())
+        spec = RequestSpec(
+            method=HttpMethod.GET,
+            url="ftp://AAPL",
+            params={"dataset": "price", "lib": {"type": "ticker_attr", "attr": "info", "kwargs": {}}},
+        )
+        with pytest.raises(ValueError):
+            await http_executor.fetch(spec)
 
 class TestHttpExecutorConcurrency:
     """Tests for HTTP executor concurrency behavior."""

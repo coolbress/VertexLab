@@ -296,7 +296,7 @@ class Spinner:
                     sys.stderr.flush()
             self._show_cursor()
         else:
-            pass
+            ...
 
     def _clear_line(self) -> None:
         if not self._is_tty:
@@ -367,11 +367,16 @@ class Spinner:
                 # type: ignore[attr-defined]
                 self._widget_label.value = f"{ch} {msg}"
                 failures = 0
-            except Exception:
+            except (AttributeError, RuntimeError) as e:
+                logging.getLogger(__name__).error("%s", e)
                 failures += 1
                 if failures >= 3:
                     self.busy = False
                     break
+            except Exception as e:
+                logging.getLogger(__name__).exception("Unexpected notebook widget update error: %s", e)
+                self.busy = False
+                break
             time.sleep(self.delay)
 
 

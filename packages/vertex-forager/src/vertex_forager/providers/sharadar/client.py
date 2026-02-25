@@ -409,14 +409,11 @@ class SharadarClient(BaseClient):
             logger.info("Metadata cache miss. Fetching ticker metadata first...")
             try:
                 with Spinner("Prefetching metadata for smart batching..."):
-                    meta_result = await self._get_ticker_info_impl(tickers=None, connect_db=None)
+                    meta_result = await self._get_ticker_info_impl(tickers=None, connect_db=config.connect_db)
                     if isinstance(meta_result, pl.DataFrame):
-                        self._metadata_cache = meta_result
-                        logger.info("Metadata cached: %d tickers", len(self._metadata_cache))
+                        logger.info("Metadata cached: %d tickers", len(meta_result))
             except httpx.RequestError as e:
                 logger.warning("Failed to prefetch metadata: %s. Smart batching will be disabled.", e)
-            except Exception:
-                raise
 
         total_items = (
             config.total_items

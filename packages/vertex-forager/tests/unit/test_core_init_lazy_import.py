@@ -28,5 +28,7 @@ class TestCoreInitLazyImport:
         mod = importlib.import_module("vertex_forager.core")
         if "VertexForager" in mod.__dict__:
             del mod.__dict__["VertexForager"]
+        assert "vertex_forager.core.pipeline" not in sys.modules
+        assert "VertexForager" not in mod.__dict__
         _ = getattr(mod, "VertexForager")
         assert "vertex_forager.core.pipeline" in sys.modules

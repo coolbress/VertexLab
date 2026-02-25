@@ -4,14 +4,14 @@ import logging
 from abc import ABC
 import warnings
 import asyncio
-from contextlib import asynccontextmanager, AsyncExitStack
+from contextlib import asynccontextmanager, AsyncExitStack, nullcontext
 from functools import partial
 from pathlib import Path
 from typing import Any, Callable, AsyncGenerator
 
 import httpx
 import polars as pl
-from tqdm.autonotebook import tqdm as auto_tqdm  # type: ignore
+from tqdm.auto import tqdm
 
 from vertex_forager.core.http import HttpExecutor, default_async_client
 from vertex_forager.core.config import EngineConfig, RunResult
@@ -24,7 +24,6 @@ from vertex_forager.writers.base import BaseWriter
 from vertex_forager.writers import create_writer
 from vertex_forager.utils import Spinner, create_pbar_updater
 
-tqdm = auto_tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -262,27 +261,20 @@ class BaseClient(ABC):
                 # Use writer for data collection
                 result = await self.run_pipeline(..., writer=writer)
         """
-        if show_progress:
-            with Spinner("Finalizing database writes..."):
-                async with AsyncExitStack() as stack:
-                    writer = await stack.enter_async_context(create_writer(connect_db))
-                    try:
-                        yield writer
-                    finally:
-                        run = self.last_run
-                        if run and run.errors:
-                            for err in run.errors:
-                                logger.error("%s", err)
-        else:
-            async with AsyncExitStack() as stack:
-                writer = await stack.enter_async_context(create_writer(connect_db))
-                try:
-                    yield writer
-                finally:
-                    run = self.last_run
-                    if run and run.errors:
-                        for err in run.errors:
-                            logger.error("%s", err)
+        stack = AsyncExitStack()
+        await stack.__aenter__()
+        try:
+            writer = await stack.enter_async_context(create_writer(connect_db))
+            try:
+                yield writer
+            finally:
+                run = self.last_run
+                if run and run.errors:
+                    for err in run.errors:
+                        logger.error("%s", err)
+        finally:
+            with (Spinner("Finalizing database writes...") if show_progress else nullcontext()):
+                await stack.__aexit__(None, None, None)
 
     def create_progress_tracker(
         self,
