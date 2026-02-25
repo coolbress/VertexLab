@@ -18,6 +18,7 @@ from vertex_forager.core.config import (
     RequestSpec,
 )
 from vertex_forager.routers.base import BaseRouter
+from polars.exceptions import PolarsError
 from vertex_forager.providers.sharadar.schema import (
     DATASET_SCHEMA,
     DATASET_TABLE,
@@ -132,7 +133,7 @@ class SharadarRouter(BaseRouter):
             self._ticker_ranges = {t: (s, e) for t, s, e in zip(tickers, starts, ends)}
             logger.debug(f"Processed metadata for {len(self._ticker_ranges)} tickers.")
             
-        except Exception as e:
+        except (KeyError, TypeError, ValueError, PolarsError) as e:
             logger.warning(f"Failed to process ticker metadata: {e}. Smart batching disabled.")
             self._ticker_ranges = None
 

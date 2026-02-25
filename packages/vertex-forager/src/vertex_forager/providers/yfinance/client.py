@@ -13,17 +13,21 @@ from vertex_forager.schema.mapper import SchemaMapper
 
 
 class YFinanceClient(BaseClient):
-    """YFinance client implementation.
-
-    Provides access to Yahoo Finance data via the unofficial API.
-    All methods use the VertexForager pipeline (Router -> HttpExecutor -> Writer)
-    to ensure consistent rate limiting, logging, and error handling.
-
-    Characteristics:
-        - Free API: No authentication required.
-        - Rate Limiting: Default is 60 requests per minute to avoid IP bans.
-        - Data Quality: Real-time data may be delayed; historical data accuracy is best-effort.
-        - Limitations: Financial statements (annual/quarterly) expose only recent periods; full historical coverage is not provided.
+    """Client for Yahoo Finance datasets via yfinance.
+    
+    This client integrates yfinance with the VertexForager pipeline to provide
+    consistent rate limiting, logging, and error handling across datasets.
+    
+    Attributes:
+        Free API: No authentication required.
+        Rate Limiting: Default 60 requests per minute to avoid IP bans.
+        Data Quality: Real-time data may be delayed; historical accuracy is best-effort.
+        Limitations: Financial statements expose only recent periods (no full-history).
+    
+    Notes:
+        - Pipeline flow: Router -> HttpExecutor -> Writer.
+        - Guarantees: Unified rate limiting, structured logging, and error propagation.
+        - Preferred usage: Per-ticker jobs for stability; bulk price downloads avoided.
     """
 
     def __init__(
@@ -517,7 +521,9 @@ class YFinanceClient(BaseClient):
             show_progress=show_progress,
         )
         
-        result_obj: pl.DataFrame | RunResult = pl.DataFrame()
+        result_obj: pl.DataFrame | RunResult = (
+            RunResult(provider="yfinance") if connect_db is not None else pl.DataFrame()
+        )
         try:
             async with self.managed_writer(connect_db, show_progress=show_progress) as writer:
                 router = create_router(

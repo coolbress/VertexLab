@@ -22,13 +22,24 @@ def yf_router() -> YFinanceRouter:
 
 
 class TestYFinanceRouterUnit:
+    """Unit tests verifying YFinanceRouter job generation and parsing behavior."""
     def test_provider_property(self, yf_router: YFinanceRouter) -> None:
+        """Verify provider property returns 'yfinance'.
+        
+        Returns:
+            None
+        """
         assert yf_router.provider == "yfinance"
 
     @pytest.mark.asyncio
     async def test_generate_jobs_requires_symbols_for_non_tickers(
         self, yf_router: YFinanceRouter
     ) -> None:
+        """Ensure ValueError when symbols are missing for non-tickers datasets.
+        
+        Returns:
+            None
+        """
         with pytest.raises(ValueError):
             _ = [job async for job in yf_router.generate_jobs(dataset="price", symbols=None)]
 
@@ -36,6 +47,11 @@ class TestYFinanceRouterUnit:
     async def test_generate_jobs_builds_per_symbol_jobs_for_price(
         self, yf_router: YFinanceRouter
     ) -> None:
+        """Ensure per-symbol jobs are generated for price dataset.
+        
+        Returns:
+            None
+        """
         symbols = ["AAPL", "MSFT", "TSLA"]
         jobs = [job async for job in yf_router.generate_jobs(dataset="price", symbols=symbols)]
         assert len(jobs) == len(symbols)
@@ -47,6 +63,11 @@ class TestYFinanceRouterUnit:
             assert job.context.get("is_batch") is not True
 
     def test_parse_returns_frame_for_price_dataset(self, yf_router: YFinanceRouter) -> None:
+        """Verify parse returns a populated frame for price payload.
+        
+        Returns:
+            None
+        """
         data = pd.DataFrame(
             {
                 "date": pd.to_datetime(["2024-01-02", "2024-01-03"]),
@@ -77,6 +98,11 @@ class TestYFinanceRouterUnit:
         assert set(["date", "open", "close", "ticker"]).issubset(set(packet.frame.columns))
 
     def test_parse_handles_empty_dataframe(self, yf_router: YFinanceRouter) -> None:
+        """Verify parse returns zero packets for empty DataFrame payload.
+        
+        Returns:
+            None
+        """
         empty_df = pd.DataFrame(columns=["date", "open", "close", "ticker"])
         payload = pickle.dumps(empty_df)
         job = FetchJob(

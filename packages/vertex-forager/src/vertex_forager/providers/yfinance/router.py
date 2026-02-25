@@ -8,6 +8,7 @@ from typing import Any, Final
 
 import pandas as pd
 import polars as pl
+from polars.exceptions import ComputeError
 from vertex_forager.core.config import (
     FetchJob,
     FramePacket,
@@ -84,11 +85,20 @@ class YFinanceRouter(BaseRouter):
 
     @property
     def provider(self) -> str:
-        """Get the provider name."""
+        """Return provider name.
+        
+        Returns:
+            str: Provider name ('yfinance').
+        """
         return "yfinance"
     
     @property
     def rate_limit(self) -> int:
+        """Return rate limit.
+        
+        Returns:
+            int: Requests per minute.
+        """
         return self._rate_limit
     
     async def generate_jobs(
@@ -327,8 +337,7 @@ class YFinanceRouter(BaseRouter):
                 # Convert to Polars
                 try:
                     return pl.from_pandas(data)
-                except Exception:
-                    # Fallback via dict
+                except (ValueError, TypeError, ComputeError):
                     return pl.from_pandas(pd.DataFrame(data.to_dict()))
 
             # Case B: Dictionary (e.g. info)
@@ -350,9 +359,12 @@ class YFinanceRouter(BaseRouter):
             # Default
             return pl.DataFrame([data] if data else [])
 
-        except Exception as e:
+        except (ValueError, TypeError, ComputeError) as e:
             logger.warning(f"Failed to convert data to Polars: {e}")
             return pl.DataFrame()
+        except Exception:
+            logger.exception("Unexpected failure converting data to Polars")
+            raise
     
     def _transform_price(self, frame: pl.DataFrame) -> pl.DataFrame:
         if "date" not in frame.columns:

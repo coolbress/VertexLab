@@ -551,17 +551,17 @@ class VertexForager:
             except (ComputeError, ValidationError) as e:
                 async with result_lock:
                     result.errors.append(f"WriterError:{table}:{e}")
-                logger.debug(f"WRITER: Error writing batch for {table}: {e}")
+                logger.warning(f"WRITER: Error writing batch for {table}: {e}")
             except Exception as e:
                 # Check for DuckDB Error if available
                 if duckdb and isinstance(e, duckdb.Error):
                     async with result_lock:
                         result.errors.append(f"DuckDBError:{table}:{e}")
-                    logger.debug(f"WRITER: DuckDB error for {table}: {e}")
+                    logger.error(f"WRITER: DuckDB error for {table}: {e}")
                 else:
                     async with result_lock:
                         result.errors.append(f"UnexpectedWriterError:{table}:{e}")
-                    logger.debug(f"WRITER: Unexpected error writing batch for {table}: {e}")
+                    logger.error(f"WRITER: Unexpected error writing batch for {table}: {e}")
                     raise
 
         while True:
@@ -576,7 +576,7 @@ class VertexForager:
                         for table in list(buffers.keys()):
                             await flush(table)
                     except Exception as e:
-                        logger.debug(f"WRITER: Error during shutdown flush: {e}")
+                        logger.error(f"WRITER: Error during shutdown flush: {e}")
                         raise
                     return
 
@@ -602,7 +602,7 @@ class VertexForager:
             except Exception as e:
                 async with result_lock:
                     result.errors.append(f"Writer:Unexpected:{e}")
-                logger.debug(f"WRITER: Unexpected error: {e}")
+                logger.error(f"WRITER: Unexpected error: {e}")
                 raise
             finally:
                 pkt_q.task_done()

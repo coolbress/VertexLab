@@ -15,14 +15,14 @@ class SchemaMapper:
     Core component responsible for data normalization and schema enforcement.
 
     The SchemaMapper ensures that all data flowing through the pipeline conforms to
-    strict, pre-defined schemas before it reaches the Writer stage. This guarantees
+    pre-defined schemas before it reaches the Writer stage. This guarantees
     type safety and structural consistency across different storage backends.
 
     Key Responsibilities:
     1. **Schema Lookup**: Retrieves the authoritative `TableSchema` for a given table name
         from the central registry.
-    2. **Type Casting**: forcibly casts all columns to the strict Polars data types
-        defined in the schema.
+    2. **Type Casting**: casts columns to the Polars data types defined in the schema
+        using non-strict casting (strict=False) to allow nulls on failure.
     3. **Missing Column Handling**: Automatically adds missing schema columns with `null`
         values to ensure downstream systems receive complete records.
     4. **Column Ordering**: Reorders columns to match the canonical schema definition.

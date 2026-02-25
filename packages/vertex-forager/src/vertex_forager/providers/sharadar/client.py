@@ -23,6 +23,21 @@ logger = logging.getLogger(__name__)
 
 @dataclass(slots=True)
 class FetchConfig:
+    """Sharadar data fetch configuration.
+
+    Attributes:
+        dataset (str): Target dataset name (e.g., "price", "sp500").
+        symbols (list[str] | None): List of tickers to request; None for paginated datasets.
+        connect_db (str | Path | None): DuckDB file path or connection string; None for in-memory.
+        desc (str): Description text for progress display.
+        table_name (str): Destination table name per schema mapper.
+        show_progress (bool): Whether to show progress indicators; Spinner/Progress if True.
+        total_items (int | None): Expected item count (bars/pages/tickers); None if unknown.
+        unit (str): Unit label for progress (e.g., "tickers", "pages").
+        start_date (str | None): Start date (YYYY-MM-DD) for range datasets.
+        end_date (str | None): End date (YYYY-MM-DD) for range datasets.
+        extra (dict[str, Any]): Extra options passed through to router/client.
+    """
     dataset: str
     symbols: list[str] | None
     connect_db: str | Path | None
@@ -307,7 +322,8 @@ class SharadarClient(BaseClient):
                 end_date=None,
                 extra=dict(kwargs),
             )
-            result = await self._fetch_per_ticker(cfg)
+            with Spinner("Fetching tickers metadata", persist=True):
+                result = await self._fetch_per_ticker(cfg)
         else:
             cfg = FetchConfig(
                 dataset="tickers",
@@ -322,7 +338,8 @@ class SharadarClient(BaseClient):
                 end_date=None,
                 extra=dict(kwargs),
             )
-            result = await self._fetch_pagination(cfg)
+            with Spinner("Fetching all tickers metadata", persist=True):
+                result = await self._fetch_pagination(cfg)
         if isinstance(result, pl.DataFrame):
             self._metadata_cache = result
         elif connect_db:
@@ -421,8 +438,8 @@ class SharadarClient(BaseClient):
         result_obj: pl.DataFrame | RunResult = (
             RunResult(provider="sharadar") if connect_db is not None else pl.DataFrame()
         )
-        async with self.managed_writer(connect_db, show_progress=show_progress) as writer:
-            try:
+        try:
+            async with self.managed_writer(connect_db, show_progress=show_progress) as writer:
                 router = create_router(
                     "sharadar",
                     api_key=self.api_key,  # type: ignore[arg-type]
@@ -452,9 +469,9 @@ class SharadarClient(BaseClient):
                 if dataset == "tickers" and isinstance(result_obj, pl.DataFrame):
                     logger.debug("Caching full metadata from explicit get_ticker_info() call.")
                     self._metadata_cache = result_obj
-            finally:
-                if pbar is not None:
-                    pbar.close()
+        finally:
+            if pbar is not None:
+                pbar.close()
         return result_obj
 
     async def _fetch_pagination(self, config: "FetchConfig") -> pl.DataFrame | RunResult:
@@ -504,8 +521,8 @@ class SharadarClient(BaseClient):
         result_obj: pl.DataFrame | RunResult = (
             RunResult(provider="sharadar") if connect_db is not None else pl.DataFrame()
         )
-        async with self.managed_writer(connect_db, show_progress=show_progress) as writer:
-            try:
+        try:
+            async with self.managed_writer(connect_db, show_progress=show_progress) as writer:
                 router = create_router(
                     "sharadar",
                     api_key=self.api_key,  # type: ignore[arg-type]
@@ -514,7 +531,18 @@ class SharadarClient(BaseClient):
                     **kwargs,
                 )
                 
-                with Spinner(desc, persist=True):
+                if use_pbar:
+                    with Spinner(desc, persist=True):
+                        await self.run_pipeline(
+                            router=router,
+                            dataset=dataset,
+                            symbols=None,
+                            writer=writer,
+                            mapper=self._mapper,
+                            on_progress=pbar_updater,
+                            **kwargs,
+                        )
+                else:
                     await self.run_pipeline(
                         router=router,
                         dataset=dataset,
@@ -530,7 +558,7 @@ class SharadarClient(BaseClient):
                     table_name=table_name,
                     connect_db=connect_db,
                 )
-            finally:
-                if pbar is not None:
-                    pbar.close()
+        finally:
+            if pbar is not None:
+                pbar.close()
         return result_obj

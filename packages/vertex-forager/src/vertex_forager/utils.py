@@ -16,6 +16,7 @@ from tqdm.auto import tqdm
 import psutil
 
 from dotenv import load_dotenv
+logger = logging.getLogger(__name__)
 
 
 def process_symbols(tickers: list[str] | None) -> list[str] | None:
@@ -178,10 +179,13 @@ class Spinner:
         self._is_tty = sys.stderr.isatty()
         ip = None
         try:
-            from IPython import get_ipython  # type: ignore
+            from IPython import get_ipython
             ip = get_ipython()
-        except Exception:
+        except (ImportError, ModuleNotFoundError, AttributeError):
             ip = None
+        except Exception as e:
+            logger.error("Unexpected error during notebook detection: %s", e)
+            raise
         self._is_notebook = bool(ip and ip.__class__.__name__ == "ZMQInteractiveShell")
         self._widget_label: object | None = None
 

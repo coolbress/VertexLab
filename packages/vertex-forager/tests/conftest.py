@@ -30,7 +30,14 @@ from vertex_forager.providers.yfinance.router import YFinanceRouter
 
 @pytest.fixture
 def mock_async_client() -> AsyncMock:
-    """Mock AsyncClient fixture with run_async method."""
+    """Create a mock AsyncClient with run_async.
+    
+    Returns:
+        AsyncMock: AsyncMock configured with spec=AsyncClient. It simulates an
+        HTTPX AsyncClient and provides a run_async coroutine used by the HTTP
+        executor. The added run_async method allows tests to await network-like
+        behavior without performing real I/O.
+    """
     mock = AsyncMock(spec=AsyncClient)
     # Add run_async method that HTTP executor expects
     mock.run_async = AsyncMock()

@@ -2433,8 +2433,6 @@ dependencies = [
     { name = "click" },
     { name = "duckdb" },
     { name = "httpx" },
-    { name = "ipython" },
-    { name = "ipywidgets" },
     { name = "nest-asyncio" },
     { name = "pandas" },
     { name = "polars" },
@@ -2445,6 +2443,12 @@ dependencies = [
     { name = "tenacity" },
     { name = "tqdm" },
     { name = "yfinance" },
+]
+
+[package.optional-dependencies]
+notebook = [
+    { name = "ipython" },
+    { name = "ipywidgets" },
 ]
 
 [package.dev-dependencies]
@@ -2462,8 +2466,8 @@ requires-dist = [
     { name = "click", specifier = ">=8.3.1,<9.0.0" },
     { name = "duckdb", specifier = ">=1.4.4,<2.0.0" },
     { name = "httpx", specifier = ">=0.28.1,<1.0.0" },
-    { name = "ipython", specifier = ">=8.0.0,<9.0.0" },
-    { name = "ipywidgets", specifier = ">=8.1.8" },
+    { name = "ipython", marker = "extra == 'notebook'", specifier = ">=8.0.0,<9.0.0" },
+    { name = "ipywidgets", marker = "extra == 'notebook'", specifier = ">=8.1.8" },
     { name = "nest-asyncio", specifier = ">=1.6.0,<2.0.0" },
     { name = "pandas", specifier = ">=2.3.3,<3.0.0" },
     { name = "polars", specifier = ">=1.37.1,<2.0.0" },
@@ -2473,8 +2477,9 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.2.1,<2.0.0" },
     { name = "tenacity", specifier = ">=9.1.4,<10.0.0" },
     { name = "tqdm", specifier = ">=4.67.3,<5.0.0" },
-    { name = "yfinance", specifier = ">=1.1.0" },
+    { name = "yfinance", specifier = ">=1.1.0,<2.0.0" },
 ]
+provides-extras = ["notebook"]
 
 [package.metadata.requires-dev]
 dev = [
