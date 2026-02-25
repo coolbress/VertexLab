@@ -20,13 +20,13 @@ class TestYFinanceClientDefaults:
         client = create_client(provider="yfinance", rate_limit=1_000)
         assert isinstance(client, YFinanceClient)
         assert client.api_key is None
-        assert client._config.requests_per_minute == 60
+        assert client._config.requests_per_minute == 1_000
     
     def test_create_client_ignores_user_rate_limit_and_api_key(self) -> None:
         client = create_client(provider="yfinance", api_key="user_supplied", rate_limit=5)
         assert isinstance(client, YFinanceClient)
         assert client.api_key is None
-        assert client._config.requests_per_minute == 60
+        assert client._config.requests_per_minute == 5
 
 
 class TestYFinanceRouterDateParams:

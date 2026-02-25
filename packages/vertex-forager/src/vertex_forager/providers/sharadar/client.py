@@ -414,6 +414,8 @@ class SharadarClient(BaseClient):
                         logger.info("Metadata cached: %d tickers", len(meta_result))
             except httpx.RequestError as e:
                 logger.warning("Failed to prefetch metadata: %s. Smart batching will be disabled.", e)
+            except Exception as e:
+                logger.warning("Failed to prefetch metadata (unexpected): %s. Continuing without cache.", e)
 
         total_items = (
             config.total_items

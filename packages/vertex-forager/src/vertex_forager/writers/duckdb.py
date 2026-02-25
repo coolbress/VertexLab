@@ -184,7 +184,16 @@ class DuckDBWriter(BaseWriter):
                 pk_cols = self._get_primary_keys(table_name)
                 if pk_cols:
                     for c in pk_cols:
-                        if c in merged_df.columns and merged_df.get_column(c).null_count() > 0:
+                        if c not in merged_df.columns:
+                            self._logger.warning("WRITER: Missing PK column '%s' for table '%s'. Columns=%s", c, table_name, merged_df.columns)
+                        elif merged_df.get_column(c).null_count() > 0:
+                            self._logger.error(
+                                "WRITER: Nulls detected in PK column '%s' for table '%s'. rows=%d, columns=%s",
+                                c,
+                                table_name,
+                                len(merged_df),
+                                merged_df.columns,
+                            )
                             raise ValueError(f"PKNull:{table_name}:{c}")
                 rows = len(merged_df)
                 

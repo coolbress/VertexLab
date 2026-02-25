@@ -72,7 +72,11 @@ class YFinanceRouter(BaseRouter):
             **kwargs: Additional arguments.
         """
         self._api_key = None
-        self._rate_limit = rate_limit if isinstance(rate_limit, int) and rate_limit > 0 else 60
+        if isinstance(rate_limit, int) and rate_limit > 0:
+            self._rate_limit = rate_limit
+        else:
+            logger.warning("Invalid rate_limit value '%s'; falling back to 60 rpm.", rate_limit)
+            self._rate_limit = 60
         self._start_date = start_date
         self._end_date = end_date
         raw_bs = kwargs.get("price_batch_size", self.PRICE_BATCH_SIZE)
@@ -394,7 +398,7 @@ class YFinanceRouter(BaseRouter):
             frame = frame.melt(id_vars=id_vars, value_vars=value_vars, variable_name="date", value_name="value")
             if "date" in frame.columns:
                 date_str = pl.col("date").cast(pl.Utf8, strict=False)
-                frame = frame.with_columns(date_str.str.replace(r"[_T\\s].*$", "", literal=False).alias("date"))
+                frame = frame.with_columns(date_str.str.replace(r"[_T\s].*$", "", literal=False).alias("date"))
         period = "quarterly" if dataset.startswith("quarterly") else "annual"
         if "period" not in frame.columns:
             frame = frame.with_columns(pl.lit(period).alias("period"))
@@ -450,7 +454,7 @@ class YFinanceRouter(BaseRouter):
     def _transform_calendar(self, frame: pl.DataFrame) -> pl.DataFrame:
         if "earnings_date" in frame.columns:
             dt = frame.schema.get("earnings_date")
-            if dt is not None and dt != pl.Date:
+            if dt is not None and isinstance(dt, pl.List):
                 frame = frame.with_columns(pl.col("earnings_date").list.first().alias("earnings_date"))
         return frame
 

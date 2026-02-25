@@ -503,7 +503,7 @@ class YFinanceClient(BaseClient):
         Returns:
             pl.DataFrame for in-memory mode, RunResult for database mode
         """
-        if not symbols or len(symbols) == 0:
+        if not symbols:
             raise ValueError("tickers list cannot be empty")
         size_map: dict[str, int] = {
             "info": 30 * 1024,

@@ -521,11 +521,11 @@ class VertexForager:
                 frames = [p.frame for p in packets]
                 try:
                     merged_frame = pl.concat(frames, how="vertical")
-                except Exception:
+                except pl.exceptions.PolarsError as e:
                     first = packets[0]
                     if first.provider != "yfinance":
                         raise
-                    logger.warning(f"WRITER: Schema mismatch for {first.table}, falling back to diagonal concat")
+                    logger.warning("WRITER: Schema mismatch for %s: %s. Falling back to diagonal concat", first.table, e)
                     merged_frame = pl.concat(frames, how="diagonal")
                 schema = get_table_schema(packets[0].table)
                 if schema and schema.unique_key:

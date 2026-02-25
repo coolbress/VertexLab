@@ -83,7 +83,7 @@ def create_client(
         )
 
     if provider == "yfinance":
-        return registration.factory(api_key=None, rate_limit=60, **kwargs)
+        return registration.factory(api_key=None, rate_limit=rate_limit if rate_limit is not None else 60, **kwargs)
     if rate_limit is None:
         raise ValueError(f"Missing rate_limit for provider '{provider}'")
     return registration.factory(api_key=resolved_key, rate_limit=rate_limit, **kwargs)
