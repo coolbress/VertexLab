@@ -41,3 +41,9 @@ class TestYFinanceRouterDateParams:
             lib_kwargs = params.get("lib", {}).get("kwargs", {})
             assert "start" not in lib_kwargs
             assert "end" not in lib_kwargs
+    
+    @pytest.mark.asyncio
+    async def test_generate_jobs_invalid_symbols_raises(self) -> None:
+        router = YFinanceRouter(rate_limit=60, start_date=None, end_date=None)
+        with pytest.raises(ValueError):
+            _ = [job async for job in router.generate_jobs(dataset="price", symbols=["", "   ", "@@"])]

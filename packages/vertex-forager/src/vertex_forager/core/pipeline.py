@@ -316,8 +316,10 @@ class VertexForager:
         self._active_tasks.clear()
         try:
             self._parse_executor.shutdown(wait=False)
+        except (RuntimeError, ValueError) as e:
+            logger.exception(f"PIPELINE: Parse executor shutdown failed: {e}")
         except Exception:
-            pass
+            logger.exception("PIPELINE: Unexpected error during parse executor shutdown")
         logger.debug("PIPELINE: Pipeline stopped.")
 
     async def _producer(

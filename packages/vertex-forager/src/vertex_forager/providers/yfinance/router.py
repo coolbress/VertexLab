@@ -159,7 +159,7 @@ class YFinanceRouter(BaseRouter):
         for symbol in symbols:
             if isinstance(symbol, str):
                 clean = symbol.strip()
-                if clean:
+                if clean and any(ch.isalnum() for ch in clean):
                     cleaned.append(clean)
         if not cleaned:
             raise ValueError("YFinanceRouter: no valid symbols provided")
@@ -479,7 +479,7 @@ class YFinanceRouter(BaseRouter):
                         s = s.replace("Z", "+00:00")
                     dt = datetime.fromisoformat(s)
                     return dt.astimezone(timezone.utc)
-                except Exception:
+                except (ValueError, AttributeError):
                     return None
             return None
         cols = []

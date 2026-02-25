@@ -13,6 +13,15 @@ from vertex_forager.providers.yfinance.router import YFinanceRouter
 
 class TestYFinanceRouterUnit:
     """Unit tests verifying YFinanceRouter job generation and parsing behavior."""
+    
+    def make_fetch_job(self, dataset: str = "price", symbol: str = "AAPL") -> FetchJob:
+        return FetchJob(
+            provider="yfinance",
+            dataset=dataset,
+            symbol=symbol,
+            spec=RequestSpec(url=f"yfinance://{symbol}", params={"dataset": dataset}),
+            context={"symbol": symbol},
+        )
 
     def test_provider_property(self, yfinance_router: YFinanceRouter) -> None:
         """Verify provider property returns 'yfinance'."""
@@ -44,13 +53,7 @@ class TestYFinanceRouterUnit:
     def test_parse_returns_frame_for_price_dataset(self, yfinance_router: YFinanceRouter, yf_price_df: pd.DataFrame) -> None:
         """Verify parse returns a populated frame for price payload."""
         payload = pickle.dumps(yf_price_df)
-        job = FetchJob(
-            provider="yfinance",
-            dataset="price",
-            symbol="AAPL",
-            spec=RequestSpec(url="yfinance://AAPL", params={"dataset": "price"}),
-            context={"symbol": "AAPL"},
-        )
+        job = self.make_fetch_job(dataset="price", symbol="AAPL")
         result = yfinance_router.parse(job=job, payload=payload)
         assert isinstance(result, ParseResult)
         assert len(result.packets) == 1
@@ -65,13 +68,7 @@ class TestYFinanceRouterUnit:
         """Verify parse returns zero packets for empty DataFrame payload."""
         empty_df = pd.DataFrame(columns=["date", "open", "close", "ticker"])
         payload = pickle.dumps(empty_df)
-        job = FetchJob(
-            provider="yfinance",
-            dataset="price",
-            symbol="AAPL",
-            spec=RequestSpec(url="yfinance://AAPL", params={"dataset": "price"}),
-            context={"symbol": "AAPL"},
-        )
+        job = self.make_fetch_job(dataset="price", symbol="AAPL")
         result = yfinance_router.parse(job=job, payload=payload)
         assert isinstance(result, ParseResult)
         assert len(result.packets) == 0
@@ -79,13 +76,7 @@ class TestYFinanceRouterUnit:
     def test_transform_financials_melts_and_normalizes_date(self, yfinance_router: YFinanceRouter) -> None:
         df = pd.DataFrame({"breakdown": ["Revenue", "NetIncome"], "2024-01-01 00:00:00": [1, 2], "2024-02-01": [3, 4]})
         payload = pickle.dumps(df)
-        job = FetchJob(
-            provider="yfinance",
-            dataset="financials",
-            symbol="AAPL",
-            spec=RequestSpec(url="yfinance://AAPL", params={"dataset": "financials"}),
-            context={"symbol": "AAPL"},
-        )
+        job = self.make_fetch_job(dataset="financials", symbol="AAPL")
         result = yfinance_router.parse(job=job, payload=payload)
         assert isinstance(result, ParseResult)
         assert len(result.packets) == 1
@@ -99,13 +90,7 @@ class TestYFinanceRouterUnit:
         good = [{"id": 1, "content": {"title": "T", "provider": {"displayName": "P"}, "contentType": "story", "canonicalUrl": {"url": "u"}, "pubDate": "2025-01-05T09:23:45Z"}}]
         bad = [{"id": 2, "content": {"title": "X"}}]
         payload = pickle.dumps(good + bad)
-        job = FetchJob(
-            provider="yfinance",
-            dataset="news",
-            symbol="AAPL",
-            spec=RequestSpec(url="yfinance://AAPL", params={"dataset": "news"}),
-            context={"symbol": "AAPL"},
-        )
+        job = self.make_fetch_job(dataset="news", symbol="AAPL")
         result = yfinance_router.parse(job=job, payload=payload)
         assert isinstance(result, ParseResult)
         frame = result.packets[0].frame
@@ -114,25 +99,14 @@ class TestYFinanceRouterUnit:
 
     def test_transform_calendar_list_to_first(self, yfinance_router: YFinanceRouter) -> None:
         payload = pickle.dumps([{"earnings_date": ["2024-01-01", "2024-01-02"]}])
-        job = FetchJob(
-            provider="yfinance",
-            dataset="calendar",
-            symbol="AAPL",
-            spec=RequestSpec(url="yfinance://AAPL", params={"dataset": "calendar"}),
-            context={"symbol": "AAPL"},
-        )
+        job = self.make_fetch_job(dataset="calendar", symbol="AAPL")
         result = yfinance_router.parse(job=job, payload=payload)
         assert isinstance(result, ParseResult)
         frame = result.packets[0].frame
         assert "earnings_date" in frame.columns
+        assert frame.get_column("earnings_date").to_list()[0] == "2024-01-01"
 
     def test_parse_invalid_payload_raises(self, yfinance_router: YFinanceRouter) -> None:
-        job = FetchJob(
-            provider="yfinance",
-            dataset="price",
-            symbol="AAPL",
-            spec=RequestSpec(url="yfinance://AAPL", params={"dataset": "price"}),
-            context={"symbol": "AAPL"},
-        )
-        with pytest.raises(Exception):
+        job = self.make_fetch_job(dataset="price", symbol="AAPL")
+        with pytest.raises(pickle.UnpicklingError):
             _ = yfinance_router.parse(job=job, payload=b"not a pickle")

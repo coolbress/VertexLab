@@ -213,7 +213,7 @@ class DuckDBWriter(BaseWriter):
                 self._logger.error(f"Failed to write batch for {table_name}: {e}")
                 raise
             except ValueError as e:
-                self._logger.error(f"Validation error writing batch for {table_name}: {e}")
+                self._logger.debug(f"Validation error writing batch for {table_name}: {e}")
                 raise
 
         # Fill any remaining None (should be covered by empty check or loop, but safe guard)
