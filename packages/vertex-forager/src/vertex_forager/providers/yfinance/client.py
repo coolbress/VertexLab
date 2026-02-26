@@ -503,8 +503,10 @@ class YFinanceClient(BaseClient):
             Polars DataFrame in memory or RunResult when persisting.
         
         Raises:
-            ValueError: If tickers list is empty.
-            RuntimeError: If pipeline execution fails.
+            InputError: If tickers list is empty or invalid.
+            FetchError: If network/API errors occur during data retrieval.
+            TransformError: If data normalization fails.
+            WriterError: If persistence fails.
         """
         return await self._dispatch_fetch(
             dataset="news",
