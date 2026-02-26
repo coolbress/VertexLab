@@ -376,7 +376,7 @@ DATE_FILTER_COL: Final[dict[str, str]] = {
     "balance_sheet": "date",
     "cashflow": "date",
     "earnings": "date", # Or year
-    "recommendations": "date",
+    "recommendations": "period", # recommendations use 'period' not date
     "news": "published_at",
 }
 

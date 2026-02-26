@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any, Literal
 
 import polars as pl
-import logging
 
 from vertex_forager.clients.base import BaseClient
 from vertex_forager.core.config import RunResult
@@ -32,6 +32,28 @@ class YFinanceClient(BaseClient):
         - Guarantees: Unified rate limiting, structured logging, and error propagation.
         - Preferred usage: Per-ticker jobs for stability; bulk price downloads avoided.
     """
+
+    # Estimated bytes per item per dataset (used for memory validation)
+    SIZE_MAP: dict[str, int] = {
+        "info": 30 * 1024,
+        "price": 600 * 1024,
+        "financials": 200 * 1024,
+        "quarterly_financials": 220 * 1024,
+        "balance_sheet": 180 * 1024,
+        "quarterly_balance_sheet": 200 * 1024,
+        "cashflow": 180 * 1024,
+        "quarterly_cashflow": 200 * 1024,
+        "dividends": 40 * 1024,
+        "splits": 40 * 1024,
+        "major_holders": 50 * 1024,
+        "institutional_holders": 80 * 1024,
+        "mutualfund_holders": 80 * 1024,
+        "insider_roster_holders": 80 * 1024,
+        "insider_purchases": 120 * 1024,
+        "recommendations": 100 * 1024,
+        "calendar": 24 * 1024,
+        "news": 300 * 1024,
+    }
 
     def __init__(
         self,
@@ -68,6 +90,7 @@ class YFinanceClient(BaseClient):
         *,
         tickers: list[str],
         connect_db: str | Path | None = None,
+        show_progress: bool = True,
         **kwargs: Any
     ) -> pl.DataFrame | RunResult:
         """Fetch ticker metadata/info.
@@ -90,6 +113,7 @@ class YFinanceClient(BaseClient):
             connect_db=connect_db,
             desc="Fetching YFinance info",
             table_name="yfinance_info",
+            show_progress=show_progress,
             **kwargs,
         )
         
@@ -103,6 +127,7 @@ class YFinanceClient(BaseClient):
         connect_db: str | Path | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
+        show_progress: bool = True,
         **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         """Fetch historical price data (OHLCV).
@@ -128,6 +153,7 @@ class YFinanceClient(BaseClient):
             table_name="yfinance_price",
             start_date=start_date,
             end_date=end_date,
+            show_progress=show_progress,
             **kwargs,
         )
 
@@ -141,6 +167,7 @@ class YFinanceClient(BaseClient):
         period: Literal["annual", "quarterly"] = "annual",
         tickers: list[str],
         connect_db: str | Path | None = None,
+        show_progress: bool = True,
         **kwargs: Any
     ) -> pl.DataFrame | RunResult:
         """Fetch financial statements (Unified Method).
@@ -173,6 +200,7 @@ class YFinanceClient(BaseClient):
             connect_db=connect_db,
             desc=f"Fetching YFinance {dataset}",
             table_name="yfinance_financials",
+            show_progress=show_progress,
             **kwargs,
         )
 
@@ -187,6 +215,7 @@ class YFinanceClient(BaseClient):
         connect_db: str | Path | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
+        show_progress: bool = True,
         **kwargs: Any
     ) -> pl.DataFrame | RunResult:
         """Fetch corporate actions (Unified Method: dividends or splits).
@@ -214,6 +243,7 @@ class YFinanceClient(BaseClient):
             table_name=f"yfinance_{kind}",
             start_date=start_date,
             end_date=end_date,
+            show_progress=show_progress,
             **kwargs,
         )
 
@@ -226,6 +256,7 @@ class YFinanceClient(BaseClient):
         kind: Literal["institutional", "mutualfund"] = "institutional",
         tickers: list[str],
         connect_db: str | Path | None = None,
+        show_progress: bool = True,
         **kwargs: Any
     ) -> pl.DataFrame | RunResult:
         """Fetch holders information (Unified Method).
@@ -250,6 +281,7 @@ class YFinanceClient(BaseClient):
             connect_db=connect_db,
             desc=f"Fetching YFinance {dataset}",
             table_name="yfinance_holders",
+            show_progress=show_progress,
             **kwargs,
         )
     
@@ -259,6 +291,7 @@ class YFinanceClient(BaseClient):
         *,
         tickers: list[str],
         connect_db: str | Path | None = None,
+        show_progress: bool = True,
         **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         """Fetch major holders summary metrics.
@@ -281,6 +314,7 @@ class YFinanceClient(BaseClient):
             connect_db=connect_db,
             desc="Fetching YFinance major_holders",
             table_name="yfinance_major_holders",
+            show_progress=show_progress,
             **kwargs,
         )
     
@@ -292,6 +326,7 @@ class YFinanceClient(BaseClient):
         *,
         tickers: list[str],
         connect_db: str | Path | None = None,
+        show_progress: bool = True,
         **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         """Fetch insider roster holders.
@@ -314,6 +349,7 @@ class YFinanceClient(BaseClient):
             connect_db=connect_db,
             desc="Fetching YFinance insider_roster_holders",
             table_name="yfinance_insider_roster_holders",
+            show_progress=show_progress,
             **kwargs,
         )
     
@@ -323,6 +359,7 @@ class YFinanceClient(BaseClient):
         *,
         tickers: list[str],
         connect_db: str | Path | None = None,
+        show_progress: bool = True,
         **kwargs: Any
     ) -> pl.DataFrame | RunResult:
         """Fetch insider purchases.
@@ -345,6 +382,7 @@ class YFinanceClient(BaseClient):
             connect_db=connect_db,
             desc="Fetching YFinance insider_purchases",
             table_name="yfinance_insider_purchases",
+            show_progress=show_progress,
             **kwargs,
         )
 
@@ -356,6 +394,7 @@ class YFinanceClient(BaseClient):
         *,
         tickers: list[str],
         connect_db: str | Path | None = None,
+        show_progress: bool = True,
         **kwargs: Any
     ) -> pl.DataFrame | RunResult:
         """Fetch earnings calendar.
@@ -378,6 +417,7 @@ class YFinanceClient(BaseClient):
             connect_db=connect_db,
             desc="Fetching YFinance calendar",
             table_name="yfinance_calendar",
+            show_progress=show_progress,
             **kwargs,
         )
 
@@ -389,6 +429,7 @@ class YFinanceClient(BaseClient):
         *,
         tickers: list[str],
         connect_db: str | Path | None = None,
+        show_progress: bool = True,
         **kwargs: Any
     ) -> pl.DataFrame | RunResult:
         """Fetch analyst recommendations.
@@ -411,6 +452,7 @@ class YFinanceClient(BaseClient):
             connect_db=connect_db,
             desc="Fetching YFinance recommendations",
             table_name="yfinance_recommendations",
+            show_progress=show_progress,
             **kwargs,
         )
 
@@ -422,6 +464,7 @@ class YFinanceClient(BaseClient):
         *,
         tickers: list[str],
         connect_db: str | Path | None = None,
+        show_progress: bool = True,
         **kwargs: Any
     ) -> pl.DataFrame | RunResult:
         """Fetch ticker news.
@@ -444,6 +487,7 @@ class YFinanceClient(BaseClient):
             connect_db=connect_db,
             desc="Fetching YFinance news",
             table_name="yfinance_news",
+            show_progress=show_progress,
             **kwargs,
         )
 
@@ -496,28 +540,7 @@ class YFinanceClient(BaseClient):
         """
         if not symbols:
             raise ValueError("tickers list cannot be empty")
-        size_map: dict[str, int] = {
-            "info": 30 * 1024,
-            "price": 600 * 1024,
-            "financials": 200 * 1024,
-            "quarterly_financials": 220 * 1024,
-            "balance_sheet": 180 * 1024,
-            "quarterly_balance_sheet": 200 * 1024,
-            "cashflow": 180 * 1024,
-            "quarterly_cashflow": 200 * 1024,
-            "earnings": 120 * 1024,
-            "dividends": 40 * 1024,
-            "splits": 40 * 1024,
-            "major_holders": 50 * 1024,
-            "institutional_holders": 80 * 1024,
-            "mutualfund_holders": 80 * 1024,
-            "insider_roster_holders": 80 * 1024,
-            "insider_purchases": 120 * 1024,
-            "recommendations": 100 * 1024,
-            "calendar": 24 * 1024,
-            "news": 300 * 1024,
-        }
-        bytes_per_item = size_map.get(dataset, 200 * 1024)
+        bytes_per_item = self.SIZE_MAP.get(dataset, 200 * 1024)
         validate_memory_usage(
             symbols=symbols,
             connect_db=connect_db,
@@ -576,9 +599,9 @@ class YFinanceClient(BaseClient):
         table_name: str,
         start_date: str | None = None,
         end_date: str | None = None,
+        show_progress: bool = True,
         **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
-        show_progress = True
         total_items = len(tickers)
         return await self._fetch_per_ticker(
             dataset=dataset,

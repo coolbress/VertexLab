@@ -211,7 +211,7 @@ class YFinanceRouter(BaseRouter):
             observed_at = datetime.now(timezone.utc)
             if dataset == "price":
                 df_pl = self._transform_price(df_pl)
-            elif dataset in ("financials", "quarterly_financials", "balance_sheet", "quarterly_balance_sheet", "cashflow", "quarterly_cashflow"):
+            elif dataset in ("financials", "quarterly_financials", "balance_sheet", "quarterly_balance_sheet", "cashflow", "quarterly_cashflow", "income_stmt", "earnings", "quarterly_earnings"):
                 df_pl = self._transform_financials(df_pl, dataset)
             elif dataset == "major_holders":
                 df_pl = self._transform_major_holders(df_pl)

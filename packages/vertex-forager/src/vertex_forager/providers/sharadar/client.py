@@ -423,25 +423,7 @@ class SharadarClient(BaseClient):
         show_spinner: bool = True,
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
-        if tickers is not None and len(tickers) > 0:
-            cfg = FetchConfig(
-                dataset="tickers",
-                symbols=tickers,
-                connect_db=connect_db,
-                desc="Fetching tickers metadata",
-                table_name=DATASET_TABLE["tickers"],
-                show_progress=False,
-                use_progress_bar=False,
-                total_items=len(tickers),
-                unit="tickers",
-                start_date=None,
-                end_date=None,
-                extra=dict(kwargs),
-            )
-            spinner_ctx = Spinner("Fetching tickers metadata", persist=True) if show_spinner else nullcontext()
-            with spinner_ctx:
-                result = await self._fetch_per_ticker(cfg)
-        else:
+        if tickers is None:
             cfg = FetchConfig(
                 dataset="tickers",
                 symbols=None,
@@ -459,6 +441,26 @@ class SharadarClient(BaseClient):
             spinner_ctx = Spinner("Fetching all tickers metadata", persist=True) if show_spinner else nullcontext()
             with spinner_ctx:
                 result = await self._fetch_pagination(cfg)
+        elif isinstance(tickers, (list, tuple)) and len(tickers) == 0:
+            raise ValueError("tickers list cannot be empty for SharadarClient.get_ticker_info")
+        else:
+            cfg = FetchConfig(
+                dataset="tickers",
+                symbols=tickers,
+                connect_db=connect_db,
+                desc="Fetching tickers metadata",
+                table_name=DATASET_TABLE["tickers"],
+                show_progress=False,
+                use_progress_bar=False,
+                total_items=len(tickers),
+                unit="tickers",
+                start_date=None,
+                end_date=None,
+                extra=dict(kwargs),
+            )
+            spinner_ctx = Spinner("Fetching tickers metadata", persist=True) if show_spinner else nullcontext()
+            with spinner_ctx:
+                result = await self._fetch_per_ticker(cfg)
         if isinstance(result, pl.DataFrame):
             self._metadata_cache = result
         elif connect_db:

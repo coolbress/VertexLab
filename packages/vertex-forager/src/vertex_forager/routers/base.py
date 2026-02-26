@@ -160,7 +160,10 @@ class BaseRouter(ABC):
             
         Returns:
             tuple: (start_datetime, end_datetime) if valid.
-            None: if start_date is None or invalid.
+            None: when start_date is None (no range requested).
+        
+        Raises:
+            ValueError: If date format is invalid or end < start.
         """
         if not start_date:
             return None

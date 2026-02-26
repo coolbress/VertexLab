@@ -216,6 +216,8 @@ class SharadarRouter(BaseRouter):
         # -------- Build Per-Symbol Jobs --------
         
         symbol_list = [s.strip() for s in symbols if isinstance(s, str) and s.strip()]
+        if not symbol_list:
+            raise ValueError(f"SharadarRouter: no valid symbols provided from input={symbols!r}")
 
         raw_dimension = kwargs.get("dimension")
         if not raw_dimension or str(raw_dimension).strip() == "":
