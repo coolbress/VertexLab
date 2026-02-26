@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+import asyncio
 from typing import Any
 from dataclasses import dataclass, field
 from contextlib import nullcontext
@@ -99,7 +100,20 @@ class SharadarClient(BaseClient):
         connect_db: str | Path | None = None,
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
-        """Fetch metadata for all or specific tickers (TICKERS)."""
+        """Fetch metadata for all or specific tickers (TICKERS).
+        
+        Args:
+            tickers: Optional list of ticker symbols to filter. If None, fetches all.
+            connect_db: Optional DuckDB connection string/path for persistence.
+            **kwargs: Additional provider-specific options forwarded to the pipeline.
+        
+        Returns:
+            pl.DataFrame in memory mode; RunResult when persisting to DuckDB.
+        
+        Raises:
+            ValueError: If parameters are invalid for the fetch configuration.
+            RuntimeError: If pipeline execution fails.
+        """
         return await self._get_ticker_info_impl(tickers=tickers, connect_db=connect_db, **kwargs)
 
     @jupyter_safe
@@ -109,7 +123,18 @@ class SharadarClient(BaseClient):
         connect_db: str | Path | None = None,
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
-        """Fetch S&P 500 component history."""
+        """Fetch S&P 500 component history.
+        
+        Args:
+            connect_db: Optional DuckDB connection string/path for persistence.
+            **kwargs: Additional provider-specific options forwarded to the pipeline.
+        
+        Returns:
+            pl.DataFrame in memory mode; RunResult when persisting to DuckDB.
+        
+        Raises:
+            RuntimeError: If pipeline execution fails.
+        """
         cfg = self._build_fetch_config(
             dataset="sp500",
             symbols=None,
@@ -499,10 +524,8 @@ class SharadarClient(BaseClient):
                     meta_result = await self._get_ticker_info_impl(tickers=None, connect_db=config.connect_db, show_spinner=False)
                     if isinstance(meta_result, pl.DataFrame):
                         logger.info("Metadata cached: %d tickers", len(meta_result))
-            except httpx.RequestError as e:
+            except (httpx.RequestError, asyncio.TimeoutError, OSError) as e:
                 logger.warning("Failed to prefetch metadata: %s. Smart batching will be disabled.", e)
-            except Exception as e:
-                logger.warning("Failed to prefetch metadata (unexpected): %s. Continuing without cache.", e, exc_info=True)
 
         total_items = (
             config.total_items

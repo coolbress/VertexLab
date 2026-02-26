@@ -171,7 +171,7 @@ class BaseRouter(ABC):
             if end_date:
                 end = datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
         except (ValueError, TypeError):
-            return None
+            raise ValueError(f"Invalid date format: start_date={start_date!r}, end_date={end_date!r}")
         if end < start:
             raise ValueError("End date is earlier than start date")
         return start, end

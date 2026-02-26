@@ -458,7 +458,10 @@ class VertexForager:
 
                 for packet in parse_result.packets:
                     # Normalize packet schema (enforce types, fill missing cols)
-                    normalized_packet = await asyncio.to_thread(self._mapper.normalize, packet=packet)
+                    loop = asyncio.get_running_loop()
+                    normalized_packet = await loop.run_in_executor(
+                        self._parse_executor, lambda: self._mapper.normalize(packet=packet)
+                    )
                     await pkt_q.put(normalized_packet)
 
                 if parse_result.next_jobs:
@@ -537,11 +540,11 @@ class VertexForager:
             try:
                 # Merge frames
                 frames = [p.frame for p in packets]
-                schema = get_table_schema(packets[0].table)
+                first = packets[0]
+                schema = get_table_schema(first.table)
                 try:
                     merged_frame = pl.concat(frames, how="vertical")
                 except pl.exceptions.PolarsError as e:
-                    first = packets[0]
                     is_flexible = getattr(self._router, "flexible_schema", False) or (
                         schema is not None and getattr(schema, "flexible_schema", False)
                     )
@@ -557,7 +560,6 @@ class VertexForager:
                             raise ComputeError(f"PKNull:{packets[0].table}:{col}")
 
                 # Create merged packet (use metadata from the first packet)
-                first = packets[0]
                 merged_packet = FramePacket(
                     provider=first.provider,
                     table=first.table,
@@ -640,7 +642,7 @@ class VertexForager:
             except Exception as e:
                 async with result_lock:
                     result.errors.append(f"Writer:Unexpected:{e}")
-                logger.error(f"WRITER: Unexpected error: {e}")
+                logger.exception("WRITER: Unexpected error")
                 raise
             finally:
                 pkt_q.task_done()

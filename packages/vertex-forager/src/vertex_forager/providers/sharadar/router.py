@@ -590,7 +590,10 @@ class SharadarRouter(BaseRouter):
             return clamped
             
         # Use BaseRouter helper to parse date range
-        date_range = self._parse_date_range(self._start_date, self._end_date)
+        try:
+            date_range = self._parse_date_range(self._start_date, self._end_date)
+        except ValueError:
+            date_range = None
         if date_range is None:
             # Default to conservative minimal batch when range parsing fails.
             return self.MIN_BATCH_SIZE
@@ -619,7 +622,10 @@ class SharadarRouter(BaseRouter):
                 return self.MAX_ROWS_PER_REQUEST  # Assume full history is huge -> forces single batch
                 
             # Use BaseRouter helper to parse date range
-            date_range = self._parse_date_range(self._start_date, self._end_date)
+            try:
+                date_range = self._parse_date_range(self._start_date, self._end_date)
+            except ValueError:
+                date_range = None
             if date_range is None:
                 return self.MAX_ROWS_PER_REQUEST
                 
@@ -639,7 +645,10 @@ class SharadarRouter(BaseRouter):
             ticker_end = ticker_end.date()
 
         # Parse request range
-        req_range = self._parse_date_range(self._start_date, self._end_date)
+        try:
+            req_range = self._parse_date_range(self._start_date, self._end_date)
+        except ValueError:
+            req_range = None
         if req_range is None:
             req_start, req_end = date.min, date.today()
         else:

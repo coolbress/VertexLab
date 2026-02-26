@@ -57,7 +57,7 @@ class YFinanceRouter(BaseRouter):
         self,
         *,
         api_key: str | None = None,
-        rate_limit: int,
+        rate_limit: int = 60,
         start_date: str | None = None,
         end_date: str | None = None,
         **kwargs: Any,
@@ -154,7 +154,14 @@ class YFinanceRouter(BaseRouter):
                     cleaned.append(clean)
         if not cleaned:
             raise ValueError("YFinanceRouter: no valid symbols provided")
-        for clean in cleaned:
+        # Order-preserving deduplication
+        seen: set[str] = set()
+        unique_cleaned: list[str] = []
+        for s in cleaned:
+            if s not in seen:
+                seen.add(s)
+                unique_cleaned.append(s)
+        for clean in unique_cleaned:
             yield self._build_single_symbol_job(symbol=clean, dataset=dataset)
 
     def parse(self, *, job: FetchJob, payload: bytes) -> ParseResult:
@@ -470,6 +477,8 @@ class YFinanceRouter(BaseRouter):
                     if s.endswith("Z"):
                         s = s.replace("Z", "+00:00")
                     dt = datetime.fromisoformat(s)
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
                     return dt.astimezone(timezone.utc)
                 except (ValueError, AttributeError):
                     return None
