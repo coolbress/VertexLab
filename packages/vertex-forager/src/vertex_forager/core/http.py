@@ -44,6 +44,7 @@ class HttpExecutor:
             httpx.HTTPStatusError: If the server returns 4xx/5xx status code.
             httpx.RequestError: If a network error occurs.
             ValueError: If URL scheme is invalid.
+            TypeError: If library request parameters are invalid.
         """
         # Dispatch based on scheme
         if "://" in spec.url and not spec.url.startswith(("http://", "https://")):
@@ -51,7 +52,13 @@ class HttpExecutor:
         return await self._fetch_http(spec)
 
     async def _fetch_http(self, spec: RequestSpec) -> bytes:
-        """Execute a standard HTTP request using the unified client interface."""
+        """Execute a standard HTTP request using the unified client interface.
+
+        Raises:
+            httpx.RequestError: Network error during HTTP request.
+            httpx.HTTPStatusError: Non-2xx HTTP status returned.
+            TypeError: When parameters are invalid for the underlying client.
+        """
         headers = dict(spec.headers)
         params = dict(spec.params)
 
@@ -75,13 +82,18 @@ class HttpExecutor:
             resp.raise_for_status()
             return resp.content
         except (httpx.RequestError, httpx.HTTPStatusError) as e:
-            prov = getattr(self._client, "__class__", type(self._client)).__name__
+            prov = self._client.__class__.__name__
             status = getattr(getattr(e, "response", None), "status_code", None)
             logger.error("HTTP fetch failed provider=%s status=%s exc=%s", prov, status, type(e).__name__)
             raise
 
     async def _fetch_library(self, spec: RequestSpec) -> bytes:
-        """Execute a non-HTTP library call using the unified client interface."""
+        """Execute a non-HTTP library call using the unified client interface.
+
+        Raises:
+            ValueError: Unsupported scheme or invalid library call configuration.
+            TypeError: Invalid types passed to library call.
+        """
         scheme, payload = spec.url.split("://", 1)
         params = spec.params
         dataset = params.get("dataset", "price")

@@ -92,7 +92,12 @@ async def test_upsert_conflict_updates_value(tmp_path):
                 'SELECT close FROM "yfinance_price" WHERE provider=? AND ticker=? AND date=?',
                 ["yfinance", "AAPL", today],
             ).fetchone()[0]
+            cnt = conn.execute(
+                'SELECT count(*) FROM "yfinance_price" WHERE provider=? AND ticker=? AND date=?',
+                ["yfinance", "AAPL", today],
+            ).fetchone()[0]
             assert val == 110.0
+            assert cnt == 1
     finally:
         await writer.close()
 
