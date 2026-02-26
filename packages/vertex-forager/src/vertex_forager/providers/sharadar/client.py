@@ -543,7 +543,8 @@ class SharadarClient(BaseClient):
             "start_date": config.start_date,
             "end_date": config.end_date,
         }
-        pipeline_kwargs = dict(config.extra)
+        reserved = {"router", "dataset", "symbols", "writer", "mapper", "on_progress"}
+        pipeline_kwargs = {k: v for k, v in dict(config.extra).items() if k not in reserved}
 
         result_obj = await self._run_sharadar_pipeline(
             config=config,
@@ -576,7 +577,8 @@ class SharadarClient(BaseClient):
             "start_date": config.start_date,
             "end_date": config.end_date,
         }
-        pipeline_kwargs = dict(config.extra)
+        reserved = {"router", "dataset", "symbols", "writer", "mapper", "on_progress"}
+        pipeline_kwargs = {k: v for k, v in dict(config.extra).items() if k not in reserved}
 
         result_obj = await self._run_sharadar_pipeline(
             config=config,

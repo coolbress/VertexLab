@@ -457,10 +457,16 @@ class YFinanceRouter(BaseRouter):
             frame = frame.drop(drops)
         # Normalize column names to schema
         rename_map = {
+            # original labels (pre-normalization)
             "Holder": "holder",
             "Shares": "shares",
             "Trans": "trans",
             "Insider Purchases (Last 6 months)": "insider_purchases_last_6m",
+            # normalized labels (post _normalize_columns)
+            "holder": "holder",
+            "shares": "shares",
+            "trans": "trans",
+            "insider_purchases_last_6_months": "insider_purchases_last_6m",
         }
         present = {k: v for k, v in rename_map.items() if k in frame.columns}
         if present:

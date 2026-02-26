@@ -98,6 +98,7 @@ class YFinanceClient(BaseClient):
         Args:
             tickers: List of ticker symbols.
             connect_db: Optional DuckDB connection string/path for persistence.
+            show_progress: Whether to display progress indicators (default: True).
             **kwargs: Additional provider-specific options.
         
         Returns:
@@ -137,6 +138,7 @@ class YFinanceClient(BaseClient):
             connect_db: Database connection string.
             start_date: Start date (YYYY-MM-DD). If None, fetches all available history.
             end_date: End date (YYYY-MM-DD). If None, fetches up to latest available date.
+            show_progress: Whether to display progress indicators (default: True).
             **kwargs: Additional provider-specific options forwarded to the pipeline/executor.
         
         Returns:
