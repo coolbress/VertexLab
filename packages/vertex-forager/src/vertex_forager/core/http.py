@@ -116,7 +116,14 @@ class HttpExecutor:
             return pickle.dumps(data)
 
         except (ValueError, TypeError) as e:
-            logger.error("Library fetch failed provider=%s scheme=%s dataset=%s symbol=%s error=%s", "yfinance", scheme, dataset, payload, e)
+            logger.error(
+                "Library fetch failed provider=%s scheme=%s dataset=%s symbol=%s error=%s",
+                "yfinance",
+                scheme,
+                dataset,
+                payload,
+                type(e).__name__,
+            )
             raise
 
 

@@ -466,7 +466,7 @@ class SharadarClient(BaseClient):
             with spinner_ctx:
                 result = await self._fetch_pagination(cfg)
         elif isinstance(tickers, (list, tuple)) and len(tickers) == 0:
-            raise InputError("tickers list cannot be empty for SharadarClient.get_ticker_info")
+            raise ValueError("tickers list cannot be empty for SharadarClient.get_ticker_info")
         else:
             cfg = FetchConfig(
                 dataset="tickers",

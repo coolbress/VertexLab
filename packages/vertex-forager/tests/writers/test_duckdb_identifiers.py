@@ -40,9 +40,9 @@ async def test_reserved_word_identifier_ok(tmp_path):
         )
         res = await writer.write(packet)
         assert res.rows == 1
-        conn = duckdb.connect(str(db_path))
-        out = conn.execute('SELECT count(*) FROM "select"').fetchone()[0]
-        assert out == 1
+        with duckdb.connect(str(db_path)) as conn:
+            out = conn.execute('SELECT count(*) FROM "select"').fetchone()[0]
+            assert out == 1
     finally:
         await writer.close()
 
@@ -87,12 +87,12 @@ async def test_upsert_conflict_updates_value(tmp_path):
         )
         await writer.write(p2)
 
-        conn = duckdb.connect(str(db_path))
-        val = conn.execute(
-            'SELECT close FROM "yfinance_price" WHERE provider=? AND ticker=? AND date=?',
-            ["yfinance", "AAPL", today],
-        ).fetchone()[0]
-        assert val == 110.0
+        with duckdb.connect(str(db_path)) as conn:
+            val = conn.execute(
+                'SELECT close FROM "yfinance_price" WHERE provider=? AND ticker=? AND date=?',
+                ["yfinance", "AAPL", today],
+            ).fetchone()[0]
+            assert val == 110.0
     finally:
         await writer.close()
 
@@ -126,22 +126,4 @@ async def test_identifier_edge_cases_invalid(tmp_path):
         await writer.close()
 
 
-@pytest.mark.asyncio
-async def test_identifier_explicit_quoted_select_succeeds(tmp_path):
-    db_path = tmp_path / "quoted.duckdb"
-    writer = DuckDBWriter(str(db_path))
-    try:
-        df = pl.DataFrame({"x": [2]})
-        packet = FramePacket(
-            provider="test",
-            table='select',  # writer will quote internally
-            frame=df,
-            observed_at=datetime.now(timezone.utc),
-        )
-        res = await writer.write(packet)
-        assert res.rows == 1
-        conn = duckdb.connect(str(db_path))
-        out = conn.execute('SELECT count(*) FROM "select"').fetchone()[0]
-        assert out == 1
-    finally:
-        await writer.close()
+# Removed duplicate reserved-word test; covered by test_reserved_word_identifier_ok.
