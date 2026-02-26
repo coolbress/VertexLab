@@ -3,6 +3,7 @@ from __future__ import annotations
 import pickle
 import logging
 from typing import Any
+import re
 import httpx
 import yfinance as yf
 from vertex_forager.core.config import RequestSpec
@@ -84,7 +85,8 @@ class HttpExecutor:
         except (httpx.RequestError, httpx.HTTPStatusError) as e:
             prov = self._client.__class__.__name__
             status = getattr(getattr(e, "response", None), "status_code", None)
-            logger.error("HTTP fetch failed provider=%s status=%s exc=%s", prov, status, type(e).__name__)
+            msg = re.sub(r"https?://\\S+", "[redacted]", str(e))
+            logger.error("HTTP fetch failed provider=%s status=%s exc=%s msg=%s", prov, status, type(e).__name__, msg)
             raise
 
     async def _fetch_library(self, spec: RequestSpec) -> bytes:
@@ -129,13 +131,15 @@ class HttpExecutor:
 
         except (ValueError, TypeError) as e:
             prov = self._client.__class__.__name__
+            msg = re.sub(r"https?://\\S+", "[redacted]", str(e))
             logger.error(
-                "Library fetch failed provider=%s scheme=%s dataset=%s symbol=%s error=%s",
+                "Library fetch failed provider=%s scheme=%s dataset=%s symbol=%s exc=%s msg=%s",
                 prov,
                 scheme,
                 dataset,
                 payload,
                 type(e).__name__,
+                msg,
             )
             raise
 

@@ -197,13 +197,19 @@ class YFinanceClient(BaseClient):
             - Date filters (start/end) are not applicable to financials endpoints.
             - Period selects quarterly vs annual datasets. yfinance no longer supports 'quarterly_earnings'.
             - For full historical coverage, prefer institutional sources like Sharadar SF1 (ARY/ARQ).
+        
+        Raises:
+            InputError: If requesting deprecated quarterly earnings or tickers list is invalid.
+            FetchError: If network/API errors occur during data retrieval.
+            TransformError: If data normalization fails.
+            WriterError: If persistence fails.
         """
         # Map 'income_stmt' alias to 'financials' and prevent deprecated quarterly_earnings.
         target_kind = "financials" if kind in ("income_stmt", "earnings") else kind
         if kind == "earnings":
             logger.warning("YFinance 'earnings' maps to 'financials' (income statements). Annual earnings requests are redirected.")
         if kind == "earnings" and period == "quarterly":
-            raise ValueError("quarterly_earnings is deprecated in yfinance; use income_stmt with period='quarterly'.")
+            raise InputError("quarterly_earnings is deprecated in yfinance; use income_stmt with period='quarterly'.")
         dataset = f"quarterly_{target_kind}" if period == "quarterly" else target_kind
         return await self._dispatch_fetch(
             dataset=dataset,
@@ -551,7 +557,7 @@ class YFinanceClient(BaseClient):
         
         Args:
             dataset: Dataset name (e.g., "price", "financials", "info")
-            symbols: List of symbols to fetch, or None for all symbols
+            symbols: List of symbols to fetch (required; must be non-empty)
             connect_db: Database connection string/path, or None for in-memory
             desc: Progress bar description
             table_name: Table name for result collection

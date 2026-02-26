@@ -592,7 +592,7 @@ class VertexForager:
                 if isinstance(e, PrimaryKeyMissingError):
                     logger.error("WRITER: PKMissing table=%s column=%s", table, e.column)
                 elif isinstance(e, PrimaryKeyNullError):
-                    logger.error("WRITER: PKNull table=%s column=%s nulls=%s", table, e.column, getattr(e, "null_count", None))
+                    logger.error("WRITER: PKNull table=%s column=%s nulls=%s", table, e.column, e.null_count)
                 else:
                     logger.error("WRITER: Error writing batch for %s: %s", table, e)
             except Exception as e:
