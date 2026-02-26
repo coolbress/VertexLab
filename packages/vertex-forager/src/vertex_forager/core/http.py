@@ -62,19 +62,22 @@ class HttpExecutor:
         elif spec.auth.kind == "query" and spec.auth.token and spec.auth.query_param:
             params[spec.auth.query_param] = spec.auth.token
 
-        # Use run_async from BaseClient interface
-        resp = await self._client.run_async(
-            spec.method.value,
-            spec.url,
-            params=params,
-            headers=headers,
-            json=spec.json_body,
-            content=spec.data,
-            timeout=spec.timeout_s,
-        )
-
-        resp.raise_for_status()
-        return resp.content
+        try:
+            resp = await self._client.run_async(
+                spec.method.value,
+                spec.url,
+                params=params,
+                headers=headers,
+                json=spec.json_body,
+                content=spec.data,
+                timeout=spec.timeout_s,
+            )
+            resp.raise_for_status()
+            return resp.content
+        except (httpx.RequestError, httpx.HTTPStatusError) as e:
+            prov = getattr(self._client, "__class__", type(self._client)).__name__
+            logger.error("HTTP fetch failed provider=%s url=%s error=%s", prov, spec.url, e)
+            raise
 
     async def _fetch_library(self, spec: RequestSpec) -> bytes:
         """Execute a non-HTTP library call using the unified client interface."""
@@ -112,7 +115,7 @@ class HttpExecutor:
             return pickle.dumps(data)
 
         except (ValueError, TypeError) as e:
-            logger.error(f"Library fetch failed for scheme={scheme}, dataset={dataset}: {e}")
+            logger.error("Library fetch failed provider=%s scheme=%s dataset=%s symbol=%s error=%s", "yfinance", scheme, dataset, payload, e)
             raise
 
 

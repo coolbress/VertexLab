@@ -441,6 +441,15 @@ def load_env_file(env_file: Path | None = None) -> None:
     """
     load_dotenv(dotenv_path=env_file, override=False)
 
+def mask_secret(value: str, keep: int = 4) -> str:
+    if not isinstance(value, str):
+        return "***"
+    n = max(0, keep)
+    s = value.strip()
+    if len(s) <= n:
+        return "*" * len(s)
+    return "*" * (len(s) - n) + s[-n:]
+
 
 def jupyter_safe(async_func: Callable[..., Any]) -> Callable[..., Any]:
     """Run an async function in both scripts and Jupyter environments.

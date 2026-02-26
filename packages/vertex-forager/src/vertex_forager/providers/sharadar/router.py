@@ -9,6 +9,8 @@ import copy
 from datetime import date, datetime, timezone
 
 import polars as pl
+from vertex_forager.exceptions import FetchError
+from vertex_forager.utils import mask_secret
 
 from vertex_forager.core.config import (
     FetchJob,
@@ -420,9 +422,12 @@ class SharadarRouter(BaseRouter):
         Returns:
             RequestAuth: Authentication object with API key in query parameters.
         """
+        token = self._api_key
+        if token:
+            logger.debug("Auth token=%s", mask_secret(token))
         return RequestAuth(
             kind="query",
-            token=self._api_key,
+            token=token,
             query_param="api_key",
         )
 
@@ -485,6 +490,9 @@ class SharadarRouter(BaseRouter):
                 params[f"{date_col}.gte"] = self._start_date
             if self._end_date:
                 params[f"{date_col}.lte"] = self._end_date
+        
+        # Add dataset field for downstream structured logging consistency
+        params["dataset"] = dataset
 
         req = RequestSpec(
             method=HttpMethod.GET,
@@ -703,14 +711,14 @@ class SharadarRouter(BaseRouter):
             dict: Decoded JSON dictionary.
 
         Raises:
-            ValueError: If the API returns a 'quandl_error'.
+            FetchError: If the API returns a 'quandl_error'.
         """
         decoded = json.loads(payload.decode("utf-8"))
         if "quandl_error" in decoded:
             err = decoded.get("quandl_error") or {}
             code = err.get("code", "Unknown")
             message = err.get("message", "Unknown error")
-            raise ValueError(f"Sharadar API error {code}: {message}")
+            raise FetchError(f"Sharadar API error {code}: {message}")
         return decoded
 
     # ------ Frame load: datatable(columns/data)→Polars DataFrame ------

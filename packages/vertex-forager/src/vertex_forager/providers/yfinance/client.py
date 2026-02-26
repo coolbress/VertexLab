@@ -12,6 +12,7 @@ from vertex_forager.routers import create_router
 from vertex_forager.utils import jupyter_safe, validate_memory_usage
 from vertex_forager.schema.mapper import SchemaMapper
 from vertex_forager.core.config import RetryConfig
+from vertex_forager.exceptions import InputError
 
 logger = logging.getLogger(__name__)
 
@@ -105,8 +106,10 @@ class YFinanceClient(BaseClient):
             Polars DataFrame in memory or RunResult when persisting.
         
         Raises:
-            ValueError: If tickers list is empty.
-            RuntimeError: If pipeline execution fails.
+            InputError: If tickers list is empty or invalid.
+            FetchError: If network/API errors occur during data retrieval.
+            TransformError: If data normalization fails.
+            WriterError: If persistence fails.
         """
         return await self._dispatch_fetch(
             dataset="info",
@@ -146,6 +149,12 @@ class YFinanceClient(BaseClient):
         
         Notes:
             Date filters (start/end) apply to price only; other datasets ignore date filters.
+        
+        Raises:
+            InputError: If tickers list is empty or invalid.
+            FetchError: If network/API errors occur during data retrieval.
+            TransformError: If data normalization fails.
+            WriterError: If persistence fails.
         """
         return await self._dispatch_fetch(
             dataset="price",
@@ -234,8 +243,10 @@ class YFinanceClient(BaseClient):
             Polars DataFrame in memory or RunResult when persisting.
         
         Raises:
-            ValueError: If tickers list is empty.
-            RuntimeError: If pipeline execution fails.
+            InputError: If tickers list is empty or invalid.
+            FetchError: If network/API errors occur during data retrieval.
+            TransformError: If data normalization fails.
+            WriterError: If persistence fails.
         """
         return await self._dispatch_fetch(
             dataset=kind,
@@ -273,8 +284,10 @@ class YFinanceClient(BaseClient):
             Polars DataFrame in memory or RunResult when persisting.
         
         Raises:
-            ValueError: If tickers list is empty.
-            RuntimeError: If pipeline execution fails.
+            InputError: If tickers list is empty or invalid.
+            FetchError: If network/API errors occur during data retrieval.
+            TransformError: If data normalization fails.
+            WriterError: If persistence fails.
         """
         dataset = f"{kind}_holders"
         return await self._dispatch_fetch(
@@ -307,8 +320,10 @@ class YFinanceClient(BaseClient):
             Polars DataFrame in memory or RunResult when persisting.
         
         Raises:
-            ValueError: If tickers list is empty.
-            RuntimeError: If pipeline execution fails.
+            InputError: If tickers list is empty or invalid.
+            FetchError: If network/API errors occur during data retrieval.
+            TransformError: If data normalization fails.
+            WriterError: If persistence fails.
         """
         return await self._dispatch_fetch(
             dataset="major_holders",
@@ -342,8 +357,10 @@ class YFinanceClient(BaseClient):
             Polars DataFrame in memory or RunResult when persisting.
         
         Raises:
-            ValueError: If tickers list is empty.
-            RuntimeError: If pipeline execution fails.
+            InputError: If tickers list is empty or invalid.
+            FetchError: If network/API errors occur during data retrieval.
+            TransformError: If data normalization fails.
+            WriterError: If persistence fails.
         """
         return await self._dispatch_fetch(
             dataset="insider_roster_holders",
@@ -375,8 +392,10 @@ class YFinanceClient(BaseClient):
             Polars DataFrame in memory or RunResult when persisting.
         
         Raises:
-            ValueError: If tickers list is empty.
-            RuntimeError: If pipeline execution fails.
+            InputError: If tickers list is empty or invalid.
+            FetchError: If network/API errors occur during data retrieval.
+            TransformError: If data normalization fails.
+            WriterError: If persistence fails.
         """
         return await self._dispatch_fetch(
             dataset="insider_purchases",
@@ -410,8 +429,10 @@ class YFinanceClient(BaseClient):
             Polars DataFrame in memory or RunResult when persisting.
         
         Raises:
-            ValueError: If tickers list is empty.
-            RuntimeError: If pipeline execution fails.
+            InputError: If tickers list is empty or invalid.
+            FetchError: If network/API errors occur during data retrieval.
+            TransformError: If data normalization fails.
+            WriterError: If persistence fails.
         """
         return await self._dispatch_fetch(
             dataset="calendar",
@@ -445,8 +466,10 @@ class YFinanceClient(BaseClient):
             Polars DataFrame in memory or RunResult when persisting.
         
         Raises:
-            ValueError: If tickers list is empty.
-            RuntimeError: If pipeline execution fails.
+            InputError: If tickers list is empty or invalid.
+            FetchError: If network/API errors occur during data retrieval.
+            TransformError: If data normalization fails.
+            WriterError: If persistence fails.
         """
         return await self._dispatch_fetch(
             dataset="recommendations",
@@ -541,7 +564,7 @@ class YFinanceClient(BaseClient):
             pl.DataFrame for in-memory mode, RunResult for database mode
         """
         if not symbols:
-            raise ValueError("tickers list cannot be empty")
+            raise InputError("tickers list cannot be empty")
         bytes_per_item = self.SIZE_MAP.get(dataset, 200 * 1024)
         validate_memory_usage(
             symbols=symbols,

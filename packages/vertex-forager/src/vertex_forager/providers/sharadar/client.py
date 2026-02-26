@@ -111,8 +111,10 @@ class SharadarClient(BaseClient):
             pl.DataFrame in memory mode; RunResult when persisting to DuckDB.
         
         Raises:
-            ValueError: If parameters are invalid for the fetch configuration.
-            RuntimeError: If pipeline execution fails.
+            InputError: If parameters (tickers) are invalid.
+            FetchError: If network/API errors occur during data retrieval.
+            TransformError: If data normalization fails.
+            WriterError: If persistence fails.
         """
         return await self._get_ticker_info_impl(tickers=tickers, connect_db=connect_db, **kwargs)
 
@@ -133,7 +135,9 @@ class SharadarClient(BaseClient):
             pl.DataFrame in memory mode; RunResult when persisting to DuckDB.
         
         Raises:
-            RuntimeError: If pipeline execution fails.
+            FetchError: If network/API errors occur during data retrieval.
+            TransformError: If data normalization fails.
+            WriterError: If persistence fails.
         """
         cfg = self._build_fetch_config(
             dataset="sp500",
@@ -177,9 +181,10 @@ class SharadarClient(BaseClient):
             or RunResult object if storing to database.
 
         Raises:
-            ValueError: If both tickers is empty and connect_db is not provided.
-            httpx.RequestError: If a network error occurs.
-            httpx.HTTPStatusError: If the API returns a non-success status code.
+            InputError: If tickers list is empty or invalid.
+            FetchError: If network/API errors occur during data retrieval.
+            TransformError: If data normalization fails.
+            WriterError: If persistence fails.
         """
         if (not tickers) and (connect_db is None):
             raise ValueError("Either provide non-empty tickers or a connect_db for persistence")
@@ -224,8 +229,10 @@ class SharadarClient(BaseClient):
             Rows include SF1 metrics keyed by ticker and calendardate.
         
         Raises:
-            ValueError: If tickers are empty or invalid.
-            RuntimeError: If pipeline execution or configuration validation fails.
+            InputError: If tickers list is empty or invalid.
+            FetchError: If network/API errors occur during data retrieval.
+            TransformError: If data normalization fails.
+            WriterError: If persistence fails.
         """
         if (not tickers) or (not any(isinstance(t, str) and t.strip() for t in tickers)):
             raise ValueError("tickers list cannot be empty or invalid")
@@ -269,8 +276,10 @@ class SharadarClient(BaseClient):
             Data includes per-day metrics keyed by ticker and date.
         
         Raises:
-            ValueError: If tickers are empty or invalid.
-            RuntimeError: If pipeline execution fails.
+            InputError: If tickers list is empty or invalid.
+            FetchError: If network/API errors occur during data retrieval.
+            TransformError: If data normalization fails.
+            WriterError: If persistence fails.
         """
         if (not tickers) or (not any(isinstance(t, str) and t.strip() for t in tickers)):
             raise ValueError("tickers list cannot be empty or invalid")
@@ -313,8 +322,10 @@ class SharadarClient(BaseClient):
             Rows include dividends/splits keyed by ticker and date.
         
         Raises:
-            ValueError: If tickers are empty or invalid.
-            RuntimeError: If pipeline execution fails.
+            InputError: If tickers list is empty or invalid.
+            FetchError: If network/API errors occur during data retrieval.
+            TransformError: If data normalization fails.
+            WriterError: If persistence fails.
         """
         if (not tickers) or (not any(isinstance(t, str) and t.strip() for t in tickers)):
             raise ValueError("tickers list cannot be empty or invalid")
@@ -357,8 +368,10 @@ class SharadarClient(BaseClient):
             Data includes insider transactions keyed by ticker and filingdate.
         
         Raises:
-            ValueError: If tickers are empty or invalid.
-            RuntimeError: If pipeline execution fails.
+            InputError: If tickers list is empty or invalid.
+            FetchError: If network/API errors occur during data retrieval.
+            TransformError: If data normalization fails.
+            WriterError: If persistence fails.
         """
         if (not tickers) or (not any(isinstance(t, str) and t.strip() for t in tickers)):
             raise ValueError("tickers list cannot be empty or invalid")
