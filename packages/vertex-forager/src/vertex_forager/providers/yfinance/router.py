@@ -394,7 +394,17 @@ class YFinanceRouter(BaseRouter):
             frame = frame.melt(id_vars=id_vars, value_vars=value_vars, variable_name="date", value_name="value")
             if "date" in frame.columns:
                 date_str = pl.col("date").cast(pl.Utf8, strict=False)
-                frame = frame.with_columns(date_str.str.replace(r"[_T\s].*$", "", literal=False).alias("date"))
+                frame = frame.with_columns(date_str.str.replace(r"[T\s_].*$", "", literal=False).alias("date"))
+                # Normalize pure year values to first day of the year
+                normalized = pl.when(pl.col("date").str.contains(r"^\d{4}$", literal=False)).then(
+                    pl.concat_str([pl.col("date"), pl.lit("-01-01")])
+                ).otherwise(pl.col("date")).alias("date")
+                frame = frame.with_columns(normalized)
+                # Keep only date-like strings (YYYY or YYYY-MM-DD)
+                frame = frame.filter(pl.col("date").str.contains(r"^\d{4}(-\d{2}-\d{2})?$", literal=False))
+                # Ensure numeric type for value
+                if "value" in frame.columns:
+                    frame = frame.with_columns(pl.col("value").cast(pl.Float64, strict=False).alias("value"))
         period = "quarterly" if dataset.startswith("quarterly") else "annual"
         if "period" not in frame.columns:
             frame = frame.with_columns(pl.lit(period).alias("period"))
@@ -445,6 +455,28 @@ class YFinanceRouter(BaseRouter):
             drops.append("date")
         if drops:
             frame = frame.drop(drops)
+        # Normalize column names to schema
+        rename_map = {
+            "Holder": "holder",
+            "Shares": "shares",
+            "Trans": "trans",
+            "Insider Purchases (Last 6 months)": "insider_purchases_last_6m",
+        }
+        present = {k: v for k, v in rename_map.items() if k in frame.columns}
+        if present:
+            frame = frame.rename(present)
+        # Ensure PK fields exist and are non-null; if core field missing, drop rows
+        if "insider_purchases_last_6m" in frame.columns:
+            frame = frame.with_columns(pl.col("insider_purchases_last_6m").cast(pl.Utf8, strict=False).alias("insider_purchases_last_6m"))
+            frame = frame.filter(pl.col("insider_purchases_last_6m").is_not_null())
+        else:
+            # No meaningful data -> empty
+            return frame.filter(pl.lit(False))
+        # Optional: make holder non-null even if not used in PK
+        if "holder" in frame.columns:
+            frame = frame.with_columns(pl.col("holder").cast(pl.Utf8, strict=False).fill_null("").alias("holder"))
+        else:
+            frame = frame.with_columns(pl.lit("").alias("holder"))
         return frame
     
     def _transform_calendar(self, frame: pl.DataFrame) -> pl.DataFrame:

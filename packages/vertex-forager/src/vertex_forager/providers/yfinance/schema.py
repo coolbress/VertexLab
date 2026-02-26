@@ -224,7 +224,7 @@ YFINANCE_INSIDER_PURCHASES_SCHEMA = TableSchema(
         "ticker": pl.Utf8,
         "fetched_at": pl.Datetime(time_zone="UTC"),
     },
-    unique_key=("provider", "ticker", "holder", "insider_purchases_last_6m"),
+    unique_key=("provider", "ticker", "insider_purchases_last_6m"),
     analysis_date_col=None,
 )
 

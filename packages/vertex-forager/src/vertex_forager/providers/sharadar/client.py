@@ -608,7 +608,7 @@ class SharadarClient(BaseClient):
                     **router_kwargs,
                 )
 
-                spinner_ctx = Spinner(config.desc, persist=True) if (config.show_progress and config.use_progress_bar) else nullcontext()
+                spinner_ctx = Spinner(config.desc, persist=True) if (config.show_progress and not config.use_progress_bar) else nullcontext()
                 with spinner_ctx:
                     await self.run_pipeline(
                         router=router,

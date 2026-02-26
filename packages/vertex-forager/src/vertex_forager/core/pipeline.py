@@ -236,6 +236,7 @@ class VertexForager:
         try:
             # Create a monitor for writer tasks to detect early failures
             writer_monitor = asyncio.gather(*writer_tasks)
+            self._active_tasks.append(writer_monitor)
 
             async def _pipeline_orchestration() -> None:
                 """Orchestrate the producer-fetcher-join sequence."""

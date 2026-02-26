@@ -11,6 +11,7 @@ from vertex_forager.core.config import RunResult
 from vertex_forager.routers import create_router
 from vertex_forager.utils import jupyter_safe, validate_memory_usage
 from vertex_forager.schema.mapper import SchemaMapper
+from vertex_forager.core.config import RetryConfig
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,8 @@ class YFinanceClient(BaseClient):
         else:
             logger.warning("YFinance rate_limit '%s' is invalid; falling back to 60.", normalized)
             normalized = 60
+        if "retry" not in kwargs:
+            kwargs["retry"] = RetryConfig(max_attempts=1, base_backoff_s=0.5, max_backoff_s=2.0)
         super().__init__(api_key=api_key, rate_limit=normalized, **kwargs)
         self._mapper = SchemaMapper()
         
