@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 import asyncio
 from typing import Any
@@ -189,6 +190,8 @@ class SharadarClient(BaseClient):
         """
         if (not tickers) and (connect_db is None):
             raise InputError("Either provide non-empty tickers or a connect_db for persistence")
+        if tickers:
+            self._validate_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="price",
             symbols=tickers,
@@ -235,8 +238,7 @@ class SharadarClient(BaseClient):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        if (not tickers) or (not any(isinstance(t, str) and t.strip() for t in tickers)):
-            raise InputError("tickers list cannot be empty or invalid")
+        self._validate_tickers(tickers)
         extras = {**dict(kwargs), "dimension": dimension}
         cfg = self._build_fetch_config(
             dataset="fundamental",
@@ -282,8 +284,7 @@ class SharadarClient(BaseClient):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        if (not tickers) or (not any(isinstance(t, str) and t.strip() for t in tickers)):
-            raise InputError("tickers list cannot be empty or invalid")
+        self._validate_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="daily",
             symbols=tickers,
@@ -328,8 +329,7 @@ class SharadarClient(BaseClient):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        if (not tickers) or (not any(isinstance(t, str) and t.strip() for t in tickers)):
-            raise InputError("tickers list cannot be empty or invalid")
+        self._validate_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="actions",
             symbols=tickers,
@@ -374,8 +374,7 @@ class SharadarClient(BaseClient):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        if (not tickers) or (not any(isinstance(t, str) and t.strip() for t in tickers)):
-            raise InputError("tickers list cannot be empty or invalid")
+        self._validate_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="insider",
             symbols=tickers,
@@ -415,11 +414,12 @@ class SharadarClient(BaseClient):
             Data includes institutional positions keyed by ticker and calendardate.
         
         Raises:
-            ValueError: If tickers are empty or invalid.
-            RuntimeError: If pipeline execution fails.
+            InputError: If tickers are empty or invalid.
+            FetchError: If network/API errors occur during data retrieval.
+            TransformError: If data normalization fails.
+            WriterError: If persistence fails.
         """
-        if (not tickers) or (not any(isinstance(t, str) and t.strip() for t in tickers)):
-            raise InputError("tickers list cannot be empty or invalid")
+        self._validate_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="institutional",
             symbols=tickers,
@@ -530,6 +530,8 @@ class SharadarClient(BaseClient):
 
         if symbols is not None and len(symbols) == 0:
             raise InputError("tickers list cannot be empty or invalid")
+        if symbols:
+            self._validate_tickers(symbols)
 
         bytes_per_item = (
             self.BYTES_PER_TICKER_METADATA if config.dataset == "tickers" else self.BYTES_PER_TICKER_FULL
@@ -689,3 +691,19 @@ class SharadarClient(BaseClient):
             end_date=end_date,
             extra=dict(extra or {}),
         )
+
+    def _validate_tickers(self, tickers: list[str]) -> None:
+        """
+        Validate a list of ticker symbols.
+        Enforces per-item rules: non-empty, no whitespace-only, allowed characters.
+        Raises InputError on first invalid ticker.
+        """
+        pattern = re.compile(r"^[A-Za-z0-9._-]+$")
+        for t in tickers:
+            if not isinstance(t, str):
+                raise InputError("Ticker must be a string")
+            s = t.strip()
+            if not s:
+                raise InputError("Ticker cannot be empty or whitespace")
+            if not pattern.match(s):
+                raise InputError(f"Ticker '{t}' contains invalid characters")

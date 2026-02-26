@@ -69,7 +69,8 @@ async def test_upsert_conflict_updates_value(tmp_path):
             frame=df1,
             observed_at=datetime.now(timezone.utc),
         )
-        await writer.write(p1)
+        result1 = await writer.write(p1)
+        assert result1.rows == 1
 
         df2 = pl.DataFrame(
             {
@@ -103,30 +104,32 @@ async def test_upsert_conflict_updates_value(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_identifier_edge_cases_invalid(tmp_path):
+@pytest.mark.parametrize(
+    "name",
+    [
+        '"bad"',  # double quotes unescaped in raw name
+        "'bad'",  # single quotes
+        "bad`name",  # backtick
+        "bad\x00name",  # null byte
+        "bad\nname",  # control char
+        " bad",  # leading whitespace
+        "bad ",  # trailing whitespace
+        "",  # empty
+    ],
+)
+async def test_identifier_edge_cases_invalid(tmp_path, name):
     db_path = tmp_path / "edge.duckdb"
     writer = DuckDBWriter(str(db_path))
     try:
         df = pl.DataFrame({"x": [1]})
-        bad_names = [
-            '"bad"',  # double quotes unescaped in raw name
-            "'bad'",  # single quotes
-            "bad`name",  # backtick
-            "bad\x00name",  # null byte
-            "bad\nname",  # control char
-            " bad",  # leading whitespace
-            "bad ",  # trailing whitespace
-            "",  # empty
-        ]
-        for name in bad_names:
-            packet = FramePacket(
-                provider="test",
-                table=name,
-                frame=df,
-                observed_at=datetime.now(timezone.utc),
-            )
-            with pytest.raises(InputError):
-                await writer.write(packet)
+        packet = FramePacket(
+            provider="test",
+            table=name,
+            frame=df,
+            observed_at=datetime.now(timezone.utc),
+        )
+        with pytest.raises(InputError):
+            await writer.write(packet)
     finally:
         await writer.close()
 
