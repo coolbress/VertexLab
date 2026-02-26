@@ -85,7 +85,7 @@ class HttpExecutor:
         except (httpx.RequestError, httpx.HTTPStatusError) as e:
             prov = self._client.__class__.__name__
             status = getattr(getattr(e, "response", None), "status_code", None)
-            msg = re.sub(r"https?://\\S+", "[redacted]", str(e))
+            msg = re.sub(r"https?://\S+", "[redacted]", str(e))
             logger.error("HTTP fetch failed provider=%s status=%s exc=%s msg=%s", prov, status, type(e).__name__, msg)
             raise
 
@@ -131,7 +131,7 @@ class HttpExecutor:
 
         except (ValueError, TypeError) as e:
             prov = self._client.__class__.__name__
-            msg = re.sub(r"https?://\\S+", "[redacted]", str(e))
+            msg = re.sub(r"https?://\S+", "[redacted]", str(e))
             logger.error(
                 "Library fetch failed provider=%s scheme=%s dataset=%s symbol=%s exc=%s msg=%s",
                 prov,
