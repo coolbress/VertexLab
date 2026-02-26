@@ -76,7 +76,8 @@ class HttpExecutor:
             return resp.content
         except (httpx.RequestError, httpx.HTTPStatusError) as e:
             prov = getattr(self._client, "__class__", type(self._client)).__name__
-            logger.error("HTTP fetch failed provider=%s url=%s error=%s", prov, spec.url, e)
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            logger.error("HTTP fetch failed provider=%s status=%s exc=%s", prov, status, type(e).__name__)
             raise
 
     async def _fetch_library(self, spec: RequestSpec) -> bytes:

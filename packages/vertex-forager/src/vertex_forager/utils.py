@@ -442,11 +442,27 @@ def load_env_file(env_file: Path | None = None) -> None:
     load_dotenv(dotenv_path=env_file, override=False)
 
 def mask_secret(value: str, keep: int = 4) -> str:
+    """Mask sensitive strings for safe logging.
+
+    Args:
+        value: The secret value to mask.
+        keep: Number of trailing characters to keep unmasked (default: 4).
+
+    Returns:
+        A masked string where leading characters are replaced with asterisks.
+
+    Notes:
+        - If `keep` <= 0, the entire string is masked.
+        - If the secret length is less than or equal to `keep`, the entire string is masked.
+        - Whitespace is trimmed before masking.
+    """
     if not isinstance(value, str):
         return "***"
     n = max(0, keep)
     s = value.strip()
     if len(s) <= n:
+        return "*" * len(s)
+    if n == 0:
         return "*" * len(s)
     return "*" * (len(s) - n) + s[-n:]
 

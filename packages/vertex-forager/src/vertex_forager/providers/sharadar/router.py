@@ -491,8 +491,6 @@ class SharadarRouter(BaseRouter):
             if self._end_date:
                 params[f"{date_col}.lte"] = self._end_date
         
-        # Add dataset field for downstream structured logging consistency
-        params["dataset"] = dataset
 
         req = RequestSpec(
             method=HttpMethod.GET,

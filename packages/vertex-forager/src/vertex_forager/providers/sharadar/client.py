@@ -21,6 +21,7 @@ from vertex_forager.utils import (
     Spinner,
 )
 from vertex_forager.providers.sharadar.schema import DATASET_TABLE
+from vertex_forager.exceptions import InputError
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +79,7 @@ class SharadarClient(BaseClient):
             **kwargs: Additional configuration parameters for EngineConfig.
         """
         if not api_key:
-            raise ValueError("Sharadar API Key is missing")
+            raise InputError("Sharadar API Key is missing")
 
         super().__init__(
             api_key=api_key,
@@ -187,7 +188,7 @@ class SharadarClient(BaseClient):
             WriterError: If persistence fails.
         """
         if (not tickers) and (connect_db is None):
-            raise ValueError("Either provide non-empty tickers or a connect_db for persistence")
+            raise InputError("Either provide non-empty tickers or a connect_db for persistence")
         cfg = self._build_fetch_config(
             dataset="price",
             symbols=tickers,
@@ -235,7 +236,7 @@ class SharadarClient(BaseClient):
             WriterError: If persistence fails.
         """
         if (not tickers) or (not any(isinstance(t, str) and t.strip() for t in tickers)):
-            raise ValueError("tickers list cannot be empty or invalid")
+            raise InputError("tickers list cannot be empty or invalid")
         extras = {**dict(kwargs), "dimension": dimension}
         cfg = self._build_fetch_config(
             dataset="fundamental",
@@ -282,7 +283,7 @@ class SharadarClient(BaseClient):
             WriterError: If persistence fails.
         """
         if (not tickers) or (not any(isinstance(t, str) and t.strip() for t in tickers)):
-            raise ValueError("tickers list cannot be empty or invalid")
+            raise InputError("tickers list cannot be empty or invalid")
         cfg = self._build_fetch_config(
             dataset="daily",
             symbols=tickers,
@@ -328,7 +329,7 @@ class SharadarClient(BaseClient):
             WriterError: If persistence fails.
         """
         if (not tickers) or (not any(isinstance(t, str) and t.strip() for t in tickers)):
-            raise ValueError("tickers list cannot be empty or invalid")
+            raise InputError("tickers list cannot be empty or invalid")
         cfg = self._build_fetch_config(
             dataset="actions",
             symbols=tickers,
@@ -374,7 +375,7 @@ class SharadarClient(BaseClient):
             WriterError: If persistence fails.
         """
         if (not tickers) or (not any(isinstance(t, str) and t.strip() for t in tickers)):
-            raise ValueError("tickers list cannot be empty or invalid")
+            raise InputError("tickers list cannot be empty or invalid")
         cfg = self._build_fetch_config(
             dataset="insider",
             symbols=tickers,
@@ -418,7 +419,7 @@ class SharadarClient(BaseClient):
             RuntimeError: If pipeline execution fails.
         """
         if (not tickers) or (not any(isinstance(t, str) and t.strip() for t in tickers)):
-            raise ValueError("tickers list cannot be empty or invalid")
+            raise InputError("tickers list cannot be empty or invalid")
         cfg = self._build_fetch_config(
             dataset="institutional",
             symbols=tickers,
@@ -465,7 +466,7 @@ class SharadarClient(BaseClient):
             with spinner_ctx:
                 result = await self._fetch_pagination(cfg)
         elif isinstance(tickers, (list, tuple)) and len(tickers) == 0:
-            raise ValueError("tickers list cannot be empty for SharadarClient.get_ticker_info")
+            raise InputError("tickers list cannot be empty for SharadarClient.get_ticker_info")
         else:
             cfg = FetchConfig(
                 dataset="tickers",
@@ -491,7 +492,7 @@ class SharadarClient(BaseClient):
                 table = DATASET_TABLE["tickers"]
                 allowed = set(DATASET_TABLE.values())
                 if table not in allowed:
-                    raise ValueError("Invalid table name for metadata cache query")
+                    raise InputError("Invalid table name for metadata cache query")
                 q_table = f'"{table}"'
                 with duckdb.connect(str(connect_db)) as conn:
                     df_pl = conn.execute(
@@ -528,7 +529,7 @@ class SharadarClient(BaseClient):
         symbols = config.symbols
 
         if symbols is not None and len(symbols) == 0:
-            raise ValueError("tickers list cannot be empty or invalid")
+            raise InputError("tickers list cannot be empty or invalid")
 
         bytes_per_item = (
             self.BYTES_PER_TICKER_METADATA if config.dataset == "tickers" else self.BYTES_PER_TICKER_FULL
