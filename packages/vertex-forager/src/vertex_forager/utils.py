@@ -12,9 +12,11 @@ import warnings
 from typing import Any, Callable
 
 import nest_asyncio
-from tqdm import tqdm
+from tqdm.auto import tqdm
+import psutil
 
 from dotenv import load_dotenv
+logger = logging.getLogger(__name__)
 
 
 def process_symbols(tickers: list[str] | None) -> list[str] | None:
@@ -29,6 +31,30 @@ def process_symbols(tickers: list[str] | None) -> list[str] | None:
     if tickers is not None:
         return [t.strip().upper() for t in tickers if t and t.strip()]
     return None
+
+
+def validate_memory_usage(
+    symbols: list[str] | None,
+    connect_db: str | Path | None,
+    bytes_per_item: int = 1 * 1024 * 1024,
+) -> None:
+    """Validate memory safety for per-ticker jobs.
+    
+    Args:
+        symbols: List of ticker symbols for the per-ticker job.
+        connect_db: Database connection path or None for in-memory.
+        bytes_per_item: Estimated bytes per ticker for the dataset.
+    """
+    if connect_db is not None:
+        return
+    if symbols is None:
+        return
+    if not isinstance(bytes_per_item, int) or bytes_per_item <= 0:
+        raise ValueError("bytes_per_item must be a positive integer")
+    num_items = len(symbols)
+    estimated_size = num_items * bytes_per_item
+    available_memory = psutil.virtual_memory().available
+    check_memory_safety(estimated_size, available_memory, num_items)
 
 
 def check_memory_safety(
@@ -144,24 +170,27 @@ class ListHandler(logging.Handler):
 
 
 class Spinner:
-    """
-    Spinner class using sys.stderr for direct terminal output.
-
-    Uses standard ANSI escape codes for line clearing and updates.
-    Runs a background thread to animate the spinner character.
-    """
-
-    def __init__(self, message: str = "Processing...", delay: float = 0.1) -> None:
+    def __init__(self, message: str = "Processing...", delay: float = 0.1, persist: bool = False) -> None:
         self.message = message
         self.delay = delay
+        self.persist = persist
         self.busy = False
         self.update_thread = None
         self._message_lock = threading.Lock()
 
-        # Detect TTY
         self._is_tty = sys.stderr.isatty()
+        ip = None
+        try:
+            from IPython import get_ipython
+            ip = get_ipython()
+        except (ImportError, ModuleNotFoundError, AttributeError):
+            ip = None
+        except Exception as e:
+            logger.error("Unexpected error during notebook detection: %s", e)
+            ip = None
+        self._is_notebook = bool(ip and ip.__class__.__name__ == "ZMQInteractiveShell")
+        self._widget_label: object | None = None
 
-        # Spinner chars
         self.spinner_chars = itertools.cycle(
             ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
         )
@@ -172,7 +201,6 @@ class Spinner:
             self.message = new_message
 
     def _spinner_task(self) -> None:
-        """Background task to animate the spinner."""
         while self.busy:
             spinner_char = next(self.spinner_chars)
 
@@ -198,46 +226,79 @@ class Spinner:
             time.sleep(self.delay)
 
     def start(self) -> None:
-        """Start the spinner."""
         self.busy = True
 
-        if self._is_tty:
+        if self._is_notebook:
+            try:
+                from ipywidgets import HTML  # type: ignore
+                from IPython.display import display  # type: ignore
+                self._widget_label = HTML(value=f"⏳ {self.message}")
+                display(self._widget_label)
+                self.update_thread = threading.Thread(
+                    target=self._notebook_task, daemon=True
+                )
+                self.update_thread.start()
+            except ImportError:
+                self._is_notebook = False
+                if self._is_tty:
+                    self._hide_cursor()
+                    self.update_thread = threading.Thread(
+                        target=self._spinner_task, daemon=True
+                    )
+                    self.update_thread.start()
+                else:
+                    sys.stderr.write(f"{self.message}\n")
+                    sys.stderr.flush()
+        elif self._is_tty:
             self._hide_cursor()
             self.update_thread = threading.Thread(
                 target=self._spinner_task, daemon=True
             )
             self.update_thread.start()
         else:
-            # Non-TTY mode: just log the message once
             sys.stderr.write(f"{self.message}\n")
             sys.stderr.flush()
 
     def stop(self, clear: bool = True) -> None:
-        """Stop the spinner and cleanup.
-
-        Args:
-            clear: Whether to clear the spinner line.
-        """
         self.busy = False
 
-        if self._is_tty:
+        if self._is_notebook:
             if self.update_thread:
                 try:
-                    self.update_thread.join(timeout=0.2)
+                    timeout = min(max(self.delay + 0.1, 0.1), 2.0)
+                    self.update_thread.join(timeout=timeout)
                 except Exception:
                     pass
-
-            if clear:
+            if self._widget_label:
+                if self.persist:
+                    self._widget_label.value = f"✅ {self.message}"
+                elif clear:
+                    try:
+                        self._widget_label.layout.display = "none"
+                    except Exception:
+                        pass
+        elif self._is_tty:
+            if self.update_thread:
+                try:
+                    timeout = min(max(self.delay + 0.1, 0.1), 2.0)
+                    self.update_thread.join(timeout=timeout)
+                except Exception:
+                    pass
+            if self.persist:
                 self._clear_line()
-            else:
-                sys.stderr.write("\n")
+                sys.stderr.write(f"✅ {self.message}\n")
                 sys.stderr.flush()
-
+            else:
+                if clear:
+                    self._clear_line()
+                else:
+                    sys.stderr.write("\n")
+                    sys.stderr.flush()
             self._show_cursor()
-        # Non-TTY: do nothing on stop (already printed message)
+        else:
+            ...
 
     def _clear_line(self) -> None:
-        """Clear the current line in stderr."""
         if not self._is_tty:
             return
 
@@ -251,19 +312,16 @@ class Spinner:
         sys.stderr.flush()
 
     def _hide_cursor(self) -> None:
-        """Hide the cursor."""
         if self._is_tty:
             sys.stderr.write("\033[?25l")
             sys.stderr.flush()
 
     def _show_cursor(self) -> None:
-        """Show the cursor."""
         if self._is_tty:
             sys.stderr.write("\033[?25h")
             sys.stderr.flush()
 
     def __enter__(self) -> "Spinner":
-        # Setup logging capture like before
         self.root_logger = logging.getLogger()
         self.original_handlers = self.root_logger.handlers[:]
         self.buffer_handler = ListHandler()
@@ -298,6 +356,28 @@ class Spinner:
         if exc_type is KeyboardInterrupt:
             return False
         return False
+
+    def _notebook_task(self) -> None:
+        failures = 0
+        while self.busy and self._widget_label is not None:
+            ch = next(self.spinner_chars)
+            with self._message_lock:
+                msg = self.message
+            try:
+                # type: ignore[attr-defined]
+                self._widget_label.value = f"{ch} {msg}"
+                failures = 0
+            except (AttributeError, RuntimeError) as e:
+                logging.getLogger(__name__).error("%s", e)
+                failures += 1
+                if failures >= 3:
+                    self.busy = False
+                    break
+            except Exception as e:
+                logging.getLogger(__name__).exception("Unexpected notebook widget update error: %s", e)
+                self.busy = False
+                break
+            time.sleep(self.delay)
 
 
 def get_app_root() -> Path:

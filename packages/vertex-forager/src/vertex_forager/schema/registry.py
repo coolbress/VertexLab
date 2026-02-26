@@ -11,11 +11,15 @@ from typing import Final
 
 from vertex_forager.schema.config import TableSchema
 from vertex_forager.providers.sharadar.schema import TABLES as SHARADAR_TABLES
+from vertex_forager.providers.yfinance.schema import TABLES as YFINANCE_TABLES
 
 
-TABLES: Final[dict[str, TableSchema]] = {
-    **SHARADAR_TABLES,
-}
+_sh_keys = set(SHARADAR_TABLES.keys())
+_yf_keys = set(YFINANCE_TABLES.keys())
+_dup = _sh_keys & _yf_keys
+if _dup:
+    raise ValueError(f"Schema table name conflict: {sorted(_dup)}")
+TABLES: Final[dict[str, TableSchema]] = {**SHARADAR_TABLES, **YFINANCE_TABLES}
 
 
 def get_table_schema(table: str) -> TableSchema | None:

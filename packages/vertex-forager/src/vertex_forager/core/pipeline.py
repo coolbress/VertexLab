@@ -25,9 +25,9 @@ import inspect
 import logging
 import time
 import itertools
-import functools
 import httpx
 from typing import Any, TYPE_CHECKING
+from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Sequence, Callable
 from collections import defaultdict
 
@@ -52,6 +52,7 @@ from vertex_forager.core.controller import FlowController
 from vertex_forager.core.retry import create_retry_controller
 from vertex_forager.routers.base import BaseRouter
 from vertex_forager.schema.mapper import SchemaMapper
+from vertex_forager.schema.registry import get_table_schema
 
 if TYPE_CHECKING:
     from vertex_forager.writers.base import BaseWriter
@@ -142,6 +143,18 @@ class VertexForager:
                 "PIPELINE: Detected InMemoryBufferWriter. Disabled intermediate flushing."
             )
 
+        workers = getattr(self.controller, "concurrency_limit", None)
+        try:
+            w_int = int(workers) if workers is not None else None
+            if w_int is not None and w_int <= 0:
+                w_int = None
+        except (ValueError, TypeError):
+            w_int = None
+        self._parse_executor = ThreadPoolExecutor(
+            max_workers=w_int,
+            thread_name_prefix="vertex-forager:parse",
+        )
+
     async def run(
         self,
         *,
@@ -223,6 +236,7 @@ class VertexForager:
         try:
             # Create a monitor for writer tasks to detect early failures
             writer_monitor = asyncio.gather(*writer_tasks)
+            self._active_tasks.append(writer_monitor)
 
             async def _pipeline_orchestration() -> None:
                 """Orchestrate the producer-fetcher-join sequence."""
@@ -271,11 +285,11 @@ class VertexForager:
             await orchestrator
 
             # Wait for writers to complete (graceful shutdown)
-            logger.info("PIPELINE: Waiting for writer tasks to complete...")
+            logger.debug("PIPELINE: Waiting for writer tasks to complete...")
             await writer_monitor
 
             # Flush any buffered data in the writer
-            logger.info("PIPELINE: Flushing writer buffer...")
+            logger.debug("PIPELINE: Flushing writer buffer...")
             await self._writer.flush()
 
             logger.info(f"PIPELINE: Run completed. Total errors: {len(result.errors)}")
@@ -292,7 +306,7 @@ class VertexForager:
         if not self._active_tasks:
             return
 
-        logger.info("PIPELINE: Stopping pipeline...")
+        logger.debug("PIPELINE: Stopping pipeline...")
         for task in self._active_tasks:
             if not task.done():
                 task.cancel()
@@ -302,7 +316,13 @@ class VertexForager:
             await asyncio.gather(*self._active_tasks, return_exceptions=True)
         
         self._active_tasks.clear()
-        logger.info("PIPELINE: Pipeline stopped.")
+        try:
+            self._parse_executor.shutdown(wait=False)
+        except (RuntimeError, ValueError) as e:
+            logger.exception(f"PIPELINE: Parse executor shutdown failed: {e}")
+        except Exception:
+            logger.exception("PIPELINE: Unexpected error during parse executor shutdown")
+        logger.debug("PIPELINE: Pipeline stopped.")
 
     async def _producer(
         self,
@@ -319,7 +339,7 @@ class VertexForager:
         """
         counter = itertools.count()
         job_count = 0
-        logger.info(
+        logger.debug(
             f"PRODUCER: Starting job generation for dataset={dataset}, symbols={len(symbols) if symbols else 'all'}"
         )
 
@@ -332,7 +352,7 @@ class VertexForager:
             if job_count % 100 == 0:
                 logger.debug(f"PRODUCER: Generated {job_count} jobs so far...")
 
-        logger.info(f"PRODUCER: Completed job generation. Total jobs: {job_count}")
+        logger.debug(f"PRODUCER: Completed job generation. Total jobs: {job_count}")
 
     async def _fetch_worker(
         self,
@@ -429,12 +449,9 @@ class VertexForager:
                     f"[Worker-{worker_id}] Fetched {job.symbol} ({len(payload) if payload else 0} bytes) in {fetch_latency:.3f}s"
                 )
 
-                # Offload CPU-bound parsing to a thread pool
+                # Offload CPU-bound parsing to a dedicated thread pool
                 loop = asyncio.get_running_loop()
-                parse_result = await loop.run_in_executor(
-                    None,  # Use default ThreadPoolExecutor
-                    functools.partial(self._router.parse, job=job, payload=payload),
-                )
+                parse_result = await loop.run_in_executor(self._parse_executor, lambda: self._router.parse(job=job, payload=payload))
                 t2 = time.monotonic()
                 logger.debug(
                     f"[Worker-{worker_id}] Parsed {job.symbol} in {t2 - t1:.3f}s. Packets: {len(parse_result.packets)}, Next Jobs: {len(parse_result.next_jobs)}"
@@ -442,9 +459,9 @@ class VertexForager:
 
                 for packet in parse_result.packets:
                     # Normalize packet schema (enforce types, fill missing cols)
-                    # Also CPU-bound, so we offload it
+                    loop = asyncio.get_running_loop()
                     normalized_packet = await loop.run_in_executor(
-                        None, functools.partial(self._mapper.normalize, packet=packet)
+                        self._parse_executor, lambda: self._mapper.normalize(packet=packet)
                     )
                     await pkt_q.put(normalized_packet)
 
@@ -524,11 +541,26 @@ class VertexForager:
             try:
                 # Merge frames
                 frames = [p.frame for p in packets]
-
-                merged_frame = pl.concat(frames, how="vertical")
+                first = packets[0]
+                schema = get_table_schema(first.table)
+                try:
+                    merged_frame = pl.concat(frames, how="vertical")
+                except pl.exceptions.PolarsError as e:
+                    is_flexible = getattr(self._router, "flexible_schema", False) or (
+                        schema is not None and getattr(schema, "flexible_schema", False)
+                    )
+                    if not is_flexible:
+                        raise
+                    logger.warning("WRITER: Schema mismatch for %s: %s. Falling back to diagonal concat", first.table, e)
+                    merged_frame = pl.concat(frames, how="diagonal")
+                if schema and schema.unique_key:
+                    for col in schema.unique_key:
+                        if col not in merged_frame.columns:
+                            raise ComputeError(f"PKMissing:{packets[0].table}:{col}")
+                        if merged_frame.get_column(col).null_count() > 0:
+                            raise ComputeError(f"PKNull:{packets[0].table}:{col}")
 
                 # Create merged packet (use metadata from the first packet)
-                first = packets[0]
                 merged_packet = FramePacket(
                     provider=first.provider,
                     table=first.table,
@@ -554,16 +586,22 @@ class VertexForager:
             except (ComputeError, ValidationError) as e:
                 async with result_lock:
                     result.errors.append(f"WriterError:{table}:{e}")
+                buffers[table] = []
+                buffer_rows[table] = 0
                 logger.error(f"WRITER: Error writing batch for {table}: {e}")
             except Exception as e:
                 # Check for DuckDB Error if available
                 if duckdb and isinstance(e, duckdb.Error):
                     async with result_lock:
                         result.errors.append(f"DuckDBError:{table}:{e}")
-                    logger.error(f"WRITER: DuckDB error for {table}: {e}")
+                    buffers[table] = []
+                    buffer_rows[table] = 0
+                    logger.exception(f"WRITER: DuckDB error for {table}: {e}")
                 else:
                     async with result_lock:
                         result.errors.append(f"UnexpectedWriterError:{table}:{e}")
+                    buffers[table] = []
+                    buffer_rows[table] = 0
                     logger.exception(f"WRITER: Unexpected error writing batch for {table}: {e}")
                     raise
 
@@ -579,7 +617,7 @@ class VertexForager:
                         for table in list(buffers.keys()):
                             await flush(table)
                     except Exception as e:
-                        logger.error(f"WRITER: Error during shutdown flush: {e}")
+                        logger.exception(f"WRITER: Error during shutdown flush: {e}")
                         raise
                     return
 
@@ -605,7 +643,7 @@ class VertexForager:
             except Exception as e:
                 async with result_lock:
                     result.errors.append(f"Writer:Unexpected:{e}")
-                logger.exception(f"WRITER: Unexpected error: {e}")
+                logger.exception("WRITER: Unexpected error")
                 raise
             finally:
                 pkt_q.task_done()

@@ -27,6 +27,7 @@ import duckdb
 import polars as pl
 
 from vertex_forager.core.config import FramePacket
+from polars.exceptions import ComputeError
 from vertex_forager.writers.base import BaseWriter, WriteResult
 
 # Module-level cache for schema getter to avoid circular imports
@@ -169,7 +170,42 @@ class DuckDBWriter(BaseWriter):
         for table_name, entries in by_table.items():
             try:
                 frames = [p.frame for _, p in entries]
-                merged_df = pl.concat(frames, how="diagonal")
+                try:
+                    merged_df = pl.concat(frames, how="vertical")
+                except pl.exceptions.PolarsError as e:
+                    # Use schema flexible flag to decide diagonal fallback
+                    global _get_table_schema
+                    if _get_table_schema is None:
+                        try:
+                            from vertex_forager.schema.registry import get_table_schema
+                            _get_table_schema = get_table_schema
+                        except ImportError:
+                            _get_table_schema = None
+                    schema = _get_table_schema(table_name) if _get_table_schema else None
+                    is_flexible = bool(schema and getattr(schema, "flexible_schema", False))
+                    if not is_flexible:
+                        raise
+                    self._logger.warning(
+                        "WRITER: Schema mismatch for %s: %s. Falling back to diagonal concat",
+                        table_name,
+                        e,
+                    )
+                    merged_df = pl.concat(frames, how="diagonal")
+                pk_cols = self._get_primary_keys(table_name)
+                if pk_cols:
+                    for c in pk_cols:
+                        if c not in merged_df.columns:
+                            self._logger.error("WRITER: Missing PK column '%s' for table '%s'. Columns=%s", c, table_name, merged_df.columns)
+                            raise ComputeError(f"PKMissing:{table_name}:{c}")
+                        elif merged_df.get_column(c).null_count() > 0:
+                            self._logger.error(
+                                "WRITER: Nulls detected in PK column '%s' for table '%s'. rows=%d, columns=%s",
+                                c,
+                                table_name,
+                                len(merged_df),
+                                merged_df.columns,
+                            )
+                            raise ValueError(f"PKNull:{table_name}:{c}")
                 rows = len(merged_df)
                 
                 if rows > 0:
@@ -186,6 +222,9 @@ class DuckDBWriter(BaseWriter):
 
             except duckdb.Error as e:
                 self._logger.error(f"Failed to write batch for {table_name}: {e}")
+                raise
+            except ValueError as e:
+                self._logger.debug(f"Validation error writing batch for {table_name}: {e}")
                 raise
 
         # Fill any remaining None (should be covered by empty check or loop, but safe guard)
@@ -404,7 +443,7 @@ class DuckDBWriter(BaseWriter):
             q_col = self._quote_identifier(col_name)
 
             try:
-                self._logger.info(
+                self._logger.debug(
                     f"Adding column {col_name} ({sql_type}) to {table_name}"
                 )
                 conn.execute(f"ALTER TABLE {q_table} ADD COLUMN {q_col} {sql_type}")

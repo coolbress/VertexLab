@@ -18,6 +18,7 @@ from httpx import Response
 
 from vertex_forager.core.config import RequestSpec, HttpMethod, RequestAuth
 from vertex_forager.core.http import HttpExecutor
+import pickle
 
 
 class TestHttpExecutor:
@@ -75,14 +76,14 @@ class TestHttpExecutor:
     ) -> None:
         """Test successful HTTP request execution."""
         # Arrange
-        mock_async_client.request.return_value = success_response
+        mock_async_client.run_async.return_value = success_response
 
         # Act
         result = await http_executor.fetch(sample_request_spec)
 
         # Assert
         assert result == b'{"data": "success"}'
-        mock_async_client.request.assert_called_once_with(
+        mock_async_client.run_async.assert_called_once_with(
             "GET",
             "https://api.example.com/data",
             params={"ticker": "AAPL"},
@@ -100,7 +101,7 @@ class TestHttpExecutor:
         success_response: Response,
     ) -> None:
         """Verify Bearer token injection."""
-        mock_async_client.request.return_value = success_response
+        mock_async_client.run_async.return_value = success_response
         spec = RequestSpec(
             url="http://test.com",
             method=HttpMethod.GET,
@@ -109,7 +110,7 @@ class TestHttpExecutor:
 
         await http_executor.fetch(spec)
 
-        kwargs = mock_async_client.request.call_args.kwargs
+        kwargs = mock_async_client.run_async.call_args.kwargs
         assert kwargs["headers"]["Authorization"] == "Bearer secret_token"
 
     @pytest.mark.asyncio
@@ -120,7 +121,7 @@ class TestHttpExecutor:
         success_response: Response,
     ) -> None:
         """Verify Query parameter auth injection."""
-        mock_async_client.request.return_value = success_response
+        mock_async_client.run_async.return_value = success_response
         spec = RequestSpec(
             url="http://test.com",
             method=HttpMethod.GET,
@@ -129,7 +130,7 @@ class TestHttpExecutor:
 
         await http_executor.fetch(spec)
 
-        kwargs = mock_async_client.request.call_args.kwargs
+        kwargs = mock_async_client.run_async.call_args.kwargs
         assert kwargs["params"]["api_key"] == "12345"
 
     @pytest.mark.asyncio
@@ -140,7 +141,7 @@ class TestHttpExecutor:
         success_response: Response,
     ) -> None:
         """Verify Custom Header auth injection."""
-        mock_async_client.request.return_value = success_response
+        mock_async_client.run_async.return_value = success_response
         spec = RequestSpec(
             url="http://test.com",
             method=HttpMethod.GET,
@@ -149,7 +150,7 @@ class TestHttpExecutor:
 
         await http_executor.fetch(spec)
 
-        kwargs = mock_async_client.request.call_args.kwargs
+        kwargs = mock_async_client.run_async.call_args.kwargs
         assert kwargs["headers"]["X-API-KEY"] == "secret"
 
     @pytest.mark.asyncio
@@ -162,7 +163,7 @@ class TestHttpExecutor:
     ) -> None:
         """Test that HTTP errors are properly handled."""
         # Arrange
-        mock_async_client.request.return_value = error_response
+        mock_async_client.run_async.return_value = error_response
 
         # Act & Assert
         with pytest.raises(httpx.HTTPStatusError):
@@ -177,7 +178,7 @@ class TestHttpExecutor:
     ) -> None:
         """Test that network errors are properly handled."""
         # Arrange
-        mock_async_client.request.side_effect = httpx.RequestError(
+        mock_async_client.run_async.side_effect = httpx.RequestError(
             "Network error", request=MagicMock()
         )
 
@@ -195,7 +196,7 @@ class TestHttpExecutor:
     ) -> None:
         """Test that timeout configuration is respected."""
         # Arrange
-        mock_async_client.request.return_value = success_response
+        mock_async_client.run_async.return_value = success_response
 
         # Create spec with custom timeout
         spec_with_timeout = RequestSpec(
@@ -206,7 +207,7 @@ class TestHttpExecutor:
         await http_executor.fetch(spec_with_timeout)
 
         # Assert
-        mock_async_client.request.assert_called_once_with(
+        mock_async_client.run_async.assert_called_once_with(
             "GET",
             "https://api.example.com/data",
             params={},
@@ -230,7 +231,7 @@ class TestHttpExecutor:
         empty_response.content = b""
         empty_response.headers = {}
 
-        mock_async_client.request.return_value = empty_response
+        mock_async_client.run_async.return_value = empty_response
 
         # Act
         result = await http_executor.fetch(sample_request_spec)
@@ -238,6 +239,92 @@ class TestHttpExecutor:
         # Assert
         assert result == b""
 
+class TestHttpExecutorYFinance:
+    """Tests for yfinance:// library branch behavior."""
+    @pytest.fixture
+    def http_executor(self, mock_async_client: AsyncMock) -> HttpExecutor:
+        return HttpExecutor(client=mock_async_client)
+
+    @pytest.mark.asyncio
+    async def test_fetch_yfinance_ticker_attr_success(
+        self,
+        http_executor: HttpExecutor,
+        mock_async_client: AsyncMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        class DummyTicker:
+            def __init__(self, symbol: str) -> None:
+                self.symbol = symbol
+            def info(self) -> dict[str, str]:
+                return {"ok": "yes"}
+        class DummyYF:
+            def __init__(self) -> None:
+                pass
+            def Ticker(self, sym: str) -> DummyTicker:  # type: ignore[override]
+                return DummyTicker(sym)
+        monkeypatch.setattr("vertex_forager.core.http.yf", DummyYF())
+        mock_async_client.run_sync = AsyncMock(side_effect=lambda func: func())
+        spec = RequestSpec(
+            method=HttpMethod.GET,
+            url="yfinance://AAPL",
+            params={"dataset": "info", "lib": {"type": "ticker_attr", "attr": "info", "kwargs": {}}},
+        )
+        result = await http_executor.fetch(spec)
+        assert result == pickle.dumps({"ok": "yes"})
+        mock_async_client.run_async.assert_not_called()
+        assert mock_async_client.run_sync.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_fetch_yfinance_download_success(
+        self,
+        http_executor: HttpExecutor,
+        mock_async_client: AsyncMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        class DummyYF:
+            def download(self, **kwargs: object) -> str:  # type: ignore[override]
+                return "downloaded"
+        monkeypatch.setattr("vertex_forager.core.http.yf", DummyYF())
+        mock_async_client.run_sync = AsyncMock(side_effect=lambda func: func())
+        spec = RequestSpec(
+            method=HttpMethod.GET,
+            url="yfinance://AAPL",
+            params={"dataset": "price", "lib": {"type": "download", "kwargs": {"period": "1d"}}},
+        )
+        result = await http_executor.fetch(spec)
+        assert result == pickle.dumps("downloaded")
+        mock_async_client.run_async.assert_not_called()
+        assert mock_async_client.run_sync.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_fetch_yfinance_raises_on_unknown_call_type(
+        self,
+        http_executor: HttpExecutor,
+        mock_async_client: AsyncMock,
+    ) -> None:
+        mock_async_client.run_sync = AsyncMock(side_effect=lambda func: func())
+        spec = RequestSpec(
+            method=HttpMethod.GET,
+            url="yfinance://AAPL",
+            params={"dataset": "price", "lib": {"type": "unknown", "kwargs": {}}},
+        )
+        with pytest.raises(ValueError):
+            await http_executor.fetch(spec)
+
+    @pytest.mark.asyncio
+    async def test_fetch_unsupported_library_scheme_raises(
+        self,
+        http_executor: HttpExecutor,
+        mock_async_client: AsyncMock,
+    ) -> None:
+        mock_async_client.run_sync = AsyncMock(side_effect=lambda func: func())
+        spec = RequestSpec(
+            method=HttpMethod.GET,
+            url="ftp://AAPL",
+            params={"dataset": "price", "lib": {"type": "ticker_attr", "attr": "info", "kwargs": {}}},
+        )
+        with pytest.raises(ValueError):
+            await http_executor.fetch(spec)
 
 class TestHttpExecutorConcurrency:
     """Tests for HTTP executor concurrency behavior."""
@@ -254,7 +341,7 @@ class TestHttpExecutorConcurrency:
         success_response.status_code = 200
         success_response.content = b'{"data": "success"}'
 
-        mock_async_client.request.return_value = success_response
+        mock_async_client.run_async.return_value = success_response
 
         spec1 = RequestSpec(url="https://api.example.com/data1", method=HttpMethod.GET)
         spec2 = RequestSpec(url="https://api.example.com/data2", method=HttpMethod.GET)
@@ -266,4 +353,4 @@ class TestHttpExecutorConcurrency:
         assert len(results) == 2
         assert results[0] == b'{"data": "success"}'
         assert results[1] == b'{"data": "success"}'
-        assert mock_async_client.request.call_count == 2
+        assert mock_async_client.run_async.call_count == 2

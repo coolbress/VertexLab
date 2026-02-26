@@ -89,10 +89,10 @@ class TestSharadarRouterUnit:
         assert len(jobs) == 0
 
     @pytest.mark.asyncio
-    async def test_generate_jobs_passes_kwargs_for_tickers_dataset(
+    async def test_generate_jobs_enforces_max_per_page_for_tickers_dataset(
         self, router: SharadarRouter
     ) -> None:
-        """Test that generate_jobs passes kwargs correctly for tickers dataset."""
+        """Test that generate_jobs enforces maximum per_page for tickers dataset."""
         jobs = [
             job
             async for job in router.generate_jobs(
@@ -103,7 +103,7 @@ class TestSharadarRouterUnit:
         assert len(jobs) == 1
         job = jobs[0]
         assert job.dataset == "tickers"
-        assert job.spec.params.get("qopts.per_page") == "500"
+        assert job.spec.params.get("qopts.per_page") == "10000"
 
     @pytest.mark.asyncio
     async def test_generate_jobs_passes_kwargs_for_fundamental_dataset(

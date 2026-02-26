@@ -8,6 +8,7 @@ from typing import Any
 
 import polars as pl
 from pydantic import BaseModel, Field
+from pydantic import field_validator
 
 
 class RetryConfig(BaseModel):
@@ -68,12 +69,30 @@ class RequestSpec(BaseModel):
 
     method: HttpMethod = HttpMethod.GET
     url: str
-    params: dict[str, str] = Field(default_factory=dict)
+    params: dict[str, object] = Field(default_factory=dict)
     headers: dict[str, str] = Field(default_factory=dict)
     json_body: dict[str, Any] | None = None
     data: bytes | None = None
     timeout_s: float = 30.0
     auth: RequestAuth = Field(default_factory=RequestAuth)
+
+    @field_validator("params", mode="before")
+    @classmethod
+    def _validate_params(cls, v: Any) -> dict[str, object]:
+        def _is_json_value(val: Any) -> bool:
+            if isinstance(val, (str, int, float, bool)) or val is None:
+                return True
+            if isinstance(val, list):
+                return all(_is_json_value(x) for x in val)
+            if isinstance(val, dict):
+                return all(isinstance(k, str) and _is_json_value(val[k]) for k in val)
+            return False
+        if not isinstance(v, dict):
+            raise TypeError("params must be a dict[str, JSONValue]")
+        for key, val in v.items():
+            if not isinstance(key, str) or not _is_json_value(val):
+                raise TypeError("params values must be JSON-serializable primitives/lists/dicts")
+        return v
 
 
 class FetchJob(BaseModel):

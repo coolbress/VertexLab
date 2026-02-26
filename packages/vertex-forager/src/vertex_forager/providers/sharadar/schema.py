@@ -313,3 +313,79 @@ TABLES: Final[dict[str, TableSchema]] = {
         SHARADAR_SP500,
     ]
 }
+
+# Dataset→Table name mapping (used by Router/Client)
+DATASET_TABLE: Final[dict[str, str]] = {
+    "price": "sharadar_sep",
+    "tickers": "sharadar_tickers",
+    "fundamental": "sharadar_sf1",
+    "daily": "sharadar_daily",
+    "actions": "sharadar_actions",
+    "insider": "sharadar_sf2",
+    "institutional": "sharadar_sf3",
+    "sp500": "sharadar_sp500",
+}
+
+# Dataset→Schema mapping
+DATASET_SCHEMA: Final[dict[str, TableSchema]] = {
+    "price": SHARADAR_SEP,
+    "tickers": SHARADAR_TICKERS,
+    "fundamental": SHARADAR_SF1,
+    "insider": SHARADAR_SF2,
+    "institutional": SHARADAR_SF3,
+    "actions": SHARADAR_ACTIONS,
+    "daily": SHARADAR_DAILY,
+    "sp500": SHARADAR_SP500,
+}
+
+# Endpoint mapping for provider API
+DATASET_ENDPOINT: Final[dict[str, str]] = {
+    "price": "SEP",
+    "fundamental": "SF1",
+    "daily": "DAILY",
+    "tickers": "TICKERS",
+    "actions": "ACTIONS",
+    "insider": "SF2",
+    "institutional": "SF3",
+    "sp500": "SP500",
+}
+
+# Date filter column per dataset
+DATE_FILTER_COL: Final[dict[str, str]] = {
+    "price": "date",
+    "fundamental": "calendardate",
+    "daily": "date",
+    "actions": "date",
+    "insider": "filingdate",
+    "institutional": "calendardate",
+    "sp500": "date",
+}
+
+# Columns to exclude from request/normalization
+INTERNAL_COLS: Final[set[str]] = {"provider", "fetched_at"}
+
+def _validate_mappings() -> None:
+    keys_table = set(DATASET_TABLE.keys())
+    keys_schema = set(DATASET_SCHEMA.keys())
+    keys_endpoint = set(DATASET_ENDPOINT.keys())
+    keys_date_filter = set(DATE_FILTER_COL.keys())
+    union = set().union(keys_table, keys_schema, keys_endpoint)
+    errors: list[str] = []
+    for name, keys in [
+        ("DATASET_TABLE", keys_table),
+        ("DATASET_SCHEMA", keys_schema),
+        ("DATASET_ENDPOINT", keys_endpoint),
+    ]:
+        if keys != union:
+            missing = sorted(union - keys)
+            extra = sorted(keys - union)
+            errors.append(f"{name}: missing={missing}, extra={extra}")
+    if not keys_date_filter.issubset(union):
+        missing = sorted(keys_date_filter - union)
+        errors.append(f"DATE_FILTER_COL must be subset of datasets; extra={missing}")
+    if errors:
+        raise RuntimeError(
+            "Sharadar schema mapping keys inconsistent: " + "; ".join(errors)
+        )
+
+_validate_mappings()

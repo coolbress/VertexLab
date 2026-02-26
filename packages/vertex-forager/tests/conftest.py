@@ -18,18 +18,30 @@ from unittest.mock import AsyncMock
 
 import polars as pl
 import pytest
+import pandas as pd
 from httpx import AsyncClient
 
 from vertex_forager.core.config import FetchJob, FramePacket, RequestSpec
 from vertex_forager.core.http import HttpExecutor
 from vertex_forager.providers.sharadar.router import SharadarRouter
 from vertex_forager.providers.sharadar.client import SharadarClient
+from vertex_forager.providers.yfinance.router import YFinanceRouter
 
 
 @pytest.fixture
 def mock_async_client() -> AsyncMock:
-    """Mock AsyncClient fixture."""
-    return AsyncMock(spec=AsyncClient)
+    """Create a mock AsyncClient with run_async.
+    
+    Returns:
+        AsyncMock: AsyncMock configured with spec=AsyncClient. It simulates an
+        HTTPX AsyncClient and provides a run_async coroutine used by the HTTP
+        executor. The added run_async method allows tests to await network-like
+        behavior without performing real I/O.
+    """
+    mock = AsyncMock(spec=AsyncClient)
+    # Add run_async method that HTTP executor expects
+    mock.run_async = AsyncMock()
+    return mock
 
 
 @pytest.fixture
@@ -192,6 +204,37 @@ def create_test_fetch_job() -> FetchJob:
             url="https://api.sharadar.com/SEP.json",
             params={"ticker": "AAPL"},
         ),
+    )
+
+@pytest.fixture
+def yfinance_router() -> YFinanceRouter:
+    """Create a YFinanceRouter with explicit rate limiting.
+    
+    The rate_limit argument represents requests per minute. For example,
+    rate_limit=500 allows up to 500 requests per minute across jobs.
+    
+    Returns:
+        YFinanceRouter: Router instance configured with rate_limit=500 (requests/min).
+    """
+    return YFinanceRouter(rate_limit=500)
+
+@pytest.fixture
+def yf_price_df() -> pd.DataFrame:
+    """Provide a sample price DataFrame for tests.
+    
+    Returns:
+        pandas.DataFrame: Columns include date, open, high, low, close, volume, ticker.
+    """
+    return pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2024-01-02", "2024-01-03"]),
+            "open": [100.0, 101.0],
+            "high": [101.0, 102.0],
+            "low": [99.5, 100.0],
+            "close": [100.5, 101.5],
+            "volume": [123.0, 456.0],
+            "ticker": ["AAPL", "AAPL"],
+        }
     )
 
 

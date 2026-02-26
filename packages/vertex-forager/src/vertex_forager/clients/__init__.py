@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 
+import logging
 from vertex_forager.clients.base import BaseClient
 from vertex_forager.core.registries import (
     clients as client_registry,
@@ -40,7 +41,7 @@ def create_client(
     *,
     provider: str,
     api_key: str | None = None,
-    rate_limit: int,
+    rate_limit: int | None = None,
     **kwargs: object,
 ) -> BaseClient:
     """
@@ -82,6 +83,12 @@ def create_client(
             f"Missing api_key (set api_key or {registration.env_api_key} in environment/.env)"
         )
 
+    if provider == "yfinance":
+        if api_key is not None or kwargs.get("api_key") is not None or resolved_key is not None:
+            logging.getLogger(__name__).warning("Provided API key will be ignored for yfinance; continuing with api_key=None")
+        return registration.factory(api_key=None, rate_limit=rate_limit if rate_limit is not None else 60, **kwargs)
+    if rate_limit is None:
+        raise ValueError(f"Missing rate_limit for provider '{provider}'")
     return registration.factory(api_key=resolved_key, rate_limit=rate_limit, **kwargs)
 
 
