@@ -2,6 +2,7 @@ import duckdb
 import polars as pl
 import pytest
 from datetime import datetime, timezone, date
+from pathlib import Path
 
 from vertex_forager.writers.duckdb import DuckDBWriter
 from vertex_forager.core.config import FramePacket
@@ -9,7 +10,7 @@ from vertex_forager.exceptions import InputError
 
 
 @pytest.mark.asyncio
-async def test_invalid_identifier_raises_input_error(tmp_path):
+async def test_invalid_identifier_raises_input_error(tmp_path: Path) -> None:
     db_path = tmp_path / "test.duckdb"
     writer = DuckDBWriter(str(db_path))
     try:
@@ -27,7 +28,7 @@ async def test_invalid_identifier_raises_input_error(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_reserved_word_identifier_ok(tmp_path):
+async def test_reserved_word_identifier_ok(tmp_path: Path) -> None:
     db_path = tmp_path / "test2.duckdb"
     writer = DuckDBWriter(str(db_path))
     try:
@@ -48,7 +49,7 @@ async def test_reserved_word_identifier_ok(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_upsert_conflict_updates_value(tmp_path):
+async def test_upsert_conflict_updates_value(tmp_path: Path) -> None:
     db_path = tmp_path / "upsert.duckdb"
     writer = DuckDBWriter(str(db_path))
     try:
@@ -86,7 +87,8 @@ async def test_upsert_conflict_updates_value(tmp_path):
             frame=df2,
             observed_at=datetime.now(timezone.utc),
         )
-        await writer.write(p2)
+        result2 = await writer.write(p2)
+        assert result2.rows == 1
 
         with duckdb.connect(str(db_path)) as conn:
             val = conn.execute(
@@ -117,7 +119,7 @@ async def test_upsert_conflict_updates_value(tmp_path):
         "",  # empty
     ],
 )
-async def test_identifier_edge_cases_invalid(tmp_path, name):
+async def test_identifier_edge_cases_invalid(tmp_path: Path, name: str) -> None:
     db_path = tmp_path / "edge.duckdb"
     writer = DuckDBWriter(str(db_path))
     try:

@@ -188,10 +188,9 @@ class SharadarClient(BaseClient):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        if (not tickers) and (connect_db is None):
-            raise InputError("Either provide non-empty tickers or a connect_db for persistence")
-        if tickers:
-            self._validate_tickers(tickers)
+        if not tickers:
+            raise InputError("tickers list cannot be empty")
+        self._validate_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="price",
             symbols=tickers,
@@ -705,5 +704,7 @@ class SharadarClient(BaseClient):
             s = t.strip()
             if not s:
                 raise InputError("Ticker cannot be empty or whitespace")
+            if t != s:
+                raise InputError(f"Ticker '{t}' contains leading/trailing whitespace")
             if not pattern.match(s):
                 raise InputError(f"Ticker '{t}' contains invalid characters")
