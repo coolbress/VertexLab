@@ -227,6 +227,8 @@ class SharadarClient(BaseClient):
             ValueError: If tickers are empty or invalid.
             RuntimeError: If pipeline execution or configuration validation fails.
         """
+        if (not tickers) or (not any(isinstance(t, str) and t.strip() for t in tickers)):
+            raise ValueError("tickers list cannot be empty or invalid")
         extras = {**dict(kwargs), "dimension": dimension}
         cfg = self._build_fetch_config(
             dataset="fundamental",
@@ -270,6 +272,8 @@ class SharadarClient(BaseClient):
             ValueError: If tickers are empty or invalid.
             RuntimeError: If pipeline execution fails.
         """
+        if (not tickers) or (not any(isinstance(t, str) and t.strip() for t in tickers)):
+            raise ValueError("tickers list cannot be empty or invalid")
         cfg = self._build_fetch_config(
             dataset="daily",
             symbols=tickers,
@@ -312,6 +316,8 @@ class SharadarClient(BaseClient):
             ValueError: If tickers are empty or invalid.
             RuntimeError: If pipeline execution fails.
         """
+        if (not tickers) or (not any(isinstance(t, str) and t.strip() for t in tickers)):
+            raise ValueError("tickers list cannot be empty or invalid")
         cfg = self._build_fetch_config(
             dataset="actions",
             symbols=tickers,
@@ -354,6 +360,8 @@ class SharadarClient(BaseClient):
             ValueError: If tickers are empty or invalid.
             RuntimeError: If pipeline execution fails.
         """
+        if (not tickers) or (not any(isinstance(t, str) and t.strip() for t in tickers)):
+            raise ValueError("tickers list cannot be empty or invalid")
         cfg = self._build_fetch_config(
             dataset="insider",
             symbols=tickers,
@@ -396,6 +404,8 @@ class SharadarClient(BaseClient):
             ValueError: If tickers are empty or invalid.
             RuntimeError: If pipeline execution fails.
         """
+        if (not tickers) or (not any(isinstance(t, str) and t.strip() for t in tickers)):
+            raise ValueError("tickers list cannot be empty or invalid")
         cfg = self._build_fetch_config(
             dataset="institutional",
             symbols=tickers,
@@ -505,9 +515,7 @@ class SharadarClient(BaseClient):
         symbols = config.symbols
 
         if symbols is not None and len(symbols) == 0:
-            if config.connect_db is not None:
-                return RunResult(provider="sharadar")
-            return pl.DataFrame()
+            raise ValueError("tickers list cannot be empty or invalid")
 
         bytes_per_item = (
             self.BYTES_PER_TICKER_METADATA if config.dataset == "tickers" else self.BYTES_PER_TICKER_FULL
