@@ -159,10 +159,8 @@ def create_pbar_updater(pbar: tqdm) -> Callable:
         next_jobs = getattr(parse_result, "next_jobs", None) if parse_result else None
 
         if next_jobs:
-            # Paging in progress: Update status only
-            pbar.set_postfix_str(f"Paging: {display_symbol}..", refresh=True)
+            pbar.set_postfix_str("Pagination processing", refresh=True)
         else:
-            # Batch Complete (Fully Processed): Update progress count
             pbar.update(count)
             pbar.set_postfix_str(f"Done: {display_symbol}..", refresh=True)
 
