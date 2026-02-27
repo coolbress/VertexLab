@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from abc import ABC
-import warnings
 import asyncio
 from contextlib import asynccontextmanager, AsyncExitStack, nullcontext
 from functools import partial
@@ -10,12 +9,14 @@ from pathlib import Path
 from typing import Any, Callable, AsyncGenerator
 
 import httpx
+import warnings
 import polars as pl
 from tqdm.auto import tqdm
 
-from vertex_forager.core.http import HttpExecutor, default_async_client
+from vertex_forager.core.http import default_async_client
+from vertex_forager.core.http import HttpExecutor as _HttpExecutor
+from vertex_forager.core.pipeline import VertexForager as _VertexForager
 from vertex_forager.core.config import EngineConfig, RunResult
-from vertex_forager.core.pipeline import VertexForager
 from vertex_forager.core.controller import FlowController
 from vertex_forager.routers.base import BaseRouter
 from vertex_forager.schema.mapper import SchemaMapper
@@ -23,6 +24,8 @@ from vertex_forager.schema.registry import get_table_schema
 from vertex_forager.writers.base import BaseWriter
 from vertex_forager.writers import create_writer
 from vertex_forager.utils import Spinner, create_pbar_updater
+HttpExecutor = _HttpExecutor
+VertexForager = _VertexForager
 
 
 logger = logging.getLogger(__name__)
@@ -199,7 +202,9 @@ class BaseClient(ABC):
                 controller=self.controller,
             )
 
-            run_kwargs = kwargs.copy()
+            from vertex_forager.clients.validation import filter_reserved_kwargs
+            reserved = {"router", "dataset", "symbols", "writer", "mapper", "on_progress"}
+            run_kwargs = filter_reserved_kwargs(kwargs, reserved)
 
             with warnings.catch_warnings():
                 warnings.filterwarnings(
