@@ -81,8 +81,9 @@ class SharadarClient(BaseClient):
             rate_limit: Requests per minute (int).
             **kwargs: Additional configuration parameters for EngineConfig.
         """
-        if not api_key:
+        if not api_key or not api_key.strip():
             raise InputError("Sharadar API Key is missing")
+        api_key = api_key.strip()
 
         super().__init__(
             api_key=api_key,
@@ -709,6 +710,8 @@ class SharadarClient(BaseClient):
         Enforces per-item rules: non-empty, no whitespace-only, allowed characters.
         Raises InputError on first invalid ticker.
         """
+        if not isinstance(tickers, list):
+            raise InputError("tickers must be a list of strings")
         for t in tickers:
             if not isinstance(t, str):
                 raise InputError("Ticker must be a string")
