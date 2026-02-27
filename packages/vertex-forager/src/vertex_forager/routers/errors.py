@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Mapping, Any
+from typing import Mapping, Any, NoReturn
 
 from vertex_forager.exceptions import FetchError
 from vertex_forager.exceptions import TransformError
@@ -23,7 +23,7 @@ def raise_quandl_error(provider: str, err: Mapping[str, Any]) -> None:
     raise FetchError(f"{provider} API error {code}: {message}")
 
 
-def raise_yfinance_parse_error(exc: Exception, *, dataset: str) -> None:
+def raise_yfinance_parse_error(exc: Exception, *, dataset: str) -> NoReturn:
     """Raise standardized TransformError for yfinance parse failures.
     
     Preserves UnpicklingError to satisfy tests expecting the original exception.

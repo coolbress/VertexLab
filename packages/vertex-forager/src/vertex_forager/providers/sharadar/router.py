@@ -8,7 +8,6 @@ from collections.abc import AsyncIterator, Iterator, Sequence
 from datetime import date, datetime, timezone
 
 import polars as pl
-from vertex_forager.exceptions import FetchError
 from vertex_forager.utils import mask_secret
 
 from vertex_forager.core.config import (
@@ -712,9 +711,7 @@ class SharadarRouter(BaseRouter):
         decoded = json.loads(payload.decode("utf-8"))
         if "quandl_error" in decoded:
             err = decoded.get("quandl_error") or {}
-            code = err.get("code", "Unknown")
-            message = err.get("message", "Unknown error")
-            raise FetchError(f"Sharadar API error {code}: {message}")
+            raise_quandl_error(self.provider, err)
         return decoded
 
     # ------ Frame load: datatable(columns/data)→Polars DataFrame ------
