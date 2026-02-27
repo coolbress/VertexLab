@@ -12,12 +12,12 @@ from polars.exceptions import ComputeError
 from vertex_forager.core.config import (
     FetchJob,
     FramePacket,
-    HttpMethod,
     ParseResult,
-    RequestSpec,
 )
 from vertex_forager.routers.base import BaseRouter
 from vertex_forager.providers.yfinance.schema import DATASET_TABLE, DATASET_ENDPOINT
+from vertex_forager.routers.jobs import single_symbol_job
+from vertex_forager.routers.errors import raise_yfinance_parse_error
 
 logger = logging.getLogger("vertex_forager.providers.yfinance.router")
 
@@ -256,12 +256,12 @@ class YFinanceRouter(BaseRouter):
 
             return ParseResult(packets=[packet], next_jobs=[])
         
-        except (pickle.UnpicklingError, ValueError, TypeError):
+        except (pickle.UnpicklingError, ValueError, TypeError) as e:
             logger.exception("parse failed for job %s", job)
-            raise
-        except Exception:
+            raise_yfinance_parse_error(e, dataset=job.dataset)
+        except Exception as e:
             logger.exception("Unexpected error in parse for job %s", job)
-            raise
+            raise_yfinance_parse_error(e, dataset=job.dataset)
         
     # --------------------------------------
     # Generate Jobs Helpers
@@ -301,11 +301,13 @@ class YFinanceRouter(BaseRouter):
         """Build a per-symbol job, applying dataset-specific options."""
         url = f"yfinance://{symbol}"
         params = self._build_request_params(dataset=dataset)
-        return FetchJob(
+        return single_symbol_job(
             provider=self.provider,
             dataset=dataset,
             symbol=symbol,
-            spec=RequestSpec(method=HttpMethod.GET, url=url, params=params),
+            url=url,
+            params=params,
+            auth=None,
             context={"symbol": symbol, "dataset": dataset},
         )
 

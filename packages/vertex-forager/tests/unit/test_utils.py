@@ -48,9 +48,9 @@ class TestPbarUpdater:
 
         # Should NOT call update
         mock_pbar.update.assert_not_called()
-        # Should update postfix
+        # Should update postfix (inline at right) to show pagination
         mock_pbar.set_postfix_str.assert_called()
-        assert "Paging: AAPL.." in mock_pbar.set_postfix_str.call_args[0][0]
+        assert "Pagination processing" in mock_pbar.set_postfix_str.call_args[0][0]
 
 
 class TestCacheUtils:

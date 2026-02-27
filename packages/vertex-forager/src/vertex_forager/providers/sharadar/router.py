@@ -5,22 +5,24 @@ from typing import Final
 import json
 import io
 from collections.abc import AsyncIterator, Iterator, Sequence
-import copy
 from datetime import date, datetime, timezone
 
 import polars as pl
-from vertex_forager.exceptions import FetchError
 from vertex_forager.utils import mask_secret
 
 from vertex_forager.core.config import (
     FetchJob,
     FramePacket,
-    HttpMethod,
     ParseResult,
     RequestAuth,
-    RequestSpec,
 )
 from vertex_forager.routers.base import BaseRouter
+from vertex_forager.routers.errors import raise_quandl_error
+from vertex_forager.routers.jobs import (
+    pagination_job,
+    single_symbol_job,
+    make_pagination_context,
+)
 from polars.exceptions import PolarsError
 from vertex_forager.providers.sharadar.schema import (
     DATASET_SCHEMA,
@@ -312,9 +314,7 @@ class SharadarRouter(BaseRouter):
             if "quandl_error" in json_df.columns:
                 err = json_df.select(pl.col("quandl_error")).item(0)
                 if err:
-                    code = err.get("code", "Unknown")
-                    message = err.get("message", "Unknown error")
-                    raise ValueError(f"Sharadar API error {code}: {message}")
+                    raise_quandl_error(self.provider, err)
 
             # -------- Extract & Transform Data --------
             
@@ -492,18 +492,17 @@ class SharadarRouter(BaseRouter):
                 params[f"{date_col}.lte"] = self._end_date
         
 
-        req = RequestSpec(
-            method=HttpMethod.GET,
+        context = make_pagination_context(
+            meta_key=self._PAGINATION_CONTEXT["pagination"]["meta_key"],
+            cursor_param=self._PAGINATION_CONTEXT["pagination"]["cursor_param"],
+            max_pages=self._PAGINATION_CONTEXT["pagination"]["max_pages"],
+        )
+        return pagination_job(
+            provider=self.provider,
+            dataset=dataset,
             url=self._dataset_url(dataset),
             params=params,
             auth=self._auth(),
-        )
-        context = copy.deepcopy(self._PAGINATION_CONTEXT)
-        return FetchJob(
-            provider=self.provider,
-            dataset=dataset,
-            symbol=None,
-            spec=req,
             context=context,
         )
 
@@ -545,21 +544,19 @@ class SharadarRouter(BaseRouter):
             if self._end_date:
                 params[f"{date_col}.lte"] = self._end_date
 
-        req = RequestSpec(
-            method=HttpMethod.GET,
+        # Add pagination context for all datasets that support it
+        context = make_pagination_context(
+            meta_key=self._PAGINATION_CONTEXT["pagination"]["meta_key"],
+            cursor_param=self._PAGINATION_CONTEXT["pagination"]["cursor_param"],
+            max_pages=self._PAGINATION_CONTEXT["pagination"]["max_pages"],
+        )
+        return single_symbol_job(
+            provider=self.provider,
+            dataset=dataset,
+            symbol=clean_symbol,
             url=self._dataset_url(dataset),
             params=params,
             auth=self._auth(),
-        )
-
-        # Add pagination context for all datasets that support it
-        context = copy.deepcopy(self._PAGINATION_CONTEXT)
-
-        return FetchJob(
-            provider=self.provider,
-            dataset=dataset,
-            symbol=symbol,
-            spec=req,
             context=context,
         )
         
@@ -714,9 +711,7 @@ class SharadarRouter(BaseRouter):
         decoded = json.loads(payload.decode("utf-8"))
         if "quandl_error" in decoded:
             err = decoded.get("quandl_error") or {}
-            code = err.get("code", "Unknown")
-            message = err.get("message", "Unknown error")
-            raise FetchError(f"Sharadar API error {code}: {message}")
+            raise_quandl_error(self.provider, err)
         return decoded
 
     # ------ Frame load: datatable(columns/data)→Polars DataFrame ------
