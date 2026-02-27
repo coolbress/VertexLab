@@ -44,7 +44,7 @@ def validate_tickers(symbols: list[str] | tuple[str, ...]) -> None:
                     or any item is empty or has leading/trailing whitespace.
     """
     if not isinstance(symbols, (list, tuple)):
-        raise InputError("tickers must be a list of strings")
+        raise InputError("tickers must be a list or tuple of strings")
     if len(symbols) == 0:
         raise InputError("tickers list cannot be empty")
     for symbol in symbols:
