@@ -8,6 +8,7 @@ from vertex_forager.clients.base import HttpExecutor
 from vertex_forager.core.config import RunResult
 from vertex_forager.routers.base import BaseRouter
 from vertex_forager.schema.mapper import SchemaMapper
+from vertex_forager.writers.base import BaseWriter
 
 
 async def run_pipeline_for(
@@ -16,7 +17,7 @@ async def run_pipeline_for(
     router: BaseRouter,
     dataset: str,
     symbols: list[str] | None,
-    writer,
+    writer: BaseWriter,
     mapper: SchemaMapper,
     on_progress: Callable[..., None] | None = None,
     **kwargs: object,

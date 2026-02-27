@@ -46,11 +46,11 @@ These keys are explicitly passed into pipeline.run and should be removed from an
 ## Examples
 
 - Error Mapping
-  - Quandl-style: raise_quandl_error('sharadar', err) → FetchError
-  - yfinance parse: raise_yfinance_parse_error(exc, dataset) → TransformError; preserves UnpicklingError; HTTPError → FetchError
+  - Quandl-style: raise_quandl_error(provider='sharadar', err=err) → FetchError
+  - yfinance parse: raise_yfinance_parse_error(exc=exc, dataset=dataset) → TransformError; preserves UnpicklingError; HTTPError → FetchError
 - Job Policy
-  - Single ticker: single_symbol_job(provider, dataset, symbol, url, params, auth=None, context={'symbol': symbol})
-  - Pagination: pagination_job(provider, dataset, url, params, auth, context=make_pagination_context(meta_key, cursor_param, max_pages))
+  - Single ticker: single_symbol_job(provider=provider, dataset=dataset, symbol=symbol, url=url, params=params, auth=None, context={'symbol': symbol})
+  - Pagination: pagination_job(provider=provider, dataset=dataset, url=url, params=params, auth=auth, context=make_pagination_context(meta_key=meta_key, cursor_param=cursor_param, max_pages=max_pages))
 
 ## Provider Integration Guide
 
