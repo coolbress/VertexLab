@@ -81,9 +81,11 @@ class SharadarClient(BaseClient):
             rate_limit: Requests per minute (int).
             **kwargs: Additional configuration parameters for EngineConfig.
         """
-        if not api_key or not api_key.strip():
-            raise InputError("Sharadar API Key is missing")
+        if not isinstance(api_key, str):
+            raise InputError("Sharadar API Key must be a string")
         api_key = api_key.strip()
+        if not api_key:
+            raise InputError("Sharadar API Key is missing")
 
         super().__init__(
             api_key=api_key,
