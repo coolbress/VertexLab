@@ -20,6 +20,7 @@ from vertex_forager.utils import (
     jupyter_safe,
     validate_memory_usage,
     Spinner,
+    validate_tickers,
 )
 from vertex_forager.providers.sharadar.schema import DATASET_TABLE
 from vertex_forager.exceptions import InputError
@@ -530,7 +531,7 @@ class SharadarClient(BaseClient):
         symbols = config.symbols
 
         if symbols is not None and len(symbols) == 0:
-            raise InputError("tickers list cannot be empty or invalid")
+            raise InputError("tickers list cannot be empty")
         if symbols:
             self._validate_tickers(symbols)
 
@@ -699,17 +700,9 @@ class SharadarClient(BaseClient):
         Enforces per-item rules: non-empty, no whitespace-only, allowed characters.
         Raises InputError on first invalid ticker.
         """
-        if not isinstance(tickers, list):
-            raise InputError("tickers must be a list of strings")
+        validate_tickers(tickers)
         for t in tickers:
-            if not isinstance(t, str):
-                raise InputError("Ticker must be a string")
-            s = t.strip()
-            if not s:
-                raise InputError("Ticker cannot be empty or whitespace")
-            if t != s:
-                raise InputError(f"Ticker '{t}' contains leading/trailing whitespace")
-            if not TICKER_PATTERN.match(s):
+            if not TICKER_PATTERN.match(t):
                 raise InputError(f"Ticker '{t}' contains invalid characters")
 
     def _require_valid_tickers(self, tickers: list[str]) -> None:

@@ -33,8 +33,19 @@ def process_symbols(tickers: list[str] | None) -> list[str] | None:
         return [t.strip().upper() for t in tickers if t and t.strip()]
     return None
 
-def validate_tickers(symbols: list[str]) -> None:
-    if not symbols:
+def validate_tickers(symbols: list[str] | tuple[str, ...]) -> None:
+    """Validate a list of ticker symbols.
+    
+    Args:
+        symbols: Ticker symbols container (list or tuple of strings).
+    
+    Raises:
+        InputError: If symbols is not a list/tuple, empty, contains non-string items,
+                    or any item is empty or has leading/trailing whitespace.
+    """
+    if not isinstance(symbols, (list, tuple)):
+        raise InputError("tickers must be a list of strings")
+    if len(symbols) == 0:
         raise InputError("tickers list cannot be empty")
     for symbol in symbols:
         if not isinstance(symbol, str):
@@ -471,9 +482,7 @@ def mask_secret(value: str, keep: int = 4) -> str:
         return "***"
     n = max(0, keep)
     s = value.strip()
-    if len(s) <= n:
-        return "*" * len(s)
-    if n == 0:
+    if n == 0 or len(s) <= n:
         return "*" * len(s)
     return "*" * (len(s) - n) + s[-n:]
 
