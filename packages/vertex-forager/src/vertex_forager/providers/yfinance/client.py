@@ -9,7 +9,7 @@ import polars as pl
 from vertex_forager.clients.base import BaseClient
 from vertex_forager.core.config import RunResult
 from vertex_forager.routers import create_router
-from vertex_forager.utils import jupyter_safe, validate_memory_usage
+from vertex_forager.utils import jupyter_safe, validate_memory_usage, validate_tickers
 from vertex_forager.schema.mapper import SchemaMapper
 from vertex_forager.core.config import RetryConfig
 from vertex_forager.exceptions import InputError
@@ -532,7 +532,7 @@ class YFinanceClient(BaseClient):
         self,
         *,
         dataset: str,
-        symbols: list[str] | None,
+        symbols: list[str],
         connect_db: str | Path | None,
         desc: str,
         table_name: str,
@@ -571,14 +571,7 @@ class YFinanceClient(BaseClient):
         Returns:
             pl.DataFrame for in-memory mode, RunResult for database mode
         """
-        if not symbols:
-            raise InputError("tickers list cannot be empty")
-        for symbol in symbols:
-            if not isinstance(symbol, str):
-                raise InputError("each ticker must be a string")
-            stripped = symbol.strip()
-            if not stripped or stripped != symbol:
-                raise InputError("tickers must be non-empty and must not include leading/trailing whitespace")
+        validate_tickers(symbols)
         bytes_per_item = self.SIZE_MAP.get(dataset, 200 * 1024)
         validate_memory_usage(
             symbols=symbols,

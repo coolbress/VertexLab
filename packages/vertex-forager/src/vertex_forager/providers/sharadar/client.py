@@ -494,9 +494,6 @@ class SharadarClient(BaseClient):
         elif connect_db:
             try:
                 table = DATASET_TABLE["tickers"]
-                allowed = set(DATASET_TABLE.values())
-                if table not in allowed:
-                    raise InputError("Invalid table name for metadata cache query")
                 q_table = f'"{table}"'
                 with duckdb.connect(str(connect_db)) as conn:
                     df_pl = conn.execute(
