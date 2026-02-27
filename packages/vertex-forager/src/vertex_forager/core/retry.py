@@ -31,7 +31,7 @@ def create_retry_controller(
         config: Retry configuration.
         log_level: Logging level for retry attempts.
         retry_on: Tuple of exception types to retry on.
-                  Defaults to (httpx.TransportError,).
+                Defaults to (httpx.TransportError,).
 
     Returns:
         AsyncRetrying: Configured retry controller.

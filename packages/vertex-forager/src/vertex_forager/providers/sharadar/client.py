@@ -239,6 +239,8 @@ class SharadarClient(BaseClient):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
+        if not tickers:
+            raise InputError("tickers list cannot be empty")
         self._validate_tickers(tickers)
         extras = {**dict(kwargs), "dimension": dimension}
         cfg = self._build_fetch_config(
@@ -285,6 +287,8 @@ class SharadarClient(BaseClient):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
+        if not tickers:
+            raise InputError("tickers list cannot be empty")
         self._validate_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="daily",
@@ -330,6 +334,8 @@ class SharadarClient(BaseClient):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
+        if not tickers:
+            raise InputError("tickers list cannot be empty")
         self._validate_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="actions",
@@ -375,6 +381,8 @@ class SharadarClient(BaseClient):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
+        if not tickers:
+            raise InputError("tickers list cannot be empty")
         self._validate_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="insider",
@@ -420,6 +428,8 @@ class SharadarClient(BaseClient):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
+        if not tickers:
+            raise InputError("tickers list cannot be empty")
         self._validate_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="institutional",
