@@ -38,7 +38,9 @@ async def run_pipeline_for(
             config=client._config,
             controller=client.controller,
         )
-        run_kwargs = kwargs.copy()
+        from vertex_forager.clients.validation import filter_reserved_kwargs
+        reserved = {"router", "dataset", "symbols", "writer", "mapper", "on_progress"}
+        run_kwargs = filter_reserved_kwargs(kwargs, reserved)
         with warnings.catch_warnings():
             warnings.filterwarnings(
                 "ignore",

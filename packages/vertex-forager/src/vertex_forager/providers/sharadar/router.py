@@ -18,6 +18,12 @@ from vertex_forager.core.config import (
     RequestAuth,
 )
 from vertex_forager.routers.base import BaseRouter
+from vertex_forager.routers.errors import raise_quandl_error
+from vertex_forager.routers.jobs import (
+    pagination_job,
+    single_symbol_job,
+    make_pagination_context,
+)
 from polars.exceptions import PolarsError
 from vertex_forager.providers.sharadar.schema import (
     DATASET_SCHEMA,
@@ -309,7 +315,6 @@ class SharadarRouter(BaseRouter):
             if "quandl_error" in json_df.columns:
                 err = json_df.select(pl.col("quandl_error")).item(0)
                 if err:
-                    from vertex_forager.routers.errors import raise_quandl_error
                     raise_quandl_error(self.provider, err)
 
             # -------- Extract & Transform Data --------
@@ -488,7 +493,6 @@ class SharadarRouter(BaseRouter):
                 params[f"{date_col}.lte"] = self._end_date
         
 
-        from vertex_forager.routers.jobs import pagination_job, make_pagination_context
         context = make_pagination_context(
             meta_key=self._PAGINATION_CONTEXT["pagination"]["meta_key"],
             cursor_param=self._PAGINATION_CONTEXT["pagination"]["cursor_param"],
@@ -542,17 +546,15 @@ class SharadarRouter(BaseRouter):
                 params[f"{date_col}.lte"] = self._end_date
 
         # Add pagination context for all datasets that support it
-        from vertex_forager.routers.jobs import make_pagination_context
         context = make_pagination_context(
             meta_key=self._PAGINATION_CONTEXT["pagination"]["meta_key"],
             cursor_param=self._PAGINATION_CONTEXT["pagination"]["cursor_param"],
             max_pages=self._PAGINATION_CONTEXT["pagination"]["max_pages"],
         )
-        from vertex_forager.routers.jobs import single_symbol_job
         return single_symbol_job(
             provider=self.provider,
             dataset=dataset,
-            symbol=symbol,
+            symbol=clean_symbol,
             url=self._dataset_url(dataset),
             params=params,
             auth=self._auth(),

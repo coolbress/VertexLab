@@ -16,6 +16,8 @@ from vertex_forager.core.config import (
 )
 from vertex_forager.routers.base import BaseRouter
 from vertex_forager.providers.yfinance.schema import DATASET_TABLE, DATASET_ENDPOINT
+from vertex_forager.routers.jobs import single_symbol_job
+from vertex_forager.routers.errors import raise_yfinance_parse_error
 
 logger = logging.getLogger("vertex_forager.providers.yfinance.router")
 
@@ -256,11 +258,9 @@ class YFinanceRouter(BaseRouter):
         
         except (pickle.UnpicklingError, ValueError, TypeError) as e:
             logger.exception("parse failed for job %s", job)
-            from vertex_forager.routers.errors import raise_yfinance_parse_error
             raise_yfinance_parse_error(e, dataset=job.dataset)
         except Exception as e:
             logger.exception("Unexpected error in parse for job %s", job)
-            from vertex_forager.routers.errors import raise_yfinance_parse_error
             raise_yfinance_parse_error(e, dataset=job.dataset)
         
     # --------------------------------------
@@ -301,7 +301,6 @@ class YFinanceRouter(BaseRouter):
         """Build a per-symbol job, applying dataset-specific options."""
         url = f"yfinance://{symbol}"
         params = self._build_request_params(dataset=dataset)
-        from vertex_forager.routers.jobs import single_symbol_job
         return single_symbol_job(
             provider=self.provider,
             dataset=dataset,

@@ -9,9 +9,11 @@ from vertex_forager.routers.transforms import (
     normalize_columns,
 )
 from vertex_forager.routers.jobs import single_symbol_job, pagination_job
-from vertex_forager.routers.errors import raise_quandl_error
+from vertex_forager.routers.errors import raise_quandl_error, raise_yfinance_parse_error
 from vertex_forager.core.config import RequestAuth
-from vertex_forager.exceptions import FetchError
+from vertex_forager.exceptions import FetchError, TransformError
+import httpx
+import pickle
 
 
 class TestTransforms:
@@ -63,3 +65,17 @@ class TestErrors:
     def test_raise_quandl_error(self):
         with pytest.raises(FetchError):
             raise_quandl_error("sharadar", {"code": 400, "message": "bad request"})
+    
+    def test_raise_yfinance_parse_error_http_error_maps_to_fetch(self):
+        with pytest.raises(FetchError):
+            raise_yfinance_parse_error(httpx.HTTPError("network failed"), dataset="price")
+    
+    def test_raise_yfinance_parse_error_generic_exception_maps_to_transform(self):
+        with pytest.raises(TransformError):
+            raise_yfinance_parse_error(Exception("bad payload"), dataset="price")
+    
+    def test_raise_yfinance_parse_error_unpickling_preserved(self):
+        exc = pickle.UnpicklingError("invalid pickle")
+        with pytest.raises(pickle.UnpicklingError) as ctx:
+            raise_yfinance_parse_error(exc, dataset="price")
+        assert ctx.value is exc
