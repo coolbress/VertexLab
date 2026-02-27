@@ -3,12 +3,18 @@ from __future__ import annotations
 import pickle
 import logging
 from typing import Any
+import re
 import httpx
 import yfinance as yf
 from vertex_forager.core.config import RequestSpec
 
 
 logger = logging.getLogger("vertex_forager.core.http")
+
+_URL_REDACT_RE = re.compile(r"https?://\S+")
+
+def _redact_urls(message: str) -> str:
+    return _URL_REDACT_RE.sub("[redacted]", message)
 
 
 class HttpExecutor:
@@ -44,6 +50,7 @@ class HttpExecutor:
             httpx.HTTPStatusError: If the server returns 4xx/5xx status code.
             httpx.RequestError: If a network error occurs.
             ValueError: If URL scheme is invalid.
+            TypeError: If library request parameters are invalid.
         """
         # Dispatch based on scheme
         if "://" in spec.url and not spec.url.startswith(("http://", "https://")):
@@ -51,7 +58,13 @@ class HttpExecutor:
         return await self._fetch_http(spec)
 
     async def _fetch_http(self, spec: RequestSpec) -> bytes:
-        """Execute a standard HTTP request using the unified client interface."""
+        """Execute a standard HTTP request using the unified client interface.
+
+        Raises:
+            httpx.RequestError: Network error during HTTP request.
+            httpx.HTTPStatusError: Non-2xx HTTP status returned.
+            TypeError: When parameters are invalid for the underlying client.
+        """
         headers = dict(spec.headers)
         params = dict(spec.params)
 
@@ -62,22 +75,32 @@ class HttpExecutor:
         elif spec.auth.kind == "query" and spec.auth.token and spec.auth.query_param:
             params[spec.auth.query_param] = spec.auth.token
 
-        # Use run_async from BaseClient interface
-        resp = await self._client.run_async(
-            spec.method.value,
-            spec.url,
-            params=params,
-            headers=headers,
-            json=spec.json_body,
-            content=spec.data,
-            timeout=spec.timeout_s,
-        )
-
-        resp.raise_for_status()
-        return resp.content
+        try:
+            resp = await self._client.run_async(
+                spec.method.value,
+                spec.url,
+                params=params,
+                headers=headers,
+                json=spec.json_body,
+                content=spec.data,
+                timeout=spec.timeout_s,
+            )
+            resp.raise_for_status()
+            return resp.content
+        except (httpx.RequestError, httpx.HTTPStatusError) as e:
+            prov = self._client.__class__.__name__
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            msg = _redact_urls(str(e))
+            logger.error("HTTP fetch failed provider=%s status=%s exc=%s msg=%s", prov, status, type(e).__name__, msg)
+            raise
 
     async def _fetch_library(self, spec: RequestSpec) -> bytes:
-        """Execute a non-HTTP library call using the unified client interface."""
+        """Execute a non-HTTP library call using the unified client interface.
+
+        Raises:
+            ValueError: Unsupported scheme or invalid library call configuration.
+            TypeError: Invalid types passed to library call.
+        """
         scheme, payload = spec.url.split("://", 1)
         params = spec.params
         dataset = params.get("dataset", "price")
@@ -112,7 +135,17 @@ class HttpExecutor:
             return pickle.dumps(data)
 
         except (ValueError, TypeError) as e:
-            logger.error(f"Library fetch failed for scheme={scheme}, dataset={dataset}: {e}")
+            prov = self._client.__class__.__name__
+            msg = _redact_urls(str(e))
+            logger.error(
+                "Library fetch failed provider=%s scheme=%s dataset=%s symbol=%s exc=%s msg=%s",
+                prov,
+                scheme,
+                dataset,
+                payload,
+                type(e).__name__,
+                msg,
+            )
             raise
 
 

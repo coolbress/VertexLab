@@ -33,7 +33,7 @@ from collections import defaultdict
 
 import polars as pl
 from polars.exceptions import ComputeError
-from pydantic import ValidationError
+from vertex_forager.exceptions import ValidationError, PrimaryKeyMissingError, PrimaryKeyNullError
 
 try:
     import duckdb
@@ -556,9 +556,10 @@ class VertexForager:
                 if schema and schema.unique_key:
                     for col in schema.unique_key:
                         if col not in merged_frame.columns:
-                            raise ComputeError(f"PKMissing:{packets[0].table}:{col}")
-                        if merged_frame.get_column(col).null_count() > 0:
-                            raise ComputeError(f"PKNull:{packets[0].table}:{col}")
+                            raise PrimaryKeyMissingError(table=table, column=col)
+                        nulls = merged_frame.get_column(col).null_count()
+                        if nulls > 0:
+                            raise PrimaryKeyNullError(table=table, column=col, null_count=nulls)
 
                 # Create merged packet (use metadata from the first packet)
                 merged_packet = FramePacket(
@@ -588,7 +589,12 @@ class VertexForager:
                     result.errors.append(f"WriterError:{table}:{e}")
                 buffers[table] = []
                 buffer_rows[table] = 0
-                logger.error(f"WRITER: Error writing batch for {table}: {e}")
+                if isinstance(e, PrimaryKeyMissingError):
+                    logger.error("WRITER: PKMissing table=%s column=%s", table, e.column)
+                elif isinstance(e, PrimaryKeyNullError):
+                    logger.error("WRITER: PKNull table=%s column=%s nulls=%s", table, e.column, e.null_count)
+                else:
+                    logger.error("WRITER: Error writing batch for %s: %s", table, e)
             except Exception as e:
                 # Check for DuckDB Error if available
                 if duckdb and isinstance(e, duckdb.Error):

@@ -27,8 +27,8 @@ import duckdb
 import polars as pl
 
 from vertex_forager.core.config import FramePacket
-from polars.exceptions import ComputeError
 from vertex_forager.writers.base import BaseWriter, WriteResult
+from vertex_forager.exceptions import InputError, ValidationError, PrimaryKeyMissingError, PrimaryKeyNullError
 
 # Module-level cache for schema getter to avoid circular imports
 _get_table_schema = None
@@ -67,8 +67,20 @@ class DuckDBWriter(BaseWriter):
         # Cache for table existence and schema (table_name -> set of column names)
         self._table_schemas: dict[str, set[str]] = {}
 
+    def _validate_identifier(self, identifier: str) -> None:
+        if not isinstance(identifier, str) or not identifier:
+            raise InputError(f"invalid identifier: {identifier!r}")
+        for ch in identifier:
+            o = ord(ch)
+            if o < 32 or ch in {"\x7f"}:
+                raise InputError("identifier contains control characters")
+        allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")
+        if not set(identifier) <= allowed:
+            raise InputError("identifier contains unsupported characters")
+
     def _quote_identifier(self, identifier: str) -> str:
         """Safely quote an identifier (table or column name) for DuckDB."""
+        self._validate_identifier(identifier)
         escaped = identifier.replace('"', '""')
         return f'"{escaped}"'
 
@@ -196,16 +208,18 @@ class DuckDBWriter(BaseWriter):
                     for c in pk_cols:
                         if c not in merged_df.columns:
                             self._logger.error("WRITER: Missing PK column '%s' for table '%s'. Columns=%s", c, table_name, merged_df.columns)
-                            raise ComputeError(f"PKMissing:{table_name}:{c}")
-                        elif merged_df.get_column(c).null_count() > 0:
-                            self._logger.error(
-                                "WRITER: Nulls detected in PK column '%s' for table '%s'. rows=%d, columns=%s",
-                                c,
-                                table_name,
-                                len(merged_df),
-                                merged_df.columns,
-                            )
-                            raise ValueError(f"PKNull:{table_name}:{c}")
+                            raise PrimaryKeyMissingError(table=table_name, column=c)
+                        else:
+                            nulls = merged_df.get_column(c).null_count()
+                            if nulls > 0:
+                                self._logger.error(
+                                    "WRITER: Nulls detected in PK column '%s' for table '%s'. rows=%d, columns=%s",
+                                    c,
+                                    table_name,
+                                    len(merged_df),
+                                    merged_df.columns,
+                                )
+                                raise PrimaryKeyNullError(table=table_name, column=c, null_count=nulls)
                 rows = len(merged_df)
                 
                 if rows > 0:
@@ -223,7 +237,7 @@ class DuckDBWriter(BaseWriter):
             except duckdb.Error as e:
                 self._logger.error(f"Failed to write batch for {table_name}: {e}")
                 raise
-            except ValueError as e:
+            except ValidationError as e:
                 self._logger.debug(f"Validation error writing batch for {table_name}: {e}")
                 raise
 
@@ -546,9 +560,8 @@ class DuckDBWriter(BaseWriter):
             # Validation: Check if all PK columns exist in the dataframe
             missing_pk = [c for c in pk_cols if c not in df.columns]
             if missing_pk:
-                msg = f"Missing PK columns {missing_pk} in dataframe for table {table_name}"
-                self._logger.error(msg)
-                raise ValueError(msg)
+                self._logger.error("WRITER: Missing PK columns %s in dataframe for table %s", missing_pk, table_name)
+                raise PrimaryKeyMissingError(table=table_name, column=",".join(missing_pk))
 
             pk_str = ", ".join(self._quote_identifier(c) for c in pk_cols)
             cols = df.columns

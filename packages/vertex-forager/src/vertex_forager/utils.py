@@ -16,6 +16,7 @@ from tqdm.auto import tqdm
 import psutil
 
 from dotenv import load_dotenv
+from vertex_forager.exceptions import InputError
 logger = logging.getLogger(__name__)
 
 
@@ -31,6 +32,27 @@ def process_symbols(tickers: list[str] | None) -> list[str] | None:
     if tickers is not None:
         return [t.strip().upper() for t in tickers if t and t.strip()]
     return None
+
+def validate_tickers(symbols: list[str] | tuple[str, ...]) -> None:
+    """Validate a list of ticker symbols.
+    
+    Args:
+        symbols: Ticker symbols container (list or tuple of strings).
+    
+    Raises:
+        InputError: If symbols is not a list/tuple, empty, contains non-string items,
+                    or any item is empty or has leading/trailing whitespace.
+    """
+    if not isinstance(symbols, (list, tuple)):
+        raise InputError("tickers must be a list or tuple of strings")
+    if len(symbols) == 0:
+        raise InputError("tickers list cannot be empty")
+    for symbol in symbols:
+        if not isinstance(symbol, str):
+            raise InputError("each ticker must be a string")
+        stripped = symbol.strip()
+        if not stripped or stripped != symbol:
+            raise InputError("tickers must be non-empty and must not include leading/trailing whitespace")
 
 
 def validate_memory_usage(
@@ -440,6 +462,29 @@ def load_env_file(env_file: Path | None = None) -> None:
         env_file: Path to .env file. Defaults to project-root '.env' lookup by dotenv.
     """
     load_dotenv(dotenv_path=env_file, override=False)
+
+def mask_secret(value: str, keep: int = 4) -> str:
+    """Mask sensitive strings for safe logging.
+
+    Args:
+        value: The secret value to mask.
+        keep: Number of trailing characters to keep unmasked (default: 4).
+
+    Returns:
+        A masked string where leading characters are replaced with asterisks.
+
+    Notes:
+        - If `keep` <= 0, the entire string is masked.
+        - If the secret length is less than or equal to `keep`, the entire string is masked.
+        - Whitespace is trimmed before masking.
+    """
+    if not isinstance(value, str):
+        return "***"
+    n = max(0, keep)
+    s = value.strip()
+    if n == 0 or len(s) <= n:
+        return "*" * len(s)
+    return "*" * (len(s) - n) + s[-n:]
 
 
 def jupyter_safe(async_func: Callable[..., Any]) -> Callable[..., Any]:

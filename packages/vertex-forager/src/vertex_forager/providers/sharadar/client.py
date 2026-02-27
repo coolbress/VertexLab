@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 import asyncio
 from typing import Any
@@ -19,10 +20,14 @@ from vertex_forager.utils import (
     jupyter_safe,
     validate_memory_usage,
     Spinner,
+    validate_tickers,
 )
 from vertex_forager.providers.sharadar.schema import DATASET_TABLE
+from vertex_forager.exceptions import InputError
 
 logger = logging.getLogger(__name__)
+
+TICKER_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
 
 @dataclass(slots=True)
 class FetchConfig:
@@ -77,8 +82,11 @@ class SharadarClient(BaseClient):
             rate_limit: Requests per minute (int).
             **kwargs: Additional configuration parameters for EngineConfig.
         """
+        if not isinstance(api_key, str):
+            raise InputError("Sharadar API Key must be a string")
+        api_key = api_key.strip()
         if not api_key:
-            raise ValueError("Sharadar API Key is missing")
+            raise InputError("Sharadar API Key is missing")
 
         super().__init__(
             api_key=api_key,
@@ -111,8 +119,10 @@ class SharadarClient(BaseClient):
             pl.DataFrame in memory mode; RunResult when persisting to DuckDB.
         
         Raises:
-            ValueError: If parameters are invalid for the fetch configuration.
-            RuntimeError: If pipeline execution fails.
+            InputError: If parameters (tickers) are invalid.
+            FetchError: If network/API errors occur during data retrieval.
+            TransformError: If data normalization fails.
+            WriterError: If persistence fails.
         """
         return await self._get_ticker_info_impl(tickers=tickers, connect_db=connect_db, **kwargs)
 
@@ -133,7 +143,9 @@ class SharadarClient(BaseClient):
             pl.DataFrame in memory mode; RunResult when persisting to DuckDB.
         
         Raises:
-            RuntimeError: If pipeline execution fails.
+            FetchError: If network/API errors occur during data retrieval.
+            TransformError: If data normalization fails.
+            WriterError: If persistence fails.
         """
         cfg = self._build_fetch_config(
             dataset="sp500",
@@ -177,12 +189,12 @@ class SharadarClient(BaseClient):
             or RunResult object if storing to database.
 
         Raises:
-            ValueError: If both tickers is empty and connect_db is not provided.
-            httpx.RequestError: If a network error occurs.
-            httpx.HTTPStatusError: If the API returns a non-success status code.
+            InputError: If tickers list is empty or invalid.
+            FetchError: If network/API errors occur during data retrieval.
+            TransformError: If data normalization fails.
+            WriterError: If persistence fails.
         """
-        if (not tickers) and (connect_db is None):
-            raise ValueError("Either provide non-empty tickers or a connect_db for persistence")
+        self._require_valid_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="price",
             symbols=tickers,
@@ -224,11 +236,12 @@ class SharadarClient(BaseClient):
             Rows include SF1 metrics keyed by ticker and calendardate.
         
         Raises:
-            ValueError: If tickers are empty or invalid.
-            RuntimeError: If pipeline execution or configuration validation fails.
+            InputError: If tickers list is empty or invalid.
+            FetchError: If network/API errors occur during data retrieval.
+            TransformError: If data normalization fails.
+            WriterError: If persistence fails.
         """
-        if (not tickers) or (not any(isinstance(t, str) and t.strip() for t in tickers)):
-            raise ValueError("tickers list cannot be empty or invalid")
+        self._require_valid_tickers(tickers)
         extras = {**dict(kwargs), "dimension": dimension}
         cfg = self._build_fetch_config(
             dataset="fundamental",
@@ -269,11 +282,12 @@ class SharadarClient(BaseClient):
             Data includes per-day metrics keyed by ticker and date.
         
         Raises:
-            ValueError: If tickers are empty or invalid.
-            RuntimeError: If pipeline execution fails.
+            InputError: If tickers list is empty or invalid.
+            FetchError: If network/API errors occur during data retrieval.
+            TransformError: If data normalization fails.
+            WriterError: If persistence fails.
         """
-        if (not tickers) or (not any(isinstance(t, str) and t.strip() for t in tickers)):
-            raise ValueError("tickers list cannot be empty or invalid")
+        self._require_valid_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="daily",
             symbols=tickers,
@@ -313,11 +327,12 @@ class SharadarClient(BaseClient):
             Rows include dividends/splits keyed by ticker and date.
         
         Raises:
-            ValueError: If tickers are empty or invalid.
-            RuntimeError: If pipeline execution fails.
+            InputError: If tickers list is empty or invalid.
+            FetchError: If network/API errors occur during data retrieval.
+            TransformError: If data normalization fails.
+            WriterError: If persistence fails.
         """
-        if (not tickers) or (not any(isinstance(t, str) and t.strip() for t in tickers)):
-            raise ValueError("tickers list cannot be empty or invalid")
+        self._require_valid_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="actions",
             symbols=tickers,
@@ -357,11 +372,12 @@ class SharadarClient(BaseClient):
             Data includes insider transactions keyed by ticker and filingdate.
         
         Raises:
-            ValueError: If tickers are empty or invalid.
-            RuntimeError: If pipeline execution fails.
+            InputError: If tickers list is empty or invalid.
+            FetchError: If network/API errors occur during data retrieval.
+            TransformError: If data normalization fails.
+            WriterError: If persistence fails.
         """
-        if (not tickers) or (not any(isinstance(t, str) and t.strip() for t in tickers)):
-            raise ValueError("tickers list cannot be empty or invalid")
+        self._require_valid_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="insider",
             symbols=tickers,
@@ -401,11 +417,12 @@ class SharadarClient(BaseClient):
             Data includes institutional positions keyed by ticker and calendardate.
         
         Raises:
-            ValueError: If tickers are empty or invalid.
-            RuntimeError: If pipeline execution fails.
+            InputError: If tickers are empty or invalid.
+            FetchError: If network/API errors occur during data retrieval.
+            TransformError: If data normalization fails.
+            WriterError: If persistence fails.
         """
-        if (not tickers) or (not any(isinstance(t, str) and t.strip() for t in tickers)):
-            raise ValueError("tickers list cannot be empty or invalid")
+        self._require_valid_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="institutional",
             symbols=tickers,
@@ -451,8 +468,10 @@ class SharadarClient(BaseClient):
             spinner_ctx = Spinner("Fetching all tickers metadata", persist=True) if show_spinner else nullcontext()
             with spinner_ctx:
                 result = await self._fetch_pagination(cfg)
-        elif isinstance(tickers, (list, tuple)) and len(tickers) == 0:
-            raise ValueError("tickers list cannot be empty for SharadarClient.get_ticker_info")
+        elif isinstance(tickers, list) and len(tickers) == 0:
+            raise InputError("tickers list cannot be empty for SharadarClient.get_ticker_info")
+        elif not isinstance(tickers, list):
+            raise InputError("tickers must be a list of strings")
         else:
             cfg = FetchConfig(
                 dataset="tickers",
@@ -476,9 +495,6 @@ class SharadarClient(BaseClient):
         elif connect_db:
             try:
                 table = DATASET_TABLE["tickers"]
-                allowed = set(DATASET_TABLE.values())
-                if table not in allowed:
-                    raise ValueError("Invalid table name for metadata cache query")
                 q_table = f'"{table}"'
                 with duckdb.connect(str(connect_db)) as conn:
                     df_pl = conn.execute(
@@ -515,7 +531,9 @@ class SharadarClient(BaseClient):
         symbols = config.symbols
 
         if symbols is not None and len(symbols) == 0:
-            raise ValueError("tickers list cannot be empty or invalid")
+            raise InputError("tickers list cannot be empty")
+        if symbols:
+            self._validate_tickers(symbols)
 
         bytes_per_item = (
             self.BYTES_PER_TICKER_METADATA if config.dataset == "tickers" else self.BYTES_PER_TICKER_FULL
@@ -675,3 +693,19 @@ class SharadarClient(BaseClient):
             end_date=end_date,
             extra=dict(extra or {}),
         )
+
+    def _validate_tickers(self, tickers: list[str]) -> None:
+        """
+        Validate a list of ticker symbols.
+        Enforces per-item rules: non-empty, no whitespace-only, allowed characters.
+        Raises InputError on first invalid ticker.
+        """
+        validate_tickers(tickers)
+        for t in tickers:
+            if not TICKER_PATTERN.match(t):
+                raise InputError(f"Ticker '{t}' contains invalid characters")
+
+    def _require_valid_tickers(self, tickers: list[str]) -> None:
+        if not tickers:
+            raise InputError("tickers list cannot be empty")
+        self._validate_tickers(tickers)
