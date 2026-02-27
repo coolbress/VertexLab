@@ -242,9 +242,7 @@ class SharadarClient(BaseClient):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        if not tickers:
-            raise InputError("tickers list cannot be empty")
-        self._validate_tickers(tickers)
+        self._require_valid_tickers(tickers)
         extras = {**dict(kwargs), "dimension": dimension}
         cfg = self._build_fetch_config(
             dataset="fundamental",
@@ -290,9 +288,7 @@ class SharadarClient(BaseClient):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        if not tickers:
-            raise InputError("tickers list cannot be empty")
-        self._validate_tickers(tickers)
+        self._require_valid_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="daily",
             symbols=tickers,
@@ -337,9 +333,7 @@ class SharadarClient(BaseClient):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        if not tickers:
-            raise InputError("tickers list cannot be empty")
-        self._validate_tickers(tickers)
+        self._require_valid_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="actions",
             symbols=tickers,
@@ -384,9 +378,7 @@ class SharadarClient(BaseClient):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        if not tickers:
-            raise InputError("tickers list cannot be empty")
-        self._validate_tickers(tickers)
+        self._require_valid_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="insider",
             symbols=tickers,
@@ -431,9 +423,7 @@ class SharadarClient(BaseClient):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        if not tickers:
-            raise InputError("tickers list cannot be empty")
-        self._validate_tickers(tickers)
+        self._require_valid_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="institutional",
             symbols=tickers,
@@ -481,6 +471,8 @@ class SharadarClient(BaseClient):
                 result = await self._fetch_pagination(cfg)
         elif isinstance(tickers, (list, tuple)) and len(tickers) == 0:
             raise InputError("tickers list cannot be empty for SharadarClient.get_ticker_info")
+        elif not isinstance(tickers, (list, tuple)):
+            raise InputError("tickers must be a list of strings")
         else:
             cfg = FetchConfig(
                 dataset="tickers",
@@ -724,3 +716,8 @@ class SharadarClient(BaseClient):
                 raise InputError(f"Ticker '{t}' contains leading/trailing whitespace")
             if not TICKER_PATTERN.match(s):
                 raise InputError(f"Ticker '{t}' contains invalid characters")
+
+    def _require_valid_tickers(self, tickers: list[str]) -> None:
+        if not tickers:
+            raise InputError("tickers list cannot be empty")
+        self._validate_tickers(tickers)
