@@ -26,6 +26,8 @@ from vertex_forager.exceptions import InputError
 
 logger = logging.getLogger(__name__)
 
+TICKER_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
+
 @dataclass(slots=True)
 class FetchConfig:
     """Sharadar data fetch configuration.
@@ -697,7 +699,6 @@ class SharadarClient(BaseClient):
         Enforces per-item rules: non-empty, no whitespace-only, allowed characters.
         Raises InputError on first invalid ticker.
         """
-        pattern = re.compile(r"^[A-Za-z0-9._-]+$")
         for t in tickers:
             if not isinstance(t, str):
                 raise InputError("Ticker must be a string")
@@ -706,5 +707,5 @@ class SharadarClient(BaseClient):
                 raise InputError("Ticker cannot be empty or whitespace")
             if t != s:
                 raise InputError(f"Ticker '{t}' contains leading/trailing whitespace")
-            if not pattern.match(s):
+            if not TICKER_PATTERN.match(s):
                 raise InputError(f"Ticker '{t}' contains invalid characters")
