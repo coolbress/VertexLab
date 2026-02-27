@@ -193,9 +193,7 @@ class SharadarClient(BaseClient):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        if not tickers:
-            raise InputError("tickers list cannot be empty")
-        self._validate_tickers(tickers)
+        self._require_valid_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="price",
             symbols=tickers,
@@ -469,9 +467,9 @@ class SharadarClient(BaseClient):
             spinner_ctx = Spinner("Fetching all tickers metadata", persist=True) if show_spinner else nullcontext()
             with spinner_ctx:
                 result = await self._fetch_pagination(cfg)
-        elif isinstance(tickers, (list, tuple)) and len(tickers) == 0:
+        elif isinstance(tickers, list) and len(tickers) == 0:
             raise InputError("tickers list cannot be empty for SharadarClient.get_ticker_info")
-        elif not isinstance(tickers, (list, tuple)):
+        elif not isinstance(tickers, list):
             raise InputError("tickers must be a list of strings")
         else:
             cfg = FetchConfig(

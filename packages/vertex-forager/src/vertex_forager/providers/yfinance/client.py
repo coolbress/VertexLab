@@ -573,17 +573,15 @@ class YFinanceClient(BaseClient):
         """
         if not symbols:
             raise InputError("tickers list cannot be empty")
-        normalized_symbols: list[str] = []
         for symbol in symbols:
             if not isinstance(symbol, str):
                 raise InputError("each ticker must be a string")
             stripped = symbol.strip()
             if not stripped or stripped != symbol:
                 raise InputError("tickers must be non-empty and must not include leading/trailing whitespace")
-            normalized_symbols.append(stripped)
         bytes_per_item = self.SIZE_MAP.get(dataset, 200 * 1024)
         validate_memory_usage(
-            symbols=normalized_symbols,
+            symbols=symbols,
             connect_db=connect_db,
             bytes_per_item=bytes_per_item,
         )
@@ -613,7 +611,7 @@ class YFinanceClient(BaseClient):
                 await self.run_pipeline(
                     router=router,
                     dataset=dataset,
-                    symbols=normalized_symbols,
+                    symbols=symbols,
                     writer=writer,
                     mapper=self._mapper,
                     on_progress=pbar_updater,
