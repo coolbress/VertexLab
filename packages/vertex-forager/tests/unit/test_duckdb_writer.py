@@ -51,7 +51,9 @@ class TestDuckDBWriter:
 
         # Verify data in DuckDB
         conn = duckdb.connect(str(db_path))
-        count = conn.execute("SELECT count(*) FROM prices").fetchone()[0]
+        row = conn.execute("SELECT count(*) FROM prices").fetchone()
+        assert row is not None
+        count = row[0]
         assert count == 2
         conn.close()
 
@@ -80,7 +82,9 @@ class TestDuckDBWriter:
 
         # Verify total rows
         conn = duckdb.connect(str(db_path))
-        count = conn.execute("SELECT count(*) FROM concurrent_test").fetchone()[0]
+        row = conn.execute("SELECT count(*) FROM concurrent_test").fetchone()
+        assert row is not None
+        count = row[0]
         assert count == 1000  # 100 packets * 10 rows
         conn.close()
 
@@ -129,9 +133,11 @@ class TestDuckDBWriter:
         conn = duckdb.connect(str(db_path))
         # Should be 1 row with updated price
         rows = conn.execute("SELECT * FROM sharadar_sep").fetchall()
+        assert rows is not None
         assert len(rows) == 1
         # Check close price
         res = conn.execute("SELECT close FROM sharadar_sep").fetchone()
+        assert res is not None
         assert res[0] == 200.0
         conn.close()
 
@@ -161,6 +167,8 @@ class TestDuckDBWriter:
 
         # Verify data in DuckDB
         conn = duckdb.connect(str(db_path))
-        count = conn.execute("SELECT count(*) FROM small_test").fetchone()[0]
+        row = conn.execute("SELECT count(*) FROM small_test").fetchone()
+        assert row is not None
+        count = row[0]
         assert count == 2
         conn.close()

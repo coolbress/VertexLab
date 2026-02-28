@@ -10,15 +10,15 @@ from datetime import date, datetime, timezone
 import polars as pl
 from vertex_forager.utils import mask_secret
 
-from typing import cast
-from vertex_forager.core.types import SharadarDataset, JSONValue, PaginationJobContext, PerSymbolJobContext
+from typing import cast, TYPE_CHECKING
+from vertex_forager.core.types import SharadarDataset
+if TYPE_CHECKING:
+    from vertex_forager.core.types import PerSymbolJobContext
 
 from vertex_forager.core.config import (
     FetchJob,
     FramePacket,
     RequestAuth,
-    RequestSpec,
-    HttpMethod,
 )
 from vertex_forager.core.contracts import ParseResult
 from vertex_forager.routers.base import BaseRouter
@@ -37,7 +37,6 @@ from vertex_forager.providers.sharadar.schema import (
     DATE_FILTER_COL,
     INTERNAL_COLS,
 )
-from vertex_forager.core.types import SharadarDataset
 
 
 logger = logging.getLogger("vertex_forager.providers.sharadar.router")
@@ -217,7 +216,6 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
             dataset == "sp500" and not symbols
         ):
             # Sharadar API limit: maximum 10,000 rows per response
-            from typing import cast
             per_page = self.MAX_ROWS_PER_REQUEST
             yield self._build_pagination_job(dataset=dataset, per_page=per_page)
             return
@@ -568,8 +566,9 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         )
         
         per_symbol_ctx = build_symbol_context(dataset=dataset, symbol=clean_symbol)
+        final_ctx: dict[str, object] = {**per_symbol_ctx}
         if "pagination" in page_ctx:
-            per_symbol_ctx["pagination"] = page_ctx["pagination"]
+            final_ctx["pagination"] = page_ctx["pagination"]
             
         return single_symbol_job(
             provider=self.provider,
@@ -578,7 +577,7 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
             url=self._dataset_url(dataset),
             params=params,
             auth=self._auth(),
-            context=per_symbol_ctx,
+            context=cast("PerSymbolJobContext", final_ctx),
         )
         
     # ------ Rows per ticker: convert days→rows by dataset characteristics ------

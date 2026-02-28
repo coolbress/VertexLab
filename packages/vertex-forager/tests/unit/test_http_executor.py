@@ -260,7 +260,7 @@ class TestHttpExecutorYFinance:
         class DummyYF:
             def __init__(self) -> None:
                 pass
-            def Ticker(self, sym: str) -> DummyTicker:  # type: ignore[override]
+            def Ticker(self, sym: str) -> DummyTicker:
                 return DummyTicker(sym)
         monkeypatch.setattr("vertex_forager.core.http.yf", DummyYF())
         mock_async_client.run_sync = AsyncMock(side_effect=lambda func: func())
@@ -282,7 +282,7 @@ class TestHttpExecutorYFinance:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         class DummyYF:
-            def download(self, **kwargs: object) -> str:  # type: ignore[override]
+            def download(self, **kwargs: object) -> str:
                 return "downloaded"
         monkeypatch.setattr("vertex_forager.core.http.yf", DummyYF())
         mock_async_client.run_sync = AsyncMock(side_effect=lambda func: func())

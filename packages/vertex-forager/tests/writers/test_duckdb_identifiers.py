@@ -42,7 +42,9 @@ async def test_reserved_word_identifier_ok(tmp_path: Path) -> None:
         res = await writer.write(packet)
         assert res.rows == 1
         with duckdb.connect(str(db_path)) as conn:
-            out = conn.execute('SELECT count(*) FROM "select"').fetchone()[0]
+            row = conn.execute('SELECT count(*) FROM "select"').fetchone()
+            assert row is not None
+            out = row[0]
             assert out == 1
     finally:
         await writer.close()
@@ -91,14 +93,18 @@ async def test_upsert_conflict_updates_value(tmp_path: Path) -> None:
         assert result2.rows == 1
 
         with duckdb.connect(str(db_path)) as conn:
-            val = conn.execute(
+            row_val = conn.execute(
                 'SELECT close FROM "yfinance_price" WHERE provider=? AND ticker=? AND date=?',
                 ["yfinance", "AAPL", today],
-            ).fetchone()[0]
-            cnt = conn.execute(
+            ).fetchone()
+            assert row_val is not None
+            val = row_val[0]
+            row_cnt = conn.execute(
                 'SELECT count(*) FROM "yfinance_price" WHERE provider=? AND ticker=? AND date=?',
                 ["yfinance", "AAPL", today],
-            ).fetchone()[0]
+            ).fetchone()
+            assert row_cnt is not None
+            cnt = row_cnt[0]
             assert val == 110.0
             assert cnt == 1
     finally:

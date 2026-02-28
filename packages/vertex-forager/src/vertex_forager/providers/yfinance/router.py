@@ -135,6 +135,11 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             f"YFinance provider requires 'symbols' list for dataset '{dataset}'."
             )
 
+        # -------- Validate Dataset --------
+        if dataset not in DATASET_ENDPOINT:
+            raise ValueError(f"Unsupported yfinance dataset: {dataset}")
+        typed_dataset: YFinanceDataset = dataset
+
         # -------- Build Batch Jobs --------
         
         # We intentionally avoid yfinance's multi-ticker bulk download because:
@@ -164,7 +169,7 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
                 seen.add(s)
                 unique_cleaned.append(s)
         for clean in unique_cleaned:
-            yield self._build_single_symbol_job(symbol=clean, dataset=dataset)
+            yield self._build_single_symbol_job(symbol=clean, dataset=typed_dataset)
 
     def parse(self, *, job: FetchJob, payload: bytes) -> ParseResult:
         """Parse raw pickled payload into structured packets.

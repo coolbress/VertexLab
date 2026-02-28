@@ -4,7 +4,7 @@ import logging
 import re
 from pathlib import Path
 import asyncio
-from typing import Any
+from typing import Any, cast
 from dataclasses import dataclass, field
 from contextlib import nullcontext
 
@@ -574,14 +574,6 @@ class SharadarClient(BaseClient[SharadarDataset]):
         reserved = {"router", "dataset", "symbols", "writer", "mapper", "on_progress"}
         pipeline_kwargs: dict[str, JSONValue] = {k: v for k, v in dict(config.extra).items() if k not in reserved}
 
-        # Prepare kwargs for pipeline
-        # We need to explicitly type hint that we are unpacking JSONValue items, 
-        # not a single dict[str, JSONValue]. 
-        # Since run_pipeline accepts **kwargs: JSONValue, unpacking a dict[str, JSONValue] 
-        # works at runtime, but mypy might need help if it thinks we are passing the dict as a single argument.
-        # Actually, unpacking **pipeline_kwargs where pipeline_kwargs is dict[str, JSONValue] 
-        # matches **kwargs: JSONValue.
-        
         result_obj = await self._run_sharadar_pipeline(
             config=config,
             total_items=total_items,
@@ -640,7 +632,6 @@ class SharadarClient(BaseClient[SharadarDataset]):
         )
         try:
             async with self.managed_writer(config.connect_db, show_progress=config.show_progress) as writer:
-                from typing import cast
                 router = create_router(
                     "sharadar",
                     api_key=cast(str, self.api_key),

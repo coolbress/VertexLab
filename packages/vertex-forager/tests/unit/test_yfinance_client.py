@@ -7,6 +7,7 @@ import pytest
 from vertex_forager.clients import create_client
 from vertex_forager.providers.yfinance.client import YFinanceClient
 from vertex_forager.providers.yfinance.router import YFinanceRouter
+from typing import cast, Any
 
 
 class TestYFinanceClientDefaults:
@@ -39,7 +40,9 @@ class TestYFinanceRouterDateParams:
         assert len(jobs) == 2
         for job in jobs:
             params = job.spec.params
-            lib_kwargs = params.get("lib", {}).get("kwargs", {})
+            params_dict = cast("dict[str, Any]", params)
+            lib = cast("dict[str, Any]", params_dict.get("lib", {}))
+            lib_kwargs = cast("dict[str, Any]", lib.get("kwargs", {}))
             assert "start" not in lib_kwargs
             assert "end" not in lib_kwargs
     

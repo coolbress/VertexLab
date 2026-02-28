@@ -111,7 +111,7 @@ class TestClientIntegration:
     ) -> None:
         """Test that get_price_data returns properly structured DataFrame."""
         # Arrange
-        mock_response = json.dumps(sample_price_data).encode()
+        mock_response: bytes = json.dumps(sample_price_data).encode()
         mock_http_executor.fetch.return_value = mock_response
 
         # Act
@@ -136,7 +136,7 @@ class TestClientIntegration:
     ) -> None:
         """Test that get_price_data returns RunResult when persisting to database."""
         # Arrange
-        mock_response = json.dumps(sample_price_data).encode()
+        mock_response: bytes = json.dumps(sample_price_data).encode()
         mock_http_executor.fetch.return_value = mock_response
 
         # Act
@@ -234,8 +234,8 @@ class TestClientErrorHandling:
     ) -> None:
         """Test that client handles empty API responses gracefully."""
         # Arrange
-        mock_response = {"datatable": {"data": [], "columns": []}}
-        mock_http_executor.fetch.return_value = json.dumps(mock_response).encode()
+        mock_response_obj: dict[str, object] = {"datatable": {"data": [], "columns": []}}
+        mock_http_executor.fetch.return_value = json.dumps(mock_response_obj).encode()
 
         # Act
         result = await sharadar_client.get_price_data(

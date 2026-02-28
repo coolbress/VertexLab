@@ -238,7 +238,7 @@ class TestSharadarRouterUnit:
             spec=RequestSpec(url="https://api.sharadar.com/SEP.json"),
         )
 
-        payload = {
+        payload: dict[str, object] = {
             "datatable": {
                 "data": [
                     [
@@ -292,7 +292,7 @@ class TestSharadarRouterUnit:
             spec=RequestSpec(url="https://api.sharadar.com/SEP.json"),
         )
 
-        payload = {"datatable": {"data": [], "columns": []}}
+        payload: dict[str, object] = {"datatable": {"data": [], "columns": []}}
 
         # Act
         result = router.parse(job=job, payload=json.dumps(payload).encode("utf-8"))
@@ -370,9 +370,11 @@ class TestRouterEdgeCases:
     ) -> None:
         """Test that router handles unknown dataset names gracefully."""
         # Act & Assert
+        from typing import cast
+        from vertex_forager.core.types import SharadarDataset
         with pytest.raises(NotImplementedError, match="Unsupported dataset"):
             async for _ in router.generate_jobs(
-                dataset="unknown_dataset", symbols=["AAPL"]
+                dataset=cast(SharadarDataset, "unknown_dataset"), symbols=["AAPL"]
             ):
                 pass
 
