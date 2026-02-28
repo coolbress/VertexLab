@@ -567,7 +567,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
                     if isinstance(meta_result, pl.DataFrame):
                         logger.info(LOG_META_CACHED_COUNT.format(prefix=CLIENT_LOG_PREFIX, count=len(meta_result)))
             except (httpx.RequestError, asyncio.TimeoutError, OSError) as e:
-                logger.warning(LOG_META_PREFETCH_FAIL.format(prefix=CLIENT_LOG_PREFIX, error=e))
+                logger.warning(LOG_META_PREFETCH_FAIL.format(prefix=CLIENT_LOG_PREFIX, error=type(e).__name__))
 
         total_items = (
             config.total_items

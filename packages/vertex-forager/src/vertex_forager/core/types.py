@@ -68,9 +68,7 @@ YFinanceDataset: TypeAlias = Literal[
     "calendar",
     "news",
     "info",
-    "fast_info",
     "dividends",
     "splits",
     "recommendations",
-    "actions",
 ]

@@ -3,6 +3,7 @@
 This document summarizes centralized constants across the codebase. The goal is to eliminate magic numbers and provide a single source of truth for operational defaults and provider-specific mappings.
 
 ## Global (`vertex_forager/constants.py`)
+
 - HTTP_TIMEOUT_S, HTTP_MAX_CONNECTIONS, HTTP_MAX_KEEPALIVE_CONNECTIONS, HTTP_USER_AGENT
 - DEFAULT_RATE_LIMIT, DEFAULT_RETRY_MAX_ATTEMPTS, DEFAULT_RETRY_BASE_BACKOFF_S, DEFAULT_RETRY_MAX_BACKOFF_S
 - RESERVED_PIPELINE_KEYS
@@ -17,6 +18,7 @@ This document summarizes centralized constants across the codebase. The goal is 
 - Writer(DuckDB): WRITER_DUCKDB_MAX_WORKERS, WAL_AUTOCHECKPOINT_LIMIT
 
 ## YFinance (`providers/yfinance/constants.py`)
+
 - SIZE_MAP
 - PRICE_BATCH_SIZE, PRICE_BATCH_MAX, THREADS_THRESHOLD
 - PRICE_BATCH_SIZE_KEY
@@ -25,6 +27,7 @@ This document summarizes centralized constants across the codebase. The goal is 
 - Price defaults/keys: INTERVAL_KEY, START_KEY, END_KEY, PERIOD_KEY, AUTO_ADJUST_KEY, PREPOST_KEY, DEFAULT_INTERVAL, DEFAULT_PRICE_PERIOD, DEFAULT_AUTO_ADJUST, DEFAULT_PREPOST
 
 ## Sharadar (`providers/sharadar/constants.py`)
+
 - MAX_ROWS_PER_REQUEST, DEFAULT_BATCH_SIZE, MIN_BATCH_SIZE
 - TRADING_DAYS_RATIO, QUARTERLY_DAYS_RATIO
 - Pagination keys: PAGINATION_META_KEY, PAGINATION_CURSOR_PARAM, MAX_PAGES

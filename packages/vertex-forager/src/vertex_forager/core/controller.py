@@ -183,6 +183,8 @@ class FlowController:
             logger.info(
                 f"Auto-configured concurrency: {concurrency_limit} (based on {requests_per_minute} RPM)"
             )
+        else:
+            concurrency_limit = max(1, int(concurrency_limit))
 
         self._rate_limiter = GCRARateLimiter(
             requests_per_minute=requests_per_minute,
@@ -192,7 +194,7 @@ class FlowController:
         self._concurrency_limiter = GradientConcurrencyLimiter(
             initial_limit=concurrency_limit,
             max_limit=concurrency_limit,
-            min_limit=min(5, concurrency_limit),
+            min_limit=max(1, min(5, concurrency_limit)),
             queue_size=GRADIENT_QUEUE_SIZE_DEFAULT,
             smoothing=GRADIENT_SMOOTHING_DEFAULT,
         )

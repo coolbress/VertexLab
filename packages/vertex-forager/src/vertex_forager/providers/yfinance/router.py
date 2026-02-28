@@ -292,10 +292,12 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             return ParseResult(packets=[packet], next_jobs=[])
         
         except (pickle.UnpicklingError, ValueError, TypeError) as e:
-            logger.exception(LOG_PARSE_FAILED_JOB.format(prefix=ROUTER_LOG_PREFIX, job=job))
+            job_id = f"{job.provider}:{job.dataset}:{job.symbol or ''}"
+            logger.exception(LOG_PARSE_FAILED_JOB.format(prefix=ROUTER_LOG_PREFIX, job_id=job_id))
             raise_yfinance_parse_error(e, dataset=job.dataset)
         except Exception as e:
-            logger.exception(LOG_PARSE_UNEXPECTED_ERROR.format(prefix=ROUTER_LOG_PREFIX, job=job))
+            job_id = f"{job.provider}:{job.dataset}:{job.symbol or ''}"
+            logger.exception(LOG_PARSE_UNEXPECTED_ERROR.format(prefix=ROUTER_LOG_PREFIX, job_id=job_id))
             raise_yfinance_parse_error(e, dataset=job.dataset)
         
     # --------------------------------------

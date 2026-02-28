@@ -137,6 +137,7 @@ def status() -> None:
 )
 @click.option(
     "--format",
+    "output_format",
     type=click.Choice(["json", "table"]),
     default="json",
     help="Output format (json/table)",
@@ -147,12 +148,12 @@ def status() -> None:
     default=False,
     help="Show only keys overridden by environment variables (table format only)",
 )
-def constants(section: str, format: str, env_only: bool) -> None:
+def constants(section: str, output_format: str, env_only: bool) -> None:
     """Preview centralized constants by section.
 
     Args:
         section: Constants section to render
-        format: Output format (json/table)
+        output_format: Output format (json/table)
         env_only: Filter table to show only environment-overridden keys
     """
     import json
@@ -166,7 +167,49 @@ def constants(section: str, format: str, env_only: bool) -> None:
     def add(name: str, values: dict[str, object]) -> None:
         preview[name] = values
     
-    if section in ("global", "flow", "queue", "all"):
+    if section == "global":
+        add(
+            "global",
+            {
+                "HTTP_TIMEOUT_S": global_constants.HTTP_TIMEOUT_S,
+                "HTTP_MAX_CONNECTIONS": global_constants.HTTP_MAX_CONNECTIONS,
+                "HTTP_MAX_KEEPALIVE_CONNECTIONS": global_constants.HTTP_MAX_KEEPALIVE_CONNECTIONS,
+                "DEFAULT_RATE_LIMIT": global_constants.DEFAULT_RATE_LIMIT,
+                "DEFAULT_RETRY_MAX_ATTEMPTS": global_constants.DEFAULT_RETRY_MAX_ATTEMPTS,
+                "DEFAULT_RETRY_BASE_BACKOFF_S": global_constants.DEFAULT_RETRY_BASE_BACKOFF_S,
+                "DEFAULT_RETRY_MAX_BACKOFF_S": global_constants.DEFAULT_RETRY_MAX_BACKOFF_S,
+                "FLUSH_THRESHOLD_ROWS": global_constants.FLUSH_THRESHOLD_ROWS,
+                "PRIORITY_PAGINATION": global_constants.PRIORITY_PAGINATION,
+                "PRIORITY_NEW_JOB": global_constants.PRIORITY_NEW_JOB,
+                "PRIORITY_SENTINEL": global_constants.PRIORITY_SENTINEL,
+                "PROGRESS_LOG_CHUNK_ROWS": global_constants.PROGRESS_LOG_CHUNK_ROWS,
+                "DEFAULT_TIME_ZONE": global_constants.DEFAULT_TIME_ZONE,
+            },
+        )
+    elif section == "flow":
+        add(
+            "flow",
+            {
+                "DEFAULT_AVG_LATENCY_S": global_constants.DEFAULT_AVG_LATENCY_S,
+                "CONCURRENCY_MIN": global_constants.CONCURRENCY_MIN,
+                "CONCURRENCY_MAX": global_constants.CONCURRENCY_MAX,
+                "GRADIENT_QUEUE_SIZE_DEFAULT": global_constants.GRADIENT_QUEUE_SIZE_DEFAULT,
+                "GRADIENT_SMOOTHING_DEFAULT": global_constants.GRADIENT_SMOOTHING_DEFAULT,
+                "GRADIENT_WINDOW_S": global_constants.GRADIENT_WINDOW_S,
+            },
+        )
+    elif section == "queue":
+        add(
+            "queue",
+            {
+                "QUEUE_TARGET_RAM_RATIO": global_constants.QUEUE_TARGET_RAM_RATIO,
+                "PACKET_SIZE_EST_BYTES": global_constants.PACKET_SIZE_EST_BYTES,
+                "QUEUE_MIN": global_constants.QUEUE_MIN,
+                "QUEUE_MAX": global_constants.QUEUE_MAX,
+                "QUEUE_DEFAULT": global_constants.QUEUE_DEFAULT,
+            },
+        )
+    elif section == "all":
         add(
             "global",
             {
@@ -256,7 +299,7 @@ def constants(section: str, format: str, env_only: bool) -> None:
     if env_overrides_obj:
         preview["env_overrides"] = env_overrides_obj
     
-    if format == "json":
+    if output_format == "json":
         click.echo(json.dumps(preview, indent=2, ensure_ascii=False))
         return
     
