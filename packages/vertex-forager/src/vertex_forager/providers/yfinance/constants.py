@@ -39,8 +39,10 @@ DEFAULT_BYTES_PER_ITEM: Final[int] = 200 * 1024
 DATASET_ENDPOINT: Final[dict[str, str]] = {
     "price": "history",
     "info": "info",
+    "fast_info": "fast_info",
     "dividends": "dividends",
     "splits": "splits",
+    "actions": "actions",
     "financials": "financials",
     "income_stmt": "financials",
     "balance_sheet": "balance_sheet",

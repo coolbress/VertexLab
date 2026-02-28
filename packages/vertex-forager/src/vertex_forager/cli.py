@@ -167,88 +167,48 @@ def constants(section: str, output_format: str, env_only: bool) -> None:
     def add(name: str, values: dict[str, object]) -> None:
         preview[name] = values
     
-    if section == "global":
-        add(
-            "global",
-            {
-                "HTTP_TIMEOUT_S": global_constants.HTTP_TIMEOUT_S,
-                "HTTP_MAX_CONNECTIONS": global_constants.HTTP_MAX_CONNECTIONS,
-                "HTTP_MAX_KEEPALIVE_CONNECTIONS": global_constants.HTTP_MAX_KEEPALIVE_CONNECTIONS,
-                "DEFAULT_RATE_LIMIT": global_constants.DEFAULT_RATE_LIMIT,
-                "DEFAULT_RETRY_MAX_ATTEMPTS": global_constants.DEFAULT_RETRY_MAX_ATTEMPTS,
-                "DEFAULT_RETRY_BASE_BACKOFF_S": global_constants.DEFAULT_RETRY_BASE_BACKOFF_S,
-                "DEFAULT_RETRY_MAX_BACKOFF_S": global_constants.DEFAULT_RETRY_MAX_BACKOFF_S,
-                "FLUSH_THRESHOLD_ROWS": global_constants.FLUSH_THRESHOLD_ROWS,
-                "PRIORITY_PAGINATION": global_constants.PRIORITY_PAGINATION,
-                "PRIORITY_NEW_JOB": global_constants.PRIORITY_NEW_JOB,
-                "PRIORITY_SENTINEL": global_constants.PRIORITY_SENTINEL,
-                "PROGRESS_LOG_CHUNK_ROWS": global_constants.PROGRESS_LOG_CHUNK_ROWS,
-                "DEFAULT_TIME_ZONE": global_constants.DEFAULT_TIME_ZONE,
-            },
-        )
-    elif section == "flow":
-        add(
-            "flow",
-            {
-                "DEFAULT_AVG_LATENCY_S": global_constants.DEFAULT_AVG_LATENCY_S,
-                "CONCURRENCY_MIN": global_constants.CONCURRENCY_MIN,
-                "CONCURRENCY_MAX": global_constants.CONCURRENCY_MAX,
-                "GRADIENT_QUEUE_SIZE_DEFAULT": global_constants.GRADIENT_QUEUE_SIZE_DEFAULT,
-                "GRADIENT_SMOOTHING_DEFAULT": global_constants.GRADIENT_SMOOTHING_DEFAULT,
-                "GRADIENT_WINDOW_S": global_constants.GRADIENT_WINDOW_S,
-            },
-        )
-    elif section == "queue":
-        add(
-            "queue",
-            {
-                "QUEUE_TARGET_RAM_RATIO": global_constants.QUEUE_TARGET_RAM_RATIO,
-                "PACKET_SIZE_EST_BYTES": global_constants.PACKET_SIZE_EST_BYTES,
-                "QUEUE_MIN": global_constants.QUEUE_MIN,
-                "QUEUE_MAX": global_constants.QUEUE_MAX,
-                "QUEUE_DEFAULT": global_constants.QUEUE_DEFAULT,
-            },
-        )
-    elif section == "all":
-        add(
-            "global",
-            {
-                "HTTP_TIMEOUT_S": global_constants.HTTP_TIMEOUT_S,
-                "HTTP_MAX_CONNECTIONS": global_constants.HTTP_MAX_CONNECTIONS,
-                "HTTP_MAX_KEEPALIVE_CONNECTIONS": global_constants.HTTP_MAX_KEEPALIVE_CONNECTIONS,
-                "DEFAULT_RATE_LIMIT": global_constants.DEFAULT_RATE_LIMIT,
-                "DEFAULT_RETRY_MAX_ATTEMPTS": global_constants.DEFAULT_RETRY_MAX_ATTEMPTS,
-                "DEFAULT_RETRY_BASE_BACKOFF_S": global_constants.DEFAULT_RETRY_BASE_BACKOFF_S,
-                "DEFAULT_RETRY_MAX_BACKOFF_S": global_constants.DEFAULT_RETRY_MAX_BACKOFF_S,
-                "FLUSH_THRESHOLD_ROWS": global_constants.FLUSH_THRESHOLD_ROWS,
-                "PRIORITY_PAGINATION": global_constants.PRIORITY_PAGINATION,
-                "PRIORITY_NEW_JOB": global_constants.PRIORITY_NEW_JOB,
-                "PRIORITY_SENTINEL": global_constants.PRIORITY_SENTINEL,
-                "PROGRESS_LOG_CHUNK_ROWS": global_constants.PROGRESS_LOG_CHUNK_ROWS,
-                "DEFAULT_TIME_ZONE": global_constants.DEFAULT_TIME_ZONE,
-            },
-        )
-        add(
-            "flow",
-            {
-                "DEFAULT_AVG_LATENCY_S": global_constants.DEFAULT_AVG_LATENCY_S,
-                "CONCURRENCY_MIN": global_constants.CONCURRENCY_MIN,
-                "CONCURRENCY_MAX": global_constants.CONCURRENCY_MAX,
-                "GRADIENT_QUEUE_SIZE_DEFAULT": global_constants.GRADIENT_QUEUE_SIZE_DEFAULT,
-                "GRADIENT_SMOOTHING_DEFAULT": global_constants.GRADIENT_SMOOTHING_DEFAULT,
-                "GRADIENT_WINDOW_S": global_constants.GRADIENT_WINDOW_S,
-            },
-        )
-        add(
-            "queue",
-            {
-                "QUEUE_TARGET_RAM_RATIO": global_constants.QUEUE_TARGET_RAM_RATIO,
-                "PACKET_SIZE_EST_BYTES": global_constants.PACKET_SIZE_EST_BYTES,
-                "QUEUE_MIN": global_constants.QUEUE_MIN,
-                "QUEUE_MAX": global_constants.QUEUE_MAX,
-                "QUEUE_DEFAULT": global_constants.QUEUE_DEFAULT,
-            },
-        )
+    def _global_constants() -> dict[str, object]:
+        return {
+            "HTTP_TIMEOUT_S": global_constants.HTTP_TIMEOUT_S,
+            "HTTP_MAX_CONNECTIONS": global_constants.HTTP_MAX_CONNECTIONS,
+            "HTTP_MAX_KEEPALIVE_CONNECTIONS": global_constants.HTTP_MAX_KEEPALIVE_CONNECTIONS,
+            "DEFAULT_RATE_LIMIT": global_constants.DEFAULT_RATE_LIMIT,
+            "DEFAULT_RETRY_MAX_ATTEMPTS": global_constants.DEFAULT_RETRY_MAX_ATTEMPTS,
+            "DEFAULT_RETRY_BASE_BACKOFF_S": global_constants.DEFAULT_RETRY_BASE_BACKOFF_S,
+            "DEFAULT_RETRY_MAX_BACKOFF_S": global_constants.DEFAULT_RETRY_MAX_BACKOFF_S,
+            "FLUSH_THRESHOLD_ROWS": global_constants.FLUSH_THRESHOLD_ROWS,
+            "PRIORITY_PAGINATION": global_constants.PRIORITY_PAGINATION,
+            "PRIORITY_NEW_JOB": global_constants.PRIORITY_NEW_JOB,
+            "PRIORITY_SENTINEL": global_constants.PRIORITY_SENTINEL,
+            "PROGRESS_LOG_CHUNK_ROWS": global_constants.PROGRESS_LOG_CHUNK_ROWS,
+            "DEFAULT_TIME_ZONE": global_constants.DEFAULT_TIME_ZONE,
+        }
+    
+    def _flow_constants() -> dict[str, object]:
+        return {
+            "DEFAULT_AVG_LATENCY_S": global_constants.DEFAULT_AVG_LATENCY_S,
+            "CONCURRENCY_MIN": global_constants.CONCURRENCY_MIN,
+            "CONCURRENCY_MAX": global_constants.CONCURRENCY_MAX,
+            "GRADIENT_QUEUE_SIZE_DEFAULT": global_constants.GRADIENT_QUEUE_SIZE_DEFAULT,
+            "GRADIENT_SMOOTHING_DEFAULT": global_constants.GRADIENT_SMOOTHING_DEFAULT,
+            "GRADIENT_WINDOW_S": global_constants.GRADIENT_WINDOW_S,
+        }
+    
+    def _queue_constants() -> dict[str, object]:
+        return {
+            "QUEUE_TARGET_RAM_RATIO": global_constants.QUEUE_TARGET_RAM_RATIO,
+            "PACKET_SIZE_EST_BYTES": global_constants.PACKET_SIZE_EST_BYTES,
+            "QUEUE_MIN": global_constants.QUEUE_MIN,
+            "QUEUE_MAX": global_constants.QUEUE_MAX,
+            "QUEUE_DEFAULT": global_constants.QUEUE_DEFAULT,
+        }
+    
+    if section in ("global", "all"):
+        add("global", _global_constants())
+    if section in ("flow", "all"):
+        add("flow", _flow_constants())
+    if section in ("queue", "all"):
+        add("queue", _queue_constants())
     
     if section in ("yfinance", "all"):
         add(

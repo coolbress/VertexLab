@@ -111,6 +111,20 @@ YFINANCE_SPLITS_SCHEMA = TableSchema(
     analysis_date_col="date",
 )
 
+YFINANCE_ACTIONS_SCHEMA = TableSchema(
+    table="yfinance_actions",
+    schema={
+        "provider": pl.Utf8,
+        "date": pl.Date,
+        "dividends": pl.Float64,
+        "stock_splits": pl.Float64,
+        "ticker": pl.Utf8,
+        "fetched_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
+    },
+    unique_key=("provider", "ticker", "date"),
+    analysis_date_col="date",
+)
+
 YFINANCE_CALENDAR_SCHEMA = TableSchema(
     table="yfinance_calendar",
     schema={
@@ -200,6 +214,17 @@ YFINANCE_HOLDERS_SCHEMA = TableSchema(
     analysis_date_col="date_reported",
 )
 
+YFINANCE_FAST_INFO_SCHEMA = TableSchema(
+    table="yfinance_fast_info",
+    schema={
+        "provider": pl.Utf8,
+        "ticker": pl.Utf8,
+        "fetched_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
+    },
+    unique_key=("provider", "ticker"),
+    analysis_date_col=None,
+    flexible_schema=True,
+)
 YFINANCE_MAJOR_HOLDERS_SCHEMA = TableSchema(
     table="yfinance_major_holders",
     schema={
@@ -256,6 +281,7 @@ YFINANCE_INSIDER_ROSTER_SCHEMA = TableSchema(
 DATASET_TABLE: Final[dict[str, str]] = {
     # Meta 
     "info": "yfinance_info",
+    "fast_info": "yfinance_fast_info",
     
     # Market
     "price": "yfinance_price",
@@ -263,6 +289,7 @@ DATASET_TABLE: Final[dict[str, str]] = {
     # Actions 
     "dividends": "yfinance_dividends",
     "splits": "yfinance_splits",
+    "actions": "yfinance_actions",
     
     # financials 
     "financials": "yfinance_financials",
@@ -298,6 +325,7 @@ DATASET_TABLE: Final[dict[str, str]] = {
 DATASET_SCHEMA: Final[dict[str, TableSchema]] = {
     # meta 
     "info": YFINANCE_INFO_SCHEMA,
+    "fast_info": YFINANCE_FAST_INFO_SCHEMA,
     
     # market 
     "price": YFINANCE_PRICE_SCHEMA,
@@ -305,6 +333,7 @@ DATASET_SCHEMA: Final[dict[str, TableSchema]] = {
     # Actions 
     "dividends": YFINANCE_DIVIDENDS_SCHEMA,
     "splits": YFINANCE_SPLITS_SCHEMA,
+    "actions": YFINANCE_ACTIONS_SCHEMA,
 
     # Holders 
     "major_holders": YFINANCE_MAJOR_HOLDERS_SCHEMA,

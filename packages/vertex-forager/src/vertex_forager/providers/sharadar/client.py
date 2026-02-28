@@ -642,8 +642,6 @@ class SharadarClient(BaseClient[SharadarDataset]):
         )
         try:
             async with self.managed_writer(config.connect_db, show_progress=config.show_progress) as writer:
-                # Avoid duplicate keys (explicit args below take precedence)
-                _safe_router_kwargs = {k: v for k, v in router_kwargs.items() if k not in {"start_date", "end_date"}}
                 router = create_router(
                     "sharadar",
                     api_key=cast(str, self.api_key),
@@ -651,7 +649,6 @@ class SharadarClient(BaseClient[SharadarDataset]):
                     start_date=config.start_date,
                     end_date=config.end_date,
                     ticker_metadata=self._metadata_cache,
-                    **_safe_router_kwargs,
                 )
 
                 spinner_ctx = Spinner(config.desc, persist=True) if (config.show_progress and not config.use_progress_bar) else nullcontext()
