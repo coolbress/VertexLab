@@ -26,7 +26,7 @@ import logging
 import time
 import itertools
 import httpx
-from typing import Any, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING, cast
 from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Sequence, Callable
 from collections import defaultdict
@@ -36,9 +36,9 @@ from polars.exceptions import ComputeError
 from vertex_forager.exceptions import ValidationError, PrimaryKeyMissingError, PrimaryKeyNullError
 
 try:
-    import duckdb
+    import duckdb as _duckdb
 except ImportError:
-    duckdb = None
+    _duckdb = cast(Any, None)
 
 from vertex_forager.core.http import HttpExecutor
 from vertex_forager.core.config import (
@@ -56,12 +56,13 @@ from vertex_forager.schema.registry import get_table_schema
 
 if TYPE_CHECKING:
     from vertex_forager.writers.base import BaseWriter
-    from vertex_forager.writers.memory import InMemoryBufferWriter
 
+InMemoryBufferWriterType: type | None
 try:
-    from vertex_forager.writers.memory import InMemoryBufferWriter
-except ImportError:
-    InMemoryBufferWriter = None
+    import vertex_forager.writers.memory as _mem_writer
+    InMemoryBufferWriterType = _mem_writer.InMemoryBufferWriter
+except (ImportError, ModuleNotFoundError):
+    InMemoryBufferWriterType = None
 
 logger = logging.getLogger("vertex_forager.debug")
 
@@ -122,10 +123,10 @@ class VertexForager:
         self.controller = controller
 
         # Track active tasks for graceful shutdown
-        self._active_tasks: list[asyncio.Task] = []
+        self._active_tasks: list[asyncio.Future[Any]] = []
 
         # Validate configuration
-        self._config.validate()
+        self._config.assert_valid()
 
         # Optimization: Disable intermediate flushing for In-Memory Writer
         # Since InMemoryBufferWriter just stores frames in a list, we can
@@ -133,8 +134,8 @@ class VertexForager:
         # This allows the worker to collect ALL frames and perform a SINGLE merge at the end.
         self._flush_threshold = config.flush_threshold_rows
 
-        if InMemoryBufferWriter is not None and isinstance(
-            writer, InMemoryBufferWriter
+        if InMemoryBufferWriterType is not None and isinstance(
+            writer, InMemoryBufferWriterType
         ):
             # Override instance config (not the global config object)
             # We treat 1 billion rows as effectively infinite for memory buffer
@@ -236,6 +237,7 @@ class VertexForager:
         try:
             # Create a monitor for writer tasks to detect early failures
             writer_monitor = asyncio.gather(*writer_tasks)
+            writer_monitor = cast(asyncio.Future[Any], writer_monitor)
             self._active_tasks.append(writer_monitor)
 
             async def _pipeline_orchestration() -> None:
@@ -260,10 +262,12 @@ class VertexForager:
             orchestrator = asyncio.create_task(
                 _pipeline_orchestration(), name="vertex-forager:orchestrator"
             )
+            orchestrator = cast(asyncio.Task[Any], orchestrator)
             self._active_tasks.append(orchestrator)
 
+            futures: set[asyncio.Future[Any]] = {writer_monitor, cast(asyncio.Future[Any], orchestrator)}
             done, pending = await asyncio.wait(
-                [orchestrator, writer_monitor],
+                futures,
                 return_when=asyncio.FIRST_COMPLETED,
             )
 
@@ -397,7 +401,7 @@ class VertexForager:
                     exc: Exception | None,
                     parse_result: ParseResult | None,
                 ) -> None:
-                    kwargs = {"job": job, "payload": payload, "exc": exc}
+                    kwargs: dict[str, object] = {"job": job, "payload": payload, "exc": exc}
                     if wants_parse_result:
                         kwargs["parse_result"] = parse_result
 
@@ -562,7 +566,7 @@ class VertexForager:
                             raise PrimaryKeyNullError(table=table, column=col, null_count=nulls)
 
                 # Create merged packet (use metadata from the first packet)
-                merged_packet = FramePacket(
+                merged_packet: FramePacket = FramePacket(
                     provider=first.provider,
                     table=first.table,
                     frame=merged_frame,
@@ -597,7 +601,7 @@ class VertexForager:
                     logger.error("WRITER: Error writing batch for %s: %s", table, e)
             except Exception as e:
                 # Check for DuckDB Error if available
-                if duckdb and isinstance(e, duckdb.Error):
+                if _duckdb is not None and isinstance(e, _duckdb.Error):
                     async with result_lock:
                         result.errors.append(f"DuckDBError:{table}:{e}")
                     buffers[table] = []
@@ -676,3 +680,4 @@ class VertexForager:
             with attempt:
                 async with self.controller.throttle():
                     return await self._http.fetch(job.spec)
+        raise RuntimeError("Fetch failed after all retry attempts")

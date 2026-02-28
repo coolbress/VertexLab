@@ -7,6 +7,7 @@ import pytest
 from vertex_forager.clients import create_client
 from vertex_forager.providers.yfinance.client import YFinanceClient
 from vertex_forager.providers.yfinance.router import YFinanceRouter
+from typing import cast, Any
 
 
 class TestYFinanceClientDefaults:
@@ -20,6 +21,7 @@ class TestYFinanceClientDefaults:
         client = create_client(provider="yfinance", rate_limit=1_000)
         assert isinstance(client, YFinanceClient)
         assert client.api_key is None
+        # It allows higher rate limits but warns
         assert client._config.requests_per_minute == 1_000
     
     def test_create_client_ignores_user_api_key(self) -> None:
@@ -38,7 +40,9 @@ class TestYFinanceRouterDateParams:
         assert len(jobs) == 2
         for job in jobs:
             params = job.spec.params
-            lib_kwargs = params.get("lib", {}).get("kwargs", {})
+            params_dict = cast("dict[str, Any]", params)
+            lib = cast("dict[str, Any]", params_dict.get("lib", {}))
+            lib_kwargs = cast("dict[str, Any]", lib.get("kwargs", {}))
             assert "start" not in lib_kwargs
             assert "end" not in lib_kwargs
     

@@ -48,7 +48,7 @@ def mock_async_client() -> AsyncMock:
 def mock_http_executor(mock_async_client: AsyncMock) -> HttpExecutor:
     """Mock HTTP executor with async client."""
     executor = HttpExecutor(client=mock_async_client)
-    executor.fetch = AsyncMock()
+    executor.fetch = AsyncMock()  # type: ignore[method-assign]
     return executor
 
 

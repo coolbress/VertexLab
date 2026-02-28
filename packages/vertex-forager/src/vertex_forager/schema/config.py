@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import polars as pl
 from dataclasses import dataclass
 
-import polars as pl
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,7 +19,7 @@ class TableSchema:
     """
 
     table: str
-    schema: dict[str, pl.DataType]
+    schema: dict[str, pl.DataType | type[pl.DataType]]
     unique_key: tuple[str, ...] = ()
     analysis_date_col: str | None = None
     flexible_schema: bool = False

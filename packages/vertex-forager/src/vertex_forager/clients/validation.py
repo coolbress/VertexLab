@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import Mapping
+from typing import Mapping, TypeVar
 
+T = TypeVar("T")
 
-def filter_reserved_kwargs(kwargs: Mapping[str, object], reserved: set[str]) -> dict[str, object]:
+def filter_reserved_kwargs(kwargs: Mapping[str, T], reserved: set[str]) -> dict[str, T]:
     """Filter out reserved pipeline kwargs that are passed explicitly.
     
     Args:

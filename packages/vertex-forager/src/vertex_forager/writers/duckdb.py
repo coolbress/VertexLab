@@ -364,13 +364,11 @@ class DuckDBWriter(BaseWriter):
             return
 
         # Check if table exists in DB
-        exists = (
-            conn.execute(
-                "SELECT count(*) FROM information_schema.tables WHERE table_name = ?",
-                [table_name],
-            ).fetchone()[0]
-            > 0
-        )
+        row = conn.execute(
+            "SELECT count(*) FROM information_schema.tables WHERE table_name = ?",
+            [table_name],
+        ).fetchone()
+        exists = bool(row and row[0] > 0)
 
         if not exists:
             self._logger.info(f"Creating table '{table_name}' in DuckDB")

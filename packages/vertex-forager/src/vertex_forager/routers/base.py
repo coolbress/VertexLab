@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Sequence
 from datetime import datetime
+from typing import TypeVar, Generic
 
 import polars as pl
 
@@ -14,8 +15,9 @@ from vertex_forager.routers.transforms import (
     normalize_columns,
 )
 
+T = TypeVar("T", bound=str)
 
-class BaseRouter(ABC):
+class BaseRouter(ABC, Generic[T]):
     """
     Vendor-agnostic base router abstraction for the Vertex Forager pipeline.
 
@@ -54,8 +56,8 @@ class BaseRouter(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def generate_jobs(
-        self, *, dataset: str, symbols: Sequence[str] | None, **kwargs: object
+    def generate_jobs(
+        self, *, dataset: T, symbols: Sequence[str] | None, **kwargs: object
     ) -> AsyncIterator[FetchJob]:
         """Generate provider-specific HTTP fetch jobs.
         
@@ -73,6 +75,8 @@ class BaseRouter(ABC):
             
         Raises:
             NotImplementedError: Must be implemented by provider routers.
+            FetchError: Network/API failures from provider execution.
+            TransformError: Payload parsing/normalization failures.
         
         Responsibilities:
             - Symbol handling: single/multiple/None depending on dataset
@@ -100,6 +104,8 @@ class BaseRouter(ABC):
             
         Raises:
             NotImplementedError: Must be implemented by provider routers.
+            FetchError: Provider-reported API errors mapped to standard exceptions.
+            TransformError: Data conversion/structural normalization failures.
         
         Responsibilities:
             - Format handling: JSON/CSV/binary/pickle

@@ -5,10 +5,13 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from enum import Enum
 from typing import Any
+from typing import Literal
 
 import polars as pl
 from pydantic import BaseModel, Field
 from pydantic import field_validator
+from vertex_forager.core.types import JSONValue
+from collections.abc import Mapping
 
 
 class RetryConfig(BaseModel):
@@ -47,7 +50,7 @@ class RequestAuth(BaseModel):
         query_param: Name of the query parameter to inject the token into (default: None).
     """
 
-    kind: str = "none"
+    kind: Literal["none", "bearer", "header", "query"] = "none"
     token: str | None = None
     header_name: str | None = None
     query_param: str | None = None
@@ -69,16 +72,16 @@ class RequestSpec(BaseModel):
 
     method: HttpMethod = HttpMethod.GET
     url: str
-    params: dict[str, object] = Field(default_factory=dict)
+    params: dict[str, JSONValue] = Field(default_factory=dict)
     headers: dict[str, str] = Field(default_factory=dict)
-    json_body: dict[str, Any] | None = None
+    json_body: dict[str, JSONValue] | None = None
     data: bytes | None = None
     timeout_s: float = 30.0
     auth: RequestAuth = Field(default_factory=RequestAuth)
 
     @field_validator("params", mode="before")
     @classmethod
-    def _validate_params(cls, v: Any) -> dict[str, object]:
+    def _validate_params(cls, v: Any) -> dict[str, JSONValue]:
         def _is_json_value(val: Any) -> bool:
             if isinstance(val, (str, int, float, bool)) or val is None:
                 return True
@@ -110,7 +113,7 @@ class FetchJob(BaseModel):
     dataset: str
     symbol: str | None = None
     spec: RequestSpec
-    context: dict[str, Any] = Field(default_factory=dict)
+    context: Mapping[str, JSONValue] = Field(default_factory=dict)
 
 
 class FramePacket(BaseModel):
@@ -130,7 +133,7 @@ class FramePacket(BaseModel):
     frame: pl.DataFrame
     observed_at: datetime
     partition_date: date | None = None
-    context: dict[str, Any] = Field(default_factory=dict)
+    context: Mapping[str, JSONValue] = Field(default_factory=dict)
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -193,7 +196,7 @@ class EngineConfig(BaseModel):
         except (ValueError, AttributeError, ImportError):
             return 500
 
-    def validate(self) -> None:
+    def assert_valid(self) -> None:
         """Validate configuration values.
 
         Raises:

@@ -10,18 +10,24 @@ from datetime import date, datetime, timezone
 import polars as pl
 from vertex_forager.utils import mask_secret
 
+from typing import cast, TYPE_CHECKING
+from vertex_forager.core.types import SharadarDataset, JSONValue
+if TYPE_CHECKING:
+    from vertex_forager.core.types import PerSymbolJobContext
+
 from vertex_forager.core.config import (
     FetchJob,
     FramePacket,
-    ParseResult,
     RequestAuth,
 )
+from vertex_forager.core.contracts import ParseResult
 from vertex_forager.routers.base import BaseRouter
 from vertex_forager.routers.errors import raise_quandl_error
 from vertex_forager.routers.jobs import (
     pagination_job,
     single_symbol_job,
     make_pagination_context,
+    build_symbol_context,
 )
 from polars.exceptions import PolarsError
 from vertex_forager.providers.sharadar.schema import (
@@ -36,7 +42,7 @@ from vertex_forager.providers.sharadar.schema import (
 logger = logging.getLogger("vertex_forager.providers.sharadar.router")
 
 
-class SharadarRouter(BaseRouter):
+class SharadarRouter(BaseRouter[SharadarDataset]):
     """Data Router implementation for Sharadar (Nasdaq Data Link).
 
     **Request Characteristics:**
@@ -78,6 +84,9 @@ class SharadarRouter(BaseRouter):
             "max_pages": 1000,
         }
     }
+    PAGINATION_META_KEY: Final[str] = "next_cursor_id"
+    PAGINATION_CURSOR_PARAM: Final[str] = "qopts.cursor_id"
+    MAX_PAGES: Final[int] = 1000
 
     # Constants for batch calculation and API limits
     MAX_ROWS_PER_REQUEST: Final[int] = 10000
@@ -183,7 +192,7 @@ class SharadarRouter(BaseRouter):
     # --------------------------------------------------------------------------
 
     async def generate_jobs(
-        self, *, dataset: str, symbols: Sequence[str] | None, **kwargs: object
+        self, *, dataset: SharadarDataset, symbols: Sequence[str] | None, **kwargs: object
     ) -> AsyncIterator[FetchJob]:
         """Generate fetch jobs based on dataset and symbols.
 
@@ -303,7 +312,7 @@ class SharadarRouter(BaseRouter):
         
         # OPTIMIZATION: Try Polars native JSON parsing first (Release GIL, Zero-Copy)
         frame = pl.DataFrame()
-        meta = {}
+        meta: dict[str, object] = {}
 
         try:
             # pl.read_json is significantly faster than json.loads for large data
@@ -323,7 +332,8 @@ class SharadarRouter(BaseRouter):
                 meta_col = json_df.select(pl.col("meta"))
                 if not meta_col.is_empty():
                     try:
-                        meta = meta_col.item(0, 0) or {}
+                        val = meta_col.item(0, 0)
+                        meta = val if isinstance(val, dict) else {}
                     except (ValueError, TypeError):
                         meta = {}
 
@@ -380,7 +390,7 @@ class SharadarRouter(BaseRouter):
         # Add provider metadata
         frame = self._add_provider_metadata(frame=frame, observed_at=observed_at)
         
-        packets = [
+        packets: list[FramePacket] = [
             FramePacket(
                 provider=self.provider,
                 table=table,
@@ -394,20 +404,23 @@ class SharadarRouter(BaseRouter):
         
         next_jobs = []
         if meta and isinstance(meta, dict):
-            pagination = job.context.get("pagination")
+            pagination = cast(dict[str, object] | None, job.context.get("pagination"))
             if pagination:
-                meta_key = pagination.get("meta_key")
-                cursor_param = pagination.get("cursor_param")
-                next_cursor = meta.get(meta_key) if meta_key else None
+                meta_key_obj = pagination.get("meta_key")
+                cursor_param_obj = pagination.get("cursor_param")
+                meta_key = None if meta_key_obj is None else str(meta_key_obj)
+                cursor_param = None if cursor_param_obj is None else str(cursor_param_obj)
+                next_cursor = meta.get(meta_key) if meta_key is not None else None
 
                 if (
-                    next_cursor
+                    next_cursor is not None
                     and cursor_param
                     and next_cursor != job.spec.params.get(cursor_param)
                 ):
                     new_job = job.model_copy(deep=True)
-                    new_job.spec.params[cursor_param] = next_cursor
-                    next_jobs.append(new_job)
+                    if isinstance(cursor_param, str):
+                        new_job.spec.params[cursor_param] = cast(JSONValue, next_cursor)
+                        next_jobs.append(new_job)
 
         return ParseResult(packets=packets, next_jobs=next_jobs)
 
@@ -469,7 +482,7 @@ class SharadarRouter(BaseRouter):
         return ",".join(cols)
 
     # ------ Build pagination job: apply per_page/columns/date filters ------
-    def _build_pagination_job(self, *, dataset: str, per_page: int = 10000) -> FetchJob:
+    def _build_pagination_job(self, *, dataset: SharadarDataset, per_page: int = 10000) -> FetchJob:
         """Build a fetch job with pagination support for tickers or sp500.
 
         Args:
@@ -493,9 +506,10 @@ class SharadarRouter(BaseRouter):
         
 
         context = make_pagination_context(
-            meta_key=self._PAGINATION_CONTEXT["pagination"]["meta_key"],
-            cursor_param=self._PAGINATION_CONTEXT["pagination"]["cursor_param"],
-            max_pages=self._PAGINATION_CONTEXT["pagination"]["max_pages"],
+            dataset=dataset,
+            meta_key=self.PAGINATION_META_KEY,
+            cursor_param=self.PAGINATION_CURSOR_PARAM,
+            max_pages=self.MAX_PAGES,
         )
         return pagination_job(
             provider=self.provider,
@@ -508,7 +522,7 @@ class SharadarRouter(BaseRouter):
 
     # ------ Build per-symbol job: validate ticker and set dataset params ------
     def _build_per_symbol_job(
-        self, *, dataset: str, symbol: str, dimension: str = "MRT"
+        self, *, dataset: SharadarDataset, symbol: str, dimension: str = "MRT"
     ) -> FetchJob:
         """Build a fetch job for a specific symbol (or batch of symbols).
 
@@ -545,11 +559,18 @@ class SharadarRouter(BaseRouter):
                 params[f"{date_col}.lte"] = self._end_date
 
         # Add pagination context for all datasets that support it
-        context = make_pagination_context(
-            meta_key=self._PAGINATION_CONTEXT["pagination"]["meta_key"],
-            cursor_param=self._PAGINATION_CONTEXT["pagination"]["cursor_param"],
-            max_pages=self._PAGINATION_CONTEXT["pagination"]["max_pages"],
+        page_ctx = make_pagination_context(
+            dataset=dataset,
+            meta_key=self.PAGINATION_META_KEY,
+            cursor_param=self.PAGINATION_CURSOR_PARAM,
+            max_pages=self.MAX_PAGES,
         )
+        
+        per_symbol_ctx = build_symbol_context(dataset=dataset, symbol=clean_symbol)
+        final_ctx: dict[str, object] = {**per_symbol_ctx}
+        if "pagination" in page_ctx:
+            final_ctx["pagination"] = page_ctx["pagination"]
+            
         return single_symbol_job(
             provider=self.provider,
             dataset=dataset,
@@ -557,7 +578,7 @@ class SharadarRouter(BaseRouter):
             url=self._dataset_url(dataset),
             params=params,
             auth=self._auth(),
-            context=context,
+            context=cast("PerSymbolJobContext", final_ctx),
         )
         
     # ------ Rows per ticker: convert days→rows by dataset characteristics ------

@@ -16,12 +16,14 @@ from vertex_forager.core.config import (
 )
 from vertex_forager.routers.base import BaseRouter
 from vertex_forager.providers.yfinance.schema import DATASET_TABLE, DATASET_ENDPOINT
-from vertex_forager.routers.jobs import single_symbol_job
+from vertex_forager.core.types import JSONValue
+from vertex_forager.core.types import YFinanceDataset
+from vertex_forager.routers.jobs import single_symbol_job, build_symbol_context
 from vertex_forager.routers.errors import raise_yfinance_parse_error
 
 logger = logging.getLogger("vertex_forager.providers.yfinance.router")
 
-class YFinanceRouter(BaseRouter):
+class YFinanceRouter(BaseRouter[YFinanceDataset]):
     """Router for Yahoo Finance datasets (via yfinance).
     
     Summary:
@@ -106,7 +108,7 @@ class YFinanceRouter(BaseRouter):
         return self._rate_limit
     
     async def generate_jobs(
-        self, *, dataset: str, symbols: Sequence[str] | None, **kwargs: object
+        self, *, dataset: YFinanceDataset, symbols: Sequence[str] | None, **kwargs: object
     ) -> AsyncIterator[FetchJob]:
         """Generate fetch jobs.
         
@@ -132,6 +134,11 @@ class YFinanceRouter(BaseRouter):
             raise ValueError(
             f"YFinance provider requires 'symbols' list for dataset '{dataset}'."
             )
+
+        # -------- Validate Dataset --------
+        if dataset not in DATASET_ENDPOINT:
+            raise ValueError(f"Unsupported yfinance dataset: {dataset}")
+        typed_dataset: YFinanceDataset = dataset
 
         # -------- Build Batch Jobs --------
         
@@ -162,7 +169,7 @@ class YFinanceRouter(BaseRouter):
                 seen.add(s)
                 unique_cleaned.append(s)
         for clean in unique_cleaned:
-            yield self._build_single_symbol_job(symbol=clean, dataset=dataset)
+            yield self._build_single_symbol_job(symbol=clean, dataset=typed_dataset)
 
     def parse(self, *, job: FetchJob, payload: bytes) -> ParseResult:
         """Parse raw pickled payload into structured packets.
@@ -191,7 +198,7 @@ class YFinanceRouter(BaseRouter):
 
             # -------- Convert to Polars --------
             
-            is_batch = job.context.get("is_batch", False)
+            is_batch = bool(job.context.get("is_batch", False))
             df_pl = self._convert_to_polars(data, is_batch=is_batch)
 
             # Check empty DataFrame using BaseRouter helper
@@ -246,7 +253,7 @@ class YFinanceRouter(BaseRouter):
 
             # -------- Build Frame Packet --------
             
-            packet = FramePacket(
+            packet: FramePacket = FramePacket(
                 provider=self.provider,
                 table=DATASET_TABLE.get(job.dataset, f"yfinance_{job.dataset}"),
                 frame=df_pl,
@@ -267,16 +274,16 @@ class YFinanceRouter(BaseRouter):
     # Generate Jobs Helpers
     # --------------------------------------
     
-    def _build_request_params(self, *, dataset: str) -> dict[str, object]:
+    def _build_request_params(self, *, dataset: YFinanceDataset) -> dict[str, JSONValue]:
         """Unified parameter builder for yfinance library calls.
         
         Returns a dict that includes a 'lib' key describing the exact library
         call the HttpExecutor should perform. This keeps HttpExecutor generic.
         """
-        params: dict[str, object] = {"dataset": dataset}
+        params: dict[str, JSONValue] = {"dataset": dataset}
         mapped = DATASET_ENDPOINT.get(dataset, dataset)
         if dataset == "price":
-            kwargs: dict[str, object] = {
+            kwargs: dict[str, JSONValue] = {
                 "interval": "1d",
                 "auto_adjust": False,
                 "prepost": False,
@@ -297,7 +304,7 @@ class YFinanceRouter(BaseRouter):
     # (Batch job removed: we no longer perform bulk downloads for price.)
     
     # ------ Build per-symbol job: construct URL and spec for single ticker ------
-    def _build_single_symbol_job(self, *, symbol: str, dataset: str) -> FetchJob:
+    def _build_single_symbol_job(self, *, symbol: str, dataset: YFinanceDataset) -> FetchJob:
         """Build a per-symbol job, applying dataset-specific options."""
         url = f"yfinance://{symbol}"
         params = self._build_request_params(dataset=dataset)
@@ -308,7 +315,7 @@ class YFinanceRouter(BaseRouter):
             url=url,
             params=params,
             auth=None,
-            context={"symbol": symbol, "dataset": dataset},
+            context=build_symbol_context(dataset=dataset, symbol=symbol),
         )
 
     # --------------------------------------
@@ -320,11 +327,14 @@ class YFinanceRouter(BaseRouter):
             if is_batch:
                 if data.columns.nlevels >= 2:
                     try:
-                        data = data.stack(level=0, future_stack=True)
+                        stacked = data.stack(level=0, future_stack=True)
                     except TypeError:
-                        data = data.stack(level=0)
-                    if isinstance(data, pd.Series):
-                        data = data.to_frame()
+                        stacked = data.stack(level=0)
+                    
+                    if isinstance(stacked, pd.Series):
+                        data = stacked.to_frame()
+                    else:
+                        data = stacked
             else:
                 if data.columns.nlevels >= 2:
                     data.columns = data.columns.droplevel(0)
@@ -422,7 +432,8 @@ class YFinanceRouter(BaseRouter):
                 val = value_cols[0]
                 df = frame.select(["metric", val]).rename({val: "value"})
                 df = df.with_columns(pl.lit(0).alias("_row"))
-                df = df.pivot(index="_row", columns="metric", values="value").drop("_row")
+                # Use new signature (on instead of columns) to satisfy type checkers
+                df = df.pivot(index="_row", on="metric", values="value").drop("_row")
                 if "ticker" in frame.columns and "ticker" not in df.columns:
                     df = df.with_columns(pl.lit(frame["ticker"][0]).alias("ticker"))
                 rename_map = {
@@ -495,45 +506,77 @@ class YFinanceRouter(BaseRouter):
         return frame
 
     def _transform_news(self, frame: pl.DataFrame) -> pl.DataFrame:
-        def _extract_from_candidates(x: Any, candidates: list[list[str]]) -> Any:
+        if "content" not in frame.columns:
+            return frame
+
+        # Inspect schema to safely access struct fields
+        content_dtype = frame.schema["content"]
+        if not isinstance(content_dtype, pl.Struct):
+            return frame
+        
+        # Build lookup for top-level fields
+        top_fields = {f.name: f.dtype for f in content_dtype.fields}
+
+        def get_expr(candidates: list[list[str]], dtype: pl.DataType = pl.String()) -> pl.Expr:
+            exprs = []
             for path in candidates:
-                cur = x
-                ok = True
-                for key in path:
-                    if not isinstance(cur, dict):
-                        ok = False
+                if not path:
+                    continue
+                
+                col_name = path[0]
+                if col_name not in top_fields:
+                    continue
+                
+                # Level 1 access
+                curr_expr = pl.col("content").struct.field(col_name)
+                curr_dtype = top_fields[col_name]
+                
+                valid_path = True
+                # Handle nested fields (Level 2+)
+                for part in path[1:]:
+                    if isinstance(curr_dtype, pl.Struct):
+                        # Check if field exists in nested struct
+                        inner_fields = {f.name: f.dtype for f in curr_dtype.fields}
+                        if part in inner_fields:
+                            curr_expr = curr_expr.struct.field(part)
+                            curr_dtype = inner_fields[part]
+                        else:
+                            valid_path = False
+                            break
+                    else:
+                        valid_path = False
                         break
-                    cur = cur.get(key)
-                    if cur is None:
-                        ok = False
-                        break
-                if ok:
-                    return cur
-            return None
-        def _parse_dt(x: Any) -> Any:
-            s = _extract_from_candidates(x, [["pubDate"]])
-            if isinstance(s, str):
-                try:
-                    if s.endswith("Z"):
-                        s = s.replace("Z", "+00:00")
-                    dt = datetime.fromisoformat(s)
-                    if dt.tzinfo is None:
-                        dt = dt.replace(tzinfo=timezone.utc)
-                    return dt.astimezone(timezone.utc)
-                except (ValueError, AttributeError):
-                    return None
-            return None
-        cols = []
-        if "content" in frame.columns:
-            cols.extend([
-                pl.col("content").map_elements(lambda x: _extract_from_candidates(x, [["title"]]), return_dtype=pl.Utf8).alias("title"),
-                pl.col("content").map_elements(lambda x: _extract_from_candidates(x, [["provider","displayName"], ["publisher"]]), return_dtype=pl.Utf8).alias("publisher"),
-                pl.col("content").map_elements(lambda x: _extract_from_candidates(x, [["contentType"]]), return_dtype=pl.Utf8).alias("type"),
-                pl.col("content").map_elements(lambda x: _extract_from_candidates(x, [["canonicalUrl","url"], ["clickThroughUrl","url"], ["previewUrl"]]), return_dtype=pl.Utf8).alias("link"),
-                pl.col("content").map_elements(lambda x: _parse_dt(x), return_dtype=pl.Datetime(time_zone="UTC")).alias("published_at"),
-            ])
-            frame = frame.with_columns(cols)
+                
+                if valid_path:
+                    exprs.append(curr_expr)
+            
+            if not exprs:
+                return pl.lit(None, dtype=dtype)
+            
+            return pl.coalesce(exprs)
+
+        # Time parsing helper
+        def parse_dt_expr() -> pl.Expr:
+            # Try to get pubDate
+            expr = get_expr([["pubDate"]])
+            # Replace Z with +00:00 and parse. Note: yfinance news dates are naive but UTC
+            # Explicitly strip Z and use strict=False to handle various formats
+            return (
+                expr
+                .str.replace("Z", "+00:00")
+                .str.to_datetime(strict=False, time_zone="UTC")
+            )
+
+        cols = [
+            get_expr([["title"]]).alias("title"),
+            get_expr([["provider", "displayName"], ["publisher"]]).alias("publisher"),
+            get_expr([["contentType"]]).alias("type"),
+            get_expr([["canonicalUrl", "url"], ["clickThroughUrl", "url"], ["previewUrl"]]).alias("link"),
+            parse_dt_expr().alias("published_at"),
+        ]
+
+        frame = frame.with_columns(cols)
+        
         keep = [c for c in ["id", "title", "publisher", "type", "link", "published_at"] if c in frame.columns]
         others = [c for c in frame.columns if c not in keep + ["content"]]
-        frame = frame.select(others + keep)
-        return frame
+        return frame.select(others + keep)

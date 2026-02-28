@@ -47,7 +47,7 @@ async def test_adaptive_batching_worker_drains_queue_correctly() -> None:
     )
 
     # 2. Setup Data
-    pkt_q = asyncio.Queue()
+    pkt_q: "asyncio.Queue[FramePacket | None]" = asyncio.Queue()
     result = RunResult(provider="test")
     result_lock = asyncio.Lock()
 
@@ -112,7 +112,7 @@ async def test_writer_failure_propagates_exception() -> None:
         controller=mock_controller,
     )
 
-    pkt_q = asyncio.Queue()
+    pkt_q: "asyncio.Queue[FramePacket | None]" = asyncio.Queue()
     result = RunResult(provider="test")
     result_lock = asyncio.Lock()
 
@@ -134,4 +134,3 @@ async def test_writer_failure_propagates_exception() -> None:
     # Verify error recorded in result
     assert len(result.errors) > 0
     assert "UnexpectedWriterError:fail_test:Disk Full" in result.errors[0]
-

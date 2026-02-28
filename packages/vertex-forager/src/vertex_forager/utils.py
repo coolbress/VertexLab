@@ -9,7 +9,7 @@ import time
 import itertools
 import sys
 import warnings
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 import nest_asyncio
 from tqdm.auto import tqdm
@@ -195,7 +195,7 @@ class Spinner:
         self.delay = delay
         self.persist = persist
         self.busy = False
-        self.update_thread = None
+        self.update_thread: threading.Thread | None = None
         self._message_lock = threading.Lock()
 
         self._is_tty = sys.stderr.isatty()
@@ -209,7 +209,7 @@ class Spinner:
             logger.error("Unexpected error during notebook detection: %s", e)
             ip = None
         self._is_notebook = bool(ip and ip.__class__.__name__ == "ZMQInteractiveShell")
-        self._widget_label: object | None = None
+        self._widget_label: Any | None = None
 
         self.spinner_chars = itertools.cycle(
             ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
@@ -250,31 +250,28 @@ class Spinner:
 
         if self._is_notebook:
             try:
-                from ipywidgets import HTML  # type: ignore
-                from IPython.display import display  # type: ignore
+                from ipywidgets import HTML
+                from IPython.display import display
                 self._widget_label = HTML(value=f"⏳ {self.message}")
                 display(self._widget_label)
-                self.update_thread = threading.Thread(
-                    target=self._notebook_task, daemon=True
-                )
-                self.update_thread.start()
+                t = threading.Thread(target=self._notebook_task, daemon=True)
+                self.update_thread = t
+                t.start()
             except ImportError:
                 self._is_notebook = False
                 if self._is_tty:
                     self._hide_cursor()
-                    self.update_thread = threading.Thread(
-                        target=self._spinner_task, daemon=True
-                    )
-                    self.update_thread.start()
+                    t = threading.Thread(target=self._spinner_task, daemon=True)
+                    self.update_thread = t
+                    t.start()
                 else:
                     sys.stderr.write(f"{self.message}\n")
                     sys.stderr.flush()
         elif self._is_tty:
             self._hide_cursor()
-            self.update_thread = threading.Thread(
-                target=self._spinner_task, daemon=True
-            )
-            self.update_thread.start()
+            t = threading.Thread(target=self._spinner_task, daemon=True)
+            self.update_thread = t
+            t.start()
         else:
             sys.stderr.write(f"{self.message}\n")
             sys.stderr.flush()
@@ -355,7 +352,7 @@ class Spinner:
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: Any,
-    ) -> bool:
+    ) -> Literal[False]:
         if exc_type is KeyboardInterrupt:
             self.stop(clear=False)
             sys.stderr.write("Aborted by user.\n")
@@ -384,7 +381,6 @@ class Spinner:
             with self._message_lock:
                 msg = self.message
             try:
-                # type: ignore[attr-defined]
                 self._widget_label.value = f"{ch} {msg}"
                 failures = 0
             except (AttributeError, RuntimeError) as e:

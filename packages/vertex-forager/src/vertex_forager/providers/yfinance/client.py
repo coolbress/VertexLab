@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import Any, Literal
+from vertex_forager.core.types import YFinanceDataset
 
 import polars as pl
 
@@ -16,7 +17,7 @@ from vertex_forager.exceptions import InputError
 
 logger = logging.getLogger(__name__)
 
-class YFinanceClient(BaseClient):
+class YFinanceClient(BaseClient[YFinanceDataset]):
     """Client for Yahoo Finance datasets via yfinance.
     
     This client integrates yfinance with the VertexForager pipeline to provide
@@ -75,7 +76,8 @@ class YFinanceClient(BaseClient):
             normalized = 60
         if "retry" not in kwargs:
             kwargs["retry"] = RetryConfig(max_attempts=1, base_backoff_s=0.5, max_backoff_s=2.0)
-        super().__init__(api_key=api_key, rate_limit=normalized, **kwargs)
+        # Ensure api_key is None for YFinanceClient
+        super().__init__(api_key=None, rate_limit=normalized, **kwargs)
         self._mapper = SchemaMapper()
         
         
@@ -211,8 +213,9 @@ class YFinanceClient(BaseClient):
         if kind == "earnings" and period == "quarterly":
             raise InputError("quarterly_earnings is deprecated in yfinance; use income_stmt with period='quarterly'.")
         dataset = f"quarterly_{target_kind}" if period == "quarterly" else target_kind
+        from typing import cast
         return await self._dispatch_fetch(
-            dataset=dataset,
+            dataset=cast(YFinanceDataset, dataset),
             tickers=tickers,
             connect_db=connect_db,
             desc=f"Fetching YFinance {dataset}",
@@ -254,8 +257,9 @@ class YFinanceClient(BaseClient):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
+        from typing import cast
         return await self._dispatch_fetch(
-            dataset=kind,
+            dataset=cast(YFinanceDataset, kind),
             tickers=tickers,
             connect_db=connect_db,
             desc=f"Fetching YFinance {kind}",
@@ -296,8 +300,9 @@ class YFinanceClient(BaseClient):
             WriterError: If persistence fails.
         """
         dataset = f"{kind}_holders"
+        from typing import cast
         return await self._dispatch_fetch(
-            dataset=dataset,
+            dataset=cast(YFinanceDataset, dataset),
             tickers=tickers,
             connect_db=connect_db,
             desc=f"Fetching YFinance {dataset}",
@@ -531,7 +536,7 @@ class YFinanceClient(BaseClient):
     async def _fetch_per_ticker(
         self,
         *,
-        dataset: str,
+        dataset: YFinanceDataset,
         symbols: list[str],
         connect_db: str | Path | None,
         desc: str,
@@ -624,7 +629,7 @@ class YFinanceClient(BaseClient):
     async def _dispatch_fetch(
         self,
         *,
-        dataset: str,
+        dataset: YFinanceDataset,
         tickers: list[str],
         connect_db: str | Path | None,
         desc: str,

@@ -1,7 +1,7 @@
 import click
 import httpx
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, cast
 from pathlib import Path
 from .utils import get_app_root, get_cache_dir, clear_app_cache
 
@@ -72,9 +72,11 @@ def collect(symbol: tuple[str, ...], source: str) -> None:
                 provider=source, api_key=api_key, rate_limit=120
             ) as client:
                 if source == "sharadar":
+                    from vertex_forager.providers.sharadar.client import SharadarClient
                     # For Sharadar, we use the specialized client method
                     # In the future, this can be generalized via a CollectorCore interface
-                    result = await client.get_price_data(tickers=list(symbol))
+                    sc = cast(SharadarClient, client)
+                    result = await sc.get_price_data(tickers=list(symbol))
                     return result
                 else:
                     raise NotImplementedError(f"{source} is not fully implemented yet.")

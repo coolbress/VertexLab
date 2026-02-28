@@ -14,25 +14,31 @@ from vertex_forager.core.registries import (
 
 def _register_sharadar() -> None:
     from vertex_forager.providers.sharadar.client import SharadarClient
+    from typing import Any
+    def _sharadar_factory(*, api_key: str | None = None, rate_limit: int, **kwargs: Any) -> BaseClient:
+        return SharadarClient(api_key=api_key or "", rate_limit=rate_limit, **kwargs)
 
     # Register known providers
     client_registry.register(
         "sharadar",
         ClientRegistration(
             env_api_key="SHARADAR_API_KEY",
-            factory=SharadarClient,
+            factory=_sharadar_factory,
         ),
     )
 
 
 def _register_yfinance() -> None:
     from vertex_forager.providers.yfinance.client import YFinanceClient
+    from typing import Any
+    def _yfinance_factory(*, api_key: str | None = None, rate_limit: int, **kwargs: Any) -> BaseClient:
+        return YFinanceClient(api_key=api_key or "", rate_limit=rate_limit, **kwargs)
 
     client_registry.register(
         "yfinance",
         ClientRegistration(
             env_api_key=None,
-            factory=YFinanceClient,
+            factory=_yfinance_factory,
         ),
     )
 
@@ -84,9 +90,12 @@ def create_client(
         )
 
     if provider == "yfinance":
-        if api_key is not None or kwargs.get("api_key") is not None or resolved_key is not None:
+        if api_key is not None:
             logging.getLogger(__name__).warning("Provided API key will be ignored for yfinance; continuing with api_key=None")
-        return registration.factory(api_key=None, rate_limit=rate_limit if rate_limit is not None else 60, **kwargs)
+        
+        # Determine effective rate limit with default fallback
+        effective_limit = rate_limit if rate_limit is not None else 60
+        return registration.factory(api_key=None, rate_limit=effective_limit, **kwargs)
     if rate_limit is None:
         raise ValueError(f"Missing rate_limit for provider '{provider}'")
     return registration.factory(api_key=resolved_key, rate_limit=rate_limit, **kwargs)

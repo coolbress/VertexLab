@@ -1,5 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
+from typing import cast
+from vertex_forager.core.types import SharadarDataset
 from vertex_forager.providers.sharadar.client import SharadarClient, FetchConfig
 from vertex_forager.core.config import RunResult
 
@@ -14,7 +16,7 @@ def mock_client() -> SharadarClient:
     # Ensure it returns a MagicMock that acts as a RunResult if needed
     mock_run = AsyncMock()
     mock_run.return_value = MagicMock()
-    client.run_pipeline = mock_run
+    client.run_pipeline = mock_run  # type: ignore[method-assign]
     client.last_run = RunResult(provider="sharadar")
     return client
 
@@ -35,7 +37,7 @@ async def test_fetch_pagination_show_progress_true(mock_client):
         mock_create_writer.return_value = mock_writer
 
         cfg = FetchConfig(
-            dataset="test",
+            dataset=cast(SharadarDataset, "test"),
             symbols=None,
             connect_db=":memory:",
             desc="test",
@@ -71,7 +73,7 @@ async def test_fetch_pagination_show_progress_false(mock_client):
         mock_create_writer.return_value = mock_writer
 
         cfg = FetchConfig(
-            dataset="test",
+            dataset=cast(SharadarDataset, "test"),
             symbols=None,
             connect_db=":memory:",
             desc="test",
