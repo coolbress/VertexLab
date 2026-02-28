@@ -62,6 +62,9 @@ def create_router(
 
     # We pass explicit arguments that match the RouterFactory protocol/signature
     # assuming most routers will need these standard parameters.
+    # Provider-specific validation
+    if provider == "sharadar" and (api_key is None or str(api_key).strip() == ""):
+        raise ValueError("Sharadar router requires a non-empty api_key")
     return registration.factory(
         api_key=api_key,
         rate_limit=config.requests_per_minute,

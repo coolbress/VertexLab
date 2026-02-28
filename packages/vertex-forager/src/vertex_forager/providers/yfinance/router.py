@@ -564,7 +564,7 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             return (
                 expr
                 .str.replace("Z", "+00:00")
-                .str.to_datetime(format="%Y-%m-%dT%H:%M:%S+00:00", strict=False, time_zone="UTC")
+                .str.to_datetime(strict=False, time_zone="UTC")
             )
 
         cols = [

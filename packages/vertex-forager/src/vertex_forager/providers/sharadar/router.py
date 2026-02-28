@@ -410,7 +410,7 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
                 next_cursor = meta.get(meta_key) if isinstance(meta_key, str) else None
 
                 if (
-                    next_cursor
+                    next_cursor is not None
                     and cursor_param
                     and next_cursor != job.spec.params.get(cursor_param)
                 ):
