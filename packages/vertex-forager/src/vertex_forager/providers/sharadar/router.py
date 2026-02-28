@@ -84,6 +84,9 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
             "max_pages": 1000,
         }
     }
+    PAGINATION_META_KEY: Final[str] = "next_cursor_id"
+    PAGINATION_CURSOR_PARAM: Final[str] = "qopts.cursor_id"
+    MAX_PAGES: Final[int] = 1000
 
     # Constants for batch calculation and API limits
     MAX_ROWS_PER_REQUEST: Final[int] = 10000
@@ -405,9 +408,9 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
             if pagination:
                 meta_key_obj = pagination.get("meta_key")
                 cursor_param_obj = pagination.get("cursor_param")
-                meta_key = str(meta_key_obj) if isinstance(meta_key_obj, str) else (meta_key_obj if meta_key_obj is None else str(meta_key_obj))
-                cursor_param = str(cursor_param_obj) if isinstance(cursor_param_obj, str) else (cursor_param_obj if cursor_param_obj is None else str(cursor_param_obj))
-                next_cursor = meta.get(meta_key) if isinstance(meta_key, str) else None
+                meta_key = None if meta_key_obj is None else str(meta_key_obj)
+                cursor_param = None if cursor_param_obj is None else str(cursor_param_obj)
+                next_cursor = meta.get(meta_key) if meta_key is not None else None
 
                 if (
                     next_cursor is not None
@@ -504,9 +507,9 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
 
         context = make_pagination_context(
             dataset=dataset,
-            meta_key=str(self._PAGINATION_CONTEXT["pagination"]["meta_key"]),
-            cursor_param=str(self._PAGINATION_CONTEXT["pagination"]["cursor_param"]),
-            max_pages=self._PAGINATION_CONTEXT.get("pagination", {}).get("max_pages"),  # type: ignore[arg-type]
+            meta_key=self.PAGINATION_META_KEY,
+            cursor_param=self.PAGINATION_CURSOR_PARAM,
+            max_pages=self.MAX_PAGES,
         )
         return pagination_job(
             provider=self.provider,
@@ -558,9 +561,9 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         # Add pagination context for all datasets that support it
         page_ctx = make_pagination_context(
             dataset=dataset,
-            meta_key=str(self._PAGINATION_CONTEXT["pagination"]["meta_key"]),
-            cursor_param=str(self._PAGINATION_CONTEXT["pagination"]["cursor_param"]),
-            max_pages=self._PAGINATION_CONTEXT.get("pagination", {}).get("max_pages"),  # type: ignore[arg-type]
+            meta_key=self.PAGINATION_META_KEY,
+            cursor_param=self.PAGINATION_CURSOR_PARAM,
+            max_pages=self.MAX_PAGES,
         )
         
         per_symbol_ctx = build_symbol_context(dataset=dataset, symbol=clean_symbol)
