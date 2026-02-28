@@ -73,6 +73,8 @@ class BaseRouter(ABC):
             
         Raises:
             NotImplementedError: Must be implemented by provider routers.
+            FetchError: Network/API failures from provider execution.
+            TransformError: Payload parsing/normalization failures.
         
         Responsibilities:
             - Symbol handling: single/multiple/None depending on dataset
@@ -100,6 +102,8 @@ class BaseRouter(ABC):
             
         Raises:
             NotImplementedError: Must be implemented by provider routers.
+            FetchError: Provider-reported API errors mapped to standard exceptions.
+            TransformError: Data conversion/structural normalization failures.
         
         Responsibilities:
             - Format handling: JSON/CSV/binary/pickle

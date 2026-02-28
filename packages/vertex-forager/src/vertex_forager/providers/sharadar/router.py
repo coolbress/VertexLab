@@ -31,6 +31,7 @@ from vertex_forager.providers.sharadar.schema import (
     DATE_FILTER_COL,
     INTERNAL_COLS,
 )
+from vertex_forager.core.types import SharadarDataset
 
 
 logger = logging.getLogger("vertex_forager.providers.sharadar.router")
@@ -183,7 +184,7 @@ class SharadarRouter(BaseRouter):
     # --------------------------------------------------------------------------
 
     async def generate_jobs(
-        self, *, dataset: str, symbols: Sequence[str] | None, **kwargs: object
+        self, *, dataset: SharadarDataset, symbols: Sequence[str] | None, **kwargs: object
     ) -> AsyncIterator[FetchJob]:
         """Generate fetch jobs based on dataset and symbols.
 
@@ -469,7 +470,7 @@ class SharadarRouter(BaseRouter):
         return ",".join(cols)
 
     # ------ Build pagination job: apply per_page/columns/date filters ------
-    def _build_pagination_job(self, *, dataset: str, per_page: int = 10000) -> FetchJob:
+    def _build_pagination_job(self, *, dataset: SharadarDataset, per_page: int = 10000) -> FetchJob:
         """Build a fetch job with pagination support for tickers or sp500.
 
         Args:
@@ -508,7 +509,7 @@ class SharadarRouter(BaseRouter):
 
     # ------ Build per-symbol job: validate ticker and set dataset params ------
     def _build_per_symbol_job(
-        self, *, dataset: str, symbol: str, dimension: str = "MRT"
+        self, *, dataset: SharadarDataset, symbol: str, dimension: str = "MRT"
     ) -> FetchJob:
         """Build a fetch job for a specific symbol (or batch of symbols).
 

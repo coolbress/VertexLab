@@ -23,6 +23,7 @@ from vertex_forager.utils import (
     validate_tickers,
 )
 from vertex_forager.providers.sharadar.schema import DATASET_TABLE
+from vertex_forager.core.types import SharadarDataset
 from vertex_forager.exceptions import InputError
 
 logger = logging.getLogger(__name__)
@@ -47,7 +48,7 @@ class FetchConfig:
         end_date (str | None): End date (YYYY-MM-DD) for range datasets.
         extra (dict[str, Any]): Extra options passed through to router/client.
     """
-    dataset: str
+    dataset: SharadarDataset
     symbols: list[str] | None
     connect_db: str | Path | None
     desc: str
@@ -663,7 +664,7 @@ class SharadarClient(BaseClient):
     def _build_fetch_config(
         self,
         *,
-        dataset: str,
+        dataset: SharadarDataset,
         symbols: list[str] | None,
         connect_db: str | Path | None,
         desc: str,

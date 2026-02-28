@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Callable, Any
+from typing import Callable, Any, TypeVar
 
 
 from vertex_forager.clients.base import HttpExecutor
@@ -9,13 +9,14 @@ from vertex_forager.core.config import RunResult
 from vertex_forager.routers.base import BaseRouter
 from vertex_forager.schema.mapper import SchemaMapper
 from vertex_forager.writers.base import BaseWriter
+T = TypeVar("T")
 
 
 async def run_pipeline_for(
     *,
     client: Any,
     router: BaseRouter,
-    dataset: str,
+    dataset: T,
     symbols: list[str] | None,
     writer: BaseWriter,
     mapper: SchemaMapper,

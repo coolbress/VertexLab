@@ -6,7 +6,7 @@ import asyncio
 from contextlib import asynccontextmanager, AsyncExitStack, nullcontext
 from functools import partial
 from pathlib import Path
-from typing import Any, Callable, AsyncGenerator
+from typing import Any, Callable, AsyncGenerator, TypeVar
 
 import httpx
 import warnings
@@ -30,6 +30,7 @@ VertexForager = _VertexForager
 
 logger = logging.getLogger(__name__)
 
+T = TypeVar("T")
 
 class BaseClient(ABC):
     """
@@ -169,7 +170,7 @@ class BaseClient(ABC):
         self,
         *,
         router: BaseRouter,
-        dataset: str,
+        dataset: T,
         symbols: list[str] | None,
         writer: BaseWriter,
         mapper: SchemaMapper,

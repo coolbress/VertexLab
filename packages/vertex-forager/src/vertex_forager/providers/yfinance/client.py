@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import Any, Literal
+from vertex_forager.core.types import YFinanceDataset
 
 import polars as pl
 
@@ -531,7 +532,7 @@ class YFinanceClient(BaseClient):
     async def _fetch_per_ticker(
         self,
         *,
-        dataset: str,
+        dataset: YFinanceDataset,
         symbols: list[str],
         connect_db: str | Path | None,
         desc: str,
@@ -624,7 +625,7 @@ class YFinanceClient(BaseClient):
     async def _dispatch_fetch(
         self,
         *,
-        dataset: str,
+        dataset: YFinanceDataset,
         tickers: list[str],
         connect_db: str | Path | None,
         desc: str,

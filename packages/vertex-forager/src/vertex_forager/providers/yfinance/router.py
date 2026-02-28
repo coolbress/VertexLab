@@ -16,7 +16,9 @@ from vertex_forager.core.config import (
 )
 from vertex_forager.routers.base import BaseRouter
 from vertex_forager.providers.yfinance.schema import DATASET_TABLE, DATASET_ENDPOINT
-from vertex_forager.routers.jobs import single_symbol_job
+from vertex_forager.core.types import JSONValue
+from vertex_forager.core.types import YFinanceDataset
+from vertex_forager.routers.jobs import single_symbol_job, build_symbol_context
 from vertex_forager.routers.errors import raise_yfinance_parse_error
 
 logger = logging.getLogger("vertex_forager.providers.yfinance.router")
@@ -106,7 +108,7 @@ class YFinanceRouter(BaseRouter):
         return self._rate_limit
     
     async def generate_jobs(
-        self, *, dataset: str, symbols: Sequence[str] | None, **kwargs: object
+        self, *, dataset: YFinanceDataset, symbols: Sequence[str] | None, **kwargs: object
     ) -> AsyncIterator[FetchJob]:
         """Generate fetch jobs.
         
@@ -267,16 +269,16 @@ class YFinanceRouter(BaseRouter):
     # Generate Jobs Helpers
     # --------------------------------------
     
-    def _build_request_params(self, *, dataset: str) -> dict[str, object]:
+    def _build_request_params(self, *, dataset: YFinanceDataset) -> dict[str, JSONValue]:
         """Unified parameter builder for yfinance library calls.
         
         Returns a dict that includes a 'lib' key describing the exact library
         call the HttpExecutor should perform. This keeps HttpExecutor generic.
         """
-        params: dict[str, object] = {"dataset": dataset}
+        params: dict[str, JSONValue] = {"dataset": dataset}
         mapped = DATASET_ENDPOINT.get(dataset, dataset)
         if dataset == "price":
-            kwargs: dict[str, object] = {
+            kwargs: dict[str, JSONValue] = {
                 "interval": "1d",
                 "auto_adjust": False,
                 "prepost": False,
@@ -297,7 +299,7 @@ class YFinanceRouter(BaseRouter):
     # (Batch job removed: we no longer perform bulk downloads for price.)
     
     # ------ Build per-symbol job: construct URL and spec for single ticker ------
-    def _build_single_symbol_job(self, *, symbol: str, dataset: str) -> FetchJob:
+    def _build_single_symbol_job(self, *, symbol: str, dataset: YFinanceDataset) -> FetchJob:
         """Build a per-symbol job, applying dataset-specific options."""
         url = f"yfinance://{symbol}"
         params = self._build_request_params(dataset=dataset)
@@ -308,7 +310,7 @@ class YFinanceRouter(BaseRouter):
             url=url,
             params=params,
             auth=None,
-            context={"symbol": symbol, "dataset": dataset},
+            context=build_symbol_context(dataset=dataset, symbol=symbol),
         )
 
     # --------------------------------------
