@@ -78,7 +78,7 @@ def collect(symbol: tuple[str, ...], source: str) -> None:
                     result = await sc.get_price_data(tickers=list(symbol))
                     return result
                 else:
-                    raise NotImplementedError(f"{source} is not fully implemented yet.")
+                    raise click.ClickException(f"`{source}` is not supported by `collect` yet.")
 
         result = asyncio.run(_run_collect())
 
@@ -93,6 +93,9 @@ def collect(symbol: tuple[str, ...], source: str) -> None:
             else:
                 click.echo(f"✅ Completed: {result}")
 
+    except click.ClickException as e:
+        click.echo(f"❌ {e.message}")
+        return
     except (ValueError, KeyError, httpx.RequestError) as e:
         click.echo(f"❌ Collection error: {str(e)}")
         logger.error(f"Collection failed: {e}")

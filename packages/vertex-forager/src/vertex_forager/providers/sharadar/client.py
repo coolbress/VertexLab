@@ -682,7 +682,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         desc: str,
         table_name: str,
         total_items: int | None = None,
-        unit: str = "tickers",
+        unit: str = TICKERS_UNIT,
         start_date: str | None = None,
         end_date: str | None = None,
         extra: dict[str, Any] | None = None,
