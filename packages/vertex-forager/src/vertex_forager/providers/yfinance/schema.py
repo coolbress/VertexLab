@@ -23,9 +23,9 @@ Notes:
 """
 from __future__ import annotations
 
+import polars as pl
 from typing import Final
 from vertex_forager.providers.yfinance.constants import DATASET_ENDPOINT, DATE_FILTER_COL
-import polars as pl
 
 from vertex_forager.schema.config import TableSchema
 from vertex_forager.constants import DEFAULT_TIME_ZONE
@@ -248,8 +248,6 @@ YFINANCE_INSIDER_ROSTER_SCHEMA = TableSchema(
     analysis_date_col="latest_transaction_date",
 )
 
- 
-
 # --------------------------------------------------------------------------
 # Dataset, Schema Mapper
 # --------------------------------------------------------------------------
@@ -343,8 +341,6 @@ DATASET_SCHEMA: Final[dict[str, TableSchema]] = {
 # --------------------------------------------------------------------------
 # Date Filter Column Mapper
 # --------------------------------------------------------------------------
-
- 
 
 INTERNAL_COLS: Final[set[str]] = {"provider", "fetched_at"}
 

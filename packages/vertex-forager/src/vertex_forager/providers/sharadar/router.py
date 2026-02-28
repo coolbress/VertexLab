@@ -253,13 +253,13 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
             dataset == "sp500" and not symbols
         ):
             # Sharadar API limit: maximum 10,000 rows per response
-            per_page = self.MAX_ROWS_PER_REQUEST
+            per_page = MAX_ROWS_PER_REQUEST
             logger.debug(LOG_PAGINATION_START.format(prefix=ROUTER_LOG_PREFIX, dataset=dataset, per_page=per_page))
             page_ctx = make_pagination_context(
                 dataset=dataset,
-                meta_key=self.PAGINATION_META_KEY,
-                cursor_param=self.PAGINATION_CURSOR_PARAM,
-                max_pages=self.MAX_PAGES,
+                meta_key=PAGINATION_META_KEY,
+                cursor_param=PAGINATION_CURSOR_PARAM,
+                max_pages=MAX_PAGES,
             )
             page_ctx["trace_id"] = trace_id
             page_ctx["request_id"] = req_id
@@ -300,8 +300,8 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
             # Smart Batching Mode
             current_batch: list[str] = []
             current_rows = 0
-            max_rows = self.MAX_ROWS_PER_REQUEST
-            max_batch_size = self.DEFAULT_BATCH_SIZE  # API URL length safety
+            max_rows = MAX_ROWS_PER_REQUEST
+            max_batch_size = DEFAULT_BATCH_SIZE  # API URL length safety
             
             for symbol in symbol_list:
                 est_rows = self._estimate_ticker_rows(symbol, dataset)
@@ -561,9 +561,9 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
 
         context = make_pagination_context(
             dataset=dataset,
-            meta_key=self.PAGINATION_META_KEY,
-            cursor_param=self.PAGINATION_CURSOR_PARAM,
-            max_pages=self.MAX_PAGES,
+            meta_key=PAGINATION_META_KEY,
+            cursor_param=PAGINATION_CURSOR_PARAM,
+            max_pages=MAX_PAGES,
         )
         return pagination_job(
             provider=self.provider,
@@ -615,9 +615,9 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         # Add pagination context for all datasets that support it
         page_ctx = make_pagination_context(
             dataset=dataset,
-            meta_key=self.PAGINATION_META_KEY,
-            cursor_param=self.PAGINATION_CURSOR_PARAM,
-            max_pages=self.MAX_PAGES,
+            meta_key=PAGINATION_META_KEY,
+            cursor_param=PAGINATION_CURSOR_PARAM,
+            max_pages=MAX_PAGES,
         )
         
         per_symbol_ctx = build_symbol_context(dataset=dataset, symbol=clean_symbol)
@@ -641,9 +641,9 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
     def _calculate_rows_per_ticker(self, days: int, dataset: str) -> int:
         """Calculate estimated rows per ticker based on dataset type and days."""
         if dataset in ("price", "daily"):
-            return max(1, int(days * self.TRADING_DAYS_RATIO))
+            return max(1, int(days * TRADING_DAYS_RATIO))
         elif dataset in ("fundamental", "insider", "institutional"):
-            return max(1, int(days * self.QUARTERLY_DAYS_RATIO))
+            return max(1, int(days * QUARTERLY_DAYS_RATIO))
         else:
             return days
 
@@ -665,9 +665,9 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         if not self._start_date:
             est_days = min(30 * TRADING_DAYS_PER_YEAR, MAX_ROWS_PER_REQUEST)  # ~30 years trading days capped
             rows_per_ticker = self._calculate_rows_per_ticker(est_days, dataset)
-            batch_size = self.MAX_ROWS_PER_REQUEST // max(1, rows_per_ticker)
+            batch_size = MAX_ROWS_PER_REQUEST // max(1, rows_per_ticker)
             # Clamp between MIN and DEFAULT to avoid extremes.
-            clamped = max(self.MIN_BATCH_SIZE, min(self.DEFAULT_BATCH_SIZE, batch_size))
+            clamped = max(MIN_BATCH_SIZE, min(DEFAULT_BATCH_SIZE, batch_size))
             # Extremely large histories may still warrant MIN_BATCH_SIZE; keep conservative bound.
             return clamped
             
@@ -678,7 +678,7 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
             date_range = None
         if date_range is None:
             # Default to conservative minimal batch when range parsing fails.
-            return self.MIN_BATCH_SIZE
+            return MIN_BATCH_SIZE
             
         start, end = date_range
         days = (end - start).days
@@ -689,11 +689,11 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         
         # Calculate batch size
         # Example: 1 year daily data = ~250 rows. 10000 / 250 = 40 tickers.
-        batch_size = self.MAX_ROWS_PER_REQUEST // rows_per_ticker
+        batch_size = MAX_ROWS_PER_REQUEST // rows_per_ticker
         
         # Apply bounds (1 <= batch_size <= 100)
         # Sharadar recommends max 100 tickers per request for URL length safety
-        return max(self.MIN_BATCH_SIZE, min(self.DEFAULT_BATCH_SIZE, batch_size))
+        return max(MIN_BATCH_SIZE, min(DEFAULT_BATCH_SIZE, batch_size))
 
     # ------ Rows estimate (metadata): compute overlap of request vs. ticker range ------
     def _estimate_ticker_rows(self, ticker: str, dataset: str) -> int:
@@ -701,7 +701,7 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         # Fallback to heuristic if no metadata or ticker not found
         if not self._ticker_ranges or ticker not in self._ticker_ranges:
             if not self._start_date:
-                return self.MAX_ROWS_PER_REQUEST  # Assume full history is huge -> forces single batch
+                return MAX_ROWS_PER_REQUEST  # Assume full history is huge -> forces single batch
                 
             # Use BaseRouter helper to parse date range
             try:
@@ -709,7 +709,7 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
             except ValueError:
                 date_range = None
             if date_range is None:
-                return self.MAX_ROWS_PER_REQUEST
+                return MAX_ROWS_PER_REQUEST
                 
             start, end = date_range
             days = (end - start).days

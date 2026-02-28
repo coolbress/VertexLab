@@ -33,6 +33,7 @@ PRICE_BATCH_SIZE: Final[int] = 250
 THREADS_THRESHOLD: Final[int] = 50
 PRICE_BATCH_MAX: Final[int] = 500
 PRICE_BATCH_SIZE_KEY: Final[str] = "price_batch_size"
+DEFAULT_BYTES_PER_ITEM: Final[int] = 200 * 1024
 
 # Dataset Request Endpoint aliases
 DATASET_ENDPOINT: Final[dict[str, str]] = {

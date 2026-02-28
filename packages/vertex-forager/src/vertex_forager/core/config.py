@@ -11,7 +11,18 @@ import polars as pl
 from pydantic import BaseModel, Field
 from pydantic import field_validator
 from vertex_forager.core.types import JSONValue
-from vertex_forager.constants import FLUSH_THRESHOLD_ROWS, DEFAULT_RETRY_MAX_ATTEMPTS, DEFAULT_RETRY_BASE_BACKOFF_S, DEFAULT_RETRY_MAX_BACKOFF_S, HTTP_TIMEOUT_S
+from vertex_forager.constants import (
+    FLUSH_THRESHOLD_ROWS,
+    DEFAULT_RETRY_MAX_ATTEMPTS,
+    DEFAULT_RETRY_BASE_BACKOFF_S,
+    DEFAULT_RETRY_MAX_BACKOFF_S,
+    HTTP_TIMEOUT_S,
+    QUEUE_TARGET_RAM_RATIO,
+    PACKET_SIZE_EST_BYTES,
+    QUEUE_MIN,
+    QUEUE_MAX,
+    QUEUE_DEFAULT,
+)
 from collections.abc import Mapping
 
 
@@ -183,18 +194,11 @@ class EngineConfig(BaseModel):
             int: Calculated maximum queue size (clamped between 100 and 2000).
         """
         try:
-            from vertex_forager.constants import (
-                QUEUE_TARGET_RAM_RATIO,
-                PACKET_SIZE_EST_BYTES,
-                QUEUE_MIN,
-                QUEUE_MAX,
-                QUEUE_DEFAULT,
-            )
             total_ram = psutil.virtual_memory().total
             target_buffer_bytes = total_ram * QUEUE_TARGET_RAM_RATIO
             calc_size = int(target_buffer_bytes / PACKET_SIZE_EST_BYTES)
             return max(QUEUE_MIN, min(QUEUE_MAX, calc_size))
-        except (ValueError, AttributeError, ImportError):
+        except (ValueError, AttributeError):
             return QUEUE_DEFAULT
 
     def assert_valid(self) -> None:

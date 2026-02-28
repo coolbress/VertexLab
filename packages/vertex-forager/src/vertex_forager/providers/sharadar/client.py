@@ -23,7 +23,7 @@ from vertex_forager.utils import (
     validate_tickers,
 )
 from vertex_forager.providers.sharadar.schema import DATASET_TABLE
-from vertex_forager.constants import TICKERS_UNIT, PAGES_UNIT
+from vertex_forager.constants import TICKERS_UNIT, PAGES_UNIT, RESERVED_PIPELINE_KEYS
 from vertex_forager.providers.sharadar.constants import (
     BYTES_PER_TICKER_METADATA as SH_BYTES_PER_TICKER_METADATA,
     BYTES_PER_TICKER_FULL as SH_BYTES_PER_TICKER_FULL,
@@ -216,7 +216,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             desc="Fetching price data",
             table_name=DATASET_TABLE["price"],
             total_items=None,
-            unit="tickers",
+            unit=TICKERS_UNIT,
             start_date=start_date,
             end_date=end_date,
             extra=dict(kwargs),
@@ -264,7 +264,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             desc="Fetching fundamental data",
             table_name=DATASET_TABLE["fundamental"],
             total_items=None,
-            unit="tickers",
+            unit=TICKERS_UNIT,
             start_date=start_date,
             end_date=end_date,
             extra=extras,
@@ -309,7 +309,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             desc="Fetching daily metrics",
             table_name=DATASET_TABLE["daily"],
             total_items=None,
-            unit="tickers",
+            unit=TICKERS_UNIT,
             start_date=start_date,
             end_date=end_date,
             extra=dict(kwargs),
@@ -354,7 +354,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             desc="Fetching corporate actions",
             table_name=DATASET_TABLE["actions"],
             total_items=None,
-            unit="tickers",
+            unit=TICKERS_UNIT,
             start_date=start_date,
             end_date=end_date,
             extra=dict(kwargs),
@@ -399,7 +399,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             desc="Fetching insider trading data",
             table_name=DATASET_TABLE["insider"],
             total_items=None,
-            unit="tickers",
+            unit=TICKERS_UNIT,
             start_date=start_date,
             end_date=end_date,
             extra=dict(kwargs),
@@ -444,7 +444,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             desc="Fetching institutional ownership",
             table_name=DATASET_TABLE["institutional"],
             total_items=None,
-            unit="tickers",
+            unit=TICKERS_UNIT,
             start_date=start_date,
             end_date=end_date,
             extra=dict(kwargs),
@@ -583,7 +583,6 @@ class SharadarClient(BaseClient[SharadarDataset]):
             "start_date": config.start_date,
             "end_date": config.end_date,
         }
-        from vertex_forager.constants import RESERVED_PIPELINE_KEYS
         pipeline_kwargs: dict[str, JSONValue] = {k: v for k, v in dict(config.extra).items() if k not in RESERVED_PIPELINE_KEYS}
 
         result_obj = await self._run_sharadar_pipeline(
@@ -617,7 +616,6 @@ class SharadarClient(BaseClient[SharadarDataset]):
             "start_date": config.start_date,
             "end_date": config.end_date,
         }
-        from vertex_forager.constants import RESERVED_PIPELINE_KEYS
         pipeline_kwargs: dict[str, JSONValue] = {k: v for k, v in dict(config.extra).items() if k not in RESERVED_PIPELINE_KEYS}
 
         result_obj = await self._run_sharadar_pipeline(

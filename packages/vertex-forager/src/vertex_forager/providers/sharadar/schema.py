@@ -344,7 +344,6 @@ DATASET_SCHEMA: Final[dict[str, TableSchema]] = {
 }
 
 # Endpoint mapping for provider API
- 
 
 def _validate_mappings() -> None:
     keys_table = set(DATASET_TABLE.keys())

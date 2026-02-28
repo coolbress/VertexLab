@@ -28,7 +28,7 @@ LOG_RATE_LIMIT_INVALID_TYPE: Final[str] = "{prefix}: rate_limit '{value}' is inv
 
 # Router decisions (pagination/batching/build)
 LOG_PAGINATION_START: Final[str] = "{prefix}: Starting pagination for dataset={dataset} per_page={per_page}"
-LOG_BATCH_FORCE_SINGLE: Final[str] = "{prefix}: Forcing single-symbol job for {symbol} (est_rows={est_rows} > max_rows)"
+LOG_BATCH_FORCE_SINGLE: Final[str] = "{prefix}: Forcing single-symbol job for {symbol} (est_rows={est_rows} > max_rows={max_rows})"
 LOG_BATCH_FLUSH: Final[str] = "{prefix}: Flushing batch size={size} rows={rows}"
 LOG_BATCH_ADD: Final[str] = "{prefix}: Added {symbol} to batch (est_rows={est_rows}) current_rows={current_rows}"
 LOG_HEURISTIC_BATCH_SIZE: Final[str] = "{prefix}: Heuristic batch_size for dataset={dataset} is {batch_size}"

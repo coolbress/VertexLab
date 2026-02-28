@@ -251,6 +251,8 @@ def constants(section: str, format: str, env_only: bool) -> None:
         "VF_MAX_CONNECTIONS": os.getenv("VF_MAX_CONNECTIONS"),
     }
     env_overrides_obj: dict[str, object] = {k: v for k, v in env_vars.items() if v is not None}
+    if "SHARADAR_API_KEY" in env_overrides_obj:
+        env_overrides_obj["SHARADAR_API_KEY"] = "<redacted>"
     if env_overrides_obj:
         preview["env_overrides"] = env_overrides_obj
     
@@ -264,6 +266,8 @@ def constants(section: str, format: str, env_only: bool) -> None:
         "yfinance": set(),
         "sharadar": set(),
         "writers": set(),
+        "flow": set(),
+        "queue": set(),
     }
     if "env_overrides" in preview and isinstance(preview["env_overrides"], dict):
         envs = preview["env_overrides"]

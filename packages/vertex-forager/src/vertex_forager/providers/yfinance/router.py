@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import pickle
 from collections.abc import AsyncIterator, Sequence
+import uuid
 from datetime import date, datetime, timezone
 from typing import Any, Final
 from vertex_forager.providers.yfinance.constants import PRICE_BATCH_SIZE, THREADS_THRESHOLD, PRICE_BATCH_MAX, DATASET_ENDPOINT
@@ -192,7 +193,6 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             if s not in seen:
                 seen.add(s)
                 unique_cleaned.append(s)
-        import uuid
         trace_id = uuid.uuid4().hex
         req_id = 0
         for clean in unique_cleaned:

@@ -21,6 +21,7 @@ from vertex_forager.constants import (
     RESERVED_PIPELINE_KEYS,
 )
 from vertex_forager.providers.yfinance.constants import SIZE_MAP as YF_SIZE_MAP
+from vertex_forager.providers.yfinance.constants import DEFAULT_BYTES_PER_ITEM
 from vertex_forager.providers.yfinance.constants import PRICE_BATCH_SIZE_KEY
 from vertex_forager.exceptions import InputError
 from vertex_forager.logging.constants import (
@@ -575,7 +576,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             pl.DataFrame for in-memory mode, RunResult for database mode
         """
         validate_tickers(symbols)
-        bytes_per_item = YF_SIZE_MAP.get(dataset, 200 * 1024)
+        bytes_per_item = YF_SIZE_MAP.get(dataset, DEFAULT_BYTES_PER_ITEM)
         validate_memory_usage(
             symbols=symbols,
             connect_db=connect_db,

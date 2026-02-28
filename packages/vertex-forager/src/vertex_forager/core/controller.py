@@ -6,6 +6,7 @@ import time
 from collections import deque
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
+from vertex_forager.constants import GRADIENT_WINDOW_S
 
 logger = logging.getLogger("vertex_forager.flow")
 
@@ -47,7 +48,6 @@ class GradientConcurrencyLimiter:
         self.min_rtt = float("inf")
         self.rtt_ema = 0.0  # Exponential Moving Average of RTT
         self.window_start = time.monotonic()
-        from vertex_forager.constants import GRADIENT_WINDOW_S
         self.window_duration = GRADIENT_WINDOW_S
         self._rtt_samples: deque[float] = deque(maxlen=100)
 

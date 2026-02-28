@@ -11,6 +11,7 @@ from vertex_forager.core.registries import (
     ClientRegistration,
 )
 from typing import Any
+from vertex_forager.constants import DEFAULT_RATE_LIMIT
 
 
 def _register_sharadar() -> None:
@@ -92,8 +93,8 @@ def create_client(
         if api_key is not None:
             logging.getLogger(__name__).warning("Provided API key will be ignored for yfinance; continuing with api_key=None")
         
-        # Determine effective rate limit with default fallback
-        effective_limit = rate_limit if rate_limit is not None else 60
+        # Determine effective rate limit with centralized default fallback
+        effective_limit = rate_limit if rate_limit is not None else DEFAULT_RATE_LIMIT
         return registration.factory(api_key=None, rate_limit=effective_limit, **kwargs)
     if rate_limit is None:
         raise ValueError(f"Missing rate_limit for provider '{provider}'")
