@@ -554,11 +554,12 @@ class YFinanceRouter(BaseRouter):
         def parse_dt_expr() -> pl.Expr:
             # Try to get pubDate
             expr = get_expr([["pubDate"]])
-            # Replace Z with +00:00 and parse
+            # Replace Z with +00:00 and parse. Note: yfinance news dates are naive but UTC
+            # Explicitly strip Z and use strict=False to handle various formats
             return (
                 expr
                 .str.replace("Z", "+00:00")
-                .str.to_datetime(strict=False)
+                .str.to_datetime(format="%Y-%m-%dT%H:%M:%S+00:00", strict=False)
                 .dt.replace_time_zone("UTC")
             )
 

@@ -17,7 +17,7 @@ from vertex_forager.exceptions import InputError
 
 logger = logging.getLogger(__name__)
 
-class YFinanceClient(BaseClient):
+class YFinanceClient(BaseClient[YFinanceDataset]):
     """Client for Yahoo Finance datasets via yfinance.
     
     This client integrates yfinance with the VertexForager pipeline to provide
@@ -76,7 +76,8 @@ class YFinanceClient(BaseClient):
             normalized = 60
         if "retry" not in kwargs:
             kwargs["retry"] = RetryConfig(max_attempts=1, base_backoff_s=0.5, max_backoff_s=2.0)
-        super().__init__(api_key=api_key, rate_limit=normalized, **kwargs)
+        # Ensure api_key is None for YFinanceClient
+        super().__init__(api_key=None, rate_limit=normalized, **kwargs)
         self._mapper = SchemaMapper()
         
         

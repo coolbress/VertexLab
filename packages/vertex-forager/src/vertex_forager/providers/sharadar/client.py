@@ -63,7 +63,7 @@ class FetchConfig:
     extra: dict[str, Any] = field(default_factory=dict)
 
 
-class SharadarClient(BaseClient):
+class SharadarClient(BaseClient[SharadarDataset]):
     """Sharadar-specific client exposing Sharadar data APIs."""
 
     BYTES_PER_TICKER_METADATA = 1024  # 1KB for metadata

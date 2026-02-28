@@ -20,6 +20,7 @@ class TestYFinanceClientDefaults:
         client = create_client(provider="yfinance", rate_limit=1_000)
         assert isinstance(client, YFinanceClient)
         assert client.api_key is None
+        # It allows higher rate limits but warns
         assert client._config.requests_per_minute == 1_000
     
     def test_create_client_ignores_user_api_key(self) -> None:

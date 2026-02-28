@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 import warnings
-from typing import Callable, Any, TypeVar
-
+from typing import Callable, Any, TypeVar, Union
 
 from vertex_forager.clients.base import HttpExecutor
 from vertex_forager.core.config import RunResult
 from vertex_forager.routers.base import BaseRouter
 from vertex_forager.schema.mapper import SchemaMapper
 from vertex_forager.writers.base import BaseWriter
-from vertex_forager.core.types import JSONValue
+from vertex_forager.core.types import JSONValue, SharadarDataset, YFinanceDataset
 
-T = TypeVar("T", bound=str)
+T = TypeVar("T", bound=Union[SharadarDataset, YFinanceDataset, str])
 
 async def run_pipeline_for(
     *,

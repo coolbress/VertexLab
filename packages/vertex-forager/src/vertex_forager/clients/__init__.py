@@ -90,9 +90,12 @@ def create_client(
         )
 
     if provider == "yfinance":
-        if api_key is not None or kwargs.get("api_key") is not None or resolved_key is not None:
+        if api_key is not None:
             logging.getLogger(__name__).warning("Provided API key will be ignored for yfinance; continuing with api_key=None")
-        return registration.factory(api_key=None, rate_limit=rate_limit if rate_limit is not None else 60, **kwargs)
+        
+        # Determine effective rate limit with default fallback
+        effective_limit = rate_limit if rate_limit is not None else 60
+        return registration.factory(api_key=None, rate_limit=effective_limit, **kwargs)
     if rate_limit is None:
         raise ValueError(f"Missing rate_limit for provider '{provider}'")
     return registration.factory(api_key=resolved_key, rate_limit=rate_limit, **kwargs)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Protocol, TypeVar, Generic, Sequence, AsyncIterator, Callable, TYPE_CHECKING
+from typing import Protocol, TypeVar, Generic, Sequence, AsyncIterator, Callable, TYPE_CHECKING, Union
+from vertex_forager.core.types import SharadarDataset, YFinanceDataset
 
 from vertex_forager.core.config import FetchJob, ParseResult
 if TYPE_CHECKING:
@@ -8,8 +9,8 @@ if TYPE_CHECKING:
     from vertex_forager.schema.mapper import SchemaMapper
 
 
-T = TypeVar("T", bound=str)
-T_contra = TypeVar("T_contra", bound=str, contravariant=True)
+T = TypeVar("T", bound=Union[SharadarDataset, YFinanceDataset, str])
+T_contra = TypeVar("T_contra", bound=Union[SharadarDataset, YFinanceDataset, str], contravariant=True)
 
 
 class IRouter(Protocol, Generic[T_contra]):
