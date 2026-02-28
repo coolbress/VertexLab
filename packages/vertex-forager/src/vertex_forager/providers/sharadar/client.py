@@ -23,9 +23,21 @@ from vertex_forager.utils import (
     validate_tickers,
 )
 from vertex_forager.providers.sharadar.schema import DATASET_TABLE
+from vertex_forager.constants import TICKERS_UNIT, PAGES_UNIT
+from vertex_forager.providers.sharadar.constants import (
+    BYTES_PER_TICKER_METADATA as SH_BYTES_PER_TICKER_METADATA,
+    BYTES_PER_TICKER_FULL as SH_BYTES_PER_TICKER_FULL,
+    ESTIMATED_TOTAL_TICKERS as SH_ESTIMATED_TOTAL_TICKERS,
+)
 from vertex_forager.core.types import JSONValue
 from vertex_forager.core.types import SharadarDataset
 from vertex_forager.exceptions import InputError
+from vertex_forager.logging.constants import (
+    CLIENT_LOG_PREFIX,
+    LOG_META_CACHE_MISS,
+    LOG_META_CACHED_COUNT,
+    LOG_META_PREFETCH_FAIL,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +69,7 @@ class FetchConfig:
     show_progress: bool = True
     use_progress_bar: bool = True
     total_items: int | None = None
-    unit: str = "tickers"
+    unit: str = TICKERS_UNIT
     start_date: str | None = None
     end_date: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
@@ -66,9 +78,9 @@ class FetchConfig:
 class SharadarClient(BaseClient[SharadarDataset]):
     """Sharadar-specific client exposing Sharadar data APIs."""
 
-    BYTES_PER_TICKER_METADATA = 1024  # 1KB for metadata
-    BYTES_PER_TICKER_FULL = 1 * 1024 * 1024  # 1MB for price/financials
-    ESTIMATED_TOTAL_TICKERS = 15_000
+    BYTES_PER_TICKER_METADATA = SH_BYTES_PER_TICKER_METADATA
+    BYTES_PER_TICKER_FULL = SH_BYTES_PER_TICKER_FULL
+    ESTIMATED_TOTAL_TICKERS = SH_ESTIMATED_TOTAL_TICKERS
 
     def __init__(
         self,
@@ -156,7 +168,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             desc="Fetching S&P 500 history",
             table_name=DATASET_TABLE["sp500"],
             total_items=None,
-            unit="pages",
+            unit=PAGES_UNIT,
             start_date=None,
             end_date=None,
             extra=dict(kwargs),
@@ -462,7 +474,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
                 show_progress=False,
                 use_progress_bar=False,
                 total_items=None,
-                unit="pages",
+                unit=PAGES_UNIT,
                 start_date=None,
                 end_date=None,
                 extra=dict(kwargs),
@@ -484,7 +496,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
                 show_progress=False,
                 use_progress_bar=False,
                 total_items=len(tickers),
-                unit="tickers",
+                unit=TICKERS_UNIT,
                 start_date=None,
                 end_date=None,
                 extra=dict(kwargs),
@@ -548,14 +560,14 @@ class SharadarClient(BaseClient[SharadarDataset]):
 
         # Sharadar-specific: Metadata caching for smart batching
         if self._metadata_cache is None and config.dataset != "tickers":
-            logger.info("Metadata cache miss. Fetching ticker metadata first...")
+            logger.info(LOG_META_CACHE_MISS.format(prefix=CLIENT_LOG_PREFIX))
             try:
                 with Spinner("Prefetching metadata for smart batching..."):
                     meta_result = await self._get_ticker_info_impl(tickers=None, connect_db=config.connect_db, show_spinner=False)
                     if isinstance(meta_result, pl.DataFrame):
-                        logger.info("Metadata cached: %d tickers", len(meta_result))
+                        logger.info(LOG_META_CACHED_COUNT.format(prefix=CLIENT_LOG_PREFIX, count=len(meta_result)))
             except (httpx.RequestError, asyncio.TimeoutError, OSError) as e:
-                logger.warning("Failed to prefetch metadata: %s. Smart batching will be disabled.", e)
+                logger.warning(LOG_META_PREFETCH_FAIL.format(prefix=CLIENT_LOG_PREFIX, error=e))
 
         total_items = (
             config.total_items

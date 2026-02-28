@@ -21,35 +21,34 @@ def main() -> None:
     Returns:
         None: Entry point does not return a value.
     """
-    # uv run으로 실행되므로 여기서 아키텍처 체크를 할 필요가 없습니다.
+    # Executed via `uv run`; no additional runtime checks required here.
     pass
 
 
 @main.command()
-@click.option("--symbol", "-s", multiple=True, help="수집할 종목 코드 (예: AAPL)")
+@click.option("--symbol", "-s", multiple=True, help="Symbols to collect (e.g., AAPL)")
 @click.option(
     "--source", type=click.Choice(["yfinance", "sharadar"]), default="sharadar"
 )
 def collect(symbol: tuple[str, ...], source: str) -> None:
-    """
-    지정한 소스로부터 금융 데이터를 수집합니다.
+    """Collect market data from the selected provider.
 
     Args:
-        symbol: 수집할 종목 코드 리스트 (예: ('AAPL', 'MSFT')).
-        source: 데이터 소스 ('yfinance' 또는 'sharadar').
+        symbol: Tuple of ticker symbols to collect (e.g., ('AAPL', 'MSFT')).
+        source: Data source ('yfinance' or 'sharadar').
 
     Returns:
-        None: 수집 결과는 로그로 출력되거나 파일로 저장됩니다.
+        None: Results are printed to stdout or written to storage.
 
     Raises:
-        ValueError: API 키가 누락되었거나 잘못된 입력이 제공된 경우.
-        httpx.RequestError: 네트워크 요청 실패 시.
+        ValueError: Missing API key or invalid inputs.
+        httpx.RequestError: Network request fails.
     """
     if not symbol:
-        click.echo("⚠️ 수집할 종목(--symbol)을 입력해주세요.")
+        click.echo("⚠️ Please provide at least one symbol via --symbol.")
         return
 
-    click.echo(f"🚀 {source}를 통해 {symbol} 데이터 수집을 시작합니다...")
+    click.echo(f"🚀 Starting collection for {symbol} using {source}...")
 
     try:
         from vertex_forager.clients import create_client
@@ -64,7 +63,7 @@ def collect(symbol: tuple[str, ...], source: str) -> None:
             api_key_env = "SHARADAR_API_KEY"
             api_key = os.getenv(api_key_env)
             if not api_key:
-                click.echo(f"⚠️ {api_key_env} 환경변수가 설정되지 않았습니다.")
+                click.echo(f"⚠️ Environment variable {api_key_env} is not set.")
                 return
 
         async def _run_collect() -> Optional[Any]:
@@ -84,25 +83,21 @@ def collect(symbol: tuple[str, ...], source: str) -> None:
         result = asyncio.run(_run_collect())
 
         if result is not None:
-            # Show summary
             if hasattr(result, "tables") and isinstance(result.tables, Mapping):
                 total_rows = sum(result.tables.values())
-                click.echo(f"✅ 수집 완료: 총 {total_rows}개 행이 처리되었습니다.")
+                click.echo(f"✅ Completed: processed {total_rows} rows.")
                 for table, count in result.tables.items():
                     click.echo(f"  - {table}: {count} rows")
             elif isinstance(result, pl.DataFrame):
-                click.echo(f"✅ 수집 완료: 총 {len(result)}개 행이 처리되었습니다.")
+                click.echo(f"✅ Completed: processed {len(result)} rows.")
             else:
-                # Fallback for other result types
-                click.echo(f"✅ 수집 완료: {result}")
+                click.echo(f"✅ Completed: {result}")
 
     except (ValueError, KeyError, httpx.RequestError) as e:
-        # Expected errors
-        click.echo(f"❌ 수집 중 오류가 발생했습니다: {str(e)}")
+        click.echo(f"❌ Collection error: {str(e)}")
         logger.error(f"Collection failed: {e}")
     except Exception as e:
-        # Unexpected errors
-        click.echo(f"❌ 예상치 못한 오류가 발생했습니다: {str(e)}")
+        click.echo(f"❌ Unexpected error: {str(e)}")
         logger.exception("Unexpected error during collection")
         raise
 
@@ -121,18 +116,175 @@ def status() -> None:
     click.echo(f"📂 Data Root: {root}")
     click.echo(f"📦 Cache Dir: {get_cache_dir()}")
 
-    # 데이터 용량 확인 등 유용한 정보 추가 가능
     size = 0
     for f in root.glob("**/*"):
         try:
             if f.is_file():
                 size += f.stat().st_size
         except (PermissionError, OSError) as exc:
-            logger.warning("Failed to stat file during size calc: %s", exc)
+            logger.warning("Failed to stat file during size calculation: %s", exc)
             continue
 
     click.echo(f"📊 Total Data Size: {size / (1024 * 1024):.2f} MB")
 
+
+@main.command()
+@click.option(
+    "--section",
+    type=click.Choice(["global", "yfinance", "sharadar", "writers", "flow", "queue", "all"]),
+    default="all",
+    help="Select constants section to preview",
+)
+@click.option(
+    "--format",
+    type=click.Choice(["json", "table"]),
+    default="json",
+    help="Output format (json/table)",
+)
+@click.option(
+    "--env-only",
+    is_flag=True,
+    default=False,
+    help="Show only keys overridden by environment variables (table format only)",
+)
+def constants(section: str, format: str, env_only: bool) -> None:
+    """Preview centralized constants by section.
+
+    Args:
+        section: Constants section to render
+        format: Output format (json/table)
+        env_only: Filter table to show only environment-overridden keys
+    """
+    import json
+    import os
+    from vertex_forager import constants as global_constants
+    from vertex_forager.providers.yfinance import constants as yf_constants
+    from vertex_forager.providers.sharadar import constants as sh_constants
+    
+    preview: dict[str, dict[str, object]] = {}
+    
+    def add(name: str, values: dict[str, object]) -> None:
+        preview[name] = values
+    
+    if section in ("global", "flow", "queue", "all"):
+        add(
+            "global",
+            {
+                "HTTP_TIMEOUT_S": global_constants.HTTP_TIMEOUT_S,
+                "HTTP_MAX_CONNECTIONS": global_constants.HTTP_MAX_CONNECTIONS,
+                "HTTP_MAX_KEEPALIVE_CONNECTIONS": global_constants.HTTP_MAX_KEEPALIVE_CONNECTIONS,
+                "DEFAULT_RATE_LIMIT": global_constants.DEFAULT_RATE_LIMIT,
+                "DEFAULT_RETRY_MAX_ATTEMPTS": global_constants.DEFAULT_RETRY_MAX_ATTEMPTS,
+                "DEFAULT_RETRY_BASE_BACKOFF_S": global_constants.DEFAULT_RETRY_BASE_BACKOFF_S,
+                "DEFAULT_RETRY_MAX_BACKOFF_S": global_constants.DEFAULT_RETRY_MAX_BACKOFF_S,
+                "FLUSH_THRESHOLD_ROWS": global_constants.FLUSH_THRESHOLD_ROWS,
+                "PRIORITY_PAGINATION": global_constants.PRIORITY_PAGINATION,
+                "PRIORITY_NEW_JOB": global_constants.PRIORITY_NEW_JOB,
+                "PRIORITY_SENTINEL": global_constants.PRIORITY_SENTINEL,
+                "PROGRESS_LOG_CHUNK_ROWS": global_constants.PROGRESS_LOG_CHUNK_ROWS,
+                "DEFAULT_TIME_ZONE": global_constants.DEFAULT_TIME_ZONE,
+            },
+        )
+        add(
+            "flow",
+            {
+                "DEFAULT_AVG_LATENCY_S": global_constants.DEFAULT_AVG_LATENCY_S,
+                "CONCURRENCY_MIN": global_constants.CONCURRENCY_MIN,
+                "CONCURRENCY_MAX": global_constants.CONCURRENCY_MAX,
+                "GRADIENT_QUEUE_SIZE_DEFAULT": global_constants.GRADIENT_QUEUE_SIZE_DEFAULT,
+                "GRADIENT_SMOOTHING_DEFAULT": global_constants.GRADIENT_SMOOTHING_DEFAULT,
+                "GRADIENT_WINDOW_S": global_constants.GRADIENT_WINDOW_S,
+            },
+        )
+        add(
+            "queue",
+            {
+                "QUEUE_TARGET_RAM_RATIO": global_constants.QUEUE_TARGET_RAM_RATIO,
+                "PACKET_SIZE_EST_BYTES": global_constants.PACKET_SIZE_EST_BYTES,
+                "QUEUE_MIN": global_constants.QUEUE_MIN,
+                "QUEUE_MAX": global_constants.QUEUE_MAX,
+                "QUEUE_DEFAULT": global_constants.QUEUE_DEFAULT,
+            },
+        )
+    
+    if section in ("yfinance", "all"):
+        add(
+            "yfinance",
+            {
+                "PRICE_BATCH_SIZE": yf_constants.PRICE_BATCH_SIZE,
+                "PRICE_BATCH_MAX": yf_constants.PRICE_BATCH_MAX,
+                "THREADS_THRESHOLD": yf_constants.THREADS_THRESHOLD,
+                "PRICE_BATCH_SIZE_KEY": yf_constants.PRICE_BATCH_SIZE_KEY,
+                "DEFAULT_INTERVAL": yf_constants.DEFAULT_INTERVAL,
+                "DEFAULT_PRICE_PERIOD": yf_constants.DEFAULT_PRICE_PERIOD,
+            },
+        )
+    
+    if section in ("sharadar", "all"):
+        add(
+            "sharadar",
+            {
+                "MAX_ROWS_PER_REQUEST": sh_constants.MAX_ROWS_PER_REQUEST,
+                "DEFAULT_BATCH_SIZE": sh_constants.DEFAULT_BATCH_SIZE,
+                "MIN_BATCH_SIZE": sh_constants.MIN_BATCH_SIZE,
+                "TRADING_DAYS_RATIO": sh_constants.TRADING_DAYS_RATIO,
+                "QUARTERLY_DAYS_RATIO": sh_constants.QUARTERLY_DAYS_RATIO,
+                "PAGINATION_META_KEY": sh_constants.PAGINATION_META_KEY,
+                "PAGINATION_CURSOR_PARAM": sh_constants.PAGINATION_CURSOR_PARAM,
+                "MAX_PAGES": sh_constants.MAX_PAGES,
+            },
+        )
+    
+    if section in ("writers", "all"):
+        add(
+            "writers",
+            {
+                "WRITER_DUCKDB_MAX_WORKERS": global_constants.WRITER_DUCKDB_MAX_WORKERS,
+                "WAL_AUTOCHECKPOINT_LIMIT": global_constants.WAL_AUTOCHECKPOINT_LIMIT,
+            },
+        )
+    
+    env_vars = {
+        "SHARADAR_API_KEY": os.getenv("SHARADAR_API_KEY"),
+        "VF_HTTP_TIMEOUT_S": os.getenv("VF_HTTP_TIMEOUT_S"),
+        "VF_DEFAULT_RATE_LIMIT": os.getenv("VF_DEFAULT_RATE_LIMIT"),
+        "VF_MAX_CONNECTIONS": os.getenv("VF_MAX_CONNECTIONS"),
+    }
+    env_overrides_obj: dict[str, object] = {k: v for k, v in env_vars.items() if v is not None}
+    if env_overrides_obj:
+        preview["env_overrides"] = env_overrides_obj
+    
+    if format == "json":
+        click.echo(json.dumps(preview, indent=2, ensure_ascii=False))
+        return
+    
+    # table format
+    override_flags: dict[str, set[str]] = {
+        "global": set(),
+        "yfinance": set(),
+        "sharadar": set(),
+        "writers": set(),
+    }
+    if "env_overrides" in preview and isinstance(preview["env_overrides"], dict):
+        envs = preview["env_overrides"]
+        if envs.get("VF_HTTP_TIMEOUT_S"):
+            override_flags["global"].add("HTTP_TIMEOUT_S")
+        if envs.get("VF_DEFAULT_RATE_LIMIT"):
+            override_flags["global"].add("DEFAULT_RATE_LIMIT")
+        if envs.get("VF_MAX_CONNECTIONS"):
+            override_flags["global"].add("HTTP_MAX_CONNECTIONS")
+    for name, values in preview.items():
+        click.echo(f"\n[{name}]")
+        keys = list(values.keys())
+        if env_only and name in override_flags:
+            keys = [k for k in keys if k in override_flags[name]]
+        max_key = max((len(k) for k in keys), default=0)
+        for k in keys:
+            v = values[k]
+            suffix = ""
+            if name in override_flags and k in override_flags[name]:
+                suffix = " (env)"
+            click.echo(f"{k.ljust(max_key)}{suffix}  :  {v}")
 
 @main.command()
 def clear() -> None:
@@ -144,9 +296,9 @@ def clear() -> None:
     Returns:
         None: Confirmation message is printed to stdout.
     """
-    if click.confirm("⚠️ 모든 캐시 데이터를 삭제하시겠습니까?"):
+    if click.confirm("⚠️ Delete all cache data?"):
         clear_app_cache()
-        click.echo("🧹 캐시가 성공적으로 비워졌습니다.")
+        click.echo("🧹 Cache cleared.")
 
 
 if __name__ == "__main__":

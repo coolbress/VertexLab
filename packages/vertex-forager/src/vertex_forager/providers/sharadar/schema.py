@@ -5,6 +5,11 @@ from typing import Final
 import polars as pl
 
 from vertex_forager.schema.config import TableSchema
+from vertex_forager.constants import DEFAULT_TIME_ZONE
+from vertex_forager.providers.sharadar.constants import (
+    DATASET_ENDPOINT,
+    DATE_FILTER_COL,
+)
 
 
 SHARADAR_SEP: Final[TableSchema] = TableSchema(
@@ -21,7 +26,7 @@ SHARADAR_SEP: Final[TableSchema] = TableSchema(
         "closeadj": pl.Float64,
         "closeunadj": pl.Float64,
         "lastupdated": pl.Date,
-        "fetched_at": pl.Datetime(time_zone="UTC"),
+        "fetched_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
     },
     unique_key=("provider", "ticker", "date"),
     analysis_date_col="date",
@@ -60,7 +65,7 @@ SHARADAR_TICKERS: Final[TableSchema] = TableSchema(
         "lastpricedate": pl.Date,
         "firstquarter": pl.Date,
         "lastquarter": pl.Date,
-        "fetched_at": pl.Datetime(time_zone="UTC"),
+        "fetched_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
     },
     unique_key=("provider", "ticker"),
     analysis_date_col=None,
@@ -183,7 +188,7 @@ SHARADAR_SF1: Final[TableSchema] = TableSchema(
         "taxliabilities": pl.Int64,
         "tbvps": pl.Float64,
         "workingcapital": pl.Int64,
-        "fetched_at": pl.Datetime(time_zone="UTC"),
+        "fetched_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
     },
     unique_key=("provider", "ticker", "dimension", "calendardate", "reportperiod"),
     analysis_date_col="datekey",
@@ -218,7 +223,7 @@ SHARADAR_SF2: Final[TableSchema] = TableSchema(
         "expirationdate": pl.Date,
         "rownum": pl.Int64,
         "securitytitle": pl.Utf8,
-        "fetched_at": pl.Datetime(time_zone="UTC"),
+        "fetched_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
     },
     unique_key=("provider", "ticker", "filingdate", "rownum"),
     analysis_date_col="filingdate",
@@ -236,7 +241,7 @@ SHARADAR_SF3: Final[TableSchema] = TableSchema(
         "units": pl.Int64,
         "price": pl.Float64,
         "value": pl.Float64,
-        "fetched_at": pl.Datetime(time_zone="UTC"),
+        "fetched_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
     },
     unique_key=("provider", "ticker", "calendardate", "investorname", "securitytype"),
     analysis_date_col="calendardate",
@@ -254,7 +259,7 @@ SHARADAR_ACTIONS: Final[TableSchema] = TableSchema(
         "value": pl.Float64,
         "contraticker": pl.Utf8,
         "contraname": pl.Utf8,
-        "fetched_at": pl.Datetime(time_zone="UTC"),
+        "fetched_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
     },
     unique_key=("provider", "ticker", "date", "action"),
     analysis_date_col="date",
@@ -275,7 +280,7 @@ SHARADAR_DAILY: Final[TableSchema] = TableSchema(
         "evebit": pl.Float64,
         "evebitda": pl.Float64,
         "lastupdated": pl.Date,
-        "fetched_at": pl.Datetime(time_zone="UTC"),
+        "fetched_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
     },
     unique_key=("provider", "ticker", "date"),
     analysis_date_col="date",
@@ -293,7 +298,7 @@ SHARADAR_SP500: Final[TableSchema] = TableSchema(
         "contraticker": pl.Utf8,
         "contraname": pl.Utf8,
         "note": pl.Utf8,
-        "fetched_at": pl.Datetime(time_zone="UTC"),
+        "fetched_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
     },
     unique_key=("provider", "ticker", "date", "action"),
     analysis_date_col="date",
@@ -339,30 +344,7 @@ DATASET_SCHEMA: Final[dict[str, TableSchema]] = {
 }
 
 # Endpoint mapping for provider API
-DATASET_ENDPOINT: Final[dict[str, str]] = {
-    "price": "SEP",
-    "fundamental": "SF1",
-    "daily": "DAILY",
-    "tickers": "TICKERS",
-    "actions": "ACTIONS",
-    "insider": "SF2",
-    "institutional": "SF3",
-    "sp500": "SP500",
-}
-
-# Date filter column per dataset
-DATE_FILTER_COL: Final[dict[str, str]] = {
-    "price": "date",
-    "fundamental": "calendardate",
-    "daily": "date",
-    "actions": "date",
-    "insider": "filingdate",
-    "institutional": "calendardate",
-    "sp500": "date",
-}
-
-# Columns to exclude from request/normalization
-INTERNAL_COLS: Final[set[str]] = {"provider", "fetched_at"}
+ 
 
 def _validate_mappings() -> None:
     keys_table = set(DATASET_TABLE.keys())

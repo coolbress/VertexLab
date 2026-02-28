@@ -17,6 +17,8 @@ class JobContext(TypedDict, total=False):
     pagination: PaginationParams
     dataset: str
     symbol: str
+    trace_id: NotRequired[str]
+    request_id: NotRequired[int]
 
 class SymbolContext(TypedDict, total=False):
     dataset: Required[str]
@@ -25,11 +27,15 @@ class SymbolContext(TypedDict, total=False):
 class PaginationJobContext(TypedDict, total=False):
     pagination: Required[PaginationParams]
     dataset: NotRequired[str]
+    trace_id: NotRequired[str]
+    request_id: NotRequired[int]
 
 class PerSymbolJobContext(TypedDict, total=False):
     dataset: Required[str]
     symbol: Required[str]
     pagination: NotRequired[PaginationParams]
+    trace_id: NotRequired[str]
+    request_id: NotRequired[int]
 
 # Dataset Literals for typing clarity (runtime remains flexible via str fields)
 SharadarDataset: TypeAlias = Literal[

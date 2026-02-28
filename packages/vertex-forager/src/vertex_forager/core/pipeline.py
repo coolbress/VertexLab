@@ -34,7 +34,14 @@ from collections import defaultdict
 import polars as pl
 from polars.exceptions import ComputeError
 from vertex_forager.exceptions import ValidationError, PrimaryKeyMissingError, PrimaryKeyNullError
-from vertex_forager.constants import FLUSH_THRESHOLD_ROWS as DEFAULT_FLUSH_THRESHOLD_ROWS
+from vertex_forager.constants import (
+    FLUSH_THRESHOLD_ROWS as DEFAULT_FLUSH_THRESHOLD_ROWS,
+    PRIORITY_PAGINATION as CONST_PRIORITY_PAGINATION,
+    PRIORITY_NEW_JOB as CONST_PRIORITY_NEW_JOB,
+    PRIORITY_SENTINEL as CONST_PRIORITY_SENTINEL,
+    FLUSH_THRESHOLD_INFINITE as CONST_FLUSH_THRESHOLD_INFINITE,
+    PROGRESS_LOG_CHUNK_ROWS,
+)
 
 try:
     import duckdb as _duckdb
@@ -99,12 +106,12 @@ class VertexForager:
     FLUSH_THRESHOLD_ROWS = DEFAULT_FLUSH_THRESHOLD_ROWS
 
     # Priority Constants
-    PRIORITY_PAGINATION = 0  # Highest priority for pagination/next jobs
-    PRIORITY_NEW_JOB = 10    # Normal priority for new jobs
-    PRIORITY_SENTINEL = 999  # Lowest priority for sentinel (shutdown)
+    PRIORITY_PAGINATION = CONST_PRIORITY_PAGINATION
+    PRIORITY_NEW_JOB = CONST_PRIORITY_NEW_JOB
+    PRIORITY_SENTINEL = CONST_PRIORITY_SENTINEL
     
     # Infinite threshold for in-memory writer
-    FLUSH_THRESHOLD_INFINITE = 1_000_000_000
+    FLUSH_THRESHOLD_INFINITE = CONST_FLUSH_THRESHOLD_INFINITE
 
     def __init__(
         self,
@@ -640,8 +647,8 @@ class VertexForager:
                 current_rows = previous_rows + len(packet.frame)
                 buffer_rows[table] = current_rows
 
-                # Log progress every 100k rows to assure user it's working
-                if (current_rows // 100_000) > (previous_rows // 100_000):
+                # Log progress every chunk to assure user it's working
+                if (current_rows // PROGRESS_LOG_CHUNK_ROWS) > (previous_rows // PROGRESS_LOG_CHUNK_ROWS):
                     logger.debug(
                         f"WRITER: Buffering {table}... {current_rows:,} / {threshold:,} rows"
                     )

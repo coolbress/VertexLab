@@ -18,9 +18,17 @@ from vertex_forager.constants import (
     DEFAULT_RETRY_MAX_ATTEMPTS,
     DEFAULT_RETRY_BASE_BACKOFF_S,
     DEFAULT_RETRY_MAX_BACKOFF_S,
+    RESERVED_PIPELINE_KEYS,
 )
 from vertex_forager.providers.yfinance.constants import SIZE_MAP as YF_SIZE_MAP
+from vertex_forager.providers.yfinance.constants import PRICE_BATCH_SIZE_KEY
 from vertex_forager.exceptions import InputError
+from vertex_forager.logging.constants import (
+    CLIENT_LOG_PREFIX,
+    LOG_RATE_LIMIT_INVALID_INT,
+    LOG_RATE_LIMIT_EXCEEDS_DEFAULT,
+    LOG_RATE_LIMIT_INVALID_TYPE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,12 +61,12 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         normalized = rate_limit
         if isinstance(normalized, int):
             if normalized <= 0:
-                logger.warning("YFinance rate_limit %d is invalid; falling back to default.", normalized)
+                logger.warning(LOG_RATE_LIMIT_INVALID_INT.format(prefix=CLIENT_LOG_PREFIX, value=normalized))
                 normalized = DEFAULT_RATE_LIMIT
             elif normalized > DEFAULT_RATE_LIMIT:
-                logger.warning("YFinance rate_limit %d exceeds default; API may throttle.", normalized)
+                logger.warning(LOG_RATE_LIMIT_EXCEEDS_DEFAULT.format(prefix=CLIENT_LOG_PREFIX, value=normalized))
         else:
-            logger.warning("YFinance rate_limit '%s' is invalid; falling back to default.", normalized)
+            logger.warning(LOG_RATE_LIMIT_INVALID_TYPE.format(prefix=CLIENT_LOG_PREFIX, value=normalized))
             normalized = DEFAULT_RATE_LIMIT
         if "retry" not in kwargs:
             kwargs["retry"] = RetryConfig(
@@ -593,7 +601,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
                     config=self._config,
                     start_date=start_date,
                     end_date=end_date,
-                    **{k: v for k, v in kwargs.items() if k in {"price_batch_size"}},
+                    **{k: v for k, v in kwargs.items() if k in {PRICE_BATCH_SIZE_KEY}},
                 )
                 
                 await self.run_pipeline(
@@ -603,7 +611,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
                     writer=writer,
                     mapper=self._mapper,
                     on_progress=pbar_updater,
-                    **{k: v for k, v in kwargs.items() if k not in {"router","dataset","symbols","writer","mapper","on_progress","price_batch_size"}},
+                    **{k: v for k, v in kwargs.items() if k not in (RESERVED_PIPELINE_KEYS | {PRICE_BATCH_SIZE_KEY})},
                 )
                 
                 result_obj = await self.collect_results(

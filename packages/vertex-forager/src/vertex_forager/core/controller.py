@@ -47,7 +47,8 @@ class GradientConcurrencyLimiter:
         self.min_rtt = float("inf")
         self.rtt_ema = 0.0  # Exponential Moving Average of RTT
         self.window_start = time.monotonic()
-        self.window_duration = 60.0  # Reset min_rtt every minute
+        from vertex_forager.constants import GRADIENT_WINDOW_S
+        self.window_duration = GRADIENT_WINDOW_S
         self._rtt_samples: deque[float] = deque(maxlen=100)
 
     async def acquire(self) -> None:
@@ -175,11 +176,10 @@ class FlowController:
         if concurrency_limit is None:
             # L = λ * W
             # λ (Throughput) = RPM / 60
-            # W (Avg Latency) ≈ 6.0s (Conservative estimate for high-latency financial APIs)
-            # L (Concurrency) = (RPM / 60) * 6 = RPM / 10
-            estimated = requests_per_minute // 10
-            # Bounds: Min 10 (liveness), Max 50 (socket exhaustion prevention)
-            concurrency_limit = max(10, min(50, estimated))
+            # W (Avg Latency)
+            from vertex_forager.constants import DEFAULT_AVG_LATENCY_S, CONCURRENCY_MIN, CONCURRENCY_MAX
+            estimated = int((requests_per_minute / 60.0) * DEFAULT_AVG_LATENCY_S)
+            concurrency_limit = max(CONCURRENCY_MIN, min(CONCURRENCY_MAX, estimated))
             logger.info(
                 f"Auto-configured concurrency: {concurrency_limit} (based on {requests_per_minute} RPM)"
             )
@@ -188,10 +188,13 @@ class FlowController:
             requests_per_minute=requests_per_minute,
             burst_limit=concurrency_limit,
         )
+        from vertex_forager.constants import GRADIENT_QUEUE_SIZE_DEFAULT, GRADIENT_SMOOTHING_DEFAULT
         self._concurrency_limiter = GradientConcurrencyLimiter(
             initial_limit=concurrency_limit,
             max_limit=concurrency_limit,
             min_limit=min(5, concurrency_limit),
+            queue_size=GRADIENT_QUEUE_SIZE_DEFAULT,
+            smoothing=GRADIENT_SMOOTHING_DEFAULT,
         )
 
     @property

@@ -160,10 +160,10 @@ class HttpExecutor:
 def default_async_client() -> httpx.AsyncClient:
     """Create a default httpx AsyncClient instance.
 
-    Configured with reasonable defaults for high-concurrency scraping:
-    - User-Agent: vertex-forager
-    - Timeout: 60 seconds (increased for large datasets)
-    - Connection Pool: 200 max connections, 100 keep-alive (reduced handshake overhead)
+    Configured with centralized defaults (see vertex_forager.constants):
+    - User-Agent: HTTP_USER_AGENT
+    - Timeout: HTTP_TIMEOUT_S seconds
+    - Connection Pool: HTTP_MAX_CONNECTIONS (max), HTTP_MAX_KEEPALIVE_CONNECTIONS (keep-alive)
     """
     return httpx.AsyncClient(
         headers={"User-Agent": HTTP_USER_AGENT},
