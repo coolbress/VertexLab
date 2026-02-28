@@ -35,7 +35,7 @@ router_registry.register(
 def create_router(
     provider: str,
     *,
-    api_key: str,
+    api_key: str | None,
     config: EngineConfig,
     start_date: str | None = None,
     end_date: str | None = None,

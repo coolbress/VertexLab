@@ -432,7 +432,8 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
                 val = value_cols[0]
                 df = frame.select(["metric", val]).rename({val: "value"})
                 df = df.with_columns(pl.lit(0).alias("_row"))
-                df = df.pivot(index="_row", columns="metric", values="value").drop("_row")  # type: ignore[call-arg]
+                # Use new signature (on instead of columns) to satisfy type checkers
+                df = df.pivot(index="_row", on="metric", values="value").drop("_row")
                 if "ticker" in frame.columns and "ticker" not in df.columns:
                     df = df.with_columns(pl.lit(frame["ticker"][0]).alias("ticker"))
                 rename_map = {

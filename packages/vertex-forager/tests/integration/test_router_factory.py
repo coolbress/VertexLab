@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import pytest
 from vertex_forager.core.config import EngineConfig
-from typing import cast
 from vertex_forager.routers import create_router
 from vertex_forager.providers.sharadar.router import SharadarRouter
 from vertex_forager.providers.yfinance.router import YFinanceRouter
@@ -39,6 +38,6 @@ class TestRouterFactory:
     def test_create_yfinance_router_success(self) -> None:
         """Verify create_router returns a configured YFinanceRouter with default rate limit."""
         config = EngineConfig(requests_per_minute=60)
-        router = create_router(provider="yfinance", api_key=cast(str, None), config=config)
+        router = create_router(provider="yfinance", api_key=None, config=config)
         assert isinstance(router, YFinanceRouter)
         assert router.rate_limit == 60

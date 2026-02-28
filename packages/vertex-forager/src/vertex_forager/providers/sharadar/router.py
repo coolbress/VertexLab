@@ -11,7 +11,7 @@ import polars as pl
 from vertex_forager.utils import mask_secret
 
 from typing import cast, TYPE_CHECKING
-from vertex_forager.core.types import SharadarDataset
+from vertex_forager.core.types import SharadarDataset, JSONValue
 if TYPE_CHECKING:
     from vertex_forager.core.types import PerSymbolJobContext
 
@@ -401,7 +401,6 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         
         next_jobs = []
         if meta and isinstance(meta, dict):
-            from typing import cast
             pagination = cast(dict[str, object] | None, job.context.get("pagination"))
             if pagination:
                 meta_key_obj = pagination.get("meta_key")
@@ -417,7 +416,6 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
                 ):
                     new_job = job.model_copy(deep=True)
                     if isinstance(cursor_param, str):
-                        from vertex_forager.core.types import JSONValue
                         new_job.spec.params[cursor_param] = cast(JSONValue, next_cursor)
                         next_jobs.append(new_job)
 
