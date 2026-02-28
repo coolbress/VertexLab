@@ -45,8 +45,7 @@ def collect(symbol: tuple[str, ...], source: str) -> None:
         httpx.RequestError: Network request fails.
     """
     if not symbol:
-        click.echo("⚠️ Please provide at least one symbol via --symbol.")
-        return
+        raise click.UsageError("Please provide at least one symbol via --symbol.")
 
     click.echo(f"🚀 Starting collection for {symbol} using {source}...")
 
@@ -63,8 +62,7 @@ def collect(symbol: tuple[str, ...], source: str) -> None:
             api_key_env = "SHARADAR_API_KEY"
             api_key = os.getenv(api_key_env)
             if not api_key:
-                click.echo(f"⚠️ Environment variable {api_key_env} is not set.")
-                return
+                raise click.ClickException(f"Environment variable {api_key_env} is not set.")
 
         async def _run_collect() -> Optional[Any]:
             async with create_client(
@@ -93,9 +91,8 @@ def collect(symbol: tuple[str, ...], source: str) -> None:
             else:
                 click.echo(f"✅ Completed: {result}")
 
-    except click.ClickException as e:
-        click.echo(f"❌ {e.message}")
-        return
+    except click.ClickException:
+        raise
     except (ValueError, KeyError, httpx.RequestError) as e:
         click.echo(f"❌ Collection error: {str(e)}")
         logger.error(f"Collection failed: {e}")
