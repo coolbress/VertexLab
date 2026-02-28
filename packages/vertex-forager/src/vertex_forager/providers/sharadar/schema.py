@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Final, cast
+from typing import Final
 
 import polars as pl
 
@@ -9,7 +9,7 @@ from vertex_forager.schema.config import TableSchema
 
 SHARADAR_SEP: Final[TableSchema] = TableSchema(
     table="sharadar_sep",
-    schema=cast(dict[str, pl.DataType], {
+    schema={
         "provider": pl.Utf8,
         "ticker": pl.Utf8,
         "date": pl.Date,
@@ -22,7 +22,7 @@ SHARADAR_SEP: Final[TableSchema] = TableSchema(
         "closeunadj": pl.Float64,
         "lastupdated": pl.Date,
         "fetched_at": pl.Datetime(time_zone="UTC"),
-    }),
+    },
     unique_key=("provider", "ticker", "date"),
     analysis_date_col="date",
 )
@@ -30,7 +30,7 @@ SHARADAR_SEP: Final[TableSchema] = TableSchema(
 
 SHARADAR_TICKERS: Final[TableSchema] = TableSchema(
     table="sharadar_tickers",
-    schema=cast(dict[str, pl.DataType], {
+    schema={
         "provider": pl.Utf8,
         "table": pl.Utf8,
         "permaticker": pl.Utf8,
@@ -61,7 +61,7 @@ SHARADAR_TICKERS: Final[TableSchema] = TableSchema(
         "firstquarter": pl.Date,
         "lastquarter": pl.Date,
         "fetched_at": pl.Datetime(time_zone="UTC"),
-    }),
+    },
     unique_key=("provider", "ticker"),
     analysis_date_col=None,
 )
@@ -69,7 +69,7 @@ SHARADAR_TICKERS: Final[TableSchema] = TableSchema(
 
 SHARADAR_SF1: Final[TableSchema] = TableSchema(
     table="sharadar_sf1",
-    schema=cast(dict[str, pl.DataType], {
+    schema={
         "provider": pl.Utf8,
         "ticker": pl.Utf8,
         "dimension": pl.Utf8,
@@ -184,7 +184,7 @@ SHARADAR_SF1: Final[TableSchema] = TableSchema(
         "tbvps": pl.Float64,
         "workingcapital": pl.Int64,
         "fetched_at": pl.Datetime(time_zone="UTC"),
-    }),
+    },
     unique_key=("provider", "ticker", "dimension", "calendardate", "reportperiod"),
     analysis_date_col="datekey",
 )
@@ -192,7 +192,7 @@ SHARADAR_SF1: Final[TableSchema] = TableSchema(
 
 SHARADAR_SF2: Final[TableSchema] = TableSchema(
     table="sharadar_sf2",
-    schema=cast(dict[str, pl.DataType], {
+    schema={
         "provider": pl.Utf8,
         "ticker": pl.Utf8,
         "filingdate": pl.Date,
@@ -219,7 +219,7 @@ SHARADAR_SF2: Final[TableSchema] = TableSchema(
         "rownum": pl.Int64,
         "securitytitle": pl.Utf8,
         "fetched_at": pl.Datetime(time_zone="UTC"),
-    }),
+    },
     unique_key=("provider", "ticker", "filingdate", "rownum"),
     analysis_date_col="filingdate",
 )
@@ -227,7 +227,7 @@ SHARADAR_SF2: Final[TableSchema] = TableSchema(
 
 SHARADAR_SF3: Final[TableSchema] = TableSchema(
     table="sharadar_sf3",
-    schema=cast(dict[str, pl.DataType], {
+    schema={
         "provider": pl.Utf8,
         "ticker": pl.Utf8,
         "calendardate": pl.Date,
@@ -237,7 +237,7 @@ SHARADAR_SF3: Final[TableSchema] = TableSchema(
         "price": pl.Float64,
         "value": pl.Float64,
         "fetched_at": pl.Datetime(time_zone="UTC"),
-    }),
+    },
     unique_key=("provider", "ticker", "calendardate", "investorname", "securitytype"),
     analysis_date_col="calendardate",
 )
@@ -245,7 +245,7 @@ SHARADAR_SF3: Final[TableSchema] = TableSchema(
 
 SHARADAR_ACTIONS: Final[TableSchema] = TableSchema(
     table="sharadar_actions",
-    schema=cast(dict[str, pl.DataType], {
+    schema={
         "provider": pl.Utf8,
         "date": pl.Date,
         "action": pl.Utf8,
@@ -255,7 +255,7 @@ SHARADAR_ACTIONS: Final[TableSchema] = TableSchema(
         "contraticker": pl.Utf8,
         "contraname": pl.Utf8,
         "fetched_at": pl.Datetime(time_zone="UTC"),
-    }),
+    },
     unique_key=("provider", "ticker", "date", "action"),
     analysis_date_col="date",
 )
@@ -263,7 +263,7 @@ SHARADAR_ACTIONS: Final[TableSchema] = TableSchema(
 
 SHARADAR_DAILY: Final[TableSchema] = TableSchema(
     table="sharadar_daily",
-    schema=cast(dict[str, pl.DataType], {
+    schema={
         "provider": pl.Utf8,
         "date": pl.Date,
         "ticker": pl.Utf8,
@@ -276,7 +276,7 @@ SHARADAR_DAILY: Final[TableSchema] = TableSchema(
         "evebitda": pl.Float64,
         "lastupdated": pl.Date,
         "fetched_at": pl.Datetime(time_zone="UTC"),
-    }),
+    },
     unique_key=("provider", "ticker", "date"),
     analysis_date_col="date",
 )
@@ -284,7 +284,7 @@ SHARADAR_DAILY: Final[TableSchema] = TableSchema(
 
 SHARADAR_SP500: Final[TableSchema] = TableSchema(
     table="sharadar_sp500",
-    schema=cast(dict[str, pl.DataType], {
+    schema={
         "provider": pl.Utf8,
         "date": pl.Date,
         "action": pl.Utf8,
@@ -294,7 +294,7 @@ SHARADAR_SP500: Final[TableSchema] = TableSchema(
         "contraname": pl.Utf8,
         "note": pl.Utf8,
         "fetched_at": pl.Datetime(time_zone="UTC"),
-    }),
+    },
     unique_key=("provider", "ticker", "date", "action"),
     analysis_date_col="date",
 )

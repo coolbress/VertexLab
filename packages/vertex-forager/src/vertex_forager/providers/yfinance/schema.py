@@ -23,7 +23,7 @@ Notes:
 """
 from __future__ import annotations
 
-from typing import Final, cast
+from typing import Final
 import polars as pl
 
 from vertex_forager.schema.config import TableSchema
@@ -35,7 +35,7 @@ from vertex_forager.schema.config import TableSchema
 # Info
 YFINANCE_INFO_SCHEMA = TableSchema(
     table="yfinance_info",
-    schema=cast(dict[str, pl.DataType], {
+    schema={
         "provider": pl.Utf8,
         "ticker": pl.Utf8,
         "shortname": pl.Utf8,
@@ -60,14 +60,14 @@ YFINANCE_INFO_SCHEMA = TableSchema(
         "fulltimeemployees": pl.Int64,
         "irwebsite": pl.Utf8,
         "fetched_at": pl.Datetime(time_zone="UTC"),
-    }),
+    },
     unique_key=("provider", "ticker"),
     analysis_date_col=None,
 )
 
 YFINANCE_PRICE_SCHEMA = TableSchema(
     table="yfinance_price",
-    schema=cast(dict[str, pl.DataType], {
+    schema={
         "provider": pl.Utf8,
         "date": pl.Date,
         "open": pl.Float64,
@@ -78,40 +78,40 @@ YFINANCE_PRICE_SCHEMA = TableSchema(
         "volume": pl.Float64,
         "ticker": pl.Utf8,
         "fetched_at": pl.Datetime(time_zone="UTC"),
-    }),
+    },
     unique_key=("provider", "ticker", "date"),
     analysis_date_col="date",
 )
 
 YFINANCE_DIVIDENDS_SCHEMA = TableSchema(
     table="yfinance_dividends",
-    schema=cast(dict[str, pl.DataType], {
+    schema={
         "provider": pl.Utf8,
         "date": pl.Date,
         "dividends": pl.Float64,
         "ticker": pl.Utf8,
         "fetched_at": pl.Datetime(time_zone="UTC"),
-    }),
+    },
     unique_key=("provider", "ticker", "date"),
     analysis_date_col="date",
 )
 
 YFINANCE_SPLITS_SCHEMA = TableSchema(
     table="yfinance_splits",
-    schema=cast(dict[str, pl.DataType], {
+    schema={
         "provider": pl.Utf8,
         "date": pl.Date,
         "stock_splits": pl.Float64,
         "ticker": pl.Utf8,
         "fetched_at": pl.Datetime(time_zone="UTC"),
-    }),
+    },
     unique_key=("provider", "ticker", "date"),
     analysis_date_col="date",
 )
 
 YFINANCE_CALENDAR_SCHEMA = TableSchema(
     table="yfinance_calendar",
-    schema=cast(dict[str, pl.DataType], {
+    schema={
         "provider": pl.Utf8,
         "earnings_date": pl.Date,
         "earnings_average": pl.Float64,
@@ -122,14 +122,14 @@ YFINANCE_CALENDAR_SCHEMA = TableSchema(
         "revenue_high": pl.Int64,
         "ticker": pl.Utf8,
         "fetched_at": pl.Datetime(time_zone="UTC"),
-    }),
+    },
     unique_key=("provider", "ticker", "earnings_date"),
     analysis_date_col="earnings_date",
 )
 
 YFINANCE_RECOMMENDATIONS_SCHEMA = TableSchema(
     table="yfinance_recommendations",
-    schema=cast(dict[str, pl.DataType], {
+    schema={
         "provider": pl.Utf8,
         "period": pl.Utf8,
         "strongbuy": pl.Int64,
@@ -139,7 +139,7 @@ YFINANCE_RECOMMENDATIONS_SCHEMA = TableSchema(
         "strongsell": pl.Int64,
         "ticker": pl.Utf8,
         "fetched_at": pl.Datetime(time_zone="UTC"),
-    }),
+    },
     unique_key=("provider", "ticker", "period"),
     analysis_date_col=None,
 )
@@ -147,7 +147,7 @@ YFINANCE_RECOMMENDATIONS_SCHEMA = TableSchema(
 # News
 YFINANCE_NEWS_SCHEMA = TableSchema(
     table="yfinance_news",
-    schema=cast(dict[str, pl.DataType], {
+    schema={
         "provider": pl.Utf8,
         "ticker": pl.Utf8,
         "id": pl.Utf8,
@@ -157,7 +157,7 @@ YFINANCE_NEWS_SCHEMA = TableSchema(
         "link": pl.Utf8,
         "published_at": pl.Datetime(time_zone="UTC"),
         "fetched_at": pl.Datetime(time_zone="UTC"),
-    }),
+    },
     unique_key=("provider", "ticker", "id", "published_at"),
     analysis_date_col="published_at",
 )
@@ -166,7 +166,7 @@ YFINANCE_NEWS_SCHEMA = TableSchema(
 # Structure: date | ticker | metric | value
 YFINANCE_FINANCIALS_SCHEMA = TableSchema(
     table="yfinance_financials",
-    schema=cast(dict[str, pl.DataType], {
+    schema={
         "date": pl.Date,
         "ticker": pl.Utf8,
         "provider": pl.Utf8,
@@ -174,7 +174,7 @@ YFINANCE_FINANCIALS_SCHEMA = TableSchema(
         "metric": pl.Utf8,
         "value": pl.Float64,
         "fetched_at": pl.Datetime(time_zone="UTC"),
-    }),
+    },
     unique_key=("date", "ticker", "provider", "period", "metric"),
     analysis_date_col="date",
 )
@@ -182,7 +182,7 @@ YFINANCE_FINANCIALS_SCHEMA = TableSchema(
 # For Holders
 YFINANCE_HOLDERS_SCHEMA = TableSchema(
     table="yfinance_holders",
-    schema=cast(dict[str, pl.DataType], {
+    schema={
         "provider": pl.Utf8,
         "holder": pl.Utf8,
         "shares": pl.Float64,
@@ -193,14 +193,14 @@ YFINANCE_HOLDERS_SCHEMA = TableSchema(
         "value": pl.Float64,
         "ticker": pl.Utf8,
         "fetched_at": pl.Datetime(time_zone="UTC"),
-    }),
+    },
     unique_key=("provider", "ticker", "holder", "date_reported"),
     analysis_date_col="date_reported",
 )
 
 YFINANCE_MAJOR_HOLDERS_SCHEMA = TableSchema(
     table="yfinance_major_holders",
-    schema=cast(dict[str, pl.DataType], {
+    schema={
         "provider": pl.Utf8,
         "ticker": pl.Utf8,
         "insiders_percent_held": pl.Float64,
@@ -208,14 +208,14 @@ YFINANCE_MAJOR_HOLDERS_SCHEMA = TableSchema(
         "institutions_float_percent_held": pl.Float64,
         "institutions_percent_held": pl.Float64,
         "fetched_at": pl.Datetime(time_zone="UTC"),
-    }),
+    },
     unique_key=("provider", "ticker"),
     analysis_date_col=None,
 )
 
 YFINANCE_INSIDER_PURCHASES_SCHEMA = TableSchema(
     table="yfinance_insider_purchases",
-    schema=cast(dict[str, pl.DataType], {
+    schema={
         "provider": pl.Utf8,
         "holder": pl.Utf8,
         "shares": pl.Float64,
@@ -223,14 +223,14 @@ YFINANCE_INSIDER_PURCHASES_SCHEMA = TableSchema(
         "insider_purchases_last_6m": pl.Utf8, # Usually text like 'Purchases', 'Sales', 'Net Shares Purchased'
         "ticker": pl.Utf8,
         "fetched_at": pl.Datetime(time_zone="UTC"),
-    }),
+    },
     unique_key=("provider", "ticker", "insider_purchases_last_6m"),
     analysis_date_col=None,
 )
 
 YFINANCE_INSIDER_ROSTER_SCHEMA = TableSchema(
     table="yfinance_insider_roster_holders",
-    schema=cast(dict[str, pl.DataType], {
+    schema={
         "provider": pl.Utf8,
         "ticker": pl.Utf8,
         "name": pl.Utf8,
@@ -241,7 +241,7 @@ YFINANCE_INSIDER_ROSTER_SCHEMA = TableSchema(
         "shares_owned_directly": pl.Int64,
         "position_direct_date": pl.Datetime(time_zone="UTC"),
         "fetched_at": pl.Datetime(time_zone="UTC"),
-    }),
+    },
     unique_key=("provider", "ticker", "name", "position", "latest_transaction_date"),
     analysis_date_col="latest_transaction_date",
 )
