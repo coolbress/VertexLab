@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from typing import Mapping, Any
 from vertex_forager.core.types import JSONValue, PaginationParams, PaginationJobContext, PerSymbolJobContext
+from typing import cast
 
 from vertex_forager.core.config import FetchJob, RequestSpec, HttpMethod
 
 
 def make_pagination_context(
     *,
+    dataset: str,
     meta_key: str = "next_cursor_id",
     cursor_param: str = "qopts.cursor_id",
     max_pages: int | None = 1000,
@@ -16,7 +18,7 @@ def make_pagination_context(
     pagination: PaginationParams = {"cursor_param": cursor_param, "meta_key": meta_key}
     if max_pages is not None:
         pagination["max_pages"] = int(max_pages)
-    return {"pagination": pagination}
+    return {"pagination": pagination, "dataset": dataset}
 
 def build_symbol_context(*, dataset: str, symbol: str) -> PerSymbolJobContext:
     """Standardized builder for per-symbol job context."""
@@ -33,7 +35,7 @@ def pagination_job(
 ) -> FetchJob:
     """Create a pagination-aware FetchJob."""
     spec = RequestSpec(method=HttpMethod.GET, url=url, params=dict(params), auth=auth)
-    return FetchJob(provider=provider, dataset=dataset, symbol=None, spec=spec, context=context)
+    return FetchJob(provider=provider, dataset=dataset, symbol=None, spec=spec, context=cast(Mapping[str, JSONValue], context))
 
 
 def single_symbol_job(
@@ -51,4 +53,20 @@ def single_symbol_job(
         spec = RequestSpec(method=HttpMethod.GET, url=url, params=dict(params))
     else:
         spec = RequestSpec(method=HttpMethod.GET, url=url, params=dict(params), auth=auth)
-    return FetchJob(provider=provider, dataset=dataset, symbol=symbol, spec=spec, context=context or {})
+    
+    # Ensure context has required fields if not provided
+    final_context: PerSymbolJobContext
+    if context is None:
+        final_context = build_symbol_context(dataset=dataset, symbol=symbol)
+    else:
+        # Validate that context has required fields if passed
+        if "dataset" not in context or "symbol" not in context:
+             # Fallback or merge - for safety we rebuild base context and merge extras
+             base = build_symbol_context(dataset=dataset, symbol=symbol)
+             # Cast to dict to merge, then cast back
+             merged = {**base, **context}
+             final_context = cast(PerSymbolJobContext, merged)
+        else:
+             final_context = context
+
+    return FetchJob(provider=provider, dataset=dataset, symbol=symbol, spec=spec, context=cast(Mapping[str, JSONValue], final_context))

@@ -5,6 +5,7 @@ import logging
 import time
 from collections import deque
 from contextlib import asynccontextmanager
+from typing import AsyncGenerator
 
 logger = logging.getLogger("vertex_forager.flow")
 
@@ -199,7 +200,7 @@ class FlowController:
         return int(self._concurrency_limiter.max_limit)
 
     @asynccontextmanager
-    async def throttle(self) -> None:
+    async def throttle(self) -> AsyncGenerator[None, None]:
         """Context manager to acquire both rate limit and concurrency slot."""
         # 1. Acquire Rate Limit (may sleep)
         await self._rate_limiter.acquire()

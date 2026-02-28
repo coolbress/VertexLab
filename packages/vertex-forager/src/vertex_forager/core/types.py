@@ -23,7 +23,7 @@ class SymbolContext(TypedDict, total=False):
 
 class PaginationJobContext(TypedDict, total=False):
     pagination: Required[PaginationParams]
-    dataset: Required[str]
+    dataset: NotRequired[str]
 
 class PerSymbolJobContext(TypedDict, total=False):
     dataset: Required[str]
@@ -62,4 +62,8 @@ YFinanceDataset: TypeAlias = Literal[
     "news",
     "info",
     "fast_info",
+    "dividends",
+    "splits",
+    "recommendations",
+    "actions",
 ]

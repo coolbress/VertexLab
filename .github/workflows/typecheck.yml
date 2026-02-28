@@ -2,9 +2,9 @@ name: Type Check
 
 on:
   push:
-    branches: [ main, "refactor/**", "feature/**" ]
+    branches: [main, "refactor/**", "feature/**"]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   mypy:
@@ -19,9 +19,9 @@ jobs:
           python-version: "3.10"
 
       - name: Install uv
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
 
       - name: Sync dependencies
         run: |

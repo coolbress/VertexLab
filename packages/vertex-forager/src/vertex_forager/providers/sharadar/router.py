@@ -22,6 +22,7 @@ from vertex_forager.routers.jobs import (
     pagination_job,
     single_symbol_job,
     make_pagination_context,
+    build_symbol_context,
 )
 from polars.exceptions import PolarsError
 from vertex_forager.providers.sharadar.schema import (
@@ -184,7 +185,7 @@ class SharadarRouter(BaseRouter):
     # --------------------------------------------------------------------------
 
     async def generate_jobs(
-        self, *, dataset: SharadarDataset, symbols: Sequence[str] | None, **kwargs: object
+        self, *, dataset: str, symbols: Sequence[str] | None, **kwargs: object
     ) -> AsyncIterator[FetchJob]:
         """Generate fetch jobs based on dataset and symbols.
 
@@ -211,8 +212,9 @@ class SharadarRouter(BaseRouter):
             dataset == "sp500" and not symbols
         ):
             # Sharadar API limit: maximum 10,000 rows per response
+            from typing import cast
             per_page = self.MAX_ROWS_PER_REQUEST
-            yield self._build_pagination_job(dataset=dataset, per_page=per_page)
+            yield self._build_pagination_job(dataset=cast(SharadarDataset, dataset), per_page=per_page)
             return
 
         if not symbols:
@@ -248,13 +250,15 @@ class SharadarRouter(BaseRouter):
                 est_rows = self._estimate_ticker_rows(symbol, dataset)
                 
                 if est_rows > max_rows:
-                    yield self._build_per_symbol_job(dataset=dataset, symbol=symbol, dimension=dimension)
+                    from typing import cast
+                    yield self._build_per_symbol_job(dataset=cast(SharadarDataset, dataset), symbol=symbol, dimension=dimension)
                     continue
                 
                 if (current_rows + est_rows > max_rows) or (len(current_batch) >= max_batch_size):
                     if current_batch:
+                        from typing import cast
                         yield self._build_per_symbol_job(
-                            dataset=dataset, 
+                            dataset=cast(SharadarDataset, dataset), 
                             symbol=",".join(current_batch), 
                             dimension=dimension
                         )
@@ -266,8 +270,9 @@ class SharadarRouter(BaseRouter):
                 
             # Flush remaining
             if current_batch:
+                from typing import cast
                 yield self._build_per_symbol_job(
-                    dataset=dataset, 
+                    dataset=cast(SharadarDataset, dataset), 
                     symbol=",".join(current_batch), 
                     dimension=dimension
                 )
@@ -283,8 +288,9 @@ class SharadarRouter(BaseRouter):
                     continue
                 batch_symbol_str = ",".join(chunk)
                 
+                from typing import cast
                 yield self._build_per_symbol_job(
-                    dataset=dataset, symbol=batch_symbol_str, dimension=dimension
+                    dataset=cast(SharadarDataset, dataset), symbol=batch_symbol_str, dimension=dimension
                 )
 
     def parse(self, *, job: FetchJob, payload: bytes) -> ParseResult:
@@ -304,7 +310,7 @@ class SharadarRouter(BaseRouter):
         
         # OPTIMIZATION: Try Polars native JSON parsing first (Release GIL, Zero-Copy)
         frame = pl.DataFrame()
-        meta = {}
+        meta: dict[str, object] = {}
 
         try:
             # pl.read_json is significantly faster than json.loads for large data
@@ -324,7 +330,8 @@ class SharadarRouter(BaseRouter):
                 meta_col = json_df.select(pl.col("meta"))
                 if not meta_col.is_empty():
                     try:
-                        meta = meta_col.item(0, 0) or {}
+                        val = meta_col.item(0, 0)
+                        meta = val if isinstance(val, dict) else {}
                     except (ValueError, TypeError):
                         meta = {}
 
@@ -381,7 +388,7 @@ class SharadarRouter(BaseRouter):
         # Add provider metadata
         frame = self._add_provider_metadata(frame=frame, observed_at=observed_at)
         
-        packets = [
+        packets: list[FramePacket] = [
             FramePacket(
                 provider=self.provider,
                 table=table,
@@ -395,11 +402,14 @@ class SharadarRouter(BaseRouter):
         
         next_jobs = []
         if meta and isinstance(meta, dict):
-            pagination = job.context.get("pagination")
+            from typing import cast
+            pagination = cast(dict[str, object] | None, job.context.get("pagination"))
             if pagination:
-                meta_key = pagination.get("meta_key")
-                cursor_param = pagination.get("cursor_param")
-                next_cursor = meta.get(meta_key) if meta_key else None
+                meta_key_obj = pagination.get("meta_key")
+                cursor_param_obj = pagination.get("cursor_param")
+                meta_key = str(meta_key_obj) if isinstance(meta_key_obj, str) else (meta_key_obj if meta_key_obj is None else str(meta_key_obj))
+                cursor_param = str(cursor_param_obj) if isinstance(cursor_param_obj, str) else (cursor_param_obj if cursor_param_obj is None else str(cursor_param_obj))
+                next_cursor = meta.get(meta_key) if isinstance(meta_key, str) else None
 
                 if (
                     next_cursor
@@ -407,8 +417,10 @@ class SharadarRouter(BaseRouter):
                     and next_cursor != job.spec.params.get(cursor_param)
                 ):
                     new_job = job.model_copy(deep=True)
-                    new_job.spec.params[cursor_param] = next_cursor
-                    next_jobs.append(new_job)
+                    if isinstance(cursor_param, str):
+                        from vertex_forager.core.types import JSONValue
+                        new_job.spec.params[cursor_param] = cast(JSONValue, next_cursor)
+                        next_jobs.append(new_job)
 
         return ParseResult(packets=packets, next_jobs=next_jobs)
 
@@ -494,9 +506,10 @@ class SharadarRouter(BaseRouter):
         
 
         context = make_pagination_context(
-            meta_key=self._PAGINATION_CONTEXT["pagination"]["meta_key"],
-            cursor_param=self._PAGINATION_CONTEXT["pagination"]["cursor_param"],
-            max_pages=self._PAGINATION_CONTEXT["pagination"]["max_pages"],
+            dataset=dataset,
+            meta_key=str(self._PAGINATION_CONTEXT["pagination"]["meta_key"]),
+            cursor_param=str(self._PAGINATION_CONTEXT["pagination"]["cursor_param"]),
+            max_pages=self._PAGINATION_CONTEXT.get("pagination", {}).get("max_pages"),  # type: ignore[arg-type]
         )
         return pagination_job(
             provider=self.provider,
@@ -546,11 +559,17 @@ class SharadarRouter(BaseRouter):
                 params[f"{date_col}.lte"] = self._end_date
 
         # Add pagination context for all datasets that support it
-        context = make_pagination_context(
-            meta_key=self._PAGINATION_CONTEXT["pagination"]["meta_key"],
-            cursor_param=self._PAGINATION_CONTEXT["pagination"]["cursor_param"],
-            max_pages=self._PAGINATION_CONTEXT["pagination"]["max_pages"],
+        page_ctx = make_pagination_context(
+            dataset=dataset,
+            meta_key=str(self._PAGINATION_CONTEXT["pagination"]["meta_key"]),
+            cursor_param=str(self._PAGINATION_CONTEXT["pagination"]["cursor_param"]),
+            max_pages=self._PAGINATION_CONTEXT.get("pagination", {}).get("max_pages"),  # type: ignore[arg-type]
         )
+        
+        per_symbol_ctx = build_symbol_context(dataset=dataset, symbol=clean_symbol)
+        if "pagination" in page_ctx:
+            per_symbol_ctx["pagination"] = page_ctx["pagination"]
+            
         return single_symbol_job(
             provider=self.provider,
             dataset=dataset,
@@ -558,7 +577,7 @@ class SharadarRouter(BaseRouter):
             url=self._dataset_url(dataset),
             params=params,
             auth=self._auth(),
-            context=context,
+            context=per_symbol_ctx,
         )
         
     # ------ Rows per ticker: convert days→rows by dataset characteristics ------

@@ -14,25 +14,31 @@ from vertex_forager.core.registries import (
 
 def _register_sharadar() -> None:
     from vertex_forager.providers.sharadar.client import SharadarClient
+    from typing import Any
+    def _sharadar_factory(*, api_key: str | None = None, rate_limit: int, **kwargs: Any) -> BaseClient:
+        return SharadarClient(api_key=api_key or "", rate_limit=rate_limit, **kwargs)
 
     # Register known providers
     client_registry.register(
         "sharadar",
         ClientRegistration(
             env_api_key="SHARADAR_API_KEY",
-            factory=SharadarClient,
+            factory=_sharadar_factory,
         ),
     )
 
 
 def _register_yfinance() -> None:
     from vertex_forager.providers.yfinance.client import YFinanceClient
+    from typing import Any
+    def _yfinance_factory(*, api_key: str | None = None, rate_limit: int, **kwargs: Any) -> BaseClient:
+        return YFinanceClient(api_key=api_key or "", rate_limit=rate_limit, **kwargs)
 
     client_registry.register(
         "yfinance",
         ClientRegistration(
             env_api_key=None,
-            factory=YFinanceClient,
+            factory=_yfinance_factory,
         ),
     )
 

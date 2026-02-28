@@ -4,13 +4,14 @@ import psutil
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import Enum
-from typing import Any, Generic, TypeVar
+from typing import Any
 from typing import Literal
 
 import polars as pl
 from pydantic import BaseModel, Field
 from pydantic import field_validator
 from vertex_forager.core.types import JSONValue
+from collections.abc import Mapping
 
 
 class RetryConfig(BaseModel):
@@ -97,9 +98,7 @@ class RequestSpec(BaseModel):
         return v
 
 
-T = TypeVar("T")
-
-class FetchJob(BaseModel, Generic[T]):
+class FetchJob(BaseModel):
     """Unit of work for the fetch pipeline.
 
     Args:
@@ -114,10 +113,10 @@ class FetchJob(BaseModel, Generic[T]):
     dataset: str
     symbol: str | None = None
     spec: RequestSpec
-    context: dict[str, JSONValue] = Field(default_factory=dict)
+    context: Mapping[str, JSONValue] = Field(default_factory=dict)
 
 
-class FramePacket(BaseModel, Generic[T]):
+class FramePacket(BaseModel):
     """Polars frame packet passed from provider to sink.
 
     Args:
@@ -134,7 +133,7 @@ class FramePacket(BaseModel, Generic[T]):
     frame: pl.DataFrame
     observed_at: datetime
     partition_date: date | None = None
-    context: dict[str, JSONValue] = Field(default_factory=dict)
+    context: Mapping[str, JSONValue] = Field(default_factory=dict)
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -197,7 +196,7 @@ class EngineConfig(BaseModel):
         except (ValueError, AttributeError, ImportError):
             return 500
 
-    def validate(self) -> None:
+    def assert_valid(self) -> None:
         """Validate configuration values.
 
         Raises:

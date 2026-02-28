@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
+import polars as pl
 
 from pydantic import BaseModel, Field
 
@@ -127,3 +128,10 @@ class BaseWriter(ABC):
         Ensures resources are closed even if an error occurs.
         """
         await self.close()
+
+    def collect_table(self, table_name: str, sort_cols: list[str] | None = None) -> pl.DataFrame:
+        """
+        Collect table data in memory for in-memory writers.
+        Default implementation is not supported for non-memory writers.
+        """
+        raise NotImplementedError("collect_table is only supported by in-memory writers")

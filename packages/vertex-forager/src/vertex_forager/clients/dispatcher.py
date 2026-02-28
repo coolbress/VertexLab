@@ -9,8 +9,9 @@ from vertex_forager.core.config import RunResult
 from vertex_forager.routers.base import BaseRouter
 from vertex_forager.schema.mapper import SchemaMapper
 from vertex_forager.writers.base import BaseWriter
-T = TypeVar("T")
+from vertex_forager.core.types import JSONValue
 
+T = TypeVar("T", bound=str)
 
 async def run_pipeline_for(
     *,
@@ -21,7 +22,7 @@ async def run_pipeline_for(
     writer: BaseWriter,
     mapper: SchemaMapper,
     on_progress: Callable[..., None] | None = None,
-    **kwargs: object,
+    **kwargs: dict[str, JSONValue],
 ) -> RunResult:
     """Execute the VertexForager pipeline using the provided client context.
     
@@ -29,7 +30,7 @@ async def run_pipeline_for(
     satisfy DIP and improve testability.
     """
     # Import VertexForager via base to allow test patching on vertex_forager.clients.base.VertexForager
-    from vertex_forager.clients.base import VertexForager  # type: ignore
+    from vertex_forager.clients.base import VertexForager
     async with client._http_client():
         http = HttpExecutor(client=client)
         pipeline = VertexForager(

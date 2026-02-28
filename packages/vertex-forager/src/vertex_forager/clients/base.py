@@ -6,7 +6,7 @@ import asyncio
 from contextlib import asynccontextmanager, AsyncExitStack, nullcontext
 from functools import partial
 from pathlib import Path
-from typing import Any, Callable, AsyncGenerator, TypeVar
+from typing import Any, Callable, AsyncGenerator, TypeVar, Generic
 
 import httpx
 import warnings
@@ -24,15 +24,16 @@ from vertex_forager.schema.registry import get_table_schema
 from vertex_forager.writers.base import BaseWriter
 from vertex_forager.writers import create_writer
 from vertex_forager.utils import Spinner, create_pbar_updater
+from vertex_forager.core.types import JSONValue
 HttpExecutor = _HttpExecutor
 VertexForager = _VertexForager
 
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar("T")
+T = TypeVar("T", bound=str)
 
-class BaseClient(ABC):
+class BaseClient(ABC, Generic[T]):
     """
     Vendor-agnostic base client abstraction for the Vertex Forager pipeline.
 
@@ -175,7 +176,7 @@ class BaseClient(ABC):
         writer: BaseWriter,
         mapper: SchemaMapper,
         on_progress: Callable[..., None] | None = None,
-        **kwargs: object,
+        **kwargs: dict[str, JSONValue],
     ) -> RunResult:
         """
         Run the VertexForager pipeline for the given router, dataset, and symbols.

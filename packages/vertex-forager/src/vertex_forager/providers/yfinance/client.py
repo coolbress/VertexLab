@@ -212,8 +212,9 @@ class YFinanceClient(BaseClient):
         if kind == "earnings" and period == "quarterly":
             raise InputError("quarterly_earnings is deprecated in yfinance; use income_stmt with period='quarterly'.")
         dataset = f"quarterly_{target_kind}" if period == "quarterly" else target_kind
+        from typing import cast
         return await self._dispatch_fetch(
-            dataset=dataset,
+            dataset=cast(YFinanceDataset, dataset),
             tickers=tickers,
             connect_db=connect_db,
             desc=f"Fetching YFinance {dataset}",
@@ -255,8 +256,9 @@ class YFinanceClient(BaseClient):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
+        from typing import cast
         return await self._dispatch_fetch(
-            dataset=kind,
+            dataset=cast(YFinanceDataset, kind),
             tickers=tickers,
             connect_db=connect_db,
             desc=f"Fetching YFinance {kind}",
@@ -297,8 +299,9 @@ class YFinanceClient(BaseClient):
             WriterError: If persistence fails.
         """
         dataset = f"{kind}_holders"
+        from typing import cast
         return await self._dispatch_fetch(
-            dataset=dataset,
+            dataset=cast(YFinanceDataset, dataset),
             tickers=tickers,
             connect_db=connect_db,
             desc=f"Fetching YFinance {dataset}",

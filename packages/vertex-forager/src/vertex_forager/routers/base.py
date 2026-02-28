@@ -54,7 +54,7 @@ class BaseRouter(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def generate_jobs(
+    def generate_jobs(
         self, *, dataset: str, symbols: Sequence[str] | None, **kwargs: object
     ) -> AsyncIterator[FetchJob]:
         """Generate provider-specific HTTP fetch jobs.

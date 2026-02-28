@@ -1,40 +1,36 @@
 from __future__ import annotations
 
-from typing import Protocol, Generic, TypeVar, Sequence, AsyncIterator, Callable, TYPE_CHECKING
-from datetime import datetime
-import polars as pl
+from typing import Protocol, TypeVar, Generic, Sequence, AsyncIterator, Callable, TYPE_CHECKING
 
 from vertex_forager.core.config import FetchJob, ParseResult
 if TYPE_CHECKING:
     from vertex_forager.writers.base import BaseWriter
     from vertex_forager.schema.mapper import SchemaMapper
 
-T = TypeVar("T")
+
+T = TypeVar("T", bound=str)
+T_contra = TypeVar("T_contra", bound=str, contravariant=True)
 
 
-class IRouter(Protocol, Generic[T]):
+class IRouter(Protocol, Generic[T_contra]):
     """Provider-agnostic Router protocol."""
 
     @property
     def provider(self) -> str: ...
 
-    async def generate_jobs(self, *, dataset: str, symbols: Sequence[str] | None, **kwargs: object) -> AsyncIterator[FetchJob[T]]: ...
+    async def generate_jobs(self, *, dataset: T_contra, symbols: Sequence[str] | None, **kwargs: object) -> AsyncIterator[FetchJob]: ...
 
-    def parse(self, *, job: FetchJob[T], payload: bytes) -> ParseResult: ...
-
-    # Common helpers (optional)
-    def _add_provider_metadata(self, *, frame: pl.DataFrame, observed_at: datetime) -> pl.DataFrame: ...
-    def _check_empty_response(self, *, payload: bytes | None = None, frame: pl.DataFrame | None = None) -> ParseResult | None: ...
+    def parse(self, *, job: FetchJob, payload: bytes) -> ParseResult: ...
 
 
-class IClient(Protocol):
+class IClient(Protocol, Generic[T]):
     """Client protocol for running the pipeline."""
 
     async def run_pipeline(
         self,
         *,
         router: IRouter[T],
-        dataset: str,
+        dataset: T,
         symbols: list[str] | None,
         writer: "BaseWriter",
         mapper: "SchemaMapper",

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from typing import Mapping
-from vertex_forager.core.types import JSONValue
+from typing import Mapping, TypeVar
 
+T = TypeVar("T")
 
-def filter_reserved_kwargs(kwargs: Mapping[str, JSONValue], reserved: set[str]) -> dict[str, JSONValue]:
+def filter_reserved_kwargs(kwargs: Mapping[str, T], reserved: set[str]) -> dict[str, T]:
     """Filter out reserved pipeline kwargs that are passed explicitly.
     
     Args:

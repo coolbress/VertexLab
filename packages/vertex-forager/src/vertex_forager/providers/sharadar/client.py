@@ -23,6 +23,7 @@ from vertex_forager.utils import (
     validate_tickers,
 )
 from vertex_forager.providers.sharadar.schema import DATASET_TABLE
+from vertex_forager.core.types import JSONValue
 from vertex_forager.core.types import SharadarDataset
 from vertex_forager.exceptions import InputError
 
@@ -125,7 +126,7 @@ class SharadarClient(BaseClient):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        return await self._get_ticker_info_impl(tickers=tickers, connect_db=connect_db, **kwargs)
+        return await self._get_ticker_info_impl(tickers=tickers, connect_db=connect_db, show_spinner=True, **kwargs)
 
     @jupyter_safe
     async def get_sp500_history(
@@ -566,12 +567,12 @@ class SharadarClient(BaseClient):
             )
         )
 
-        router_kwargs = {
+        router_kwargs: dict[str, JSONValue] = {
             "start_date": config.start_date,
             "end_date": config.end_date,
         }
         reserved = {"router", "dataset", "symbols", "writer", "mapper", "on_progress"}
-        pipeline_kwargs = {k: v for k, v in dict(config.extra).items() if k not in reserved}
+        pipeline_kwargs: dict[str, JSONValue] = {k: v for k, v in dict(config.extra).items() if k not in reserved}
 
         result_obj = await self._run_sharadar_pipeline(
             config=config,
@@ -600,12 +601,12 @@ class SharadarClient(BaseClient):
             pl.DataFrame for in-memory mode, RunResult for database mode.
         """
 
-        router_kwargs = {
+        router_kwargs: dict[str, JSONValue] = {
             "start_date": config.start_date,
             "end_date": config.end_date,
         }
         reserved = {"router", "dataset", "symbols", "writer", "mapper", "on_progress"}
-        pipeline_kwargs = {k: v for k, v in dict(config.extra).items() if k not in reserved}
+        pipeline_kwargs: dict[str, JSONValue] = {k: v for k, v in dict(config.extra).items() if k not in reserved}
 
         result_obj = await self._run_sharadar_pipeline(
             config=config,
@@ -620,8 +621,8 @@ class SharadarClient(BaseClient):
         *,
         config: "FetchConfig",
         total_items: int | None,
-        router_kwargs: dict[str, object],
-        pipeline_kwargs: dict[str, object],
+        router_kwargs: dict[str, JSONValue],
+        pipeline_kwargs: dict[str, JSONValue],
     ) -> pl.DataFrame | RunResult:
         pbar, pbar_updater = self.create_progress_tracker(
             total_items=total_items,
@@ -631,12 +632,14 @@ class SharadarClient(BaseClient):
         )
         try:
             async with self.managed_writer(config.connect_db, show_progress=config.show_progress) as writer:
+                from typing import cast
                 router = create_router(
                     "sharadar",
-                    api_key=self.api_key,  # type: ignore[arg-type]
+                    api_key=cast(str, self.api_key),
                     config=self._config,
+                    start_date=config.start_date,
+                    end_date=config.end_date,
                     ticker_metadata=self._metadata_cache,
-                    **router_kwargs,
                 )
 
                 spinner_ctx = Spinner(config.desc, persist=True) if (config.show_progress and not config.use_progress_bar) else nullcontext()
@@ -648,7 +651,7 @@ class SharadarClient(BaseClient):
                         writer=writer,
                         mapper=self._mapper,
                         on_progress=pbar_updater,
-                        **pipeline_kwargs,
+                        **pipeline_kwargs,  # type: ignore[arg-type]
                     )
 
                 result_obj = await self.collect_results(
