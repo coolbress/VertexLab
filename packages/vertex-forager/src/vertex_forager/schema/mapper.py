@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING
 
 import polars as pl
 
@@ -73,7 +73,7 @@ class SchemaMapper:
         return packet.model_copy(update={"frame": frame})
 
     def _cast_to_schema(
-        self, frame: pl.DataFrame, schema: dict[str, Any]
+        self, frame: pl.DataFrame, schema: dict[str, pl.DataType | type[pl.DataType]]
     ) -> pl.DataFrame:
         """
         Internal helper to align a DataFrame with the target schema.
@@ -90,12 +90,10 @@ class SchemaMapper:
         for name, dtype in schema.items():
             if name not in cols:
                 # Missing column: Create as null
-                dtype_like = cast(type[Any] | pl.DataType, dtype)
-                exprs.append(pl.lit(None).cast(dtype_like).alias(name))
+                exprs.append(pl.lit(None).cast(dtype).alias(name))
             else:
                 # Existing column: Cast
-                dtype_like = cast(type[Any] | pl.DataType, dtype)
-                exprs.append(pl.col(name).cast(dtype_like, strict=False).alias(name))
+                exprs.append(pl.col(name).cast(dtype, strict=False).alias(name))
 
         # 2. Apply Projections
         # Note: We do NOT filter out extra columns. They are preserved.

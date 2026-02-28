@@ -306,7 +306,9 @@ class TestSharadarRouterUnit:
     ) -> None:
         """Test that parse method creates next_jobs when pagination context exists and next_cursor is returned."""
         # Arrange
-        context = {
+        from collections.abc import Mapping
+        from vertex_forager.core.types import JSONValue
+        context: Mapping[str, JSONValue] = {
             "pagination": {
                 "cursor_param": "qopts.cursor_id",
                 "meta_key": "next_cursor_id",

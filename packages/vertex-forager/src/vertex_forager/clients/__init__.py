@@ -10,11 +10,11 @@ from vertex_forager.core.registries import (
     clients as client_registry,
     ClientRegistration,
 )
+from typing import Any
 
 
 def _register_sharadar() -> None:
     from vertex_forager.providers.sharadar.client import SharadarClient
-    from typing import Any
     def _sharadar_factory(*, api_key: str | None = None, rate_limit: int, **kwargs: Any) -> BaseClient:
         return SharadarClient(api_key=api_key or "", rate_limit=rate_limit, **kwargs)
 
@@ -30,7 +30,6 @@ def _register_sharadar() -> None:
 
 def _register_yfinance() -> None:
     from vertex_forager.providers.yfinance.client import YFinanceClient
-    from typing import Any
     def _yfinance_factory(*, api_key: str | None = None, rate_limit: int, **kwargs: Any) -> BaseClient:
         return YFinanceClient(api_key=api_key or "", rate_limit=rate_limit, **kwargs)
 
