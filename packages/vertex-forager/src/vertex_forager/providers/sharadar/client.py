@@ -574,6 +574,14 @@ class SharadarClient(BaseClient[SharadarDataset]):
         reserved = {"router", "dataset", "symbols", "writer", "mapper", "on_progress"}
         pipeline_kwargs: dict[str, JSONValue] = {k: v for k, v in dict(config.extra).items() if k not in reserved}
 
+        # Prepare kwargs for pipeline
+        # We need to explicitly type hint that we are unpacking JSONValue items, 
+        # not a single dict[str, JSONValue]. 
+        # Since run_pipeline accepts **kwargs: JSONValue, unpacking a dict[str, JSONValue] 
+        # works at runtime, but mypy might need help if it thinks we are passing the dict as a single argument.
+        # Actually, unpacking **pipeline_kwargs where pipeline_kwargs is dict[str, JSONValue] 
+        # matches **kwargs: JSONValue.
+        
         result_obj = await self._run_sharadar_pipeline(
             config=config,
             total_items=total_items,
@@ -651,7 +659,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
                         writer=writer,
                         mapper=self._mapper,
                         on_progress=pbar_updater,
-                        **pipeline_kwargs,  # type: ignore[arg-type]
+                        **pipeline_kwargs,
                     )
 
                 result_obj = await self.collect_results(

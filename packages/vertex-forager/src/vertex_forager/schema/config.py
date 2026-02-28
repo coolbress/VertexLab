@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import polars as pl
 from dataclasses import dataclass
 from typing import Any
 
@@ -19,7 +20,7 @@ class TableSchema:
     """
 
     table: str
-    schema: dict[str, Any]
+    schema: dict[str, pl.DataType]
     unique_key: tuple[str, ...] = ()
     analysis_date_col: str | None = None
     flexible_schema: bool = False

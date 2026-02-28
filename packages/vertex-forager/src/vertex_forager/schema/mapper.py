@@ -73,7 +73,7 @@ class SchemaMapper:
         return packet.model_copy(update={"frame": frame})
 
     def _cast_to_schema(
-        self, frame: pl.DataFrame, schema: dict[str, object]
+        self, frame: pl.DataFrame, schema: dict[str, Any]
     ) -> pl.DataFrame:
         """
         Internal helper to align a DataFrame with the target schema.

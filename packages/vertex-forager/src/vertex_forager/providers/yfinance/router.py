@@ -23,7 +23,7 @@ from vertex_forager.routers.errors import raise_yfinance_parse_error
 
 logger = logging.getLogger("vertex_forager.providers.yfinance.router")
 
-class YFinanceRouter(BaseRouter):
+class YFinanceRouter(BaseRouter[YFinanceDataset]):
     """Router for Yahoo Finance datasets (via yfinance).
     
     Summary:
@@ -108,7 +108,7 @@ class YFinanceRouter(BaseRouter):
         return self._rate_limit
     
     async def generate_jobs(
-        self, *, dataset: str, symbols: Sequence[str] | None, **kwargs: object
+        self, *, dataset: YFinanceDataset, symbols: Sequence[str] | None, **kwargs: object
     ) -> AsyncIterator[FetchJob]:
         """Generate fetch jobs.
         
@@ -163,9 +163,8 @@ class YFinanceRouter(BaseRouter):
             if s not in seen:
                 seen.add(s)
                 unique_cleaned.append(s)
-        from typing import cast
         for clean in unique_cleaned:
-            yield self._build_single_symbol_job(symbol=clean, dataset=cast(YFinanceDataset, dataset))
+            yield self._build_single_symbol_job(symbol=clean, dataset=dataset)
 
     def parse(self, *, job: FetchJob, payload: bytes) -> ParseResult:
         """Parse raw pickled payload into structured packets.
@@ -559,8 +558,7 @@ class YFinanceRouter(BaseRouter):
             return (
                 expr
                 .str.replace("Z", "+00:00")
-                .str.to_datetime(format="%Y-%m-%dT%H:%M:%S+00:00", strict=False)
-                .dt.replace_time_zone("UTC")
+                .str.to_datetime(format="%Y-%m-%dT%H:%M:%S+00:00", strict=False, time_zone="UTC")
             )
 
         cols = [

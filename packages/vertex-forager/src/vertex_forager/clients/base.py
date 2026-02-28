@@ -176,7 +176,7 @@ class BaseClient(ABC, Generic[T]):
         writer: BaseWriter,
         mapper: SchemaMapper,
         on_progress: Callable[..., None] | None = None,
-        **kwargs: dict[str, JSONValue],
+        **kwargs: JSONValue,
     ) -> RunResult:
         """
         Run the VertexForager pipeline for the given router, dataset, and symbols.

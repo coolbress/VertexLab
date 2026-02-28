@@ -10,12 +10,17 @@ from datetime import date, datetime, timezone
 import polars as pl
 from vertex_forager.utils import mask_secret
 
+from typing import cast
+from vertex_forager.core.types import SharadarDataset, JSONValue, PaginationJobContext, PerSymbolJobContext
+
 from vertex_forager.core.config import (
     FetchJob,
     FramePacket,
-    ParseResult,
     RequestAuth,
+    RequestSpec,
+    HttpMethod,
 )
+from vertex_forager.core.contracts import ParseResult
 from vertex_forager.routers.base import BaseRouter
 from vertex_forager.routers.errors import raise_quandl_error
 from vertex_forager.routers.jobs import (
@@ -38,7 +43,7 @@ from vertex_forager.core.types import SharadarDataset
 logger = logging.getLogger("vertex_forager.providers.sharadar.router")
 
 
-class SharadarRouter(BaseRouter):
+class SharadarRouter(BaseRouter[SharadarDataset]):
     """Data Router implementation for Sharadar (Nasdaq Data Link).
 
     **Request Characteristics:**
@@ -185,7 +190,7 @@ class SharadarRouter(BaseRouter):
     # --------------------------------------------------------------------------
 
     async def generate_jobs(
-        self, *, dataset: str, symbols: Sequence[str] | None, **kwargs: object
+        self, *, dataset: SharadarDataset, symbols: Sequence[str] | None, **kwargs: object
     ) -> AsyncIterator[FetchJob]:
         """Generate fetch jobs based on dataset and symbols.
 
@@ -214,7 +219,7 @@ class SharadarRouter(BaseRouter):
             # Sharadar API limit: maximum 10,000 rows per response
             from typing import cast
             per_page = self.MAX_ROWS_PER_REQUEST
-            yield self._build_pagination_job(dataset=cast(SharadarDataset, dataset), per_page=per_page)
+            yield self._build_pagination_job(dataset=dataset, per_page=per_page)
             return
 
         if not symbols:
@@ -250,15 +255,13 @@ class SharadarRouter(BaseRouter):
                 est_rows = self._estimate_ticker_rows(symbol, dataset)
                 
                 if est_rows > max_rows:
-                    from typing import cast
-                    yield self._build_per_symbol_job(dataset=cast(SharadarDataset, dataset), symbol=symbol, dimension=dimension)
+                    yield self._build_per_symbol_job(dataset=dataset, symbol=symbol, dimension=dimension)
                     continue
                 
                 if (current_rows + est_rows > max_rows) or (len(current_batch) >= max_batch_size):
                     if current_batch:
-                        from typing import cast
                         yield self._build_per_symbol_job(
-                            dataset=cast(SharadarDataset, dataset), 
+                            dataset=dataset, 
                             symbol=",".join(current_batch), 
                             dimension=dimension
                         )
@@ -270,9 +273,8 @@ class SharadarRouter(BaseRouter):
                 
             # Flush remaining
             if current_batch:
-                from typing import cast
                 yield self._build_per_symbol_job(
-                    dataset=cast(SharadarDataset, dataset), 
+                    dataset=dataset, 
                     symbol=",".join(current_batch), 
                     dimension=dimension
                 )
@@ -288,9 +290,8 @@ class SharadarRouter(BaseRouter):
                     continue
                 batch_symbol_str = ",".join(chunk)
                 
-                from typing import cast
                 yield self._build_per_symbol_job(
-                    dataset=cast(SharadarDataset, dataset), symbol=batch_symbol_str, dimension=dimension
+                    dataset=dataset, symbol=batch_symbol_str, dimension=dimension
                 )
 
     def parse(self, *, job: FetchJob, payload: bytes) -> ParseResult:

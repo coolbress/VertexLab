@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Sequence
 from datetime import datetime
+from typing import TypeVar, Generic
 
 import polars as pl
 
@@ -14,8 +15,9 @@ from vertex_forager.routers.transforms import (
     normalize_columns,
 )
 
+T = TypeVar("T", bound=str)
 
-class BaseRouter(ABC):
+class BaseRouter(ABC, Generic[T]):
     """
     Vendor-agnostic base router abstraction for the Vertex Forager pipeline.
 
@@ -55,7 +57,7 @@ class BaseRouter(ABC):
 
     @abstractmethod
     def generate_jobs(
-        self, *, dataset: str, symbols: Sequence[str] | None, **kwargs: object
+        self, *, dataset: T, symbols: Sequence[str] | None, **kwargs: object
     ) -> AsyncIterator[FetchJob]:
         """Generate provider-specific HTTP fetch jobs.
         

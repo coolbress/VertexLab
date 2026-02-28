@@ -61,7 +61,7 @@ InMemoryBufferWriterType: type | None
 try:
     import vertex_forager.writers.memory as _mem_writer
     InMemoryBufferWriterType = _mem_writer.InMemoryBufferWriter
-except Exception:
+except (ImportError, ModuleNotFoundError):
     InMemoryBufferWriterType = None
 
 logger = logging.getLogger("vertex_forager.debug")

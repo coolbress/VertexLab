@@ -21,7 +21,7 @@ async def run_pipeline_for(
     writer: BaseWriter,
     mapper: SchemaMapper,
     on_progress: Callable[..., None] | None = None,
-    **kwargs: dict[str, JSONValue],
+    **kwargs: JSONValue,
 ) -> RunResult:
     """Execute the VertexForager pipeline using the provided client context.
     

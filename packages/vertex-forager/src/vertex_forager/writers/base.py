@@ -132,6 +132,15 @@ class BaseWriter(ABC):
     def collect_table(self, table_name: str, sort_cols: list[str] | None = None) -> pl.DataFrame:
         """
         Collect table data in memory for in-memory writers.
-        Default implementation is not supported for non-memory writers.
+
+        Args:
+            table_name (str): The name of the table to collect.
+            sort_cols (list[str] | None): Optional list of columns to sort by.
+
+        Returns:
+            pl.DataFrame: The collected DataFrame.
+
+        Raises:
+            NotImplementedError: If the writer does not support in-memory collection.
         """
         raise NotImplementedError("collect_table is only supported by in-memory writers")

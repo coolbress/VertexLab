@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Protocol, TypeVar, Generic, Sequence, AsyncIterator, Callable, TYPE_CHECKING, Union
 from vertex_forager.core.types import SharadarDataset, YFinanceDataset
 
-from vertex_forager.core.config import FetchJob, ParseResult
+from vertex_forager.core.config import FetchJob, ParseResult, RunResult
 if TYPE_CHECKING:
     from vertex_forager.writers.base import BaseWriter
     from vertex_forager.schema.mapper import SchemaMapper
@@ -19,7 +19,7 @@ class IRouter(Protocol, Generic[T_contra]):
     @property
     def provider(self) -> str: ...
 
-    async def generate_jobs(self, *, dataset: T_contra, symbols: Sequence[str] | None, **kwargs: object) -> AsyncIterator[FetchJob]: ...
+    def generate_jobs(self, *, dataset: T_contra, symbols: Sequence[str] | None, **kwargs: object) -> AsyncIterator[FetchJob]: ...
 
     def parse(self, *, job: FetchJob, payload: bytes) -> ParseResult: ...
 
@@ -37,4 +37,4 @@ class IClient(Protocol, Generic[T]):
         mapper: "SchemaMapper",
         on_progress: Callable[..., None] | None = None,
         **kwargs: object,
-    ): ...
+    ) -> RunResult: ...
