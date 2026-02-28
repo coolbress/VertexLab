@@ -11,6 +11,7 @@ import polars as pl
 from pydantic import BaseModel, Field
 from pydantic import field_validator
 from vertex_forager.core.types import JSONValue
+from vertex_forager.constants import FLUSH_THRESHOLD_ROWS
 from collections.abc import Mapping
 
 
@@ -162,7 +163,7 @@ class EngineConfig(BaseModel):
     retry: RetryConfig = Field(default_factory=RetryConfig)
 
     # 3. Advanced Tuning (Internal Defaults)
-    flush_threshold_rows: int = 500_000  # ~40MB buffer
+    flush_threshold_rows: int = FLUSH_THRESHOLD_ROWS
 
     @property
     def fetch_concurrency(self) -> int | None:

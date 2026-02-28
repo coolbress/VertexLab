@@ -8,6 +8,12 @@ import httpx
 import yfinance as yf
 from vertex_forager.core.types import JSONValue
 from vertex_forager.core.config import RequestSpec
+from vertex_forager.constants import (
+    HTTP_TIMEOUT_S,
+    HTTP_MAX_KEEPALIVE_CONNECTIONS,
+    HTTP_MAX_CONNECTIONS,
+    HTTP_USER_AGENT,
+)
 
 
 logger = logging.getLogger("vertex_forager.core.http")
@@ -160,7 +166,10 @@ def default_async_client() -> httpx.AsyncClient:
     - Connection Pool: 200 max connections, 100 keep-alive (reduced handshake overhead)
     """
     return httpx.AsyncClient(
-        headers={"User-Agent": "vertex-forager"},
-        timeout=httpx.Timeout(60.0),
-        limits=httpx.Limits(max_keepalive_connections=100, max_connections=200),
+        headers={"User-Agent": HTTP_USER_AGENT},
+        timeout=httpx.Timeout(HTTP_TIMEOUT_S),
+        limits=httpx.Limits(
+            max_keepalive_connections=HTTP_MAX_KEEPALIVE_CONNECTIONS,
+            max_connections=HTTP_MAX_CONNECTIONS,
+        ),
     )

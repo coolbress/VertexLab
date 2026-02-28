@@ -34,6 +34,7 @@ from collections import defaultdict
 import polars as pl
 from polars.exceptions import ComputeError
 from vertex_forager.exceptions import ValidationError, PrimaryKeyMissingError, PrimaryKeyNullError
+from vertex_forager.constants import FLUSH_THRESHOLD_ROWS as DEFAULT_FLUSH_THRESHOLD_ROWS
 
 try:
     import duckdb as _duckdb
@@ -95,7 +96,7 @@ class VertexForager:
 
     # Configurable flush threshold
     # Increased to 500k to allow better batching for large packets (125k rows each)
-    FLUSH_THRESHOLD_ROWS = 500_000
+    FLUSH_THRESHOLD_ROWS = DEFAULT_FLUSH_THRESHOLD_ROWS
 
     # Priority Constants
     PRIORITY_PAGINATION = 0  # Highest priority for pagination/next jobs

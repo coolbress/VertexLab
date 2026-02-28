@@ -12,6 +12,16 @@ from vertex_forager.utils import mask_secret
 
 from typing import cast, TYPE_CHECKING
 from vertex_forager.core.types import SharadarDataset, JSONValue
+from vertex_forager.providers.sharadar.constants import (
+    MAX_ROWS_PER_REQUEST,
+    DEFAULT_BATCH_SIZE,
+    MIN_BATCH_SIZE,
+    TRADING_DAYS_RATIO,
+    QUARTERLY_DAYS_RATIO,
+    PAGINATION_META_KEY,
+    PAGINATION_CURSOR_PARAM,
+    MAX_PAGES,
+)
 if TYPE_CHECKING:
     from vertex_forager.core.types import PerSymbolJobContext
 
@@ -79,21 +89,21 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
 
     _PAGINATION_CONTEXT = {
         "pagination": {
-            "cursor_param": "qopts.cursor_id",
-            "meta_key": "next_cursor_id",
-            "max_pages": 1000,
+            "cursor_param": PAGINATION_CURSOR_PARAM,
+            "meta_key": PAGINATION_META_KEY,
+            "max_pages": MAX_PAGES,
         }
     }
-    PAGINATION_META_KEY: Final[str] = "next_cursor_id"
-    PAGINATION_CURSOR_PARAM: Final[str] = "qopts.cursor_id"
-    MAX_PAGES: Final[int] = 1000
+    PAGINATION_META_KEY: Final[str] = PAGINATION_META_KEY
+    PAGINATION_CURSOR_PARAM: Final[str] = PAGINATION_CURSOR_PARAM
+    MAX_PAGES: Final[int] = MAX_PAGES
 
     # Constants for batch calculation and API limits
-    MAX_ROWS_PER_REQUEST: Final[int] = 10000
-    DEFAULT_BATCH_SIZE: Final[int] = 100
-    MIN_BATCH_SIZE: Final[int] = 1
-    TRADING_DAYS_RATIO: Final[float] = 0.7  # ~252 trading days per year (252/365)
-    QUARTERLY_DAYS_RATIO: Final[float] = 1/90  # ~4 quarters per year
+    MAX_ROWS_PER_REQUEST: Final[int] = MAX_ROWS_PER_REQUEST
+    DEFAULT_BATCH_SIZE: Final[int] = DEFAULT_BATCH_SIZE
+    MIN_BATCH_SIZE: Final[int] = MIN_BATCH_SIZE
+    TRADING_DAYS_RATIO: Final[float] = TRADING_DAYS_RATIO
+    QUARTERLY_DAYS_RATIO: Final[float] = QUARTERLY_DAYS_RATIO
 
     def __init__(
         self,

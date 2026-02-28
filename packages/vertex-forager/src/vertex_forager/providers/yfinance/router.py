@@ -5,6 +5,7 @@ import pickle
 from collections.abc import AsyncIterator, Sequence
 from datetime import date, datetime, timezone
 from typing import Any, Final
+from vertex_forager.providers.yfinance.constants import PRICE_BATCH_SIZE, THREADS_THRESHOLD
 
 import pandas as pd
 import polars as pl
@@ -51,9 +52,8 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
     """
     flexible_schema: bool = True
 
-    # Constants for batching and processing
-    PRICE_BATCH_SIZE: Final[int] = 250
-    THREADS_THRESHOLD: Final[int] = 50
+    PRICE_BATCH_SIZE: Final[int] = PRICE_BATCH_SIZE
+    THREADS_THRESHOLD: Final[int] = THREADS_THRESHOLD
     
     def __init__(
         self,

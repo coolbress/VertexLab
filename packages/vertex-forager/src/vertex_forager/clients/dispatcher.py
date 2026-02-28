@@ -30,6 +30,7 @@ async def run_pipeline_for(
     """
     # Import VertexForager via base to allow test patching on vertex_forager.clients.base.VertexForager
     from vertex_forager.clients.base import VertexForager
+    from vertex_forager.constants import RESERVED_PIPELINE_KEYS
     async with client._http_client():
         http = HttpExecutor(client=client)
         pipeline = VertexForager(
@@ -41,8 +42,7 @@ async def run_pipeline_for(
             controller=client.controller,
         )
         from vertex_forager.clients.validation import filter_reserved_kwargs
-        reserved = {"router", "dataset", "symbols", "writer", "mapper", "on_progress"}
-        run_kwargs = filter_reserved_kwargs(kwargs, reserved)
+        run_kwargs = filter_reserved_kwargs(kwargs, RESERVED_PIPELINE_KEYS)
         with warnings.catch_warnings():
             warnings.filterwarnings(
                 "ignore",
