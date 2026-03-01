@@ -1,3 +1,11 @@
+"""Writer logging constants.
+
+Summary:
+    Centralized log prefixes and templates used by writer implementations.
+
+Notes:
+    - Keep placeholders stable to avoid downstream formatting regressions.
+"""
 from __future__ import annotations
 
 from typing import Final

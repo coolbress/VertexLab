@@ -644,7 +644,8 @@ class VertexForager:
                 buffer_rows[table] = current_rows
 
                 # Log progress every chunk to assure user it's working
-                if (current_rows // PROGRESS_LOG_CHUNK_ROWS) > (previous_rows // PROGRESS_LOG_CHUNK_ROWS):
+                chunk_rows = max(1, int(PROGRESS_LOG_CHUNK_ROWS))
+                if (current_rows // chunk_rows) > (previous_rows // chunk_rows):
                     logger.debug(
                         f"WRITER: Buffering {table}... {current_rows:,} / {threshold:,} rows"
                     )

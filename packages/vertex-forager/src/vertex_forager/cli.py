@@ -250,13 +250,16 @@ def constants(section: str, output_format: str, env_only: bool) -> None:
             },
         )
     
-    env_vars = {
-        "SHARADAR_API_KEY": os.getenv("SHARADAR_API_KEY"),
-        "VF_HTTP_TIMEOUT_S": os.getenv("VF_HTTP_TIMEOUT_S"),
-        "VF_DEFAULT_RATE_LIMIT": os.getenv("VF_DEFAULT_RATE_LIMIT"),
-        "VF_MAX_CONNECTIONS": os.getenv("VF_MAX_CONNECTIONS"),
+    ENV_VAR_MAPPING: dict[str, tuple[str, str]] = {
+        "VF_HTTP_TIMEOUT_S": ("global", "HTTP_TIMEOUT_S"),
+        "VF_DEFAULT_RATE_LIMIT": ("global", "DEFAULT_RATE_LIMIT"),
+        "VF_MAX_CONNECTIONS": ("global", "HTTP_MAX_CONNECTIONS"),
     }
-    env_overrides_obj: dict[str, object] = {k: v for k, v in env_vars.items() if v is not None}
+    env_vals = {
+        "SHARADAR_API_KEY": os.getenv("SHARADAR_API_KEY"),
+        **{k: os.getenv(k) for k in ENV_VAR_MAPPING.keys()},
+    }
+    env_overrides_obj: dict[str, object] = {k: v for k, v in env_vals.items() if v is not None}
     if "SHARADAR_API_KEY" in env_overrides_obj:
         env_overrides_obj["SHARADAR_API_KEY"] = "<redacted>"
     if env_overrides_obj:
@@ -277,12 +280,9 @@ def constants(section: str, output_format: str, env_only: bool) -> None:
     }
     if "env_overrides" in preview and isinstance(preview["env_overrides"], dict):
         envs = preview["env_overrides"]
-        if envs.get("VF_HTTP_TIMEOUT_S"):
-            override_flags["global"].add("HTTP_TIMEOUT_S")
-        if envs.get("VF_DEFAULT_RATE_LIMIT"):
-            override_flags["global"].add("DEFAULT_RATE_LIMIT")
-        if envs.get("VF_MAX_CONNECTIONS"):
-            override_flags["global"].add("HTTP_MAX_CONNECTIONS")
+        for env_name, (section_name, const_name) in ENV_VAR_MAPPING.items():
+            if envs.get(env_name):
+                override_flags[section_name].add(const_name)
     for name, values in preview.items():
         click.echo(f"\n[{name}]")
         keys = list(values.keys())
