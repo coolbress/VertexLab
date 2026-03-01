@@ -66,7 +66,7 @@ def collect(symbol: tuple[str, ...], source: str) -> None:
 
         async def _run_collect() -> Optional[Any]:
             async with create_client(
-                provider=source, api_key=api_key, rate_limit=120
+                provider=source, api_key=api_key
             ) as client:
                 if source == "sharadar":
                     from vertex_forager.providers.sharadar.client import SharadarClient

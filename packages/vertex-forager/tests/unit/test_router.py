@@ -17,6 +17,8 @@ import polars as pl
 import pytest
 
 from vertex_forager.core.config import FetchJob, ParseResult, RequestSpec
+from collections.abc import Mapping
+from vertex_forager.core.types import JSONValue
 from vertex_forager.providers.sharadar.router import SharadarRouter
 
 
@@ -306,8 +308,6 @@ class TestSharadarRouterUnit:
     ) -> None:
         """Test that parse method creates next_jobs when pagination context exists and next_cursor is returned."""
         # Arrange
-        from collections.abc import Mapping
-        from vertex_forager.core.types import JSONValue
         context: Mapping[str, JSONValue] = {
             "pagination": {
                 "cursor_param": "qopts.cursor_id",

@@ -589,6 +589,9 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
             dataset: Target dataset name.
             symbol: Ticker symbol or comma-separated list of symbols.
             dimension: Dimension parameter (used for fundamental data).
+            extra_context: Optional dict[str, JSONValue] to propagate tracing/request
+                metadata (e.g., trace_id, request_id) into the created FetchJob.
+                Merged into the job context for downstream correlation.
 
         Returns:
             FetchJob: Job configured for the specific symbol(s).
