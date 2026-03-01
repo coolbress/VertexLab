@@ -19,6 +19,7 @@ import pytest
 from vertex_forager.core.config import FetchJob, ParseResult, RequestSpec
 from collections.abc import Mapping
 from vertex_forager.core.types import JSONValue
+from vertex_forager.providers.sharadar.constants import MAX_ROWS_PER_REQUEST
 from vertex_forager.providers.sharadar.router import SharadarRouter
 
 
@@ -106,6 +107,18 @@ class TestSharadarRouterUnit:
         job = jobs[0]
         assert job.dataset == "tickers"
         assert job.spec.params.get("qopts.per_page") == "500"
+
+        # Subcase: per_page above API cap should be clamped to MAX_ROWS_PER_REQUEST
+        jobs2 = [
+            job
+            async for job in router.generate_jobs(
+                dataset="tickers", symbols=None, per_page=MAX_ROWS_PER_REQUEST * 10
+            )
+        ]
+        assert len(jobs2) == 1
+        job2 = jobs2[0]
+        assert job2.dataset == "tickers"
+        assert job2.spec.params.get("qopts.per_page") == str(MAX_ROWS_PER_REQUEST)
 
     @pytest.mark.asyncio
     async def test_generate_jobs_passes_kwargs_for_fundamental_dataset(

@@ -483,6 +483,14 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
                     new_job = job.model_copy(deep=True)
                     if isinstance(cursor_param, str):
                         new_job.spec.params[cursor_param] = cast(JSONValue, next_cursor)
+                        # Update per-request correlation id for pagination follow-ups
+                        try:
+                            # Ensure distinct request_id for tracing
+                            ctx = dict(cast(dict[str, JSONValue], new_job.context))
+                            ctx["request_id"] = uuid.uuid4().hex
+                            new_job.context = ctx
+                        except Exception:
+                            pass
                         next_jobs.append(new_job)
 
         return ParseResult(packets=packets, next_jobs=next_jobs)
