@@ -483,14 +483,22 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
                     new_job = job.model_copy(deep=True)
                     if isinstance(cursor_param, str):
                         new_job.spec.params[cursor_param] = cast(JSONValue, next_cursor)
-                        # Update per-request correlation id for pagination follow-ups
+                        # Update per-request correlation id for pagination follow-ups (use int consistently)
                         try:
-                            # Ensure distinct request_id for tracing
-                            ctx = dict(cast(dict[str, JSONValue], new_job.context))
-                            ctx["request_id"] = uuid.uuid4().hex
-                            new_job.context = ctx
+                            ctx_dict = dict(cast(dict[str, JSONValue], new_job.context))
+                            old_req = ctx_dict.get("request_id")
+                            new_req: int
+                            if isinstance(old_req, int):
+                                new_req = old_req + 1
+                            else:
+                                new_req = 1
+                            ctx_dict["request_id"] = new_req
+                            new_job.context = ctx_dict
+                        except (TypeError, ValueError, AttributeError) as exc:
+                            logger.warning("%s: Failed to update request_id in pagination follow-up: %s", ROUTER_LOG_PREFIX, exc)
                         except Exception:
-                            pass
+                            logger.exception("%s: Unexpected error updating request_id in pagination follow-up", ROUTER_LOG_PREFIX)
+                            raise
                         next_jobs.append(new_job)
 
         return ParseResult(packets=packets, next_jobs=next_jobs)
