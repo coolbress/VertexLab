@@ -196,6 +196,8 @@ class EngineConfig(BaseModel):
         try:
             total_ram = psutil.virtual_memory().total
             target_buffer_bytes = total_ram * QUEUE_TARGET_RAM_RATIO
+            if PACKET_SIZE_EST_BYTES <= 0:
+                raise ValueError("PACKET_SIZE_EST_BYTES must be > 0")
             calc_size = int(target_buffer_bytes / PACKET_SIZE_EST_BYTES)
             return max(QUEUE_MIN, min(QUEUE_MAX, calc_size))
         except (ValueError, AttributeError):

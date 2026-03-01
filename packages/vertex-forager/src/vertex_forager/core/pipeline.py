@@ -358,8 +358,7 @@ class VertexForager:
         async for job in self._router.generate_jobs(
             dataset=dataset, symbols=symbols, **kwargs
         ):
-            # Priority 10 for initial jobs
-            await req_q.put((10, next(counter), job))
+            await req_q.put((self.PRIORITY_NEW_JOB, next(counter), job))
             job_count += 1
             if job_count % 100 == 0:
                 logger.debug(f"PRODUCER: Generated {job_count} jobs so far...")
@@ -482,10 +481,7 @@ class VertexForager:
                         f"[Worker-{worker_id}] Adding {len(parse_result.next_jobs)} pagination jobs for {job.symbol}"
                     )
                     for next_job in parse_result.next_jobs:
-                        # Priority 0 for derived jobs (e.g., pagination, detailed info) to complete logical units first.
-                        # This implements a generic Depth-First Fetching strategy.
-                        # Use monotonic time as tie breaker.
-                        await req_q.put((0, time.monotonic_ns(), next_job))
+                        await req_q.put((self.PRIORITY_PAGINATION, time.monotonic_ns(), next_job))
 
             except (httpx.HTTPStatusError, httpx.RequestError, ValueError) as exc:
                 worker_exc = exc

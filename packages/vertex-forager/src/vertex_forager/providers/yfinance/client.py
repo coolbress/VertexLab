@@ -56,7 +56,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         self,
         *,
         api_key: str | None = None,
-        rate_limit: int = 60,
+        rate_limit: int = DEFAULT_RATE_LIMIT,
         **kwargs: Any,
     ) -> None:
         normalized = rate_limit
