@@ -253,7 +253,12 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
             dataset == "sp500" and not symbols
         ):
             # Sharadar API limit: maximum 10,000 rows per response
-            per_page = MAX_ROWS_PER_REQUEST
+            per_page_obj = kwargs.get("per_page", MAX_ROWS_PER_REQUEST)
+            try:
+                per_page = int(per_page_obj) if isinstance(per_page_obj, (int, str)) else MAX_ROWS_PER_REQUEST
+            except (TypeError, ValueError):
+                per_page = MAX_ROWS_PER_REQUEST
+            per_page = max(1, min(MAX_ROWS_PER_REQUEST, per_page))
             logger.debug(LOG_PAGINATION_START.format(prefix=ROUTER_LOG_PREFIX, dataset=dataset, per_page=per_page))
             page_ctx = make_pagination_context(
                 dataset=dataset,

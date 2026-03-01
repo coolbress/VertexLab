@@ -281,7 +281,7 @@ def constants(section: str, output_format: str, env_only: bool) -> None:
     if "env_overrides" in preview and isinstance(preview["env_overrides"], dict):
         envs = preview["env_overrides"]
         for env_name, (section_name, const_name) in ENV_VAR_MAPPING.items():
-            if envs.get(env_name):
+            if env_name in envs:
                 override_flags[section_name].add(const_name)
     for name, values in preview.items():
         click.echo(f"\n[{name}]")
