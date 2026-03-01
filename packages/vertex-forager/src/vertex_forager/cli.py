@@ -94,8 +94,8 @@ def collect(symbol: tuple[str, ...], source: str) -> None:
     except click.ClickException:
         raise
     except (ValueError, KeyError, httpx.RequestError) as e:
-        click.echo(f"❌ Collection error: {str(e)}")
         logger.error(f"Collection failed: {e}")
+        raise click.ClickException(f"Collection error: {str(e)}")
     except Exception as e:
         click.echo(f"❌ Unexpected error: {str(e)}")
         logger.exception("Unexpected error during collection")
