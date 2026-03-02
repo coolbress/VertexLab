@@ -60,6 +60,7 @@ def build_graph() -> tuple[dict[str, set[str]], list[tuple[str, str]]]:
         if not name.startswith(PKG):
             continue
         base = getattr(mod, "__name__", name)
+        _ = graph[name]  # ensure node exists even if no deps
         globalnames = getattr(mod, "globalnames", {})
         for dep in globalnames.keys():
             dep_abs = _resolve(dep, base)
@@ -132,15 +133,17 @@ def main() -> int:
         "*/api.py",
         "*/cli.py",
         "*/constants.py",
-        "*/providers/yfinance/*",
-        "*/providers/sharadar/*",
-        "*/schema/*",
     ]
-    filtered = [(p, e) for (p, e) in failures if not any(fnmatch(p, g) for g in allow_globs)]
-    if filtered:
-        print("Failed to analyze the following modules (filtered):")
-        for path, err in filtered:
+    if failures:
+        print("Failed to analyze the following modules:")
+        for path, err in failures:
             print(f" - {path}: {err}")
+        # Optionally warn allowed patterns
+        allowed = [(p, e) for (p, e) in failures if any(fnmatch(p, g) for g in allow_globs)]
+        if allowed:
+            print("Note: the following match allowlist patterns (still failing):")
+            for path, err in allowed:
+                print(f" - {path}")
         return 1
     cycles = find_cycles(graph)
     if cycles:

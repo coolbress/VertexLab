@@ -18,7 +18,8 @@ def run(cmd: list[str]) -> str:
     Raises:
         subprocess.CalledProcessError: If the command exits with a non-zero status.
     """
-    return subprocess.check_output(cmd, text=True).strip()
+    proc = subprocess.run(cmd, text=True, capture_output=True, check=True)
+    return proc.stdout.strip()
 
 def main() -> int:
     """Pre-commit hotspot diff check against origin/main.
@@ -48,9 +49,10 @@ def main() -> int:
         return 0
     except subprocess.CalledProcessError as e:
         print(f"Error running git command: {e}")
-        out = getattr(e, "output", "")
-        if out:
-            print(out)
+        if e.stdout:
+            print(e.stdout)
+        if e.stderr:
+            print(e.stderr)
         return 1
 
 if __name__ == "__main__":

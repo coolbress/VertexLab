@@ -8,13 +8,12 @@ from vertex_forager.core.library import register_library_fetcher, BaseLibraryFet
 
 
 class YFinanceLibraryFetcher(BaseLibraryFetcher):
-    scheme = "yfinance"
-
     """YFinance library fetcher.
     
     Provides scheme-based dispatch for yfinance calls and integrates with the
     library fetcher registry via `scheme`.
     """
+    scheme = "yfinance"
     def fetch(self, spec: RequestSpec) -> Any:
         """Execute a yfinance library call described by RequestSpec.
         
