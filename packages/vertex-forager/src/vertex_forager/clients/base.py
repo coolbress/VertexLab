@@ -162,6 +162,17 @@ class BaseClient(ABC, Generic[T]):
         
         This wrapper ensures that blocking library calls (like yfinance, pandas I/O)
         do not freeze the main asyncio event loop.
+        
+        Args:
+            func: Callable to execute in a worker thread.
+            *args: Positional arguments for the callable.
+            **kwargs: Keyword arguments for the callable.
+        
+        Returns:
+            Any: The return value of the callable.
+        
+        Raises:
+            Exception: Any exception raised by the callable is propagated.
         """
         pfunc = partial(func, *args, **kwargs)
         return await asyncio.to_thread(pfunc)
@@ -179,18 +190,25 @@ class BaseClient(ABC, Generic[T]):
     ) -> RunResult:
         """
         Run the VertexForager pipeline for the given router, dataset, and symbols.
-
+        
         Args:
             router: Data router to fetch data from.
-            dataset: Dataset name (e.g., "price_bars").
+            dataset: Dataset name (e.g., "price").
             symbols: List of symbols to fetch data for. If None, fetch all symbols.
             writer: Data writer to persist the processed data.
             mapper: Schema mapper to transform connector data to sink schema.
             on_progress: Optional callback function called on each completed request.
             **kwargs: Additional arguments passed to the pipeline run method.
-
+        
         Returns:
             RunResult: Summary of the pipeline run, including success/failure status.
+        
+        Raises:
+            httpx.RequestError: If a network error occurs during fetching.
+            httpx.HTTPStatusError: If an HTTP response returns non-2xx.
+            ValidationError: If schema validation fails during writing.
+            PrimaryKeyMissingError: When required PK columns are absent.
+            PrimaryKeyNullError: When PK columns contain nulls.
         """
         async with self._http_client():
             http = HttpExecutor(client=self)
@@ -256,15 +274,19 @@ class BaseClient(ABC, Generic[T]):
         to ensure consistent writer lifecycle management.
         
         Args:
-            connect_db: Database connection string/path, or None for in-memory
-            show_progress: Whether to show progress indicators
+            connect_db: Database connection string/path, or None for in-memory.
+            show_progress: Whether to show progress indicators (default: True).
             
         Yields:
-            BaseWriter: Properly initialized writer instance
-            
+            BaseWriter: Properly initialized writer instance.
+        
+        Raises:
+            duckdb.Error: If a DuckDB connection cannot be established.
+            ValidationError: If writer initialization fails due to schema issues.
+            Exception: Any unexpected errors during writer setup are propagated.
+        
         Example:
             async with self.managed_writer(connect_db, show_progress=True) as writer:
-                # Use writer for data collection
                 result = await self.run_pipeline(..., writer=writer)
         """
         stack = AsyncExitStack()

@@ -30,12 +30,17 @@ def _redact_urls(message: str) -> str:
 
 class HttpExecutor:
     """Async HTTP Request Executor using httpx.
-
+    
     This class abstracts the low-level HTTP client details and maps `RequestSpec`
     objects to actual network requests. It handles authentication header injection
     and response status checking.
-
+    
     It also supports special schemes like `yfinance://` to bypass HTTP and use internal libraries.
+    
+    Notes:
+        - Error logs redact URLs using a sanitizer to avoid leaking sensitive query
+          parameters (e.g., API keys) in messages.
+        - Example: "https://api.example.com?token=SECRET&cursor=123" -> "[redacted]"
     """
 
     def __init__(self, *, client: Any) -> None:
@@ -70,7 +75,13 @@ class HttpExecutor:
 
     async def _fetch_http(self, spec: RequestSpec) -> bytes:
         """Execute a standard HTTP request using the unified client interface.
-
+        
+        Args:
+            spec: Request specification including method, url, headers, params, body, and timeout.
+        
+        Returns:
+            bytes: Raw response content.
+        
         Raises:
             httpx.RequestError: Network error during HTTP request.
             httpx.HTTPStatusError: Non-2xx HTTP status returned.
@@ -107,7 +118,13 @@ class HttpExecutor:
 
     async def _fetch_library(self, spec: RequestSpec) -> bytes:
         """Execute a non-HTTP library call using the unified client interface.
-
+        
+        Args:
+            spec: Request specification with a library URL scheme (e.g., yfinance://).
+        
+        Returns:
+            bytes: Pickled Python object returned from the library call.
+        
         Raises:
             ValueError: Unsupported scheme or invalid library call configuration.
             TypeError: Invalid types passed to library call.
@@ -149,11 +166,14 @@ class HttpExecutor:
 
 def default_async_client() -> httpx.AsyncClient:
     """Create a default httpx AsyncClient instance.
-
+    
     Configured with centralized defaults (see vertex_forager.constants):
     - User-Agent: HTTP_USER_AGENT
     - Timeout: HTTP_TIMEOUT_S seconds
     - Connection Pool: HTTP_MAX_CONNECTIONS (max), HTTP_MAX_KEEPALIVE_CONNECTIONS (keep-alive)
+    
+    Returns:
+        httpx.AsyncClient: Configured client for HTTP operations.
     """
     return httpx.AsyncClient(
         headers={"User-Agent": HTTP_USER_AGENT},
