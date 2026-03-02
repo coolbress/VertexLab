@@ -7,7 +7,7 @@ import re
 import httpx
 try:
     import yfinance as yf  # test compatibility: allow monkeypatching core.http.yf
-except Exception:
+except ImportError:
     yf = None
 from vertex_forager.core.types import JSONValue
 from vertex_forager.core.config import RequestSpec

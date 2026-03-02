@@ -70,7 +70,7 @@ This document summarizes centralized constants across the codebase. The goal is 
 
 ## Logging Prefix Rules
 - Core HTTP (`vertex_forager.core.http`):
-  - Error logs include `provider_class`, `status_code` (if available), and redacted messages.
+  - Error logs include `provider`, `status` (if available), and redacted messages.
   - Library fetch branch logs: include `scheme`, `dataset`, `symbol`, and exception type for traceability.
 - Writers (`vertex_forager.writers.constants`):
   - Prefixes: `WRITER`, `DUCKDB`.

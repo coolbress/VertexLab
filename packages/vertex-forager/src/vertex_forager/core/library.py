@@ -35,6 +35,8 @@ _REGISTRY: dict[str, LibraryFetcher] = {}
 
 def register_library_fetcher(fetcher: LibraryFetcher) -> None:
     """Register a provider-specific library fetcher instance."""
+    if fetcher.scheme in _REGISTRY:
+        raise ValueError(f"Library fetcher for scheme '{fetcher.scheme}' already registered")
     _REGISTRY[fetcher.scheme] = fetcher
 
 def get_library_fetcher(scheme: str) -> LibraryFetcher | None:

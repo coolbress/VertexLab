@@ -3,10 +3,17 @@ repos:
     rev: v0.6.9
     hooks:
       - id: ruff
-        args: [ "check", "packages/", "--exclude", "legacy_code" ]
+        args: [ "packages/", "--exclude", "legacy_code" ]
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.10.0
     hooks:
       - id: mypy
         additional_dependencies: [ "types-requests" ]
         args: [ "packages/vertex-forager" ]
+  - repo: local
+    hooks:
+      - id: hotspot-diff-check
+        name: Hotspot diff check against origin/main
+        entry: python3 scripts/precommit_hotspot_check.py
+        language: system
+        pass_filenames: false

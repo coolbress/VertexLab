@@ -11,6 +11,8 @@ class YFinanceLibraryFetcher(BaseLibraryFetcher):
     scheme = "yfinance"
 
     def fetch(self, spec: RequestSpec) -> Any:
+        if getattr(_http_mod, "yf", None) is None:
+            raise ValueError("yfinance library not available")
         ticker_symbol, dataset, lib = self.parse_spec(spec)
         call_type = lib.get("type")
         kw = lib.get("kwargs")
