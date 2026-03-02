@@ -76,7 +76,29 @@ class FetchConfig:
 
 
 class SharadarClient(BaseClient[SharadarDataset]):
-    """Sharadar-specific client exposing Sharadar data APIs."""
+    """Client for Sharadar (Nasdaq Data Link) datasets.
+    
+    This client integrates Sharadar with the VertexForager pipeline to provide
+    consistent rate limiting, logging, and error handling across datasets.
+    
+    Attributes:
+        Authentication: API key required; passed via query parameter.
+        Rate Limiting: Configurable requests per minute through `rate_limit`.
+        Dataset Coverage: Supports `price`, `daily`, `fundamental` (SF1),
+            `actions`, `insider` (SF2), `institutional` (SF3), `tickers`, and `sp500`.
+        Metadata Cache: Optional ticker metadata cache used for smart batching.
+        Data Model: Datatables JSON responses normalized to Polars frames.
+    
+    Notes:
+        - Pipeline flow: Router -> HttpExecutor -> Writer.
+        - Guarantees: Unified rate limiting, structured logging, and error
+          accumulation into `RunResult.errors`.
+        - Smart batching: Prefetches ticker metadata and estimates rows per ticker
+          to keep responses under API row limits.
+        - Progress: Spinner or tqdm-based progress tracking based on configuration.
+        - Preferred usage: Per-ticker jobs for stability; pagination for `tickers`
+          and `sp500` datasets.
+    """
 
     BYTES_PER_TICKER_METADATA = SH_BYTES_PER_TICKER_METADATA
     BYTES_PER_TICKER_FULL = SH_BYTES_PER_TICKER_FULL
