@@ -325,7 +325,12 @@ class VertexForager:
         
         Raises:
             Exception: Propagates unexpected errors during executor shutdown after logging.
-            asyncio.CancelledError: If cancellation occurs during stop awaiting.
+        
+        Notes:
+            - Internally, this method calls `asyncio.gather(*self._active_tasks, return_exceptions=True)`,
+              which collects `asyncio.CancelledError` as a returned exception rather than raising it.
+            - `asyncio.CancelledError` would only propagate if the `stop` coroutine itself is externally
+              cancelled by the caller while awaiting completion.
         """
         if not self._active_tasks:
             return
