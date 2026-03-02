@@ -16,7 +16,7 @@ class YFinanceLibraryFetcher(BaseLibraryFetcher):
         ticker_symbol, dataset, lib = self.parse_spec(spec)
         call_type = lib.get("type")
         kw = lib.get("kwargs")
-        call_kwargs: dict[str, "JSONValue"] = dict(kw) if isinstance(kw, dict) else {}
+        call_kwargs: dict[str, JSONValue] = dict(kw) if isinstance(kw, dict) else {}
         if call_type == "download":
             return _http_mod.yf.download(tickers=ticker_symbol, **call_kwargs)
         if call_type == "ticker_attr":

@@ -4,18 +4,35 @@ from __future__ import annotations
 import subprocess
 import sys
 
-HOTSPOTS = {
-    "packages/vertex-forager/src/vertex_forager/core/contracts.py",
-    "packages/vertex-forager/src/vertex_forager/api.py",
-}
+HOTSPOTS: set[str] | None = None  # None → 모든 스테이지 파일 대상으로 점검
 
 def run(cmd: list[str]) -> str:
+    """Run a shell command and capture stdout.
+
+    Args:
+        cmd: Command and arguments as a list of strings.
+
+    Returns:
+        The standard output of the command, decoded as a string.
+
+    Raises:
+        subprocess.CalledProcessError: If the command exits with a non-zero status.
+    """
     return subprocess.check_output(cmd, text=True).strip()
 
 def main() -> int:
+    """Pre-commit hotspot diff check against origin/main.
+
+    Returns:
+        int: 0 if no hotspot conflicts detected, 1 if conflicts found.
+
+    Notes:
+        - Checks staged files for hotspot paths and compares with origin/main changes.
+        - Any subprocess errors are treated as pass-through (returns 0).
+    """
     try:
         staged = set(run(["git", "diff", "--cached", "--name-only"]).splitlines())
-        targets = HOTSPOTS.intersection(staged)
+        targets = staged if not HOTSPOTS else HOTSPOTS.intersection(staged)
         if not targets:
             return 0
         base = run(["git", "merge-base", "origin/main", "HEAD"])
