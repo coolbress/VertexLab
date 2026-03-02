@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import sys
 import os
-from modulefinder import ModuleFinder
+import ast
 from collections import defaultdict
 from pathlib import Path
 from fnmatch import fnmatch
@@ -29,55 +29,69 @@ def build_graph() -> tuple[dict[str, set[str]], list[tuple[str, str]]]:
             - List of (path, error) for files that failed to load
 
     Notes:
-        - Uses ModuleFinder across all .py files under ROOT/PKG
+        - Parses imports via AST across all .py files under ROOT/PKG
         - Only collects dependencies that resolve to the package namespace
         - Resolves relative imports against each module's name
     """
-    finder = ModuleFinder(path=SYS_PATH)
     pkg_dir = ROOT / PKG.replace(".", os.sep)
     failures: list[tuple[str, str]] = []
-    for path in pkg_dir.rglob("*.py"):
-        try:
-            finder.run_script(str(path))
-        except (ImportError, SyntaxError, ModuleNotFoundError, AttributeError) as e:
-            failures.append((str(path), repr(e)))
-        except Exception:
-            raise
-
-    def _resolve(name: str, base: str) -> str:
-        if not name:
-            return name
-        if name.startswith("."):
-            dots = len(name) - len(name.lstrip("."))
-            base_parts = base.split(".")
-            parent = ".".join(base_parts[:-dots]) if dots else base
-            rel = name.lstrip(".")
-            return parent if not rel else f"{parent}.{rel}"
-        return name
-
     graph: dict[str, set[str]] = defaultdict(set)
-    for name, mod in finder.modules.items():
-        if not name.startswith(PKG):
+
+    def module_name_for(path: Path) -> str:
+        rel = path.relative_to(ROOT)
+        parts = list(rel.parts)
+        if not parts or parts[0] != PKG:
+            return ""
+        if parts[-1] == "__init__.py":
+            return ".".join(parts[:-1])
+        return ".".join(parts[:-1] + [parts[-1].removesuffix(".py")])
+
+    def resolve_from(base: str, module: str | None, level: int, names: list[ast.alias]) -> list[str]:
+        if level > 0:
+            base_parts = base.split(".")
+            parent = ".".join(base_parts[:-level]) if level <= len(base_parts) else ""
+            target_base = parent if not module else f"{parent}.{module}"
+            results: list[str] = []
+            for n in names:
+                name = n.name
+                target = target_base if not name else (f"{target_base}.{name}" if target_base else name)
+                results.append(target)
+            return results
+        else:
+            mod = module or ""
+            if not mod:
+                return [alias.name for alias in names]
+            return [mod]
+
+    for path in pkg_dir.rglob("*.py"):
+        modname = module_name_for(path)
+        if not modname:
             continue
-        base = getattr(mod, "__name__", name)
-        _ = graph[name]  # ensure node exists even if no deps
-        globalnames = getattr(mod, "globalnames", {})
-        for dep in globalnames.keys():
-            dep_abs = _resolve(dep, base)
-            if dep_abs.startswith(PKG):
-                graph[name].add(dep_abs)
-        starimports = getattr(mod, "starimports", [])
-        for dep in starimports:
-            dep_abs = _resolve(dep, base)
-            if dep_abs.startswith(PKG):
-                graph[name].add(dep_abs)
-        code_obj = getattr(mod, "code", None)
-        if code_obj is not None:
-            for dep in getattr(code_obj, "co_names", ()):
-                if isinstance(dep, str):
-                    dep_abs = _resolve(dep, base)
-                    if dep_abs.startswith(PKG):
-                        graph[name].add(dep_abs)
+        _ = graph[modname]  # ensure node exists
+        try:
+            src = path.read_text(encoding="utf-8")
+            tree = ast.parse(src, filename=str(path))
+        except (UnicodeDecodeError, SyntaxError) as e:
+            failures.append((str(path), repr(e)))
+            continue
+        def walk_no_type_checking(n: ast.AST):
+            yield n
+            for ch in ast.iter_child_nodes(n):
+                if isinstance(n, ast.If) and isinstance(n.test, ast.Name) and n.test.id == "TYPE_CHECKING":
+                    continue
+                yield from walk_no_type_checking(ch)
+
+        for node in walk_no_type_checking(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    dep = alias.name
+                    if dep.startswith(PKG):
+                        graph[modname].add(dep)
+            elif isinstance(node, ast.ImportFrom):
+                targets = resolve_from(modname, node.module, node.level, node.names)
+                for dep in targets:
+                    if dep.startswith(PKG):
+                        graph[modname].add(dep)
     return graph, failures
 
 def find_cycles(graph: dict[str, set[str]]) -> list[list[str]]:
