@@ -65,11 +65,13 @@ def build_graph() -> dict[str, set[str]]:
             dep_abs = _resolve(dep, base)
             if dep_abs.startswith(PKG):
                 graph[name].add(dep_abs)
-        for dep in mod.code.co_names if mod.code else []:
-            if isinstance(dep, str):
-                dep_abs = _resolve(dep, base)
-                if dep_abs.startswith(PKG):
-                    graph[name].add(dep_abs)
+        code_obj = getattr(mod, "code", None)
+        if code_obj is not None:
+            for dep in getattr(code_obj, "co_names", ()):
+                if isinstance(dep, str):
+                    dep_abs = _resolve(dep, base)
+                    if dep_abs.startswith(PKG):
+                        graph[name].add(dep_abs)
     return graph
 
 def find_cycles(graph: dict[str, set[str]]) -> list[list[str]]:
