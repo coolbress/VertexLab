@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Protocol, TypeVar, Generic, Sequence, AsyncIterator, Callable, TYPE_CHECKING, Union
+from vertex_forager.core.types import JSONValue
 from vertex_forager.core.types import SharadarDataset, YFinanceDataset
 
 from vertex_forager.core.config import FetchJob, ParseResult, RunResult
@@ -36,5 +37,5 @@ class IClient(Protocol, Generic[T]):
         writer: "BaseWriter",
         mapper: "SchemaMapper",
         on_progress: Callable[..., None] | None = None,
-        **kwargs: object,
+        **kwargs: JSONValue,
     ) -> RunResult: ...

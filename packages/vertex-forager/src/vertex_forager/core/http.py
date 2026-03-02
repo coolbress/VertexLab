@@ -6,7 +6,14 @@ from typing import Any
 import re
 import httpx
 import yfinance as yf
+from vertex_forager.core.types import JSONValue
 from vertex_forager.core.config import RequestSpec
+from vertex_forager.constants import (
+    HTTP_TIMEOUT_S,
+    HTTP_MAX_KEEPALIVE_CONNECTIONS,
+    HTTP_MAX_CONNECTIONS,
+    HTTP_USER_AGENT,
+)
 
 
 logger = logging.getLogger("vertex_forager.core.http")
@@ -65,8 +72,8 @@ class HttpExecutor:
             httpx.HTTPStatusError: Non-2xx HTTP status returned.
             TypeError: When parameters are invalid for the underlying client.
         """
-        headers = dict(spec.headers)
-        params = dict(spec.params)
+        headers: dict[str, str] = dict(spec.headers)
+        params: dict[str, "JSONValue"] = dict(spec.params)
 
         if spec.auth.kind == "bearer" and spec.auth.token:
             headers["Authorization"] = f"Bearer {spec.auth.token}"
@@ -115,13 +122,14 @@ class HttpExecutor:
                 if not isinstance(lib, dict):
                     raise ValueError("Missing library call specification ('lib') in request params")
                 call_type = lib.get("type")
-                call_kwargs = dict(lib.get("kwargs") or {})
+                kw = lib.get("kwargs")
+                call_kwargs: dict[str, "JSONValue"] = dict(kw) if isinstance(kw, dict) else {}
                 if call_type == "download":
                     return yf.download(tickers=ticker_symbol, **call_kwargs)
                 if call_type == "ticker_attr":
                     attr_name = lib.get("attr")
                     ticker = yf.Ticker(ticker_symbol)
-                    if not attr_name or not hasattr(ticker, attr_name):
+                    if not isinstance(attr_name, str) or not hasattr(ticker, attr_name):
                         raise ValueError(f"Unknown yfinance dataset: {dataset} -> {attr_name}")
                     attr = getattr(ticker, attr_name)
                     return attr(**call_kwargs) if callable(attr) else attr
@@ -152,13 +160,16 @@ class HttpExecutor:
 def default_async_client() -> httpx.AsyncClient:
     """Create a default httpx AsyncClient instance.
 
-    Configured with reasonable defaults for high-concurrency scraping:
-    - User-Agent: vertex-forager
-    - Timeout: 60 seconds (increased for large datasets)
-    - Connection Pool: 200 max connections, 100 keep-alive (reduced handshake overhead)
+    Configured with centralized defaults (see vertex_forager.constants):
+    - User-Agent: HTTP_USER_AGENT
+    - Timeout: HTTP_TIMEOUT_S seconds
+    - Connection Pool: HTTP_MAX_CONNECTIONS (max), HTTP_MAX_KEEPALIVE_CONNECTIONS (keep-alive)
     """
     return httpx.AsyncClient(
-        headers={"User-Agent": "vertex-forager"},
-        timeout=httpx.Timeout(60.0),
-        limits=httpx.Limits(max_keepalive_connections=100, max_connections=200),
+        headers={"User-Agent": HTTP_USER_AGENT},
+        timeout=httpx.Timeout(HTTP_TIMEOUT_S),
+        limits=httpx.Limits(
+            max_keepalive_connections=HTTP_MAX_KEEPALIVE_CONNECTIONS,
+            max_connections=HTTP_MAX_CONNECTIONS,
+        ),
     )

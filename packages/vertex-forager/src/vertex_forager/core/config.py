@@ -11,6 +11,18 @@ import polars as pl
 from pydantic import BaseModel, Field
 from pydantic import field_validator
 from vertex_forager.core.types import JSONValue
+from vertex_forager.constants import (
+    FLUSH_THRESHOLD_ROWS,
+    DEFAULT_RETRY_MAX_ATTEMPTS,
+    DEFAULT_RETRY_BASE_BACKOFF_S,
+    DEFAULT_RETRY_MAX_BACKOFF_S,
+    HTTP_TIMEOUT_S,
+    QUEUE_TARGET_RAM_RATIO,
+    PACKET_SIZE_EST_BYTES,
+    QUEUE_MIN,
+    QUEUE_MAX,
+    QUEUE_DEFAULT,
+)
 from collections.abc import Mapping
 
 
@@ -23,9 +35,9 @@ class RetryConfig(BaseModel):
         max_backoff_s: Maximum backoff duration in seconds (default: 30.0).
     """
 
-    max_attempts: int = 3
-    base_backoff_s: float = 1.0
-    max_backoff_s: float = 30.0
+    max_attempts: int = DEFAULT_RETRY_MAX_ATTEMPTS
+    base_backoff_s: float = DEFAULT_RETRY_BASE_BACKOFF_S
+    max_backoff_s: float = DEFAULT_RETRY_MAX_BACKOFF_S
 
 
 class HttpMethod(str, Enum):
@@ -76,7 +88,7 @@ class RequestSpec(BaseModel):
     headers: dict[str, str] = Field(default_factory=dict)
     json_body: dict[str, JSONValue] | None = None
     data: bytes | None = None
-    timeout_s: float = 30.0
+    timeout_s: float = HTTP_TIMEOUT_S
     auth: RequestAuth = Field(default_factory=RequestAuth)
 
     @field_validator("params", mode="before")
@@ -162,7 +174,7 @@ class EngineConfig(BaseModel):
     retry: RetryConfig = Field(default_factory=RetryConfig)
 
     # 3. Advanced Tuning (Internal Defaults)
-    flush_threshold_rows: int = 500_000  # ~40MB buffer
+    flush_threshold_rows: int = FLUSH_THRESHOLD_ROWS
 
     @property
     def fetch_concurrency(self) -> int | None:
@@ -182,19 +194,14 @@ class EngineConfig(BaseModel):
             int: Calculated maximum queue size (clamped between 100 and 2000).
         """
         try:
-            # Total Memory in Bytes using psutil for cross-platform support
             total_ram = psutil.virtual_memory().total
-
-            # Target: 5% of RAM / Estimate: 5MB per packet
-            target_buffer_bytes = total_ram * 0.05
-            packet_size_est = 5 * 1024 * 1024
-
-            calc_size = int(target_buffer_bytes / packet_size_est)
-
-            # Bounds: Min 100, Max 2000
-            return max(100, min(2000, calc_size))
-        except (ValueError, AttributeError, ImportError):
-            return 500
+            target_buffer_bytes = total_ram * QUEUE_TARGET_RAM_RATIO
+            if PACKET_SIZE_EST_BYTES <= 0:
+                raise ValueError("PACKET_SIZE_EST_BYTES must be > 0")
+            calc_size = int(target_buffer_bytes / PACKET_SIZE_EST_BYTES)
+            return max(QUEUE_MIN, min(QUEUE_MAX, calc_size))
+        except (ValueError, AttributeError):
+            return QUEUE_DEFAULT
 
     def assert_valid(self) -> None:
         """Validate configuration values.

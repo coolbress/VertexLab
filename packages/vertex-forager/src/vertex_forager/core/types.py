@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import Union, Mapping, Sequence
+from typing import Union, Any
 from typing import Literal, TypeAlias
 from typing_extensions import TypedDict, Required, NotRequired
 
-# JSON‐like value used in RequestSpec.params and other payloads (non-recursive for Pydantic)
-JSONValue = Union[str, int, float, bool, None, Mapping[str, object], Sequence[object]]
+# JSONValue: JSON-safe union used in params/payloads
+# Allows only primitives, lists, and dicts (validated recursively by RequestSpec._validate_params)
+JSONValue = Union[str, int, float, bool, None, dict[str, Any], list[Any]]
 
 class PaginationParams(TypedDict):
     cursor_param: Required[str]
@@ -16,6 +17,8 @@ class JobContext(TypedDict, total=False):
     pagination: PaginationParams
     dataset: str
     symbol: str
+    trace_id: str
+    request_id: int
 
 class SymbolContext(TypedDict, total=False):
     dataset: Required[str]
@@ -24,11 +27,15 @@ class SymbolContext(TypedDict, total=False):
 class PaginationJobContext(TypedDict, total=False):
     pagination: Required[PaginationParams]
     dataset: NotRequired[str]
+    trace_id: str
+    request_id: int
 
 class PerSymbolJobContext(TypedDict, total=False):
     dataset: Required[str]
     symbol: Required[str]
     pagination: NotRequired[PaginationParams]
+    trace_id: str
+    request_id: int
 
 # Dataset Literals for typing clarity (runtime remains flexible via str fields)
 SharadarDataset: TypeAlias = Literal[

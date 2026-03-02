@@ -119,6 +119,10 @@ packages/vertex-forager/
 2. Ensure all tests pass before creating PR
 3. Include issue number in commit messages
 4. Keep PRs focused and well-documented
+5. Refer to docs for architecture and constants overview:
+   - docs/router-client.md
+   - docs/writer-security.md
+   - docs/CONSTANTS.md
 
 ## 📄 License
 

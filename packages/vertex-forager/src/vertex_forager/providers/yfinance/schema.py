@@ -23,10 +23,12 @@ Notes:
 """
 from __future__ import annotations
 
-from typing import Final
 import polars as pl
+from typing import Final
+from vertex_forager.providers.yfinance.constants import DATASET_ENDPOINT, DATE_FILTER_COL
 
 from vertex_forager.schema.config import TableSchema
+from vertex_forager.constants import DEFAULT_TIME_ZONE
 
 # --------------------------------------------------------------------------
 # Schemas
@@ -59,7 +61,7 @@ YFINANCE_INFO_SCHEMA = TableSchema(
         "longbusinesssummary": pl.Utf8,
         "fulltimeemployees": pl.Int64,
         "irwebsite": pl.Utf8,
-        "fetched_at": pl.Datetime(time_zone="UTC"),
+        "fetched_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
     },
     unique_key=("provider", "ticker"),
     analysis_date_col=None,
@@ -77,7 +79,7 @@ YFINANCE_PRICE_SCHEMA = TableSchema(
         "adj_close": pl.Float64,
         "volume": pl.Float64,
         "ticker": pl.Utf8,
-        "fetched_at": pl.Datetime(time_zone="UTC"),
+        "fetched_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
     },
     unique_key=("provider", "ticker", "date"),
     analysis_date_col="date",
@@ -90,7 +92,7 @@ YFINANCE_DIVIDENDS_SCHEMA = TableSchema(
         "date": pl.Date,
         "dividends": pl.Float64,
         "ticker": pl.Utf8,
-        "fetched_at": pl.Datetime(time_zone="UTC"),
+        "fetched_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
     },
     unique_key=("provider", "ticker", "date"),
     analysis_date_col="date",
@@ -103,7 +105,21 @@ YFINANCE_SPLITS_SCHEMA = TableSchema(
         "date": pl.Date,
         "stock_splits": pl.Float64,
         "ticker": pl.Utf8,
-        "fetched_at": pl.Datetime(time_zone="UTC"),
+        "fetched_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
+    },
+    unique_key=("provider", "ticker", "date"),
+    analysis_date_col="date",
+)
+
+YFINANCE_ACTIONS_SCHEMA = TableSchema(
+    table="yfinance_actions",
+    schema={
+        "provider": pl.Utf8,
+        "date": pl.Date,
+        "dividends": pl.Float64,
+        "stock_splits": pl.Float64,
+        "ticker": pl.Utf8,
+        "fetched_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
     },
     unique_key=("provider", "ticker", "date"),
     analysis_date_col="date",
@@ -121,7 +137,7 @@ YFINANCE_CALENDAR_SCHEMA = TableSchema(
         "revenue_low": pl.Int64,
         "revenue_high": pl.Int64,
         "ticker": pl.Utf8,
-        "fetched_at": pl.Datetime(time_zone="UTC"),
+        "fetched_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
     },
     unique_key=("provider", "ticker", "earnings_date"),
     analysis_date_col="earnings_date",
@@ -138,7 +154,7 @@ YFINANCE_RECOMMENDATIONS_SCHEMA = TableSchema(
         "sell": pl.Int64,
         "strongsell": pl.Int64,
         "ticker": pl.Utf8,
-        "fetched_at": pl.Datetime(time_zone="UTC"),
+        "fetched_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
     },
     unique_key=("provider", "ticker", "period"),
     analysis_date_col=None,
@@ -155,8 +171,8 @@ YFINANCE_NEWS_SCHEMA = TableSchema(
         "publisher": pl.Utf8,
         "type": pl.Utf8,
         "link": pl.Utf8,
-        "published_at": pl.Datetime(time_zone="UTC"),
-        "fetched_at": pl.Datetime(time_zone="UTC"),
+        "published_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
+        "fetched_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
     },
     unique_key=("provider", "ticker", "id", "published_at"),
     analysis_date_col="published_at",
@@ -173,7 +189,7 @@ YFINANCE_FINANCIALS_SCHEMA = TableSchema(
         "period": pl.Utf8,
         "metric": pl.Utf8,
         "value": pl.Float64,
-        "fetched_at": pl.Datetime(time_zone="UTC"),
+        "fetched_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
     },
     unique_key=("date", "ticker", "provider", "period", "metric"),
     analysis_date_col="date",
@@ -192,12 +208,23 @@ YFINANCE_HOLDERS_SCHEMA = TableSchema(
         "pctchange": pl.Float64,
         "value": pl.Float64,
         "ticker": pl.Utf8,
-        "fetched_at": pl.Datetime(time_zone="UTC"),
+        "fetched_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
     },
     unique_key=("provider", "ticker", "holder", "date_reported"),
     analysis_date_col="date_reported",
 )
 
+YFINANCE_FAST_INFO_SCHEMA = TableSchema(
+    table="yfinance_fast_info",
+    schema={
+        "provider": pl.Utf8,
+        "ticker": pl.Utf8,
+        "fetched_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
+    },
+    unique_key=("provider", "ticker"),
+    analysis_date_col=None,
+    flexible_schema=True,
+)
 YFINANCE_MAJOR_HOLDERS_SCHEMA = TableSchema(
     table="yfinance_major_holders",
     schema={
@@ -207,7 +234,7 @@ YFINANCE_MAJOR_HOLDERS_SCHEMA = TableSchema(
         "institutions_count": pl.Float64,
         "institutions_float_percent_held": pl.Float64,
         "institutions_percent_held": pl.Float64,
-        "fetched_at": pl.Datetime(time_zone="UTC"),
+        "fetched_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
     },
     unique_key=("provider", "ticker"),
     analysis_date_col=None,
@@ -222,7 +249,7 @@ YFINANCE_INSIDER_PURCHASES_SCHEMA = TableSchema(
         "trans": pl.Int64, # Number of transactions? Or shares transacted? yfinance says 'Shares' and 'Trans'
         "insider_purchases_last_6m": pl.Utf8, # Usually text like 'Purchases', 'Sales', 'Net Shares Purchased'
         "ticker": pl.Utf8,
-        "fetched_at": pl.Datetime(time_zone="UTC"),
+        "fetched_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
     },
     unique_key=("provider", "ticker", "insider_purchases_last_6m"),
     analysis_date_col=None,
@@ -237,42 +264,14 @@ YFINANCE_INSIDER_ROSTER_SCHEMA = TableSchema(
         "position": pl.Utf8,
         "url": pl.Utf8,
         "most_recent_transaction": pl.Utf8,
-        "latest_transaction_date": pl.Datetime(time_zone="UTC"),
+        "latest_transaction_date": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
         "shares_owned_directly": pl.Int64,
-        "position_direct_date": pl.Datetime(time_zone="UTC"),
-        "fetched_at": pl.Datetime(time_zone="UTC"),
+        "position_direct_date": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
+        "fetched_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
     },
     unique_key=("provider", "ticker", "name", "position", "latest_transaction_date"),
     analysis_date_col="latest_transaction_date",
 )
-
-# --------------------------------------------------------------------------
-# Dataset Request Endpoint
-# --------------------------------------------------------------------------
-
-DATASET_ENDPOINT: Final[dict[str, str]] = {
-    "price": "history",  # yf.download / Ticker.history
-    "info": "info",      # Ticker.info
-    "dividends": "dividends", # Ticker.dividends
-    "splits": "splits",  # Ticker.splits
-    "financials": "financials", # Ticker.financials
-    "income_stmt": "financials", # Alias for financials
-    "balance_sheet": "balance_sheet", # Ticker.balance_sheet
-    "cashflow": "cashflow", # Ticker.cashflow
-    "earnings": "earnings", # Ticker.earnings
-    "quarterly_financials": "quarterly_financials",
-    "quarterly_balance_sheet": "quarterly_balance_sheet",
-    "quarterly_cashflow": "quarterly_cashflow",
-    "quarterly_earnings": "quarterly_earnings",
-    "major_holders": "major_holders",
-    "institutional_holders": "institutional_holders",
-    "mutualfund_holders": "mutualfund_holders",
-    "insider_roster_holders": "insider_roster_holders",
-    "insider_purchases": "insider_purchases",
-    "recommendations": "recommendations",
-    "calendar": "calendar",
-    "news": "news",
-}
 
 # --------------------------------------------------------------------------
 # Dataset, Schema Mapper
@@ -282,6 +281,7 @@ DATASET_ENDPOINT: Final[dict[str, str]] = {
 DATASET_TABLE: Final[dict[str, str]] = {
     # Meta 
     "info": "yfinance_info",
+    "fast_info": "yfinance_fast_info",
     
     # Market
     "price": "yfinance_price",
@@ -289,6 +289,7 @@ DATASET_TABLE: Final[dict[str, str]] = {
     # Actions 
     "dividends": "yfinance_dividends",
     "splits": "yfinance_splits",
+    "actions": "yfinance_actions",
     
     # financials 
     "financials": "yfinance_financials",
@@ -324,6 +325,7 @@ DATASET_TABLE: Final[dict[str, str]] = {
 DATASET_SCHEMA: Final[dict[str, TableSchema]] = {
     # meta 
     "info": YFINANCE_INFO_SCHEMA,
+    "fast_info": YFINANCE_FAST_INFO_SCHEMA,
     
     # market 
     "price": YFINANCE_PRICE_SCHEMA,
@@ -331,6 +333,7 @@ DATASET_SCHEMA: Final[dict[str, TableSchema]] = {
     # Actions 
     "dividends": YFINANCE_DIVIDENDS_SCHEMA,
     "splits": YFINANCE_SPLITS_SCHEMA,
+    "actions": YFINANCE_ACTIONS_SCHEMA,
 
     # Holders 
     "major_holders": YFINANCE_MAJOR_HOLDERS_SCHEMA,
@@ -368,18 +371,6 @@ DATASET_SCHEMA: Final[dict[str, TableSchema]] = {
 # Date Filter Column Mapper
 # --------------------------------------------------------------------------
 
-DATE_FILTER_COL: Final[dict[str, str]] = {
-    "price": "date",
-    "dividends": "date",
-    "splits": "date",
-    "financials": "date", # Usually column headers are dates, need transposition
-    "balance_sheet": "date",
-    "cashflow": "date",
-    "earnings": "date", # Or year
-    "recommendations": "period", # recommendations use 'period' not date
-    "news": "published_at",
-}
-
 INTERNAL_COLS: Final[set[str]] = {"provider", "fetched_at"}
 
 TABLES: Final[dict[str, TableSchema]] = {
@@ -387,8 +378,10 @@ TABLES: Final[dict[str, TableSchema]] = {
     for t in [
         YFINANCE_PRICE_SCHEMA,
         YFINANCE_INFO_SCHEMA,
+        YFINANCE_FAST_INFO_SCHEMA,
         YFINANCE_DIVIDENDS_SCHEMA,
         YFINANCE_SPLITS_SCHEMA,
+        YFINANCE_ACTIONS_SCHEMA,
         YFINANCE_CALENDAR_SCHEMA,
         YFINANCE_RECOMMENDATIONS_SCHEMA,
         YFINANCE_NEWS_SCHEMA,

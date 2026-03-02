@@ -13,7 +13,21 @@ from vertex_forager.routers import create_router
 from vertex_forager.utils import jupyter_safe, validate_memory_usage, validate_tickers
 from vertex_forager.schema.mapper import SchemaMapper
 from vertex_forager.core.config import RetryConfig
+from vertex_forager.constants import (
+    DEFAULT_RATE_LIMIT,
+    DEFAULT_RETRY_MAX_ATTEMPTS,
+    DEFAULT_RETRY_BASE_BACKOFF_S,
+    DEFAULT_RETRY_MAX_BACKOFF_S,
+    RESERVED_PIPELINE_KEYS,
+)
+from vertex_forager.providers.yfinance.constants import SIZE_MAP as YF_SIZE_MAP, DEFAULT_BYTES_PER_ITEM, PRICE_BATCH_SIZE_KEY
 from vertex_forager.exceptions import InputError
+from vertex_forager.logging.constants import (
+    CLIENT_LOG_PREFIX,
+    LOG_RATE_LIMIT_INVALID_INT,
+    LOG_RATE_LIMIT_EXCEEDS_DEFAULT,
+    LOG_RATE_LIMIT_INVALID_TYPE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,47 +49,30 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         - Preferred usage: Per-ticker jobs for stability; bulk price downloads avoided.
     """
 
-    # Estimated bytes per item per dataset (used for memory validation)
-    SIZE_MAP: dict[str, int] = {
-        "info": 30 * 1024,
-        "price": 600 * 1024,
-        "financials": 200 * 1024,
-        "quarterly_financials": 220 * 1024,
-        "balance_sheet": 180 * 1024,
-        "quarterly_balance_sheet": 200 * 1024,
-        "cashflow": 180 * 1024,
-        "quarterly_cashflow": 200 * 1024,
-        "dividends": 40 * 1024,
-        "splits": 40 * 1024,
-        "major_holders": 50 * 1024,
-        "institutional_holders": 80 * 1024,
-        "mutualfund_holders": 80 * 1024,
-        "insider_roster_holders": 80 * 1024,
-        "insider_purchases": 120 * 1024,
-        "recommendations": 100 * 1024,
-        "calendar": 24 * 1024,
-        "news": 300 * 1024,
-    }
 
     def __init__(
         self,
         *,
         api_key: str | None = None,
-        rate_limit: int = 60,
+        rate_limit: int = DEFAULT_RATE_LIMIT,
         **kwargs: Any,
     ) -> None:
         normalized = rate_limit
         if isinstance(normalized, int):
             if normalized <= 0:
-                logger.warning("YFinance rate_limit %d is invalid; falling back to 60.", normalized)
-                normalized = 60
-            elif normalized > 60:
-                logger.warning("YFinance rate_limit %d exceeds 60; API may throttle.", normalized)
+                logger.warning(LOG_RATE_LIMIT_INVALID_INT.format(prefix=CLIENT_LOG_PREFIX, value=normalized))
+                normalized = DEFAULT_RATE_LIMIT
+            elif normalized > DEFAULT_RATE_LIMIT:
+                logger.warning(LOG_RATE_LIMIT_EXCEEDS_DEFAULT.format(prefix=CLIENT_LOG_PREFIX, value=normalized))
         else:
-            logger.warning("YFinance rate_limit '%s' is invalid; falling back to 60.", normalized)
-            normalized = 60
+            logger.warning(LOG_RATE_LIMIT_INVALID_TYPE.format(prefix=CLIENT_LOG_PREFIX, value=normalized))
+            normalized = DEFAULT_RATE_LIMIT
         if "retry" not in kwargs:
-            kwargs["retry"] = RetryConfig(max_attempts=1, base_backoff_s=0.5, max_backoff_s=2.0)
+            kwargs["retry"] = RetryConfig(
+                max_attempts=DEFAULT_RETRY_MAX_ATTEMPTS,
+                base_backoff_s=DEFAULT_RETRY_BASE_BACKOFF_S,
+                max_backoff_s=DEFAULT_RETRY_MAX_BACKOFF_S,
+            )
         # Ensure api_key is None for YFinanceClient
         super().__init__(api_key=None, rate_limit=normalized, **kwargs)
         self._mapper = SchemaMapper()
@@ -577,7 +574,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             pl.DataFrame for in-memory mode, RunResult for database mode
         """
         validate_tickers(symbols)
-        bytes_per_item = self.SIZE_MAP.get(dataset, 200 * 1024)
+        bytes_per_item = YF_SIZE_MAP.get(dataset, DEFAULT_BYTES_PER_ITEM)
         validate_memory_usage(
             symbols=symbols,
             connect_db=connect_db,
@@ -603,7 +600,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
                     config=self._config,
                     start_date=start_date,
                     end_date=end_date,
-                    **{k: v for k, v in kwargs.items() if k in {"price_batch_size"}},
+                    **{k: v for k, v in kwargs.items() if k in {PRICE_BATCH_SIZE_KEY}},
                 )
                 
                 await self.run_pipeline(
@@ -613,7 +610,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
                     writer=writer,
                     mapper=self._mapper,
                     on_progress=pbar_updater,
-                    **{k: v for k, v in kwargs.items() if k not in {"router","dataset","symbols","writer","mapper","on_progress","price_batch_size"}},
+                    **{k: v for k, v in kwargs.items() if k not in (RESERVED_PIPELINE_KEYS | {PRICE_BATCH_SIZE_KEY})},
                 )
                 
                 result_obj = await self.collect_results(

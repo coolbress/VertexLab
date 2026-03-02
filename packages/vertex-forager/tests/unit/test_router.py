@@ -17,6 +17,9 @@ import polars as pl
 import pytest
 
 from vertex_forager.core.config import FetchJob, ParseResult, RequestSpec
+from collections.abc import Mapping
+from vertex_forager.core.types import JSONValue
+from vertex_forager.providers.sharadar.constants import MAX_ROWS_PER_REQUEST
 from vertex_forager.providers.sharadar.router import SharadarRouter
 
 
@@ -89,10 +92,10 @@ class TestSharadarRouterUnit:
         assert len(jobs) == 0
 
     @pytest.mark.asyncio
-    async def test_generate_jobs_enforces_max_per_page_for_tickers_dataset(
+    async def test_generate_jobs_respects_per_page_with_max_cap_for_tickers_dataset(
         self, router: SharadarRouter
     ) -> None:
-        """Test that generate_jobs enforces maximum per_page for tickers dataset."""
+        """Test that generate_jobs respects caller per_page but caps at API limit."""
         jobs = [
             job
             async for job in router.generate_jobs(
@@ -103,7 +106,19 @@ class TestSharadarRouterUnit:
         assert len(jobs) == 1
         job = jobs[0]
         assert job.dataset == "tickers"
-        assert job.spec.params.get("qopts.per_page") == "10000"
+        assert job.spec.params.get("qopts.per_page") == "500"
+
+        # Subcase: per_page above API cap should be clamped to MAX_ROWS_PER_REQUEST
+        jobs2 = [
+            job
+            async for job in router.generate_jobs(
+                dataset="tickers", symbols=None, per_page=MAX_ROWS_PER_REQUEST * 10
+            )
+        ]
+        assert len(jobs2) == 1
+        job2 = jobs2[0]
+        assert job2.dataset == "tickers"
+        assert job2.spec.params.get("qopts.per_page") == str(MAX_ROWS_PER_REQUEST)
 
     @pytest.mark.asyncio
     async def test_generate_jobs_passes_kwargs_for_fundamental_dataset(
@@ -306,7 +321,7 @@ class TestSharadarRouterUnit:
     ) -> None:
         """Test that parse method creates next_jobs when pagination context exists and next_cursor is returned."""
         # Arrange
-        context = {
+        context: Mapping[str, JSONValue] = {
             "pagination": {
                 "cursor_param": "qopts.cursor_id",
                 "meta_key": "next_cursor_id",

@@ -3,8 +3,34 @@ from __future__ import annotations
 import logging
 import pickle
 from collections.abc import AsyncIterator, Sequence
+import uuid
 from datetime import date, datetime, timezone
 from typing import Any, Final
+from vertex_forager.providers.yfinance.constants import PRICE_BATCH_SIZE, THREADS_THRESHOLD, PRICE_BATCH_MAX, DATASET_ENDPOINT
+from vertex_forager.providers.yfinance.constants import (
+    INTERVAL_KEY,
+    START_KEY,
+    END_KEY,
+    PERIOD_KEY,
+    AUTO_ADJUST_KEY,
+    PREPOST_KEY,
+    DEFAULT_INTERVAL,
+    DEFAULT_PRICE_PERIOD,
+    DEFAULT_AUTO_ADJUST,
+    DEFAULT_PREPOST,
+)
+from vertex_forager.constants import ISO8601_Z_SUFFIX, DEFAULT_TIME_ZONE
+from vertex_forager.logging.constants import (
+    ROUTER_LOG_PREFIX,
+    LOG_PRICE_BATCH_PARSE_FAIL,
+    LOG_INVALID_RATE_LIMIT,
+    LOG_PARSE_FAILED_JOB,
+    LOG_PARSE_UNEXPECTED_ERROR,
+    LOG_POLARS_CONVERT_FAIL,
+    LOG_POLARS_CONVERT_UNEXPECTED,
+    LOG_BUILD_JOB,
+    LOG_PRICE_PARAMS,
+)
 
 import pandas as pd
 import polars as pl
@@ -15,7 +41,7 @@ from vertex_forager.core.config import (
     ParseResult,
 )
 from vertex_forager.routers.base import BaseRouter
-from vertex_forager.providers.yfinance.schema import DATASET_TABLE, DATASET_ENDPOINT
+from vertex_forager.providers.yfinance.schema import DATASET_TABLE
 from vertex_forager.core.types import JSONValue
 from vertex_forager.core.types import YFinanceDataset
 from vertex_forager.routers.jobs import single_symbol_job, build_symbol_context
@@ -51,9 +77,8 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
     """
     flexible_schema: bool = True
 
-    # Constants for batching and processing
-    PRICE_BATCH_SIZE: Final[int] = 250
-    THREADS_THRESHOLD: Final[int] = 50
+    PRICE_BATCH_SIZE: Final[int] = PRICE_BATCH_SIZE
+    THREADS_THRESHOLD: Final[int] = THREADS_THRESHOLD
     
     def __init__(
         self,
@@ -77,7 +102,7 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         if isinstance(rate_limit, int) and rate_limit > 0:
             self._rate_limit = rate_limit
         else:
-            logger.warning("Invalid rate_limit value '%s'; falling back to 60 rpm.", rate_limit)
+            logger.warning(LOG_INVALID_RATE_LIMIT.format(prefix=ROUTER_LOG_PREFIX, value=rate_limit, fallback=60))
             self._rate_limit = 60
         self._start_date = start_date
         self._end_date = end_date
@@ -85,9 +110,9 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         try:
             bs_int = int(raw_bs)
         except (ValueError, TypeError):
-            logger.debug("Failed to parse price_batch_size='%s', using default=%d", raw_bs, self.PRICE_BATCH_SIZE)
+            logger.debug(LOG_PRICE_BATCH_PARSE_FAIL.format(prefix=ROUTER_LOG_PREFIX, value=raw_bs, default=self.PRICE_BATCH_SIZE))
             bs_int = self.PRICE_BATCH_SIZE
-        self._price_batch_size = max(1, min(500, bs_int))
+        self._price_batch_size = max(1, min(PRICE_BATCH_MAX, bs_int))
 
     @property
     def provider(self) -> str:
@@ -168,8 +193,11 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             if s not in seen:
                 seen.add(s)
                 unique_cleaned.append(s)
+        trace_id = uuid.uuid4().hex
+        req_id = 0
         for clean in unique_cleaned:
-            yield self._build_single_symbol_job(symbol=clean, dataset=typed_dataset)
+            yield self._build_single_symbol_job(symbol=clean, dataset=typed_dataset, trace_id=trace_id, request_id=req_id)
+            req_id += 1
 
     def parse(self, *, job: FetchJob, payload: bytes) -> ParseResult:
         """Parse raw pickled payload into structured packets.
@@ -264,10 +292,12 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             return ParseResult(packets=[packet], next_jobs=[])
         
         except (pickle.UnpicklingError, ValueError, TypeError) as e:
-            logger.exception("parse failed for job %s", job)
+            job_id = f"{job.provider}:{job.dataset}:{job.symbol or ''}"
+            logger.exception(LOG_PARSE_FAILED_JOB.format(prefix=ROUTER_LOG_PREFIX, job_id=job_id))
             raise_yfinance_parse_error(e, dataset=job.dataset)
         except Exception as e:
-            logger.exception("Unexpected error in parse for job %s", job)
+            job_id = f"{job.provider}:{job.dataset}:{job.symbol or ''}"
+            logger.exception(LOG_PARSE_UNEXPECTED_ERROR.format(prefix=ROUTER_LOG_PREFIX, job_id=job_id))
             raise_yfinance_parse_error(e, dataset=job.dataset)
         
     # --------------------------------------
@@ -284,16 +314,17 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         mapped = DATASET_ENDPOINT.get(dataset, dataset)
         if dataset == "price":
             kwargs: dict[str, JSONValue] = {
-                "interval": "1d",
-                "auto_adjust": False,
-                "prepost": False,
+                INTERVAL_KEY: DEFAULT_INTERVAL,
+                AUTO_ADJUST_KEY: DEFAULT_AUTO_ADJUST,
+                PREPOST_KEY: DEFAULT_PREPOST,
             }
             if self._start_date:
-                kwargs["start"] = self._start_date
+                kwargs[START_KEY] = self._start_date
             if self._end_date:
-                kwargs["end"] = self._end_date
+                kwargs[END_KEY] = self._end_date
             if not self._start_date:
-                kwargs["period"] = "max"
+                kwargs[PERIOD_KEY] = DEFAULT_PRICE_PERIOD
+            logger.debug(LOG_PRICE_PARAMS.format(prefix=ROUTER_LOG_PREFIX, interval=kwargs.get(INTERVAL_KEY), start=kwargs.get(START_KEY), end=kwargs.get(END_KEY), period=kwargs.get(PERIOD_KEY)))
             # Single-ticker history call is preferred over download for stability
             params["lib"] = {"type": "ticker_attr", "attr": mapped, "kwargs": kwargs}
             return params
@@ -304,10 +335,16 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
     # (Batch job removed: we no longer perform bulk downloads for price.)
     
     # ------ Build per-symbol job: construct URL and spec for single ticker ------
-    def _build_single_symbol_job(self, *, symbol: str, dataset: YFinanceDataset) -> FetchJob:
+    def _build_single_symbol_job(self, *, symbol: str, dataset: YFinanceDataset, trace_id: str | None = None, request_id: int | None = None) -> FetchJob:
         """Build a per-symbol job, applying dataset-specific options."""
         url = f"yfinance://{symbol}"
         params = self._build_request_params(dataset=dataset)
+        logger.debug(LOG_BUILD_JOB.format(prefix=ROUTER_LOG_PREFIX, dataset=dataset, symbols=symbol))
+        ctx = build_symbol_context(dataset=dataset, symbol=symbol)
+        if trace_id is not None:
+            ctx["trace_id"] = trace_id
+        if request_id is not None:
+            ctx["request_id"] = request_id
         return single_symbol_job(
             provider=self.provider,
             dataset=dataset,
@@ -315,7 +352,7 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             url=url,
             params=params,
             auth=None,
-            context=build_symbol_context(dataset=dataset, symbol=symbol),
+            context=ctx,
         )
 
     # --------------------------------------
@@ -379,10 +416,10 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
                 return pl.DataFrame([])
             return pl.DataFrame([data])
         except (ValueError, TypeError, ComputeError) as e:
-            logger.error("Failed to convert data to Polars: %s", e)
+            logger.error(LOG_POLARS_CONVERT_FAIL.format(prefix=ROUTER_LOG_PREFIX, error=e))
             raise
         except Exception:
-            logger.exception("Unexpected failure converting data to Polars")
+            logger.exception(LOG_POLARS_CONVERT_UNEXPECTED.format(prefix=ROUTER_LOG_PREFIX))
             raise
     
     def _transform_price(self, frame: pl.DataFrame) -> pl.DataFrame:
@@ -563,8 +600,8 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             # Explicitly strip Z and use strict=False to handle various formats
             return (
                 expr
-                .str.replace("Z", "+00:00")
-                .str.to_datetime(strict=False, time_zone="UTC")
+                .str.replace("Z", ISO8601_Z_SUFFIX)
+                .str.to_datetime(strict=False, time_zone=DEFAULT_TIME_ZONE)
             )
 
         cols = [

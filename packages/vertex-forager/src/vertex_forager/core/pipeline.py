@@ -34,6 +34,14 @@ from collections import defaultdict
 import polars as pl
 from polars.exceptions import ComputeError
 from vertex_forager.exceptions import ValidationError, PrimaryKeyMissingError, PrimaryKeyNullError
+from vertex_forager.constants import (
+    FLUSH_THRESHOLD_ROWS as DEFAULT_FLUSH_THRESHOLD_ROWS,
+    PRIORITY_PAGINATION as CONST_PRIORITY_PAGINATION,
+    PRIORITY_NEW_JOB as CONST_PRIORITY_NEW_JOB,
+    PRIORITY_SENTINEL as CONST_PRIORITY_SENTINEL,
+    FLUSH_THRESHOLD_INFINITE as CONST_FLUSH_THRESHOLD_INFINITE,
+    PROGRESS_LOG_CHUNK_ROWS,
+)
 
 try:
     import duckdb as _duckdb
@@ -95,15 +103,15 @@ class VertexForager:
 
     # Configurable flush threshold
     # Increased to 500k to allow better batching for large packets (125k rows each)
-    FLUSH_THRESHOLD_ROWS = 500_000
+    FLUSH_THRESHOLD_ROWS = DEFAULT_FLUSH_THRESHOLD_ROWS
 
     # Priority Constants
-    PRIORITY_PAGINATION = 0  # Highest priority for pagination/next jobs
-    PRIORITY_NEW_JOB = 10    # Normal priority for new jobs
-    PRIORITY_SENTINEL = 999  # Lowest priority for sentinel (shutdown)
+    PRIORITY_PAGINATION = CONST_PRIORITY_PAGINATION
+    PRIORITY_NEW_JOB = CONST_PRIORITY_NEW_JOB
+    PRIORITY_SENTINEL = CONST_PRIORITY_SENTINEL
     
     # Infinite threshold for in-memory writer
-    FLUSH_THRESHOLD_INFINITE = 1_000_000_000
+    FLUSH_THRESHOLD_INFINITE = CONST_FLUSH_THRESHOLD_INFINITE
 
     def __init__(
         self,
@@ -350,8 +358,7 @@ class VertexForager:
         async for job in self._router.generate_jobs(
             dataset=dataset, symbols=symbols, **kwargs
         ):
-            # Priority 10 for initial jobs
-            await req_q.put((10, next(counter), job))
+            await req_q.put((self.PRIORITY_NEW_JOB, next(counter), job))
             job_count += 1
             if job_count % 100 == 0:
                 logger.debug(f"PRODUCER: Generated {job_count} jobs so far...")
@@ -474,10 +481,7 @@ class VertexForager:
                         f"[Worker-{worker_id}] Adding {len(parse_result.next_jobs)} pagination jobs for {job.symbol}"
                     )
                     for next_job in parse_result.next_jobs:
-                        # Priority 0 for derived jobs (e.g., pagination, detailed info) to complete logical units first.
-                        # This implements a generic Depth-First Fetching strategy.
-                        # Use monotonic time as tie breaker.
-                        await req_q.put((0, time.monotonic_ns(), next_job))
+                        await req_q.put((self.PRIORITY_PAGINATION, time.monotonic_ns(), next_job))
 
             except (httpx.HTTPStatusError, httpx.RequestError, ValueError) as exc:
                 worker_exc = exc
@@ -639,8 +643,9 @@ class VertexForager:
                 current_rows = previous_rows + len(packet.frame)
                 buffer_rows[table] = current_rows
 
-                # Log progress every 100k rows to assure user it's working
-                if (current_rows // 100_000) > (previous_rows // 100_000):
+                # Log progress every chunk to assure user it's working
+                chunk_rows = max(1, int(PROGRESS_LOG_CHUNK_ROWS))
+                if (current_rows // chunk_rows) > (previous_rows // chunk_rows):
                     logger.debug(
                         f"WRITER: Buffering {table}... {current_rows:,} / {threshold:,} rows"
                     )
