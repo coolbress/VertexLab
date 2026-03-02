@@ -11,6 +11,7 @@ import ast
 from collections import defaultdict
 from pathlib import Path
 from fnmatch import fnmatch
+from collections.abc import Iterator
 
 PKG = "vertex_forager"
 ROOT = Path(__file__).resolve().parent.parent / "packages" / "vertex-forager" / "src"
@@ -36,6 +37,17 @@ def build_graph() -> tuple[dict[str, set[str]], list[tuple[str, str]]]:
     failures: list[tuple[str, str]] = []
     graph: dict[str, set[str]] = defaultdict(set)
 
+    modules_set: set[str] = set()
+    packages_set: set[str] = set()
+    for path in pkg_dir.rglob("*.py"):
+        modname = ".".join([PKG] + list(path.relative_to(ROOT / PKG).with_suffix("").parts))
+        if path.name == "__init__.py":
+            modname = ".".join([PKG] + list(path.parent.relative_to(ROOT / PKG).parts))
+            modules_set.add(modname)
+            packages_set.add(modname)
+        else:
+            modules_set.add(modname)
+
     def module_name_for(path: Path) -> str:
         rel = path.relative_to(ROOT)
         parts = list(rel.parts)
@@ -45,22 +57,24 @@ def build_graph() -> tuple[dict[str, set[str]], list[tuple[str, str]]]:
             return ".".join(parts[:-1])
         return ".".join(parts[:-1] + [parts[-1].removesuffix(".py")])
 
-    def resolve_from(base: str, module: str | None, level: int, names: list[ast.alias]) -> list[str]:
+    def resolve_from(base: str, is_pkg: bool, module: str | None, level: int, names: list[ast.alias]) -> tuple[str, list[str]]:
+        base_parts = base.split(".")
+        pkg_parts = base_parts if is_pkg else base_parts[:-1]
         if level > 0:
-            base_parts = base.split(".")
-            parent = ".".join(base_parts[:-level]) if level <= len(base_parts) else ""
-            target_base = parent if not module else f"{parent}.{module}"
-            results: list[str] = []
-            for n in names:
-                name = n.name
-                target = target_base if not name else (f"{target_base}.{name}" if target_base else name)
-                results.append(target)
-            return results
+            if level == 1:
+                parent_parts = pkg_parts
+            else:
+                parent_parts = pkg_parts[: -(level - 1)] if (level - 1) <= len(pkg_parts) else []
         else:
-            mod = module or ""
-            if not mod:
-                return [alias.name for alias in names]
-            return [mod]
+            parent_parts = []
+        parent = ".".join(parent_parts)
+        target_base = parent if not module else f"{parent}.{module}"
+        results: list[str] = []
+        for n in names:
+            name = n.name
+            target = target_base if not name else (f"{target_base}.{name}" if target_base else name)
+            results.append(target)
+        return target_base, results
 
     for path in pkg_dir.rglob("*.py"):
         modname = module_name_for(path)
@@ -73,7 +87,7 @@ def build_graph() -> tuple[dict[str, set[str]], list[tuple[str, str]]]:
         except (UnicodeDecodeError, SyntaxError) as e:
             failures.append((str(path), repr(e)))
             continue
-        def walk_no_type_checking(n: ast.AST):
+        def walk_no_type_checking(n: ast.AST) -> Iterator[ast.AST]:
             yield n
             for ch in ast.iter_child_nodes(n):
                 if isinstance(n, ast.If) and isinstance(n.test, ast.Name) and n.test.id == "TYPE_CHECKING":
@@ -87,10 +101,25 @@ def build_graph() -> tuple[dict[str, set[str]], list[tuple[str, str]]]:
                     if dep.startswith(PKG):
                         graph[modname].add(dep)
             elif isinstance(node, ast.ImportFrom):
-                targets = resolve_from(modname, node.module, node.level, node.names)
+                # Detect too-deep relative imports
+                base_parts_len = len(modname.split("."))
+                if node.level > 0 and node.level > base_parts_len:
+                    failures.append((str(path), "RelativeImportTooDeep"))
+                    continue
+                target_base, targets = resolve_from(modname, modname in packages_set, node.module, node.level, node.names)
+                if target_base and target_base.startswith(PKG):
+                    if target_base != modname:
+                        graph[modname].add(target_base)
+                    if target_base not in modules_set:
+                        failures.append((str(path), f"MissingModule:{target_base}"))
                 for dep in targets:
                     if dep.startswith(PKG):
                         graph[modname].add(dep)
+                # When importing names from a relative base (module is None), flag missing modules
+                if node.module is None:
+                    for dep in targets:
+                        if dep.startswith(PKG) and dep not in modules_set:
+                            failures.append((str(path), f"MissingModule:{dep}"))
     return graph, failures
 
 def find_cycles(graph: dict[str, set[str]]) -> list[list[str]]:
