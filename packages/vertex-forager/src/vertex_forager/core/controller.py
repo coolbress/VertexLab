@@ -172,6 +172,15 @@ class FlowController:
         requests_per_minute: int,
         concurrency_limit: int | None = None,
     ) -> None:
+        """Initialize the unified Flow Controller.
+        
+        Args:
+            requests_per_minute: Allowed requests per minute (RPM).
+            concurrency_limit: Optional max concurrent requests; if None, auto-computed.
+        
+        Raises:
+            ValueError: If requests_per_minute <= 0.
+        """
         # Calculate optimal concurrency using Little's Law if not provided
         if concurrency_limit is None:
             # L = λ * W
@@ -206,7 +215,16 @@ class FlowController:
 
     @asynccontextmanager
     async def throttle(self) -> AsyncGenerator[None, None]:
-        """Context manager to acquire both rate limit and concurrency slot."""
+        """Context manager to acquire both rate limit and concurrency slot.
+        
+        Behavior:
+            - Acquires GCRA rate limiter permission (may sleep).
+            - Acquires GradientConcurrencyLimiter slot (may wait).
+            - Releases slot with RTT feedback on exit to adapt limits.
+        
+        Raises:
+            asyncio.CancelledError: If the enclosing task is cancelled while waiting.
+        """
         # 1. Acquire Rate Limit (may sleep)
         await self._rate_limiter.acquire()
 

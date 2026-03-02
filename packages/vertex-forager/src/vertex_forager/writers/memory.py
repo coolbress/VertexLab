@@ -10,11 +10,19 @@ from vertex_forager.writers.base import BaseWriter, WriteResult
 
 class InMemoryBufferWriter(BaseWriter):
     """In-memory writer for buffering results.
-
+    
     Used when the user wants to get a DataFrame back directly without writing to disk.
     Accumulates all incoming packets in a dictionary of lists.
-
-    Note: Not suitable for massive datasets that exceed memory.
+    
+    Notes:
+        - Not suitable for massive datasets that exceed memory.
+        - Best used for small workloads or unit testing scenarios.
+    
+    Example:
+        Collect and sort buffered frames for a table:
+            writer = InMemoryBufferWriter()
+            await writer.write(packet)
+            df = writer.collect_table("price", sort_cols=["ticker", "date"])
     """
 
     def __init__(self) -> None:
@@ -45,6 +53,10 @@ class InMemoryBufferWriter(BaseWriter):
 
         Returns:
             pl.DataFrame: Combined data.
+        
+        Example:
+            df = writer.collect_table("price", sort_cols=["ticker", "date"])
+            # df contains all buffered parts for 'price', optionally sorted
         """
         with self._lock:
             parts = self._tables.get(table) or []

@@ -196,6 +196,17 @@ class VertexForager:
 
         Returns:
             RunResult: Summary of the run including metrics and errors.
+        
+        Raises:
+            RuntimeError: Orchestration-level failures (e.g., early writer shutdown).
+        
+        Notes:
+            - Exceptions raised during fetch/parse/write (e.g., httpx.RequestError,
+              httpx.HTTPStatusError, ValidationError, PrimaryKeyMissingError,
+              PrimaryKeyNullError) are captured and appended to `RunResult.errors`
+              and are not re-raised by default.
+            - Callers should inspect `RunResult.errors` for per-task failures and
+              only expect orchestration-level issues to raise.
         """
         # PriorityQueue to prioritize pagination (next jobs) over new jobs
         # Tuple structure: (priority, order, job)
@@ -311,9 +322,19 @@ class VertexForager:
 
     async def stop(self) -> None:
         """Gracefully stop the pipeline.
-
+        
         Cancels all running tasks (producer, fetchers, writers) and awaits their
         cleanup. This method is idempotent and safe to call multiple times.
+        
+        Notes:
+            - Internally, this method calls `asyncio.gather(*self._active_tasks, return_exceptions=True)`,
+              which collects `asyncio.CancelledError` as a returned exception rather than raising it.
+            - `asyncio.CancelledError` would only propagate if the `stop` coroutine itself is externally
+              cancelled by the caller while awaiting completion.
+        
+        Raises:
+            asyncio.CancelledError: Only if this `stop` coroutine is externally cancelled; exceptions
+            from tasks are logged and suppressed via `return_exceptions=True`.
         """
         if not self._active_tasks:
             return

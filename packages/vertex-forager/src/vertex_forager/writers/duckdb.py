@@ -131,6 +131,12 @@ class DuckDBWriter(BaseWriter):
 
         Returns:
             WriteResult: Result object containing table name and number of rows written.
+        
+        Raises:
+            duckdb.Error: If DuckDB execution fails during upsert.
+            ValidationError: If schema validation fails during write.
+            PrimaryKeyMissingError: Required PK columns are missing in packet.
+            PrimaryKeyNullError: PK columns contain null values.
         """
         if packet.frame.is_empty():
             return WriteResult(table=packet.table, rows=0)
@@ -148,6 +154,12 @@ class DuckDBWriter(BaseWriter):
 
         Returns:
             list[WriteResult]: List of result objects for each written packet.
+        
+        Raises:
+            duckdb.Error: If DuckDB execution fails during batch upsert.
+            ValidationError: If schema validation fails during write.
+            PrimaryKeyMissingError: Required PK columns are missing in packets.
+            PrimaryKeyNullError: PK columns contain null values in packets.
         """
         if not packets:
             return []
@@ -323,6 +335,9 @@ class DuckDBWriter(BaseWriter):
 
         Returns:
             None
+        
+        Raises:
+            duckdb.Error: If VACUUM or CHECKPOINT commands fail.
         """
         async with self._lock:
             loop = asyncio.get_running_loop()
@@ -349,6 +364,9 @@ class DuckDBWriter(BaseWriter):
 
         Returns:
             None
+        
+        Raises:
+            duckdb.Error: If the connection close operation fails.
         """
         # Flush any remaining data first (outside lock to avoid deadlock)
         # await self.flush() (no-op, removed to avoid recursive lock wait)

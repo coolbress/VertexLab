@@ -14,14 +14,36 @@ def make_pagination_context(
     cursor_param: str = "qopts.cursor_id",
     max_pages: int | None = 1000,
 ) -> PaginationJobContext:
-    """Create a standardized pagination context dict."""
+    """Create a standardized pagination context dictionary.
+    
+    Args:
+        dataset: Dataset name associated with pagination (e.g., "tickers").
+        meta_key: Metadata key in provider response that contains the next cursor id.
+            Defaults to "next_cursor_id".
+        cursor_param: Request parameter name used to pass the cursor id.
+            Defaults to "qopts.cursor_id".
+        max_pages: Optional cap on total pagination cycles. If None, pagination
+            is unbounded. Defaults to 1000.
+    
+    Returns:
+        PaginationJobContext: A mapping containing the 'pagination' config and
+        the originating 'dataset' for downstream correlation.
+    """
     pagination: PaginationParams = {"cursor_param": cursor_param, "meta_key": meta_key}
     if max_pages is not None:
         pagination["max_pages"] = int(max_pages)
     return {"pagination": pagination, "dataset": dataset}
 
 def build_symbol_context(*, dataset: str, symbol: str) -> PerSymbolJobContext:
-    """Standardized builder for per-symbol job context."""
+    """Build standardized context for per-symbol jobs.
+    
+    Args:
+        dataset: Dataset name (e.g., "price").
+        symbol: Target ticker symbol (or comma-separated list).
+    
+    Returns:
+        PerSymbolJobContext: Context with 'dataset' and 'symbol' for downstream use.
+    """
     return {"dataset": dataset, "symbol": symbol}
 
 def pagination_job(
@@ -33,7 +55,19 @@ def pagination_job(
     auth: Any,
     context: PaginationJobContext,
 ) -> FetchJob:
-    """Create a pagination-aware FetchJob."""
+    """Create a pagination-aware FetchJob.
+    
+    Args:
+        provider: Provider identifier (e.g., "sharadar").
+        dataset: Dataset name for the job.
+        url: Target URL for the request.
+        params: Request parameters (JSONValue-safe mapping).
+        auth: Authentication configuration (attached to RequestSpec).
+        context: Pagination context including cursor param, meta key, and optional max pages.
+    
+    Returns:
+        FetchJob: Constructed job with pagination context.
+    """
     spec = RequestSpec(method=HttpMethod.GET, url=url, params=dict(params), auth=auth)
     return FetchJob(provider=provider, dataset=dataset, symbol=None, spec=spec, context=cast(Mapping[str, JSONValue], context))
 
@@ -48,7 +82,21 @@ def single_symbol_job(
     auth: Any | None = None,
     context: PerSymbolJobContext | None = None,
 ) -> FetchJob:
-    """Create a per-symbol FetchJob."""
+    """Create a per-symbol FetchJob.
+    
+    Args:
+        provider: Provider identifier (e.g., "yfinance").
+        dataset: Dataset name for the job.
+        symbol: Target ticker symbol (or comma-separated list).
+        url: Target URL for the request.
+        params: Request parameters (JSONValue-safe mapping).
+        auth: Optional authentication configuration.
+        context: Optional job context; must include 'dataset' and 'symbol'. If missing,
+            they are injected via a standardized builder while preserving extra keys.
+    
+    Returns:
+        FetchJob: Constructed job with symbol context.
+    """
     if auth is None:
         spec = RequestSpec(method=HttpMethod.GET, url=url, params=dict(params))
     else:
