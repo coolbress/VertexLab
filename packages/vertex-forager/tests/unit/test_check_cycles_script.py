@@ -40,6 +40,14 @@ def test_build_graph_resolves_relative_imports(tmp_path: Path, monkeypatch):
     (pkg / "mod1.py").write_text("from vertex_forager.pkg_a.mod2 import X\n")
     (pkg / "bad.py").write_text("from .. import nope\n")
     (pkg / "modabs.py").write_text("import vertex_forager.pkg_a.mod2 as m2\n")
+    (pkg / "deep_bad.py").write_text("from ... import nope\n")
+    (pkg / "typing_branch.py").write_text(
+        "from typing import TYPE_CHECKING\n"
+        "if TYPE_CHECKING:\n"
+        "    import vertex_forager.pkg_a.nonexistent\n"
+        "else:\n"
+        "    from vertex_forager.pkg_a.mod2 import X\n"
+    )
 
     # Import module and patch ROOT/SYS_PATH
     from scripts import check_cycles as cc
@@ -49,6 +57,9 @@ def test_build_graph_resolves_relative_imports(tmp_path: Path, monkeypatch):
     graph, failures = cc.build_graph()
     # bad.py should be recorded as a failure (invalid relative import or missing module)
     assert any("bad.py" in p for p, _ in failures), "Expected failure recorded for bad.py"
+
+    # deep_bad.py should trigger RelativeImportTooDeep or MissingModule
+    assert any("deep_bad.py" in p for p, _ in failures), "Expected failure recorded for deep_bad.py"
 
     # Graph should contain at least one dependency edge
     # Expect at least one package-local dependency edge
@@ -60,3 +71,7 @@ def test_build_graph_resolves_relative_imports(tmp_path: Path, monkeypatch):
         if dep.startswith("vertex_forager")
     )
     assert local_edges > 0, "Expected at least one local dependency edge"
+    # typing_branch should not cause failures and should have local deps
+    typing_mod = "vertex_forager.pkg_a.typing_branch"
+    assert typing_mod in graph
+    assert any(dep.startswith("vertex_forager") for dep in graph.get(typing_mod, set()))
