@@ -10,7 +10,23 @@ from vertex_forager.core.library import register_library_fetcher, BaseLibraryFet
 class YFinanceLibraryFetcher(BaseLibraryFetcher):
     scheme = "yfinance"
 
+    """YFinance library fetcher.
+    
+    Provides scheme-based dispatch for yfinance calls and integrates with the
+    library fetcher registry via `scheme`.
+    """
     def fetch(self, spec: RequestSpec) -> Any:
+        """Execute a yfinance library call described by RequestSpec.
+        
+        Args:
+            spec: Request specification containing URL, params with `lib`.
+        
+        Returns:
+            Any: Result from yfinance APIs (download result or attribute call).
+        
+        Raises:
+            ValueError: When yfinance is unavailable or call specification invalid.
+        """
         if getattr(_http_mod, "yf", None) is None:
             raise ValueError("yfinance library not available")
         ticker_symbol, dataset, lib = self.parse_spec(spec)
@@ -21,8 +37,10 @@ class YFinanceLibraryFetcher(BaseLibraryFetcher):
             return _http_mod.yf.download(tickers=ticker_symbol, **call_kwargs)
         if call_type == "ticker_attr":
             attr_name = lib.get("attr")
+            if not isinstance(attr_name, str) or attr_name.startswith("_") or "__" in attr_name:
+                raise ValueError(f"Unknown yfinance dataset: {dataset} -> {attr_name}")
             ticker = _http_mod.yf.Ticker(ticker_symbol)
-            if not isinstance(attr_name, str) or not hasattr(ticker, attr_name):
+            if not hasattr(ticker, attr_name):
                 raise ValueError(f"Unknown yfinance dataset: {dataset} -> {attr_name}")
             attr = getattr(ticker, attr_name)
             return attr(**call_kwargs) if callable(attr) else attr

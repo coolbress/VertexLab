@@ -4,7 +4,7 @@ from __future__ import annotations
 import subprocess
 import sys
 
-HOTSPOTS: set[str] | None = None  # None → 모든 스테이지 파일 대상으로 점검
+HOTSPOTS: set[str] | None = None  # None => check all staged files
 
 def run(cmd: list[str]) -> str:
     """Run a shell command and capture stdout.
@@ -46,8 +46,12 @@ def main() -> int:
             print("Or rehearsal: git fetch origin && git merge --no-commit --no-ff origin/main && git diff --name-only --diff-filter=U && git merge --abort")
             return 1
         return 0
-    except subprocess.CalledProcessError:
-        return 0
+    except subprocess.CalledProcessError as e:
+        print(f"Error running git command: {e}")
+        out = getattr(e, "output", "")
+        if out:
+            print(out)
+        return 1
 
 if __name__ == "__main__":
     sys.exit(main())

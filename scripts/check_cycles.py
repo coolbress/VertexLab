@@ -10,19 +10,23 @@ import sys
 import os
 from modulefinder import ModuleFinder
 from collections import defaultdict
+from pathlib import Path
+from fnmatch import fnmatch
 
 PKG = "vertex_forager"
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "packages", "vertex-forager", "src"))
-SYS_PATH = [ROOT] + sys.path
+ROOT = Path(__file__).resolve().parent.parent / "packages" / "vertex-forager" / "src"
+SYS_PATH = [str(ROOT)] + sys.path
 
-def build_graph() -> dict[str, set[str]]:
+def build_graph() -> tuple[dict[str, set[str]], list[tuple[str, str]]]:
     """Build dependency graph for the package.
 
     Args:
         None
 
     Returns:
-        dict[str, set[str]]: Map of module name -> set of dependent module names
+        tuple[dict[str, set[str]], list[tuple[str, str]]]:
+            - Map of module name -> set of dependent module names
+            - List of (path, error) for files that failed to load
 
     Notes:
         - Uses ModuleFinder across all .py files under ROOT/PKG
@@ -30,16 +34,13 @@ def build_graph() -> dict[str, set[str]]:
         - Resolves relative imports against each module's name
     """
     finder = ModuleFinder(path=SYS_PATH)
-    pkg_dir = os.path.join(ROOT, PKG.replace(".", os.sep))
-    for root, _, files in os.walk(pkg_dir):
-        for f in files:
-            if f.endswith(".py"):
-                path = os.path.join(root, f)
-                try:
-                    finder.run_script(path)
-                except Exception:
-                    # Skip files that fail to load under ModuleFinder
-                    pass
+    pkg_dir = ROOT / PKG.replace(".", os.sep)
+    failures: list[tuple[str, str]] = []
+    for path in pkg_dir.rglob("*.py"):
+        try:
+            finder.run_script(str(path))
+        except (ImportError, SyntaxError, ModuleNotFoundError, Exception) as e:
+            failures.append((str(path), repr(e)))
 
     def _resolve(name: str, base: str) -> str:
         if not name:
@@ -57,11 +58,13 @@ def build_graph() -> dict[str, set[str]]:
         if not name.startswith(PKG):
             continue
         base = getattr(mod, "__name__", name)
-        for dep in mod.globalnames.keys():
+        globalnames = getattr(mod, "globalnames", {})
+        for dep in globalnames.keys():
             dep_abs = _resolve(dep, base)
             if dep_abs.startswith(PKG):
                 graph[name].add(dep_abs)
-        for dep in mod.starimports:
+        starimports = getattr(mod, "starimports", [])
+        for dep in starimports:
             dep_abs = _resolve(dep, base)
             if dep_abs.startswith(PKG):
                 graph[name].add(dep_abs)
@@ -72,7 +75,7 @@ def build_graph() -> dict[str, set[str]]:
                     dep_abs = _resolve(dep, base)
                     if dep_abs.startswith(PKG):
                         graph[name].add(dep_abs)
-    return graph
+    return graph, failures
 
 def find_cycles(graph: dict[str, set[str]]) -> list[list[str]]:
     """Detect import cycles in the provided graph.
@@ -121,7 +124,22 @@ def main() -> int:
     Notes:
         - Relies on module-scope SYS_PATH/ROOT/PKG assumptions
     """
-    graph = build_graph()
+    graph, failures = build_graph()
+    allow_globs = [
+        "*/*/__init__.py",
+        "*/api.py",
+        "*/cli.py",
+        "*/constants.py",
+        "*/providers/yfinance/*",
+        "*/providers/sharadar/*",
+        "*/schema/*",
+    ]
+    filtered = [(p, e) for (p, e) in failures if not any(fnmatch(p, g) for g in allow_globs)]
+    if filtered:
+        print("Failed to analyze the following modules (filtered):")
+        for path, err in filtered:
+            print(f" - {path}: {err}")
+        return 1
     cycles = find_cycles(graph)
     if cycles:
         print("Detected import cycles:")
