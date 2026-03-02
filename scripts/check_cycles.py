@@ -70,7 +70,10 @@ def build_graph() -> tuple[dict[str, set[str]], list[tuple[str, str]]]:
         else:
             parent_parts = []
         parent = ".".join(parent_parts)
-        target_base = parent if not module else f"{parent}.{module}"
+        if not parent:
+            target_base = module or ""
+        else:
+            target_base = parent if not module else f"{parent}.{module}"
         results: list[str] = []
         for n in names:
             name = n.name
@@ -99,11 +102,11 @@ def build_graph() -> tuple[dict[str, set[str]], list[tuple[str, str]]]:
                 elif isinstance(test, ast.Attribute) and isinstance(test.value, ast.Name) and test.value.id == "typing" and test.attr == "TYPE_CHECKING":
                     is_tc = True
                 if is_tc:
-                    for ch in n.orelse:
-                        yield from walk_no_type_checking(ch)
+                    for orelse_node in n.orelse:
+                        yield from walk_no_type_checking(orelse_node)
                     return
-            for ch in ast.iter_child_nodes(n):
-                yield from walk_no_type_checking(ch)
+            for child in ast.iter_child_nodes(n):
+                yield from walk_no_type_checking(child)
 
         for node in walk_no_type_checking(tree):
             if isinstance(node, ast.Import):
@@ -116,8 +119,7 @@ def build_graph() -> tuple[dict[str, set[str]], list[tuple[str, str]]]:
                 base_parts = modname.split(".")
                 is_pkg = modname in packages_set
                 pkg_parts = base_parts if is_pkg else base_parts[:-1]
-                allowed_level = len(pkg_parts) + (0 if is_pkg else 1)
-                if node.level > 0 and node.level >= allowed_level:
+                if node.level > 0 and node.level > len(pkg_parts):
                     failures.append((str(path), "RelativeImportTooDeep"))
                     continue
                 target_base, targets = resolve_from(modname, modname in packages_set, node.module, node.level, node.names)
