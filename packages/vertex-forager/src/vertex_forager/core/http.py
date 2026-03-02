@@ -5,7 +5,10 @@ import logging
 from typing import Any
 import re
 import httpx
-import yfinance as yf
+try:
+    import yfinance as yf  # test compatibility: allow monkeypatching core.http.yf
+except Exception:
+    yf = None
 from vertex_forager.core.types import JSONValue
 from vertex_forager.core.config import RequestSpec
 from vertex_forager.constants import (
@@ -14,6 +17,7 @@ from vertex_forager.constants import (
     HTTP_MAX_CONNECTIONS,
     HTTP_USER_AGENT,
 )
+from vertex_forager.core.library import get_library_fetcher
 
 
 logger = logging.getLogger("vertex_forager.core.http")
@@ -111,29 +115,15 @@ class HttpExecutor:
         scheme, payload = spec.url.split("://", 1)
         params = spec.params
         dataset = params.get("dataset", "price")
-        lib = params.get("lib")
 
         try:
-            # 1. Execute provider-specific library call
+            # 1. Execute provider-specific library call via registry
+            fetcher = get_library_fetcher(scheme)
+            if fetcher is None:
+                raise ValueError(f"Unsupported library scheme: {scheme}")
+
             def _execute():
-                if scheme != "yfinance":
-                    raise ValueError(f"Unsupported library scheme: {scheme}")
-                ticker_symbol = payload
-                if not isinstance(lib, dict):
-                    raise ValueError("Missing library call specification ('lib') in request params")
-                call_type = lib.get("type")
-                kw = lib.get("kwargs")
-                call_kwargs: dict[str, "JSONValue"] = dict(kw) if isinstance(kw, dict) else {}
-                if call_type == "download":
-                    return yf.download(tickers=ticker_symbol, **call_kwargs)
-                if call_type == "ticker_attr":
-                    attr_name = lib.get("attr")
-                    ticker = yf.Ticker(ticker_symbol)
-                    if not isinstance(attr_name, str) or not hasattr(ticker, attr_name):
-                        raise ValueError(f"Unknown yfinance dataset: {dataset} -> {attr_name}")
-                    attr = getattr(ticker, attr_name)
-                    return attr(**call_kwargs) if callable(attr) else attr
-                raise ValueError(f"Unsupported library call type: {call_type}")
+                return fetcher.fetch(spec)
 
             # Use the client's run_sync method
             data = await self._client.run_sync(_execute)

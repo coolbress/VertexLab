@@ -18,8 +18,7 @@ from vertex_forager.core.http import HttpExecutor as _HttpExecutor
 from vertex_forager.core.pipeline import VertexForager as _VertexForager
 from vertex_forager.core.config import EngineConfig, RunResult
 from vertex_forager.core.controller import FlowController
-from vertex_forager.routers.base import BaseRouter
-from vertex_forager.schema.mapper import SchemaMapper
+from vertex_forager.core.contracts import IRouter, IWriter, IMapper
 from vertex_forager.schema.registry import get_table_schema
 from vertex_forager.writers.base import BaseWriter
 from vertex_forager.writers import create_writer
@@ -170,11 +169,11 @@ class BaseClient(ABC, Generic[T]):
     async def run_pipeline(
         self,
         *,
-        router: BaseRouter,
+        router: IRouter,
         dataset: T,
         symbols: list[str] | None,
-        writer: BaseWriter,
-        mapper: SchemaMapper,
+        writer: IWriter,
+        mapper: IMapper,
         on_progress: Callable[..., None] | None = None,
         **kwargs: JSONValue,
     ) -> RunResult:

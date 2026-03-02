@@ -1,3 +1,8 @@
+"""Provider-agnostic router error adapters.
+ 
+Standardizes provider-specific error payloads/exceptions into Vertex Forager
+common exception types for consistent handling in router implementations.
+"""
 from __future__ import annotations
 
 from typing import Mapping, Any, NoReturn

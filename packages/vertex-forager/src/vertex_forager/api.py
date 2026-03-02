@@ -1,6 +1,21 @@
 """Public API for vertex-forager.
-
-This module is intended to be the primary import surface for users.
+ 
+This module is the primary import surface for end users. Prefer composing
+clients and routers via factory helpers to keep code decoupled from concrete
+implementations (DIP-friendly).
+ 
+Usage:
+    from vertex_forager.api import create_client, create_router
+    
+    client = create_client(provider=\"sharadar\", api_key=\"...\", rate_limit=120)
+    router = create_router(provider=\"sharadar\", api_key=\"...\", config=client._config)
+    
+    # Run a pipeline through the client (recommended)
+    # await client.run_pipeline(router=router, dataset=\"price\", symbols=[\"AAPL\"], writer=..., mapper=...)
+ 
+Notes:
+    - Concrete classes (e.g., SharadarClient, YFinanceClient) are available, but
+      typical usage does not require importing them directly; prefer factory helpers.
 """
 
 from __future__ import annotations

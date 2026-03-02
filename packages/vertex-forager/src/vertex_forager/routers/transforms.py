@@ -1,3 +1,9 @@
+"""Provider-agnostic router utilities.
+ 
+Defines shared normalization helpers used by router implementations. While
+these functions are provider-agnostic, they are scoped to the routers layer
+to keep core surface minimal and emphasize the adapter responsibility.
+"""
 from __future__ import annotations
 
 from datetime import datetime, timezone

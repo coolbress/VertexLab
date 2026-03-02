@@ -5,9 +5,7 @@ from typing import Callable, Any, TypeVar, Union
 
 from vertex_forager.clients.base import HttpExecutor
 from vertex_forager.core.config import RunResult
-from vertex_forager.routers.base import BaseRouter
-from vertex_forager.schema.mapper import SchemaMapper
-from vertex_forager.writers.base import BaseWriter
+from vertex_forager.core.contracts import IRouter, IWriter, IMapper
 from vertex_forager.core.types import JSONValue, SharadarDataset, YFinanceDataset
 
 T = TypeVar("T", bound=Union[SharadarDataset, YFinanceDataset, str])
@@ -15,11 +13,11 @@ T = TypeVar("T", bound=Union[SharadarDataset, YFinanceDataset, str])
 async def run_pipeline_for(
     *,
     client: Any,
-    router: BaseRouter,
+    router: IRouter,
     dataset: T,
     symbols: list[str] | None,
-    writer: BaseWriter,
-    mapper: SchemaMapper,
+    writer: IWriter,
+    mapper: IMapper,
     on_progress: Callable[..., None] | None = None,
     **kwargs: JSONValue,
 ) -> RunResult:

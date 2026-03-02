@@ -58,12 +58,11 @@ from vertex_forager.core.config import (
 )
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.retry import create_retry_controller
-from vertex_forager.routers.base import BaseRouter
-from vertex_forager.schema.mapper import SchemaMapper
+from vertex_forager.core.contracts import IRouter, IWriter, IMapper
 from vertex_forager.schema.registry import get_table_schema
 
 if TYPE_CHECKING:
-    from vertex_forager.writers.base import BaseWriter
+    pass
 
 InMemoryBufferWriterType: type | None
 try:
@@ -86,7 +85,7 @@ class VertexForager:
     (Writer Workers).
 
     Attributes:
-        _router (BaseRouter): Router/Queue manager for fetch jobs.
+        _router (IRouter): Router/Queue manager for fetch jobs.
         _http (HttpExecutor): Handles HTTP requests.
         _writer (BaseWriter): Writer task manager.
         _mapper (SchemaMapper): Normalizes data schemas.
@@ -116,10 +115,10 @@ class VertexForager:
     def __init__(
         self,
         *,
-        router: BaseRouter,
+        router: IRouter,
         http: HttpExecutor,
-        writer: BaseWriter,
-        mapper: SchemaMapper,
+        writer: IWriter,
+        mapper: IMapper,
         config: EngineConfig,
         controller: FlowController,
     ) -> None:

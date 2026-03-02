@@ -6,8 +6,9 @@ from vertex_forager.core.types import SharadarDataset, YFinanceDataset
 
 from vertex_forager.core.config import FetchJob, ParseResult, RunResult
 if TYPE_CHECKING:
-    from vertex_forager.writers.base import BaseWriter
+    from vertex_forager.writers.base import BaseWriter, WriteResult
     from vertex_forager.schema.mapper import SchemaMapper
+    from vertex_forager.core.config import FramePacket
 
 
 T = TypeVar("T", bound=Union[SharadarDataset, YFinanceDataset, str])
@@ -39,3 +40,16 @@ class IClient(Protocol, Generic[T]):
         on_progress: Callable[..., None] | None = None,
         **kwargs: JSONValue,
     ) -> RunResult: ...
+
+
+class IWriter(Protocol):
+    """Writer protocol for persisting normalized packets."""
+
+    async def write(self, packet: "FramePacket") -> "WriteResult": ...
+    async def flush(self) -> None: ...
+
+
+class IMapper(Protocol):
+    """Schema mapper protocol for normalizing packets."""
+
+    def normalize(self, *, packet: "FramePacket") -> "FramePacket": ...
