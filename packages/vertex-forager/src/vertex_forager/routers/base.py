@@ -25,6 +25,11 @@ class BaseRouter(ABC, Generic[T]):
     specific vendor APIs. It encapsulates all knowledge about URL construction,
     request parameters, and response parsing logic.
 
+    Attributes:
+        flexible_schema: When True, downstream normalization may allow diagonal
+            concatenation for schema evolution (extra/missing columns). This enables
+            tolerant merging when provider payloads vary across requests.
+
     Key Responsibilities:
     1. **Job Generation (`generate_jobs`)**: Translates high-level data requests (dataset, symbols)
        into concrete `FetchJob` objects containing fully formed HTTP request specifications.
@@ -85,6 +90,12 @@ class BaseRouter(ABC, Generic[T]):
             - Date filters: apply start/end via _parse_date_range when needed
             - Pagination: include cursor/keys in context if supported
             - Auth: attach provider tokens/headers
+        
+        Examples:
+            Yielding a pagination job:
+                - dataset="tickers", symbols=None
+                - context includes {"pagination": {"cursor_param": "qopts.cursor_id", "meta_key": "next_cursor_id"}}
+                - params use {"qopts.per_page": "10000"}
         """
 
     @abstractmethod
@@ -120,6 +131,12 @@ class BaseRouter(ABC, Generic[T]):
         Notes:
             - Structure transformation happens here; strict type casting is delegated to SchemaMapper.
             - Use _parse_date_range for date derivations when needed.
+        
+        Examples:
+            Creating follow-up pagination job:
+                - Read "next_cursor_id" from response meta
+                - Set job.spec.params["qopts.cursor_id"] to next value
+                - Append to ParseResult.next_jobs
         """
 
     # -----------------------------------------

@@ -25,8 +25,28 @@ async def run_pipeline_for(
 ) -> RunResult:
     """Execute the VertexForager pipeline using the provided client context.
     
-    This function isolates pipeline orchestration from the client class to
+    This helper isolates pipeline orchestration from the client class to
     satisfy DIP and improve testability.
+    
+    Args:
+        client: Client instance that owns HTTP/session lifecycle and config.
+        router: Provider router for job generation and parsing.
+        dataset: Dataset identifier (provider-specific).
+        symbols: Optional list of symbols to fetch.
+        writer: Destination writer used by the pipeline.
+        mapper: Schema mapper to normalize frames.
+        on_progress: Optional callback invoked on job completion.
+        **kwargs: Additional pipeline options; reserved keys are filtered.
+    
+    Returns:
+        RunResult: Pipeline execution summary and tables/errors metrics.
+    
+    Raises:
+        httpx.RequestError: Network errors during fetch.
+        httpx.HTTPStatusError: Non-2xx HTTP responses.
+        ValidationError: Schema validation issues during write.
+        PrimaryKeyMissingError: Required PK columns are missing.
+        PrimaryKeyNullError: PK columns contain nulls.
     """
     # Import VertexForager via base to allow test patching on vertex_forager.clients.base.VertexForager
     from vertex_forager.clients.base import VertexForager

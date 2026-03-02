@@ -196,6 +196,14 @@ class VertexForager:
 
         Returns:
             RunResult: Summary of the run including metrics and errors.
+        
+        Raises:
+            httpx.RequestError: Network errors during fetch workers.
+            httpx.HTTPStatusError: Non-2xx responses encountered by fetch workers.
+            ValidationError: Schema validation failures during writing.
+            PrimaryKeyMissingError: Missing PK columns detected during write.
+            PrimaryKeyNullError: Nulls in PK columns detected during write.
+            RuntimeError: Early writer shutdown or orchestration failures.
         """
         # PriorityQueue to prioritize pagination (next jobs) over new jobs
         # Tuple structure: (priority, order, job)
@@ -311,9 +319,13 @@ class VertexForager:
 
     async def stop(self) -> None:
         """Gracefully stop the pipeline.
-
+        
         Cancels all running tasks (producer, fetchers, writers) and awaits their
         cleanup. This method is idempotent and safe to call multiple times.
+        
+        Raises:
+            Exception: Propagates unexpected errors during executor shutdown after logging.
+            asyncio.CancelledError: If cancellation occurs during stop awaiting.
         """
         if not self._active_tasks:
             return
