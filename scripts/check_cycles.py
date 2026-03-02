@@ -7,7 +7,6 @@ Builds a directed import graph using modulefinder and detects cycles via DFS.
 from __future__ import annotations
 
 import sys
-import os
 import ast
 from collections import defaultdict
 from pathlib import Path
@@ -33,7 +32,7 @@ def build_graph() -> tuple[dict[str, set[str]], list[tuple[str, str]]]:
         - Only collects dependencies that resolve to the package namespace
         - Resolves relative imports against each module's name
     """
-    pkg_dir = ROOT / PKG.replace(".", os.sep)
+    pkg_dir = ROOT / PKG.replace(".", "/")
     failures: list[tuple[str, str]] = []
     graph: dict[str, set[str]] = defaultdict(set)
 

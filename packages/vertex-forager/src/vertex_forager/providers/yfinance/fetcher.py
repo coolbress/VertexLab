@@ -39,9 +39,10 @@ class YFinanceLibraryFetcher(BaseLibraryFetcher):
             if not isinstance(attr_name, str) or attr_name.startswith("_") or "__" in attr_name:
                 raise ValueError(f"Unknown yfinance dataset: {dataset} -> {attr_name}")
             ticker = _http_mod.yf.Ticker(ticker_symbol)
-            if not hasattr(ticker, attr_name):
+            try:
+                attr = getattr(ticker, attr_name)
+            except AttributeError:
                 raise ValueError(f"Unknown yfinance dataset: {dataset} -> {attr_name}")
-            attr = getattr(ticker, attr_name)
             return attr(**call_kwargs) if callable(attr) else attr
         raise ValueError(f"Unsupported library call type: {call_type}")
 
