@@ -39,8 +39,10 @@ def build_graph() -> tuple[dict[str, set[str]], list[tuple[str, str]]]:
     for path in pkg_dir.rglob("*.py"):
         try:
             finder.run_script(str(path))
-        except (ImportError, SyntaxError, ModuleNotFoundError, Exception) as e:
+        except (ImportError, SyntaxError, ModuleNotFoundError, AttributeError) as e:
             failures.append((str(path), repr(e)))
+        except Exception:
+            raise
 
     def _resolve(name: str, base: str) -> str:
         if not name:

@@ -28,7 +28,7 @@ def test_find_cycles_detects_and_no_cycle_cases():
     assert cc.find_cycles(acyclic) == []
 
 
-def test_build_graph_resolves_relative_imports(tmp_path: Path):
+def test_build_graph_resolves_relative_imports(tmp_path: Path, monkeypatch):
     # Create temporary package structure under src/vertex_forager
     src = tmp_path / "src"
     pkg = src / "vertex_forager" / "pkg_a"
@@ -42,8 +42,8 @@ def test_build_graph_resolves_relative_imports(tmp_path: Path):
 
     # Import module and patch ROOT/SYS_PATH
     from scripts import check_cycles as cc
-    cc.ROOT = src
-    cc.SYS_PATH = [str(src)] + sys.path
+    monkeypatch.setattr(cc, "ROOT", src)
+    monkeypatch.setattr(cc, "SYS_PATH", [str(src)] + sys.path)
 
     graph, failures = cc.build_graph()
     assert any(str(p).endswith("bad.py") for p, _ in failures), "Expected failure recorded for invalid relative import"

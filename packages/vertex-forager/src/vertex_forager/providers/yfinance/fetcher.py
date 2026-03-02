@@ -4,7 +4,7 @@ from typing import Any
 import vertex_forager.core.http as _http_mod
 from vertex_forager.core.config import RequestSpec
 from vertex_forager.core.types import JSONValue
-from vertex_forager.core.library import register_library_fetcher, BaseLibraryFetcher
+from vertex_forager.core.library import register_library_fetcher, BaseLibraryFetcher, get_library_fetcher
 
 
 class YFinanceLibraryFetcher(BaseLibraryFetcher):
@@ -47,4 +47,5 @@ class YFinanceLibraryFetcher(BaseLibraryFetcher):
         raise ValueError(f"Unsupported library call type: {call_type}")
 
 
-register_library_fetcher(YFinanceLibraryFetcher())
+if get_library_fetcher("yfinance") is None:
+    register_library_fetcher(YFinanceLibraryFetcher())

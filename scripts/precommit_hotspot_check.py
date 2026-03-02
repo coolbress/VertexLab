@@ -28,11 +28,11 @@ def main() -> int:
 
     Notes:
         - Checks staged files for hotspot paths and compares with origin/main changes.
-        - Any subprocess errors are treated as pass-through (returns 0).
+        - Subprocess errors result in a non-zero exit code (returns 1).
     """
     try:
         staged = set(run(["git", "diff", "--cached", "--name-only"]).splitlines())
-        targets = staged if not HOTSPOTS else HOTSPOTS.intersection(staged)
+        targets = staged if HOTSPOTS is None else HOTSPOTS.intersection(staged)
         if not targets:
             return 0
         base = run(["git", "merge-base", "origin/main", "HEAD"])
