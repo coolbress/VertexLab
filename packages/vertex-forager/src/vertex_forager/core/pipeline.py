@@ -204,9 +204,15 @@ class VertexForager:
     def _log_structured(self, *, provider: str, dataset: str, symbol: str | None, stage: str, attempt: int | None = None, duration_s: float | None = None) -> None:
         if not self._structured_logs:
             return
+        def _sanitize(v: object) -> str:
+            s = "" if v is None else str(v)
+            s = s.replace("\n", " ").replace("\r", " ")
+            s = s.replace("=", "_")
+            s = s.strip()
+            return s
         att = attempt if attempt is not None else 0
         dur = f"{duration_s:.3f}s" if duration_s is not None else "-"
-        msg = f"OBS provider={provider} dataset={dataset} symbol={symbol or ''} stage={stage} attempt={att} duration={dur}"
+        msg = f"OBS provider={_sanitize(provider)} dataset={_sanitize(dataset)} symbol={_sanitize(symbol)} stage={_sanitize(stage)} attempt={att} duration={dur}"
         if self._log_verbose:
             logger.info(msg)
         else:
@@ -265,6 +271,11 @@ class VertexForager:
         pkt_q: asyncio.Queue[FramePacket | None] = asyncio.Queue(
             maxsize=self._config.queue_max
         )
+        if self._metrics_enabled:
+            self._counters = {}
+            self._hists = {}
+            self._summary = {}
+            self._counters["pipeline_runs"] = 1
 
         result = RunResult(provider=self._router.provider)
         result_lock = asyncio.Lock()
@@ -777,8 +788,11 @@ class VertexForager:
                 att_no = None
                 try:
                     state = getattr(attempt, "retry_state", None)
-                    att_no = getattr(state, "attempt_number", None)
-                except Exception:
+                except (AttributeError, TypeError):
+                    state = None
+                try:
+                    att_no = getattr(state, "attempt_number", None) if state is not None else None
+                except (AttributeError, TypeError):
                     att_no = None
                 t0 = time.monotonic()
                 self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="http_start", attempt=att_no)
