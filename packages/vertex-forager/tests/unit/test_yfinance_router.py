@@ -137,3 +137,6 @@ class TestYFinanceRouterUnit:
         frame = result.packets[0].frame
         assert "period" in frame.columns
         assert frame.height == 3
+        assert frame.get_column("period").to_list() == ["0m", "-1m", "-2m"]
+        assert "strongbuy" in frame.columns
+        assert frame.get_column("strongbuy").to_list() == [5, 3, 2]
