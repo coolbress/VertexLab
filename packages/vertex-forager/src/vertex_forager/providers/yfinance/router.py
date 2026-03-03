@@ -289,6 +289,7 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
                 else:
                     logger.debug(msg0)
             t0 = time.monotonic()
+            t0 = time.monotonic()
             if dataset == "price":
                 df_pl = self._transform_price(df_pl)
             elif dataset in ("financials", "quarterly_financials", "balance_sheet", "quarterly_balance_sheet", "cashflow", "quarterly_cashflow", "income_stmt", "earnings", "quarterly_earnings"):
