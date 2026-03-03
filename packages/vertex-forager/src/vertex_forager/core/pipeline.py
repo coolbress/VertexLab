@@ -276,6 +276,7 @@ class VertexForager:
             self._hists = {}
             self._summary = {}
             self._counters["pipeline_runs"] = 1
+        t_run0 = time.monotonic()
 
         result = RunResult(provider=self._router.provider)
         result_lock = asyncio.Lock()
@@ -383,8 +384,19 @@ class VertexForager:
                 self._summary = self._compute_summary()
                 result.metrics_summary = dict(self._summary)
                 if self._structured_logs:
-                    msg_s = "OBS stage=pipeline_summary " + " ".join(
-                        f"{k}={v:.3f}" for k, v in sorted(self._summary.items())
+                    def _sanitize(v: object) -> str:
+                        s = "" if v is None else str(v)
+                        s = re.sub(r"\s+", "_", s)
+                        s = s.replace("=", "_")
+                        s = re.sub(r"_+", "_", s)
+                        s = s.strip("_")
+                        return s
+                    dur_run = time.monotonic() - t_run0
+                    msg_s = (
+                        f"OBS provider={_sanitize(self._router.provider)} "
+                        f"dataset={_sanitize(dataset)} symbol=* stage=pipeline_summary attempt=0 "
+                        f"duration={dur_run:.3f}s "
+                        + " ".join(f"{k}={v:.3f}" for k, v in sorted(self._summary.items()))
                     )
                     if self._log_verbose:
                         logger.info(msg_s)

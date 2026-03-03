@@ -367,9 +367,10 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
     # --------------------------------------
     def _sanitize(self, v: object) -> str:
         s = "" if v is None else str(v)
-        s = re.sub(r"\s+", " ", s)
+        s = re.sub(r"\s+", "_", s)
         s = s.replace("=", "_")
-        s = s.strip()
+        s = re.sub(r"_+", "_", s)
+        s = s.strip("_")
         return s
     
     def _build_request_params(self, *, dataset: YFinanceDataset) -> dict[str, JSONValue]:

@@ -34,7 +34,7 @@ jobs:
         uses: aquasecurity/trivy-action@97e0b3872f55f89b95b2f65b3dbab56962816478  # 0.16.1 pinned
         with:
           scan-type: fs
-          ignorefile: .trivyignore
+          trivyignores: .trivyignore
           scanners: secret,config
           severity: HIGH,CRITICAL
           format: table
