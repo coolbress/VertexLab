@@ -1,4 +1,9 @@
-"""Router implementations for different data sources."""
+"""Router implementations for different data sources.
+ 
+DIP Note:
+- Factories return instances conforming to the IRouter protocol
+  to keep core layers dependent on abstractions, not concretes.
+"""
 
 from __future__ import annotations
 

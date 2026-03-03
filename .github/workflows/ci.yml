@@ -25,6 +25,9 @@ jobs:
 
       - name: Install dependencies
         run: uv sync  # 라이브러리 설치 테스트
+      
+      - name: Check Import Cycles
+        run: python3 scripts/check_cycles.py
 
       - name: Lint Code (Ruff)
         # packages 폴더 안에 있는 모든 코드를 검사 (legacy_code 제외)

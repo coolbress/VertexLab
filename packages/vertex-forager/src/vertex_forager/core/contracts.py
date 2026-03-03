@@ -6,8 +6,8 @@ from vertex_forager.core.types import SharadarDataset, YFinanceDataset
 
 from vertex_forager.core.config import FetchJob, ParseResult, RunResult
 if TYPE_CHECKING:
-    from vertex_forager.writers.base import BaseWriter
-    from vertex_forager.schema.mapper import SchemaMapper
+    from vertex_forager.writers.base import WriteResult
+    from vertex_forager.core.config import FramePacket
 
 
 T = TypeVar("T", bound=Union[SharadarDataset, YFinanceDataset, str])
@@ -66,8 +66,8 @@ class IClient(Protocol, Generic[T]):
         router: IRouter[T],
         dataset: T,
         symbols: list[str] | None,
-        writer: "BaseWriter",
-        mapper: "SchemaMapper",
+        writer: "IWriter",
+        mapper: "IMapper",
         on_progress: Callable[..., None] | None = None,
         **kwargs: JSONValue,
     ) -> RunResult:
@@ -84,5 +84,46 @@ class IClient(Protocol, Generic[T]):
         
         Returns:
             RunResult: Summary metrics and error collection from the run.
+        """
+        ...
+
+class IWriter(Protocol):
+    """Writer protocol for persisting normalized packets."""
+
+    async def write(self, packet: "FramePacket") -> "WriteResult":
+        """Persist a normalized packet.
+
+        Args:
+            packet (FramePacket): The normalized packet produced by the mapper.
+
+        Returns:
+            WriteResult: Result metadata (e.g., rows written, conflicts).
+        """
+        ...
+
+    async def flush(self) -> None:
+        """Flush any buffered data to the destination.
+
+        Returns:
+            None
+
+        Notes:
+            Implementations should ensure buffered frames are durably written
+            and release any temporary resources associated with batching.
+        """
+        ...
+
+
+class IMapper(Protocol):
+    """Schema mapper protocol for normalizing packets."""
+
+    def normalize(self, *, packet: "FramePacket") -> "FramePacket":
+        """Normalize a packet to the target schema.
+
+        Args:
+            packet (FramePacket): Input packet with provider-specific fields/types.
+
+        Returns:
+            FramePacket: Output packet aligned to sink schema (types/columns).
         """
         ...

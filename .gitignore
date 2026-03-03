@@ -43,6 +43,7 @@ packages/vertex-forager/legacy_code/
 packages/vertex-forager/development_note/
 packages/vertex-forager/examples/*
 !packages/vertex-forager/examples/.keep
+docs/vertex-forager-collab.md
 
 # Binary / Logs
 *.duckdb

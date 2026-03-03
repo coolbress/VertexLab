@@ -1,14 +1,18 @@
+"""Provider-agnostic router error adapters.
+
+Standardizes provider-specific error payloads/exceptions into Vertex Forager
+common exception types for consistent handling in router implementations.
+"""
 from __future__ import annotations
 
 from typing import Mapping, Any, NoReturn
-
-from vertex_forager.exceptions import FetchError
-from vertex_forager.exceptions import TransformError
 import pickle
 import httpx
+from vertex_forager.exceptions import FetchError
+from vertex_forager.exceptions import TransformError
 
 
-def raise_quandl_error(provider: str, err: Mapping[str, Any]) -> None:
+def raise_quandl_error(provider: str, err: Mapping[str, Any]) -> NoReturn:
     """Raise a standardized FetchError for Quandl-style API errors.
     
     Args:

@@ -60,3 +60,19 @@ This document summarizes centralized constants across the codebase. The goal is 
 - TRADING_DAYS_PER_YEAR (days): Batch estimation heuristic; used for Sharadar range sizing.
 - WAL_AUTOCHECKPOINT_LIMIT (bytes string): DuckDB WAL auto-checkpoint; larger limits reduce checkpoint overhead during bursts.
 - DEFAULT_TIME_ZONE (tz): All timestamps stored consistently; switching impacts downstream parsing/queries.
+
+## DIP Rules & Boundaries (Summary)
+
+- Core → Abstractions: Depend on `IRouter`, `IWriter`, `IMapper` Protocols, not concrete classes.
+- Providers → Implementations: Routers and library fetchers live under `vertex_forager/providers/*`.
+- Routers Utilities: `vertex_forager/routers/transforms.py` and `routers/errors.py` are provider-agnostic helpers scoped to the routers layer.
+- Factories/Registries: Use `create_router` and writer registries to inject implementations; avoid direct imports of concretes in core.
+
+## Logging Prefix Rules
+
+- Core HTTP (`vertex_forager.core.http`):
+  - Error logs include `provider`, `status` (if available), and redacted messages.
+  - Library fetch branch logs: include `scheme`, `dataset`, `symbol`, and exception type for traceability.
+- Writers (`vertex_forager.writers.constants`):
+  - Prefixes: `WRITER`, `DUCKDB`.
+  - Correlation summary logs include counts and sample IDs for `trace_id`/`request_id`.
