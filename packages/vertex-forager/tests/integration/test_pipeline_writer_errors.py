@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from collections.abc import Sequence
 
 from vertex_forager.core.config import EngineConfig, RunResult, FetchJob, RequestSpec, ParseResult, FramePacket
-from vertex_forager.core.contracts import IRouter
+from vertex_forager.core.contracts import IRouter, IMapper
 from vertex_forager.writers.duckdb import DuckDBWriter
 from vertex_forager.core.pipeline import VertexForager
 from vertex_forager.core.http import HttpExecutor
@@ -50,7 +50,7 @@ class StubRouter(IRouter[str]):
         pkt = FramePacket(provider="yfinance", table="yfinance_price", frame=df, observed_at=datetime.now(timezone.utc))
         return ParseResult(packets=[pkt], next_jobs=[])
 
-class StubMapper:
+class StubMapper(IMapper):
     def normalize(self, *, packet: FramePacket) -> FramePacket:
         return packet
 
@@ -62,6 +62,9 @@ async def test_pipeline_records_writer_validation_errors(tmp_path):
     writer = DuckDBWriter(str(tmp_path / "err.duckdb"))
     http = HttpExecutor(client=client)
     pipeline = VertexForager(router=router, http=http, writer=writer, mapper=StubMapper(), config=client._config, controller=client.controller)
-    res = await pipeline.run(dataset="price", symbols=None)
-    assert isinstance(res, RunResult)
-    assert any(err.startswith("WriterError:yfinance_price:") for err in res.errors)
+    try:
+        res = await pipeline.run(dataset="price", symbols=None)
+        assert isinstance(res, RunResult)
+        assert any(err.startswith("WriterError:yfinance_price:") for err in res.errors)
+    finally:
+        await writer.close()

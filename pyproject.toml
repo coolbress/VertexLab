@@ -38,4 +38,4 @@ dev = [
 
 [tool.hypothesis]
 max_examples = 50
-deadline = "200 ms"
+deadline = 200

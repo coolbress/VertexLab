@@ -7,6 +7,7 @@ import polars as pl
 from vertex_forager.core.config import EngineConfig, RunResult, FetchJob, RequestSpec, ParseResult, FramePacket
 from vertex_forager.core.contracts import IRouter, IWriter, IMapper
 from vertex_forager.clients.dispatcher import run_pipeline_for
+from vertex_forager.writers.base import WriteResult
 from datetime import datetime, timezone
 from collections.abc import Sequence
 
@@ -30,7 +31,7 @@ class StubRouter(IRouter[str]):
 
 class StubWriter(IWriter):
     async def write(self, packet: FramePacket):
-        return type("WR", (), {"table": packet.table, "rows": packet.frame.height})()
+        return WriteResult(table=packet.table, rows=packet.frame.height)
     async def flush(self) -> None:
         return None
 
