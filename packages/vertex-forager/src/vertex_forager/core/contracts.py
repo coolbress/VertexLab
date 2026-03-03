@@ -90,11 +90,40 @@ class IClient(Protocol, Generic[T]):
 class IWriter(Protocol):
     """Writer protocol for persisting normalized packets."""
 
-    async def write(self, packet: "FramePacket") -> "WriteResult": ...
-    async def flush(self) -> None: ...
+    async def write(self, packet: "FramePacket") -> "WriteResult":
+        """Persist a normalized packet.
+
+        Args:
+            packet (FramePacket): The normalized packet produced by the mapper.
+
+        Returns:
+            WriteResult: Result metadata (e.g., rows written, conflicts).
+        """
+        ...
+
+    async def flush(self) -> None:
+        """Flush any buffered data to the destination.
+
+        Returns:
+            None
+
+        Notes:
+            Implementations should ensure buffered frames are durably written
+            and release any temporary resources associated with batching.
+        """
+        ...
 
 
 class IMapper(Protocol):
     """Schema mapper protocol for normalizing packets."""
 
-    def normalize(self, *, packet: "FramePacket") -> "FramePacket": ...
+    def normalize(self, *, packet: "FramePacket") -> "FramePacket":
+        """Normalize a packet to the target schema.
+
+        Args:
+            packet (FramePacket): Input packet with provider-specific fields/types.
+
+        Returns:
+            FramePacket: Output packet aligned to sink schema (types/columns).
+        """
+        ...

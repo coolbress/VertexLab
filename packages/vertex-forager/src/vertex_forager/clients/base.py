@@ -139,6 +139,17 @@ class BaseClient(ABC, Generic[T]):
 
     @property
     def config(self) -> EngineConfig:
+        """Public engine/client configuration.
+
+        Returns:
+            EngineConfig: The configuration object governing rate limits,
+                concurrency, queue sizes, and thresholds used by this client.
+
+        Notes:
+            Read-only accessor. Callers should not mutate the returned object
+            in place; prefer constructing a new EngineConfig or using factory
+            helpers to apply changes.
+        """
         return self._config
 
     @property
