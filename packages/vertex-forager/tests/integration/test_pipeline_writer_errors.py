@@ -5,7 +5,7 @@ import polars as pl
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from collections.abc import Sequence, AsyncIterator
-from typing import Any
+from typing import Any, cast
 
 from vertex_forager.core.config import EngineConfig, RunResult, FetchJob, RequestSpec, ParseResult, FramePacket
 from vertex_forager.core.contracts import IRouter, IMapper
@@ -30,7 +30,7 @@ class StubClient:
             @asynccontextmanager
             async def throttle(self) -> AsyncIterator[None]:
                 yield None
-        self.controller = C()
+        self.controller = cast(Any, C())
         self.last_run: RunResult | None = None
     async def run_async(self, method: str, url: str, **kwargs: Any) -> _Resp:
         return _Resp(b"ok")
@@ -43,7 +43,7 @@ class StubRouter(IRouter[str]):
     @property
     def provider(self) -> str:
         return "yfinance"
-    async def generate_jobs(self, *, dataset: str, symbols: Sequence[str] | None, **kwargs: object):
+    async def generate_jobs(self, *, dataset: str, symbols: Sequence[str] | None, **kwargs: object) -> AsyncIterator[FetchJob]:
         job = FetchJob(provider="yfinance", dataset=dataset, symbol="AAPL", spec=RequestSpec(url="http://example.com"))
         yield job
     def parse(self, *, job: FetchJob, payload: bytes) -> ParseResult:
@@ -57,7 +57,7 @@ class StubMapper(IMapper):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_pipeline_records_writer_validation_errors(tmp_path):
+async def test_pipeline_records_writer_validation_errors(tmp_path) -> None:
     client = StubClient()
     router = StubRouter()
     writer = DuckDBWriter(str(tmp_path / "err.duckdb"))

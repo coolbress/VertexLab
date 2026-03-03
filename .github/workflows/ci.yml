@@ -13,13 +13,13 @@ jobs:
     runs-on: ubuntu-latest  # 최신 리눅스 환경에서 실행
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4  # 내 코드를 가져옴
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4 pinned
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5 # uv 설치 (초고속!)
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5 pinned
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5 pinned
         with:
           python-version: "3.10"
 
@@ -27,14 +27,14 @@ jobs:
         run: uv sync  # 라이브러리 설치 테스트
       
       - name: Trivy FS Scan (Config + Secrets)
-        uses: aquasecurity/trivy-action@0.16.1
+        uses: aquasecurity/trivy-action@d43c1f16c00cfd3978dde6c07f4bbcf9eb6993ca # 0.16.1 pinned
         with:
           scan-type: fs
           ignorefile: .trivyignore
           scanners: secret,config
           severity: HIGH,CRITICAL
           format: table
-          exit-code: 0
+          exit-code: 1
           skip-dirs: |
             .hypothesis
             .ruff_cache
