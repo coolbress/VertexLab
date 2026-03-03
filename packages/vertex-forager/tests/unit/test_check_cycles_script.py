@@ -65,8 +65,8 @@ def test_build_graph_resolves_relative_imports(tmp_path: Path, monkeypatch):
     # Expect at least one package-local dependency edge
     local_edges = sum(
         1
-        for src, deps in graph.items()
-        if src.startswith("vertex_forager")
+        for mod, deps in graph.items()
+        if mod.startswith("vertex_forager")
         for dep in deps
         if dep.startswith("vertex_forager")
     )
