@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from abc import ABC
 import asyncio
 from contextlib import asynccontextmanager, AsyncExitStack, nullcontext
@@ -105,7 +106,17 @@ class BaseClient(ABC, Generic[T]):
         config_params = kwargs.copy()
         config_params["requests_per_minute"] = rate_limit
 
+        def _env_bool(name: str) -> bool:
+            v = os.getenv(name)
+            if v is None:
+                return False
+            return v.strip().lower() in ("1", "true", "yes", "on")
+        config_params["metrics_enabled"] = config_params.get("metrics_enabled", _env_bool("VF_METRICS_ENABLED"))
+        config_params["structured_logs"] = config_params.get("structured_logs", _env_bool("VF_STRUCTURED_LOGS"))
+        config_params["log_verbose"] = config_params.get("log_verbose", _env_bool("VF_LOG_VERBOSE"))
         self._config = EngineConfig(**config_params)
+        self._structured_logs = bool(self._config.structured_logs)
+        self._log_verbose = bool(self._config.log_verbose)
 
         # Initialize FlowController for global rate limiting
         self.controller = FlowController(
@@ -251,9 +262,23 @@ class BaseClient(ABC, Generic[T]):
                     category=FutureWarning,
                     module=r"yfinance(\.|$)",
                 )
+                if self._structured_logs:
+                    sym_count = len(symbols or [])
+                    msg_s = f"OBS provider={router.provider} dataset={str(dataset)} symbols={sym_count} stage=client_run_start"
+                    if self._log_verbose:
+                        logger.info(msg_s)
+                    else:
+                        logger.debug(msg_s)
                 self.last_run = await pipeline.run(
                     dataset=dataset, symbols=symbols, on_progress=on_progress, **run_kwargs
                 )
+                if self._structured_logs:
+                    err_n = len(self.last_run.errors) if self.last_run else 0
+                    msg_e = f"OBS provider={router.provider} dataset={str(dataset)} stage=client_run_end errors={err_n}"
+                    if self._log_verbose:
+                        logger.info(msg_e)
+                    else:
+                        logger.debug(msg_e)
             return self.last_run
 
     @asynccontextmanager

@@ -128,6 +128,11 @@ class VertexForager:
         self._mapper = mapper
         self._config = config
         self.controller = controller
+        self._metrics_enabled = bool(config.metrics_enabled)
+        self._structured_logs = bool(config.structured_logs)
+        self._log_verbose = bool(config.log_verbose)
+        self._counters: dict[str, int] = {}
+        self._hists: dict[str, list[float]] = {}
 
         # Track active tasks for graceful shutdown
         self._active_tasks: list[asyncio.Future[Any]] = []
@@ -162,6 +167,49 @@ class VertexForager:
             max_workers=w_int,
             thread_name_prefix="vertex-forager:parse",
         )
+        if self._metrics_enabled:
+            self._counters["pipeline_runs"] = self._counters.get("pipeline_runs", 0) + 1
+        self._summary: dict[str, float] = {}
+
+    def _inc(self, name: str, amount: int = 1) -> None:
+        if not self._metrics_enabled:
+            return
+        self._counters[name] = self._counters.get(name, 0) + amount
+
+    def _observe(self, name: str, value: float) -> None:
+        if not self._metrics_enabled:
+            return
+        bucket = self._hists.get(name)
+        if bucket is None:
+            bucket = []
+            self._hists[name] = bucket
+        bucket.append(float(value))
+
+    def _compute_summary(self) -> dict[str, float]:
+        if not self._metrics_enabled:
+            return {}
+        def _pctl(values: list[float], p: float) -> float:
+            if not values:
+                return 0.0
+            vs = sorted(values)
+            k = max(0, min(len(vs) - 1, int(round((p / 100.0) * (len(vs) - 1)))))
+            return float(vs[k])
+        s: dict[str, float] = {}
+        for key in ("fetch_duration_s", "parse_duration_s", "http_duration_s"):
+            vals = self._hists.get(key, [])
+            s[f"{key}_p95"] = _pctl(vals, 95.0)
+            s[f"{key}_p99"] = _pctl(vals, 99.0)
+        return s
+    def _log_structured(self, *, provider: str, dataset: str, symbol: str | None, stage: str, attempt: int | None = None, duration_s: float | None = None) -> None:
+        if not self._structured_logs:
+            return
+        att = attempt if attempt is not None else 0
+        dur = f"{duration_s:.3f}s" if duration_s is not None else "-"
+        msg = f"OBS provider={provider} dataset={dataset} symbol={symbol or ''} stage={stage} attempt={att} duration={dur}"
+        if self._log_verbose:
+            logger.info(msg)
+        else:
+            logger.debug(msg)
 
     async def run(
         self,
@@ -261,8 +309,10 @@ class VertexForager:
             async def _pipeline_orchestration() -> None:
                 """Orchestrate the producer-fetcher-join sequence."""
                 logger.info("PIPELINE: Starting producer task...")
+                self._log_structured(provider=self._router.provider, dataset=dataset, symbol="*", stage="producer_start")
                 await producer_task
                 logger.info("PIPELINE: Producer completed, waiting for request queue...")
+                self._log_structured(provider=self._router.provider, dataset=dataset, symbol="*", stage="producer_done")
                 await req_q.join()
                 logger.info("PIPELINE: Request queue joined, sending sentinel signals...")
                 for _ in range(self.controller.concurrency_limit):
@@ -315,6 +365,19 @@ class VertexForager:
             await self._writer.flush()
 
             logger.info(f"PIPELINE: Run completed. Total errors: {len(result.errors)}")
+            if self._metrics_enabled:
+                result.metrics_counters = dict(self._counters)
+                result.metrics_histograms = dict(self._hists)
+                self._summary = self._compute_summary()
+                result.metrics_summary = dict(self._summary)
+                if self._structured_logs:
+                    msg_s = "OBS stage=pipeline_summary " + " ".join(
+                        f"{k}={v:.3f}" for k, v in sorted(self._summary.items())
+                    )
+                    if self._log_verbose:
+                        logger.info(msg_s)
+                    else:
+                        logger.debug(msg_s)
             return result
         finally:
             await self.stop()
@@ -380,6 +443,7 @@ class VertexForager:
         ):
             await req_q.put((self.PRIORITY_NEW_JOB, next(counter), job))
             job_count += 1
+            self._inc("jobs_generated", 1)
             if job_count % 100 == 0:
                 logger.debug(f"PRODUCER: Generated {job_count} jobs so far...")
 
@@ -449,6 +513,7 @@ class VertexForager:
         while True:
             priority, _, job = await req_q.get()
             job_count += 1
+            self._inc("jobs_processed", 1)
             if job_count % 100 == 0:
                 logger.debug(
                     f"[Worker-{worker_id}] Processed {job_count} jobs so far..."
@@ -466,27 +531,28 @@ class VertexForager:
             parse_result: ParseResult | None = None
             try:
                 # Log Fetch Start
-                logger.debug(
-                    f"[Worker-{worker_id}] Processing job: {job.symbol} (priority: {priority})"
-                )
+                logger.debug(f"[Worker-{worker_id}] Processing job: {job.symbol} (priority: {priority})")
+                self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="fetch_start")
 
                 t_fetch_start = time.monotonic()
                 payload = await self._fetch_with_retry(job)
                 t_fetch_end = time.monotonic()
                 fetch_latency = t_fetch_end - t_fetch_start
+                self._observe("fetch_duration_s", fetch_latency)
+                self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="fetch_end", duration_s=fetch_latency)
 
                 t1 = time.monotonic()
-                logger.debug(
-                    f"[Worker-{worker_id}] Fetched {job.symbol} ({len(payload) if payload else 0} bytes) in {fetch_latency:.3f}s"
-                )
+                logger.debug(f"[Worker-{worker_id}] Fetched {job.symbol} ({len(payload) if payload else 0} bytes) in {fetch_latency:.3f}s")
+                self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="parse_start")
 
                 # Offload CPU-bound parsing to a dedicated thread pool
                 loop = asyncio.get_running_loop()
                 parse_result = await loop.run_in_executor(self._parse_executor, lambda: self._router.parse(job=job, payload=payload))
                 t2 = time.monotonic()
-                logger.debug(
-                    f"[Worker-{worker_id}] Parsed {job.symbol} in {t2 - t1:.3f}s. Packets: {len(parse_result.packets)}, Next Jobs: {len(parse_result.next_jobs)}"
-                )
+                parse_latency = t2 - t1
+                self._observe("parse_duration_s", parse_latency)
+                logger.debug(f"[Worker-{worker_id}] Parsed {job.symbol} in {parse_latency:.3f}s. Packets: {len(parse_result.packets)}, Next Jobs: {len(parse_result.next_jobs)}")
+                self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="parse_end", duration_s=parse_latency)
 
                 for packet in parse_result.packets:
                     # Normalize packet schema (enforce types, fill missing cols)
@@ -495,11 +561,10 @@ class VertexForager:
                         self._parse_executor, lambda: self._mapper.normalize(packet=packet)
                     )
                     await pkt_q.put(normalized_packet)
+                    self._inc("packets_emitted", 1)
 
                 if parse_result.next_jobs:
-                    logger.debug(
-                        f"[Worker-{worker_id}] Adding {len(parse_result.next_jobs)} pagination jobs for {job.symbol}"
-                    )
+                    logger.debug(f"[Worker-{worker_id}] Adding {len(parse_result.next_jobs)} pagination jobs for {job.symbol}")
                     for next_job in parse_result.next_jobs:
                         await req_q.put((self.PRIORITY_PAGINATION, time.monotonic_ns(), next_job))
 
@@ -509,27 +574,25 @@ class VertexForager:
                     result.errors.append(
                         f"{job.provider}:{job.dataset}:{job.symbol}:{exc}"
                     )
-                logger.error(
-                    f"[Worker-{worker_id}] Error processing {job.symbol}: {exc}"
-                )
+                logger.error(f"[Worker-{worker_id}] Error processing {job.symbol}: {exc}")
+                self._inc("errors_total", 1)
+                self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="error")
             except Exception as exc:
                 worker_exc = exc
                 async with result_lock:
                     result.errors.append(
                         f"Unexpected:{job.provider}:{job.dataset}:{job.symbol}:{exc}"
                     )
-                logger.exception(
-                    f"[Worker-{worker_id}] Unexpected error processing {job.symbol}: {exc}"
-                )
+                logger.exception(f"[Worker-{worker_id}] Unexpected error processing {job.symbol}: {exc}")
+                self._inc("errors_total", 1)
+                self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="error_unexpected")
             finally:
                 req_q.task_done()
                 try:
                     await handler(job, payload, worker_exc, parse_result)
                 except Exception as e:
                     # Swallowing exception from callback to prevent worker crash
-                    logger.error(
-                        f"[Worker-{worker_id}] Error in result handler for {job.provider}:{job.dataset}:{job.symbol}: {e}"
-                    )
+                    logger.error(f"[Worker-{worker_id}] Error in result handler for {job.provider}:{job.dataset}:{job.symbol}: {e}")
 
     async def _writer_worker(
         self,
@@ -602,6 +665,9 @@ class VertexForager:
                     f"WRITER: Flushing {len(packets)} packets ({len(merged_frame)} rows) for {table}"
                 )
                 write_result = await self._writer.write(merged_packet)
+                self._inc("writer_flushes", 1)
+                self._observe("writer_rows", float(write_result.rows))
+                self._log_structured(provider=merged_packet.provider, dataset=merged_packet.table, symbol=None, stage="write_flush", duration_s=0.0)
 
                 async with result_lock:
                     result.tables[write_result.table] = (
@@ -703,6 +769,19 @@ class VertexForager:
 
         async for attempt in retry_controller:
             with attempt:
+                att_no = None
+                try:
+                    state = getattr(attempt, "retry_state", None)
+                    att_no = getattr(state, "attempt_number", None)
+                except Exception:
+                    att_no = None
+                t0 = time.monotonic()
+                self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="http_start", attempt=att_no)
                 async with self.controller.throttle():
-                    return await self._http.fetch(job.spec)
+                    resp = await self._http.fetch(job.spec)
+                t1 = time.monotonic()
+                dur = t1 - t0
+                self._observe("http_duration_s", dur)
+                self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="http_end", attempt=att_no, duration_s=dur)
+                return resp
         raise RuntimeError("Fetch failed after all retry attempts")

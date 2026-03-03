@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import pickle
 from collections.abc import AsyncIterator, Sequence
 import uuid
@@ -113,6 +114,10 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             logger.debug(LOG_PRICE_BATCH_PARSE_FAIL.format(prefix=ROUTER_LOG_PREFIX, value=raw_bs, default=self.PRICE_BATCH_SIZE))
             bs_int = self.PRICE_BATCH_SIZE
         self._price_batch_size = max(1, min(PRICE_BATCH_MAX, bs_int))
+        v_struct = os.getenv("VF_STRUCTURED_LOGS")
+        v_verbose = os.getenv("VF_LOG_VERBOSE")
+        self._structured_logs = bool(v_struct and v_struct.strip().lower() in ("1", "true", "yes", "on"))
+        self._log_verbose = bool(v_verbose and v_verbose.strip().lower() in ("1", "true", "yes", "on"))
 
     @property
     def provider(self) -> str:
@@ -244,6 +249,13 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             # Apply dataset-specific transformations
             dataset = job.dataset
             observed_at = datetime.now(timezone.utc)
+            if self._structured_logs:
+                sym0 = job.context.get("symbol")
+                msg0 = f"OBS provider={self.provider} dataset={dataset} symbol={sym0 or ''} stage=router_parse_enter"
+                if self._log_verbose:
+                    logger.info(msg0)
+                else:
+                    logger.debug(msg0)
             if dataset == "price":
                 df_pl = self._transform_price(df_pl)
             elif dataset in ("financials", "quarterly_financials", "balance_sheet", "quarterly_balance_sheet", "cashflow", "quarterly_cashflow", "income_stmt", "earnings", "quarterly_earnings"):
@@ -288,6 +300,14 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
                 observed_at=observed_at,
                 context=job.context,
             )
+
+            if self._structured_logs:
+                sym1 = job.context.get("symbol")
+                msg1 = f"OBS provider={self.provider} dataset={job.dataset} symbol={sym1 or ''} stage=router_parse_exit packets=1 rows={len(df_pl)}"
+                if self._log_verbose:
+                    logger.info(msg1)
+                else:
+                    logger.debug(msg1)
 
             return ParseResult(packets=[packet], next_jobs=[])
         
