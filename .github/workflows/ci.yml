@@ -26,6 +26,22 @@ jobs:
       - name: Install dependencies
         run: uv sync  # 라이브러리 설치 테스트
       
+      - name: Trivy FS Scan (Config + Secrets)
+        uses: aquasecurity/trivy-action@0.16.1
+        with:
+          scan-type: fs
+          ignorefile: .trivyignore
+          scanners: secret,config
+          severity: HIGH,CRITICAL
+          format: table
+          exit-code: 0
+          skip-dirs: |
+            .hypothesis
+            .ruff_cache
+            data
+            output
+            packages/vertex-forager/legacy_code
+      
       - name: Check Import Cycles
         run: python3 scripts/check_cycles.py
 

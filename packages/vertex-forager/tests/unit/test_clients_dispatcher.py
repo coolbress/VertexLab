@@ -10,6 +10,7 @@ from vertex_forager.clients.dispatcher import run_pipeline_for
 from vertex_forager.writers.base import WriteResult
 from datetime import datetime, timezone
 from collections.abc import Sequence, AsyncIterator
+from dataclasses import dataclass
 
 
 class StubRouter(IRouter[str]):
@@ -44,7 +45,10 @@ class StubMapper(IMapper):
 class StubClient:
     def __init__(self) -> None:
         self._config = EngineConfig(requests_per_minute=60)
-        self.controller = type("C", (), {"concurrency_limit": 1})()
+        @dataclass
+        class StubController:
+            concurrency_limit: int
+        self.controller = StubController(concurrency_limit=1)
         self.last_run: RunResult | None = None
 
     @asynccontextmanager

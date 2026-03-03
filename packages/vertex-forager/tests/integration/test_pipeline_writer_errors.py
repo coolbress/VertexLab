@@ -5,6 +5,7 @@ import polars as pl
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from collections.abc import Sequence, AsyncIterator
+from typing import Any
 
 from vertex_forager.core.config import EngineConfig, RunResult, FetchJob, RequestSpec, ParseResult, FramePacket
 from vertex_forager.core.contracts import IRouter, IMapper
@@ -31,7 +32,7 @@ class StubClient:
                 yield None
         self.controller = C()
         self.last_run: RunResult | None = None
-    async def run_async(self, method: str, url: str, **kwargs) -> _Resp:
+    async def run_async(self, method: str, url: str, **kwargs: Any) -> _Resp:
         return _Resp(b"ok")
     @asynccontextmanager
     async def _http_client(self) -> AsyncIterator[None]:
