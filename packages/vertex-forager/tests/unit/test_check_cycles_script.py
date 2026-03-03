@@ -73,3 +73,10 @@ def test_build_graph_resolves_relative_imports(tmp_path: Path, monkeypatch):
     assert local_edges > 0, "Expected at least one local dependency edge"
     # typing_branch should not cause failures
     assert not any("typing_branch.py" in p for p, _ in failures)
+    # Verify the else-branch import was recorded
+    typing_mod = "vertex_forager.pkg_a.typing_branch"
+    assert typing_mod in graph, "typing_branch module should be in graph"
+    assert any(
+        dep == "vertex_forager.pkg_a.mod2" or dep.endswith(".mod2")
+        for dep in graph.get(typing_mod, set())
+    ), "typing_branch should have mod2 dependency from else branch"
