@@ -110,3 +110,35 @@ class TestYFinanceRouterUnit:
         job = self.make_fetch_job(dataset="price", symbol="AAPL")
         with pytest.raises(pickle.UnpicklingError):
             _ = yfinance_router.parse(job=job, payload=b"not a pickle")
+
+    def test_transform_insider_purchases_normalizes_columns(self, yfinance_router: YFinanceRouter) -> None:
+        """Verify insider_purchases transform maps and filters columns correctly."""
+        df = pd.DataFrame({
+            "Insider Purchases (Last 6 months)": ["Purchases", None, "Sales"],
+            "other_col": [1, 2, 3],
+        })
+        payload = pickle.dumps(df)
+        job = self.make_fetch_job(dataset="insider_purchases", symbol="AAPL")
+        result = yfinance_router.parse(job=job, payload=payload)
+        frame = result.packets[0].frame
+        assert "insider_purchases_last_6m" in frame.columns
+        assert frame.height == 2
+        assert frame.get_column("insider_purchases_last_6m").to_list() == ["Purchases", "Sales"]
+        assert frame.get_column("other_col").to_list() == [1, 3]
+
+    def test_transform_recommendations_includes_period(self, yfinance_router: YFinanceRouter) -> None:
+        """Verify recommendations transform includes period column."""
+        df = pd.DataFrame({
+            "period": ["0m", "-1m", "-2m"],
+            "strongBuy": [5, 3, 2],
+            "buy": [10, 8, 6],
+        })
+        payload = pickle.dumps(df)
+        job = self.make_fetch_job(dataset="recommendations", symbol="AAPL")
+        result = yfinance_router.parse(job=job, payload=payload)
+        frame = result.packets[0].frame
+        assert "period" in frame.columns
+        assert frame.height == 3
+        assert frame.get_column("period").to_list() == ["0m", "-1m", "-2m"]
+        assert "strongbuy" in frame.columns
+        assert frame.get_column("strongbuy").to_list() == [5, 3, 2]
