@@ -27,7 +27,6 @@ import time
 import itertools
 import httpx
 from typing import Any, TYPE_CHECKING, cast
-import re
 from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Sequence, Callable
 from collections import defaultdict, deque
@@ -61,6 +60,7 @@ from vertex_forager.core.controller import FlowController
 from vertex_forager.core.retry import create_retry_controller
 from vertex_forager.core.contracts import IRouter, IWriter, IMapper
 from vertex_forager.schema.registry import get_table_schema
+from vertex_forager.utils import sanitize_field
 
 if TYPE_CHECKING:
     pass
@@ -203,16 +203,9 @@ class VertexForager:
     def _log_structured(self, *, provider: str, dataset: str, symbol: str | None, stage: str, attempt: int | None = None, duration_s: float | None = None) -> None:
         if not self._structured_logs:
             return
-        def _sanitize(v: object) -> str:
-            s = "" if v is None else str(v)
-            s = re.sub(r"\s+", "_", s)
-            s = s.replace("=", "_")
-            s = re.sub(r"_+", "_", s)
-            s = s.strip("_")
-            return s
         att = attempt if attempt is not None else 0
         dur = f"{duration_s:.3f}s" if duration_s is not None else "-"
-        msg = f"OBS provider={_sanitize(provider)} dataset={_sanitize(dataset)} symbol={_sanitize(symbol)} stage={_sanitize(stage)} attempt={att} duration={dur}"
+        msg = f"OBS provider={sanitize_field(provider)} dataset={sanitize_field(dataset)} symbol={sanitize_field(symbol)} stage={sanitize_field(stage)} attempt={att} duration={dur}"
         if self._log_verbose:
             logger.info(msg)
         else:
@@ -384,17 +377,10 @@ class VertexForager:
                 self._summary = self._compute_summary()
                 result.metrics_summary = dict(self._summary)
                 if self._structured_logs:
-                    def _sanitize(v: object) -> str:
-                        s = "" if v is None else str(v)
-                        s = re.sub(r"\s+", "_", s)
-                        s = s.replace("=", "_")
-                        s = re.sub(r"_+", "_", s)
-                        s = s.strip("_")
-                        return s
                     dur_run = time.monotonic() - t_run0
                     msg_s = (
-                        f"OBS provider={_sanitize(self._router.provider)} "
-                        f"dataset={_sanitize(dataset)} symbol=* stage=pipeline_summary attempt=0 "
+                        f"OBS provider={sanitize_field(self._router.provider)} "
+                        f"dataset={sanitize_field(dataset)} symbol=* stage=pipeline_summary attempt=0 "
                         f"duration={dur_run:.3f}s "
                         + " ".join(f"{k}={v:.3f}" for k, v in sorted(self._summary.items()))
                     )
@@ -799,9 +785,9 @@ class VertexForager:
             with attempt:
                 state = getattr(attempt, "retry_state", None)
                 att_no = getattr(state, "attempt_number", None) if state is not None else None
-                t0 = time.monotonic()
-                self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="http_start", attempt=att_no)
                 async with self.controller.throttle():
+                    t0 = time.monotonic()
+                    self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="http_start", attempt=att_no)
                     resp = await self._http.fetch(job.spec)
                 t1 = time.monotonic()
                 dur = t1 - t0

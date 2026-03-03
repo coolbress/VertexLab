@@ -10,6 +10,7 @@ import itertools
 import sys
 import warnings
 from typing import Any, Callable, Literal
+import re
 
 import nest_asyncio
 from tqdm.auto import tqdm
@@ -397,16 +398,21 @@ class Spinner:
 
 
 def get_app_root() -> Path:
-    """
-    데이터 저장소 루트 경로를 반환합니다.
+    """데이터 저장소 루트 경로를 반환합니다.
     환경 변수 'VERTEXFORAGER_ROOT'가 없으면 홈 디렉토리의 '.vertex_forager'를 사용합니다.
     """
     app_root = os.getenv("VERTEXFORAGER_ROOT")
     path = Path(app_root) if app_root else Path.home() / ".vertex_forager"
-
-    # 별도의 init 명령 없이도 실행 시점에 폴더가 없으면 생성 (Lazy Initialization)
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+def sanitize_field(v: object) -> str:
+    s = "" if v is None else str(v)
+    s = re.sub(r"\s+", "_", s)
+    s = s.replace("=", "_")
+    s = re.sub(r"_+", "_", s)
+    s = s.strip("_")
+    return s
 
 
 def get_cache_dir() -> Path:
