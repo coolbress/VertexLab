@@ -123,6 +123,8 @@ class TestYFinanceRouterUnit:
         frame = result.packets[0].frame
         assert "insider_purchases_last_6m" in frame.columns
         assert frame.height == 2
+        assert frame.get_column("insider_purchases_last_6m").to_list() == ["Purchases", "Sales"]
+        assert frame.get_column("other_col").to_list() == [1, 3]
 
     def test_transform_recommendations_includes_period(self, yfinance_router: YFinanceRouter) -> None:
         """Verify recommendations transform includes period column."""
