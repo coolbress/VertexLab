@@ -29,7 +29,7 @@ import httpx
 from typing import Any, TYPE_CHECKING, cast
 from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Sequence, Callable
-from collections import defaultdict
+from collections import defaultdict, deque
 
 import polars as pl
 from polars.exceptions import ComputeError
@@ -111,6 +111,7 @@ class VertexForager:
     
     # Infinite threshold for in-memory writer
     FLUSH_THRESHOLD_INFINITE = CONST_FLUSH_THRESHOLD_INFINITE
+    _MAX_HIST_SAMPLES = 1024
 
     def __init__(
         self,
@@ -132,7 +133,7 @@ class VertexForager:
         self._structured_logs = bool(config.structured_logs)
         self._log_verbose = bool(config.log_verbose)
         self._counters: dict[str, int] = {}
-        self._hists: dict[str, list[float]] = {}
+        self._hists: dict[str, deque[float]] = {}
 
         # Track active tasks for graceful shutdown
         self._active_tasks: list[asyncio.Future[Any]] = []
@@ -181,7 +182,7 @@ class VertexForager:
             return
         bucket = self._hists.get(name)
         if bucket is None:
-            bucket = []
+            bucket = deque(maxlen=self._MAX_HIST_SAMPLES)
             self._hists[name] = bucket
         bucket.append(float(value))
 
@@ -196,7 +197,7 @@ class VertexForager:
             return float(vs[k])
         s: dict[str, float] = {}
         for key in ("fetch_duration_s", "parse_duration_s", "http_duration_s"):
-            vals = self._hists.get(key, [])
+            vals = list(self._hists.get(key, deque()))
             s[f"{key}_p95"] = _pctl(vals, 95.0)
             s[f"{key}_p99"] = _pctl(vals, 99.0)
         return s
@@ -367,7 +368,7 @@ class VertexForager:
             logger.info(f"PIPELINE: Run completed. Total errors: {len(result.errors)}")
             if self._metrics_enabled:
                 result.metrics_counters = dict(self._counters)
-                result.metrics_histograms = dict(self._hists)
+                result.metrics_histograms = {k: list(v) for k, v in self._hists.items()}
                 self._summary = self._compute_summary()
                 result.metrics_summary = dict(self._summary)
                 if self._structured_logs:
@@ -682,6 +683,7 @@ class VertexForager:
             except (ComputeError, ValidationError) as e:
                 async with result_lock:
                     result.errors.append(f"WriterError:{table}:{e}")
+                    self._inc("errors_total", 1)
                 buffers[table] = []
                 buffer_rows[table] = 0
                 if isinstance(e, PrimaryKeyMissingError):
@@ -695,12 +697,14 @@ class VertexForager:
                 if _duckdb is not None and isinstance(e, _duckdb.Error):
                     async with result_lock:
                         result.errors.append(f"DuckDBError:{table}:{e}")
+                        self._inc("errors_total", 1)
                     buffers[table] = []
                     buffer_rows[table] = 0
                     logger.exception(f"WRITER: DuckDB error for {table}: {e}")
                 else:
                     async with result_lock:
                         result.errors.append(f"UnexpectedWriterError:{table}:{e}")
+                        self._inc("errors_total", 1)
                     buffers[table] = []
                     buffer_rows[table] = 0
                     logger.exception(f"WRITER: Unexpected error writing batch for {table}: {e}")

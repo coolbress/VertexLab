@@ -270,7 +270,7 @@ class BaseClient(ABC, Generic[T]):
                         attempt = int((run_kwargs.get("attempt", 0)))  # type: ignore[arg-type]
                     except Exception:
                         attempt = 0
-                    msg_s = f"OBS provider={router.provider} dataset={str(dataset)} symbols={sym_count} stage=client_run_start attempt={attempt} duration=0.000s"
+                    msg_s = f"OBS provider={router.provider} dataset={str(dataset)} symbol=* symbols={sym_count} stage=client_run_start attempt={attempt} duration=0.000s"
                     if self._log_verbose:
                         logger.info(msg_s)
                     else:
@@ -287,7 +287,7 @@ class BaseClient(ABC, Generic[T]):
                         attempt = int((run_kwargs.get("attempt", 0)))  # type: ignore[arg-type]
                     except Exception:
                         attempt = 0
-                    msg_e = f"OBS provider={router.provider} dataset={str(dataset)} stage=client_run_end errors={err_n} attempt={attempt} duration={dur:.3f}s"
+                    msg_e = f"OBS provider={router.provider} dataset={str(dataset)} symbol=* stage=client_run_end errors={err_n} attempt={attempt} duration={dur:.3f}s"
                     if self._log_verbose:
                         logger.info(msg_e)
                     else:

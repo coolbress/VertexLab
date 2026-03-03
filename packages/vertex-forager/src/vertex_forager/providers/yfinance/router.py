@@ -51,6 +51,24 @@ from vertex_forager.routers.errors import raise_yfinance_parse_error
 
 logger = logging.getLogger("vertex_forager.providers.yfinance.router")
 
+def _parse_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    if isinstance(value, (int, float)):
+        return bool(int(value))
+    if isinstance(value, str):
+        s = value.strip().lower()
+        if s in ("1", "true", "yes", "on"):
+            return True
+        if s in ("0", "false", "no", "off", ""):
+            return False
+        try:
+            return bool(int(s))
+        except Exception:
+            return True
+    return bool(value)
 class YFinanceRouter(BaseRouter[YFinanceDataset]):
     """Router for Yahoo Finance datasets (via yfinance).
     
@@ -118,15 +136,15 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         structured_logs_arg = kwargs.get("structured_logs")
         log_verbose_arg = kwargs.get("log_verbose")
         if structured_logs_arg is not None:
-            self._structured_logs = bool(structured_logs_arg)
+            self._structured_logs = _parse_bool(structured_logs_arg)
         else:
             v_struct = os.getenv("VF_STRUCTURED_LOGS")
-            self._structured_logs = bool(v_struct and v_struct.strip().lower() in ("1", "true", "yes", "on"))
+            self._structured_logs = _parse_bool(v_struct)
         if log_verbose_arg is not None:
-            self._log_verbose = bool(log_verbose_arg)
+            self._log_verbose = _parse_bool(log_verbose_arg)
         else:
             v_verbose = os.getenv("VF_LOG_VERBOSE")
-            self._log_verbose = bool(v_verbose and v_verbose.strip().lower() in ("1", "true", "yes", "on"))
+            self._log_verbose = _parse_bool(v_verbose)
 
     @property
     def provider(self) -> str:
