@@ -512,19 +512,18 @@ class VertexForager:
         job_count = 0
         while True:
             priority, _, job = await req_q.get()
-            job_count += 1
-            self._inc("jobs_processed", 1)
-            if job_count % 100 == 0:
-                logger.debug(
-                    f"[Worker-{worker_id}] Processed {job_count} jobs so far..."
-                )
-
             if job is None:
                 logger.debug(
                     f"[Worker-{worker_id}] Received sentinel, shutting down. Total jobs processed: {job_count}"
                 )
                 req_q.task_done()
                 return
+            job_count += 1
+            self._inc("jobs_processed", 1)
+            if job_count % 100 == 0:
+                logger.debug(
+                    f"[Worker-{worker_id}] Processed {job_count} jobs so far..."
+                )
 
             payload: bytes | None = None
             worker_exc: Exception | None = None
@@ -664,10 +663,12 @@ class VertexForager:
                 logger.debug(
                     f"WRITER: Flushing {len(packets)} packets ({len(merged_frame)} rows) for {table}"
                 )
+                t_w0 = time.monotonic()
                 write_result = await self._writer.write(merged_packet)
+                t_w1 = time.monotonic()
                 self._inc("writer_flushes", 1)
                 self._observe("writer_rows", float(write_result.rows))
-                self._log_structured(provider=merged_packet.provider, dataset=merged_packet.table, symbol=None, stage="write_flush", duration_s=0.0)
+                self._log_structured(provider=merged_packet.provider, dataset=merged_packet.table, symbol=None, stage="write_flush", duration_s=(t_w1 - t_w0))
 
                 async with result_lock:
                     result.tables[write_result.table] = (

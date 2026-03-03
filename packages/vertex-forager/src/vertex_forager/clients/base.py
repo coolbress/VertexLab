@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from abc import ABC
 import asyncio
 from contextlib import asynccontextmanager, AsyncExitStack, nullcontext
@@ -264,17 +265,29 @@ class BaseClient(ABC, Generic[T]):
                 )
                 if self._structured_logs:
                     sym_count = len(symbols or [])
-                    msg_s = f"OBS provider={router.provider} dataset={str(dataset)} symbols={sym_count} stage=client_run_start"
+                    attempt = 0
+                    try:
+                        attempt = int((run_kwargs.get("attempt", 0)))  # type: ignore[arg-type]
+                    except Exception:
+                        attempt = 0
+                    msg_s = f"OBS provider={router.provider} dataset={str(dataset)} symbols={sym_count} stage=client_run_start attempt={attempt} duration=0.000s"
                     if self._log_verbose:
                         logger.info(msg_s)
                     else:
                         logger.debug(msg_s)
+                t0 = time.monotonic()
                 self.last_run = await pipeline.run(
                     dataset=dataset, symbols=symbols, on_progress=on_progress, **run_kwargs
                 )
                 if self._structured_logs:
                     err_n = len(self.last_run.errors) if self.last_run else 0
-                    msg_e = f"OBS provider={router.provider} dataset={str(dataset)} stage=client_run_end errors={err_n}"
+                    dur = time.monotonic() - t0
+                    attempt = 0
+                    try:
+                        attempt = int((run_kwargs.get("attempt", 0)))  # type: ignore[arg-type]
+                    except Exception:
+                        attempt = 0
+                    msg_e = f"OBS provider={router.provider} dataset={str(dataset)} stage=client_run_end errors={err_n} attempt={attempt} duration={dur:.3f}s"
                     if self._log_verbose:
                         logger.info(msg_e)
                     else:

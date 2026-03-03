@@ -229,7 +229,7 @@ class RunResult(BaseModel):
     tables: dict[str, int] = Field(default_factory=dict)
     errors: list[str] = Field(default_factory=list)
     metrics_counters: dict[str, int] = Field(default_factory=dict)
-    metrics_histograms: dict[str, list[float]] = Field(default_factory=list)
+    metrics_histograms: dict[str, list[float]] = Field(default_factory=dict)
     metrics_summary: dict[str, float] = Field(default_factory=dict)
 
     def add_rows(self, *, table: str, rows: int) -> None:
