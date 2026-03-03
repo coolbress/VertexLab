@@ -1,0 +1,26 @@
+name: Dependabot Automerge
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Enable auto-merge for this PR
+        uses: peter-evans/enable-pull-request-automerge@v3
+        with:
+          pull-request-number: ${{ github.event.pull_request.number }}
+          merge-method: squash
+      - name: Auto-merge when all checks pass
+        uses: peter-evans/auto-merge@v4
+        with:
+          pull-request: ${{ github.event.pull_request.number }}
+          merge-method: squash
+          required-labels: automerge
