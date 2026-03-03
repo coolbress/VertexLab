@@ -4,7 +4,7 @@ import pytest
 import polars as pl
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from collections.abc import Sequence
+from collections.abc import Sequence, AsyncIterator
 
 from vertex_forager.core.config import EngineConfig, RunResult, FetchJob, RequestSpec, ParseResult, FramePacket
 from vertex_forager.core.contracts import IRouter, IMapper
@@ -27,14 +27,14 @@ class StubClient:
             def __init__(self) -> None:
                 self.concurrency_limit = 1
             @asynccontextmanager
-            async def throttle(self):
+            async def throttle(self) -> AsyncIterator[None]:
                 yield None
         self.controller = C()
         self.last_run: RunResult | None = None
-    async def run_async(self, method: str, url: str, **kwargs):
+    async def run_async(self, method: str, url: str, **kwargs) -> _Resp:
         return _Resp(b"ok")
     @asynccontextmanager
-    async def _http_client(self):
+    async def _http_client(self) -> AsyncIterator[None]:
         yield None
 
 

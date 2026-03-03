@@ -9,7 +9,7 @@ from vertex_forager.core.contracts import IRouter, IWriter, IMapper
 from vertex_forager.clients.dispatcher import run_pipeline_for
 from vertex_forager.writers.base import WriteResult
 from datetime import datetime, timezone
-from collections.abc import Sequence
+from collections.abc import Sequence, AsyncIterator
 
 
 class StubRouter(IRouter[str]):
@@ -17,7 +17,7 @@ class StubRouter(IRouter[str]):
     def provider(self) -> str:
         return "stub"
 
-    async def generate_jobs(self, *, dataset: str, symbols: Sequence[str] | None, **kwargs: object):
+    async def generate_jobs(self, *, dataset: str, symbols: Sequence[str] | None, **kwargs: object) -> AsyncIterator[FetchJob]:
         if not symbols:
             return
         job = FetchJob(provider="stub", dataset=dataset, symbol=symbols[0], spec=RequestSpec(url="http://example.com"))
@@ -30,7 +30,7 @@ class StubRouter(IRouter[str]):
 
 
 class StubWriter(IWriter):
-    async def write(self, packet: FramePacket):
+    async def write(self, packet: FramePacket) -> WriteResult:
         return WriteResult(table=packet.table, rows=packet.frame.height)
     async def flush(self) -> None:
         return None
@@ -48,7 +48,7 @@ class StubClient:
         self.last_run: RunResult | None = None
 
     @asynccontextmanager
-    async def _http_client(self):
+    async def _http_client(self) -> AsyncIterator[None]:
         yield None
 
 

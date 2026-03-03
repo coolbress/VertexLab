@@ -49,3 +49,4 @@ docs/vertex-forager-collab.md
 *.duckdb
 *.log
 .hypothesis/
+.ruff_cache/
