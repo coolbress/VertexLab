@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from collections.abc import Sequence, AsyncIterator
 from typing import Any, cast
+from pathlib import Path
 
 from vertex_forager.core.config import EngineConfig, RunResult, FetchJob, RequestSpec, ParseResult, FramePacket
 from vertex_forager.core.contracts import IRouter, IMapper
@@ -57,7 +58,7 @@ class StubMapper(IMapper):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_pipeline_records_writer_validation_errors(tmp_path) -> None:
+async def test_pipeline_records_writer_validation_errors(tmp_path: Path) -> None:
     client = StubClient()
     router = StubRouter()
     writer = DuckDBWriter(str(tmp_path / "err.duckdb"))
