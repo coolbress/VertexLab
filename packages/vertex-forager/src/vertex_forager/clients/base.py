@@ -112,9 +112,12 @@ class BaseClient(ABC, Generic[T]):
             if v is None:
                 return False
             return v.strip().lower() in ("1", "true", "yes", "on")
-        config_params["metrics_enabled"] = config_params.get("metrics_enabled", _env_bool("VF_METRICS_ENABLED"))
-        config_params["structured_logs"] = config_params.get("structured_logs", _env_bool("VF_STRUCTURED_LOGS"))
-        config_params["log_verbose"] = config_params.get("log_verbose", _env_bool("VF_LOG_VERBOSE"))
+        if ("metrics_enabled" not in config_params) or (config_params.get("metrics_enabled") is None):
+            config_params["metrics_enabled"] = _env_bool("VF_METRICS_ENABLED")
+        if ("structured_logs" not in config_params) or (config_params.get("structured_logs") is None):
+            config_params["structured_logs"] = _env_bool("VF_STRUCTURED_LOGS")
+        if ("log_verbose" not in config_params) or (config_params.get("log_verbose") is None):
+            config_params["log_verbose"] = _env_bool("VF_LOG_VERBOSE")
         self._config = EngineConfig(**config_params)
         self._structured_logs = bool(self._config.structured_logs)
         self._log_verbose = bool(self._config.log_verbose)
@@ -204,6 +207,13 @@ class BaseClient(ABC, Generic[T]):
         pfunc = partial(func, *args, **kwargs)
         return await asyncio.to_thread(pfunc)
 
+    def _safe_int(self, value: Any) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            logger.debug("bad attempt value: %s", value)
+            return 0
+
     async def run_pipeline(
         self,
         *,
@@ -265,13 +275,14 @@ class BaseClient(ABC, Generic[T]):
                 )
                 if self._structured_logs:
                     sym_count = len(symbols or [])
-                    attempt = 0
-                    try:
-                        attempt = int((run_kwargs.get("attempt", 0)))  # type: ignore[arg-type]
-                    except (TypeError, ValueError):
-                        logger.debug("bad attempt value: %s", run_kwargs.get("attempt", 0))
-                        attempt = 0
-                    msg_s = f"OBS provider={router.provider} dataset={str(dataset)} symbol=* symbols={sym_count} stage=client_run_start attempt={attempt} duration=0.000s"
+                    attempt = self._safe_int(run_kwargs.get("attempt", 0))
+                    def _sanitize(v: object) -> str:
+                        s = "" if v is None else str(v)
+                        s = s.replace("\n", " ").replace("\r", " ")
+                        s = s.replace("=", "_")
+                        s = "_".join(s.split())
+                        return s
+                    msg_s = f"OBS provider={_sanitize(router.provider)} dataset={_sanitize(dataset)} symbol=* symbols={sym_count} stage=client_run_start attempt={attempt} duration=0.000s"
                     if self._log_verbose:
                         logger.info(msg_s)
                     else:
@@ -283,13 +294,8 @@ class BaseClient(ABC, Generic[T]):
                 if self._structured_logs:
                     err_n = len(self.last_run.errors) if self.last_run else 0
                     dur = time.monotonic() - t0
-                    attempt = 0
-                    try:
-                        attempt = int((run_kwargs.get("attempt", 0)))  # type: ignore[arg-type]
-                    except (TypeError, ValueError):
-                        logger.debug("bad attempt value: %s", run_kwargs.get("attempt", 0))
-                        attempt = 0
-                    msg_e = f"OBS provider={router.provider} dataset={str(dataset)} symbol=* stage=client_run_end errors={err_n} attempt={attempt} duration={dur:.3f}s"
+                    attempt = self._safe_int(run_kwargs.get("attempt", 0))
+                    msg_e = f"OBS provider={_sanitize(router.provider)} dataset={_sanitize(dataset)} symbol=* stage=client_run_end errors={err_n} attempt={attempt} duration={dur:.3f}s"
                     if self._log_verbose:
                         logger.info(msg_e)
                     else:

@@ -8,6 +8,7 @@ from collections.abc import AsyncIterator, Sequence
 import uuid
 from datetime import date, datetime, timezone
 from typing import Any, Final
+import re
 from vertex_forager.providers.yfinance.constants import PRICE_BATCH_SIZE, THREADS_THRESHOLD, PRICE_BATCH_MAX, DATASET_ENDPOINT
 from vertex_forager.providers.yfinance.constants import (
     INTERVAL_KEY,
@@ -68,7 +69,7 @@ def _parse_bool(value: Any) -> bool:
             return bool(int(s))
         except (ValueError, TypeError):
             return False
-    return bool(value)
+    return False
 class YFinanceRouter(BaseRouter[YFinanceDataset]):
     """Router for Yahoo Finance datasets (via yfinance).
     
@@ -284,18 +285,11 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
                 except (TypeError, ValueError):
                     logger.debug("bad attempt value: %s", job.context.get("attempt", 0))
                     att0 = 0
-                def _sanitize(v: object) -> str:
-                    s = "" if v is None else str(v)
-                    s = s.replace("\n", " ").replace("\r", " ")
-                    s = s.replace("=", "_")
-                    s = s.strip()
-                    return s
-                msg0 = f"OBS provider={_sanitize(self.provider)} dataset={_sanitize(dataset)} symbol={_sanitize(sym0)} stage=router_parse_enter attempt={att0} duration=0.000s"
+                msg0 = f"OBS provider={self._sanitize(self.provider)} dataset={self._sanitize(dataset)} symbol={self._sanitize(sym0)} stage=router_parse_enter attempt={att0} duration=0.000s"
                 if self._log_verbose:
                     logger.info(msg0)
                 else:
                     logger.debug(msg0)
-            t0 = time.monotonic()
             t0 = time.monotonic()
             if dataset == "price":
                 df_pl = self._transform_price(df_pl)
@@ -351,7 +345,7 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
                     logger.debug("bad attempt value: %s", job.context.get("attempt", 0))
                     att1 = 0
                 dur1 = time.monotonic() - t0
-                msg1 = f"OBS provider={_sanitize(self.provider)} dataset={_sanitize(job.dataset)} symbol={_sanitize(sym1)} stage=router_parse_exit attempt={att1} duration={dur1:.3f}s packets=1 rows={len(df_pl)}"
+                msg1 = f"OBS provider={self._sanitize(self.provider)} dataset={self._sanitize(job.dataset)} symbol={self._sanitize(sym1)} stage=router_parse_exit attempt={att1} duration={dur1:.3f}s packets=1 rows={len(df_pl)}"
                 if self._log_verbose:
                     logger.info(msg1)
                 else:
@@ -371,6 +365,12 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
     # --------------------------------------
     # Generate Jobs Helpers
     # --------------------------------------
+    def _sanitize(self, v: object) -> str:
+        s = "" if v is None else str(v)
+        s = re.sub(r"\s+", " ", s)
+        s = s.replace("=", "_")
+        s = s.strip()
+        return s
     
     def _build_request_params(self, *, dataset: YFinanceDataset) -> dict[str, JSONValue]:
         """Unified parameter builder for yfinance library calls.

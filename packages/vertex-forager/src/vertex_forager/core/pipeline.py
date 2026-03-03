@@ -27,6 +27,7 @@ import time
 import itertools
 import httpx
 from typing import Any, TYPE_CHECKING, cast
+import re
 from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Sequence, Callable
 from collections import defaultdict, deque
@@ -204,9 +205,10 @@ class VertexForager:
             return
         def _sanitize(v: object) -> str:
             s = "" if v is None else str(v)
-            s = s.replace("\n", " ").replace("\r", " ")
+            s = re.sub(r"\s+", "_", s)
             s = s.replace("=", "_")
-            s = s.strip()
+            s = re.sub(r"_+", "_", s)
+            s = s.strip("_")
             return s
         att = attempt if attempt is not None else 0
         dur = f"{duration_s:.3f}s" if duration_s is not None else "-"
@@ -783,15 +785,8 @@ class VertexForager:
 
         async for attempt in retry_controller:
             with attempt:
-                att_no = None
-                try:
-                    state = getattr(attempt, "retry_state", None)
-                except (AttributeError, TypeError):
-                    state = None
-                try:
-                    att_no = getattr(state, "attempt_number", None) if state is not None else None
-                except (AttributeError, TypeError):
-                    att_no = None
+                state = getattr(attempt, "retry_state", None)
+                att_no = getattr(state, "attempt_number", None) if state is not None else None
                 t0 = time.monotonic()
                 self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="http_start", attempt=att_no)
                 async with self.controller.throttle():
