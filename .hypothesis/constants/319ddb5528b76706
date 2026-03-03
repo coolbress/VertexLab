@@ -1,0 +1,4 @@
+# file: /Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/providers/yfinance/fetcher.py
+# hypothesis_version: 6.151.9
+
+['_', '__', 'attr', 'download', 'kwargs', 'ticker_attr', 'type', 'yf', 'yfinance']

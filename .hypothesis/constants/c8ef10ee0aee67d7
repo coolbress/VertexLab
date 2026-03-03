@@ -1,0 +1,4 @@
+# file: /Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/writers/duckdb.py
+# hypothesis_version: 6.151.9
+
+['"', '""', ',', ', ', 'BIGINT', 'BOOLEAN', 'DATE', 'DOUBLE', 'FLOAT', 'HUGEINT', 'INTEGER', 'INTERVAL', 'SMALLINT', 'TIMESTAMP', 'TIMESTAMPTZ', 'TINYINT', 'VACUUM', 'VARCHAR', 'context', 'diagonal', 'flexible_schema', 'request_id', 'temp_batch_view', 'temp_df_view', 'time_zone', 'trace_id', 'vertical', '\x7f']

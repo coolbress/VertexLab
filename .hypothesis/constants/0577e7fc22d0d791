@@ -1,0 +1,4 @@
+# file: /Users/coolbress/vertex-lab/scripts/check_cycles.py
+# hypothesis_version: 6.151.9
+
+[' -> ', '*.py', '*/*/__init__.py', '*/api.py', '*/cli.py', '*/constants.py', '.', '.py', '/', 'TYPE_CHECKING', '__init__.py', '__main__', 'packages', 'src', 'typing', 'utf-8', 'vertex-forager', 'vertex_forager']

@@ -440,7 +440,7 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             id_vars.append("ticker")
         value_vars = [c for c in frame.columns if c not in id_vars]
         if value_vars:
-            frame = frame.melt(id_vars=id_vars, value_vars=value_vars, variable_name="date", value_name="value")
+            frame = frame.unpivot(index=id_vars, on=value_vars, variable_name="date", value_name="value")
             if "date" in frame.columns:
                 date_str = pl.col("date").cast(pl.Utf8, strict=False)
                 frame = frame.with_columns(date_str.str.replace(r"[T\s_].*$", "", literal=False).alias("date"))

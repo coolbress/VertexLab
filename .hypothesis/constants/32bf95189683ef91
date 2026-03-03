@@ -1,0 +1,4 @@
+# file: /Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/constants.py
+# hypothesis_version: 6.151.9
+
+[0.05, 0.2, 1.0, 6.0, 30.0, 60.0, 100, 200, 252, 500, 999, 1024, 2000, 100000, 500000, 1000000000, '%Y-%m-%d', '+00:00', '1GB', 'UTC', 'dataset', 'mapper', 'on_progress', 'pages', 'router', 'symbols', 'tickers', 'vertex-forager', 'writer']

@@ -1,0 +1,4 @@
+# file: /Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/providers/sharadar/router.py
+# hypothesis_version: 6.151.9
+
+[',', 'MRT', 'PerSymbolJobContext', 'actions', 'columns', 'cursor_param', 'daily', 'data', 'dataset', 'datatable', 'dimension', 'firstpricedate', 'fundamental', 'insider', 'institutional', 'lastpricedate', 'max_pages', 'meta', 'meta_key', 'name', 'pagination', 'per_page', 'price', 'qopts.columns', 'quandl_error', 'query', 'request_id', 'row', 'sharadar', 'sp500', 'symbol', 'ticker', 'tickers', 'trace_id', 'utf-8']

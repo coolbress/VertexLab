@@ -1,0 +1,4 @@
+# file: /Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/providers/yfinance/client.py
+# hypothesis_version: 6.151.9
+
+['annual', 'balance_sheet', 'calendar', 'cashflow', 'dividends', 'earnings', 'financials', 'income_stmt', 'info', 'insider_purchases', 'institutional', 'major_holders', 'mutualfund', 'news', 'price', 'quarterly', 'recommendations', 'retry', 'splits', 'tickers', 'yfinance', 'yfinance_calendar', 'yfinance_financials', 'yfinance_holders', 'yfinance_info', 'yfinance_news', 'yfinance_price']

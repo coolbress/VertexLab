@@ -33,5 +33,5 @@ jobs:
         # packages 폴더 안에 있는 모든 코드를 검사 (legacy_code 제외)
         run: uv run ruff check packages/ --exclude "legacy_code"
 
-      - name: Run Tests (Pytest)
-        run: uv run pytest packages/ --tb=short 
+      - name: Run Tests (Pytest with Coverage Gate)
+        run: uv run pytest packages/ --tb=short --cov=packages/vertex-forager/src/vertex_forager/core --cov=packages/vertex-forager/src/vertex_forager/clients --cov=packages/vertex-forager/src/vertex_forager/writers --cov=packages/vertex-forager/src/vertex_forager/routers --cov-report=term --cov-fail-under=80

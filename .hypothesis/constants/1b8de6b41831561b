@@ -1,0 +1,4 @@
+# file: /Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/writers/__init__.py
+# hypothesis_version: 6.151.9
+
+['://', 'BaseWriter', 'DuckDBWriter', 'InMemoryBufferWriter', 'create_writer', 'duckdb', 'duckdb://']

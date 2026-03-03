@@ -1,0 +1,4 @@
+# file: /Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/core/registries.py
+# hypothesis_version: 6.151.9
+
+['BaseClient', 'BaseRouter', 'BaseWriter', 'T', 'client', 'router', 'writer']
