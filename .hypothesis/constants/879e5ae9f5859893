@@ -1,4 +1,0 @@
-# file: /Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/providers/yfinance/constants.py
-# hypothesis_version: 6.151.9
-
-[100, 120, 180, 200, 220, 250, 300, 500, 600, 1024, '1d', 'actions', 'auto_adjust', 'balance_sheet', 'calendar', 'cashflow', 'date', 'dividends', 'earnings', 'end', 'fast_info', 'financials', 'history', 'income_stmt', 'info', 'insider_purchases', 'interval', 'major_holders', 'max', 'mutualfund_holders', 'news', 'period', 'prepost', 'price', 'price_batch_size', 'published_at', 'quarterly_cashflow', 'quarterly_earnings', 'quarterly_financials', 'recommendations', 'splits', 'start']

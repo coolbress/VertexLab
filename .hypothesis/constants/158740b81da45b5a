@@ -1,4 +1,0 @@
-# file: /Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/providers/sharadar/constants.py
-# hypothesis_version: 6.151.9
-
-[0.7, 100, 1000, 1024, 10000, 15000, 'ACTIONS', 'DAILY', 'SEP', 'SF1', 'SF2', 'SF3', 'SP500', 'TICKERS', 'actions', 'api_key', 'calendardate', 'daily', 'date', 'fetched_at', 'filingdate', 'fundamental', 'insider', 'institutional', 'next_cursor_id', 'price', 'provider', 'qopts.columns', 'qopts.cursor_id', 'qopts.per_page', 'sp500', 'tickers']

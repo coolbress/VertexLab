@@ -1,4 +1,0 @@
-# file: /Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/core/http.py
-# hypothesis_version: 6.151.9
-
-['://', 'Authorization', 'JSONValue', 'User-Agent', '[redacted]', 'bearer', 'dataset', 'header', 'http://', 'https://', 'https?://\\S+', 'price', 'query', 'response', 'status_code']
