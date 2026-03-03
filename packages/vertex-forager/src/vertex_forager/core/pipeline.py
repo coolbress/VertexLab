@@ -87,8 +87,8 @@ class VertexForager:
     Attributes:
         _router (IRouter): Router/Queue manager for fetch jobs.
         _http (HttpExecutor): Handles HTTP requests.
-        _writer (BaseWriter): Writer task manager.
-        _mapper (SchemaMapper): Normalizes data schemas.
+        _writer (IWriter): Writer task manager.
+        _mapper (IMapper): Normalizes data schemas.
         _config (EngineConfig): Configuration object.
         controller (FlowController): Rate limiter and concurrency controller.
         _flush_threshold (int): Row count threshold for flushing buffers.

@@ -6,8 +6,7 @@ from vertex_forager.core.types import SharadarDataset, YFinanceDataset
 
 from vertex_forager.core.config import FetchJob, ParseResult, RunResult
 if TYPE_CHECKING:
-    from vertex_forager.writers.base import BaseWriter, WriteResult
-    from vertex_forager.schema.mapper import SchemaMapper
+    from vertex_forager.writers.base import WriteResult
     from vertex_forager.core.config import FramePacket
 
 
@@ -67,8 +66,8 @@ class IClient(Protocol, Generic[T]):
         router: IRouter[T],
         dataset: T,
         symbols: list[str] | None,
-        writer: "BaseWriter",
-        mapper: "SchemaMapper",
+        writer: "IWriter",
+        mapper: "IMapper",
         on_progress: Callable[..., None] | None = None,
         **kwargs: JSONValue,
     ) -> RunResult:

@@ -138,6 +138,10 @@ class BaseClient(ABC, Generic[T]):
         await self.aclose()
 
     @property
+    def config(self) -> EngineConfig:
+        return self._config
+
+    @property
     def http_client(self) -> httpx.AsyncClient:
         """Get the active HTTP client.
 

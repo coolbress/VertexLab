@@ -2,7 +2,7 @@
 """
 Simple import cycle checker for the vertex_forager package.
 
-Builds a directed import graph using modulefinder and detects cycles via DFS.
+Builds a directed import graph using AST-based import extraction and detects cycles via DFS.
 """
 from __future__ import annotations
 

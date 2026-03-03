@@ -68,8 +68,8 @@ This document summarizes centralized constants across the codebase. The goal is 
 - Routers Utilities: `vertex_forager/routers/transforms.py` and `routers/errors.py` are provider-agnostic helpers scoped to the routers layer.
 - Factories/Registries: Use `create_router` and writer registries to inject implementations; avoid direct imports of concretes in core.
 
- 
 ## Logging Prefix Rules
+
 - Core HTTP (`vertex_forager.core.http`):
   - Error logs include `provider`, `status` (if available), and redacted messages.
   - Library fetch branch logs: include `scheme`, `dataset`, `symbol`, and exception type for traceability.

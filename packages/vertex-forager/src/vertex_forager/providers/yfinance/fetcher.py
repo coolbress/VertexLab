@@ -47,5 +47,9 @@ class YFinanceLibraryFetcher(BaseLibraryFetcher):
         raise ValueError(f"Unsupported library call type: {call_type}")
 
 
-if get_library_fetcher("yfinance") is None:
+_existing = get_library_fetcher("yfinance")
+if _existing is None:
     register_library_fetcher(YFinanceLibraryFetcher())
+else:
+    if not isinstance(_existing, YFinanceLibraryFetcher):
+        raise ValueError("Library fetcher scheme conflict for 'yfinance'")
