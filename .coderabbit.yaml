@@ -1,7 +1,7 @@
 language: "ko-KR"
 
 reviews:
-   profile: "assertive" # 엄격한 품질 및 성능 검토
+   profile: "assertive"
    review_details: true
    suggested_reviewers: true
    auto_assign_reviewers: true
@@ -23,6 +23,12 @@ reviews:
       - "!**/dist/**"
    auto_review:
       enabled: true
+      ignore_usernames:
+         - "dependabot[bot]"
+         - "github-actions[bot]"
+      labels:
+         - "!automerge"
+         - "!dependencies"
 
    path_instructions:
       - path: "**"
