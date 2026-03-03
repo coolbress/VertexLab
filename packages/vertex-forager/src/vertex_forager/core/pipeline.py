@@ -168,8 +168,6 @@ class VertexForager:
             max_workers=w_int,
             thread_name_prefix="vertex-forager:parse",
         )
-        if self._metrics_enabled:
-            self._counters["pipeline_runs"] = self._counters.get("pipeline_runs", 0) + 1
         self._summary: dict[str, float] = {}
 
     def _inc(self, name: str, amount: int = 1) -> None:
