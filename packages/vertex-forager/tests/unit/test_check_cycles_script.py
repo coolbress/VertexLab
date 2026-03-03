@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 
-def test_find_cycles_detects_and_no_cycle_cases():
+def test_find_cycles_detects_and_no_cycle_cases() -> None:
     from scripts import check_cycles as cc
 
     cyc_graph = {
@@ -28,7 +29,7 @@ def test_find_cycles_detects_and_no_cycle_cases():
     assert cc.find_cycles(acyclic) == []
 
 
-def test_build_graph_resolves_relative_imports(tmp_path: Path, monkeypatch):
+def test_build_graph_resolves_relative_imports(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Create temporary package structure under src/vertex_forager
     src = tmp_path / "src"
     pkg = src / "vertex_forager" / "pkg_a"
