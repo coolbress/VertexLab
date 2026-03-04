@@ -66,7 +66,8 @@ async def main_async() -> None:
                     connect_db=db_path,
                     dimension="MRT",
                 )
-            except Exception as e:
+            except (OSError, asyncio.TimeoutError, ValueError) as e:
+                # Catch expected errors (network, timeout, config)
                 logger.warning(f"Sharadar verification skipped due to error: {e}", exc_info=True)
                 sh_run = None
                 sh_error = str(e)
