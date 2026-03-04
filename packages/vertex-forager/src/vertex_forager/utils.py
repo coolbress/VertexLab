@@ -61,9 +61,9 @@ def load_tickers_env(name: str, default: list[str]) -> list[str]:
     """
     v = os.getenv(name)
     if not v:
-        return default
+        return list(default)
     toks = [t.strip().upper() for t in v.split(",") if t.strip()]
-    return toks or default
+    return toks if toks else list(default)
 
 def process_symbols(tickers: list[str] | None) -> list[str] | None:
     """Convert tickers to normalized symbols.
@@ -113,7 +113,14 @@ def env_bool(name: str, default: bool = False) -> bool:
     v = os.getenv(name)
     if v is None:
         return default
-    return v.strip().lower() in ("1", "true", "yes", "on")
+    s = v.strip().lower()
+    truthy = ("1", "true", "yes", "on")
+    falsy = ("0", "false", "no", "off")
+    if s in truthy:
+        return True
+    if s in falsy:
+        return False
+    return default
 
 
 def env_int(name: str, default: int | None = None) -> int | None:
@@ -241,14 +248,12 @@ def create_pbar_updater(pbar: tqdm) -> Callable:
         Callable to update the progress bar.
     """
 
-    updates = 0
     def _update_pbar(
         *,
         job: object | None = None,
         parse_result: object | None = None,
         **_kwargs: object,
     ) -> None:
-        nonlocal updates
         """Update progress bar based on fully processed ticker count.
 
         With Smart Batching, we expect most requests to complete in a single fetch.
@@ -280,7 +285,6 @@ def create_pbar_updater(pbar: tqdm) -> Callable:
             pbar.set_postfix_str("Pagination processing", refresh=True)
         else:
             pbar.update(count)
-            updates += 1
             pbar.set_postfix_str(f"Done: {display_symbol}..", refresh=True)
 
     return _update_pbar
