@@ -47,7 +47,7 @@ async def main_async() -> None:
             ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "NFLX", "ADBE", "CSCO"],
         )
         yfc = YFinanceClient(rate_limit=60, structured_logs=False)
-        yf_run = await yfc.get_financials(
+        yf_run = yfc.get_financials(
             kind="income_stmt",
             period="annual",
             tickers=yf_tickers,
@@ -62,7 +62,7 @@ async def main_async() -> None:
         if sh_key:
             try:
                 shc = SharadarClient(api_key=sh_key, rate_limit=60, structured_logs=False)
-                sh_run = await shc.get_fundamental_data(
+                sh_run = shc.get_fundamental_data(
                     tickers=yf_tickers[:5],
                     connect_db=db_path,
                     dimension="MRT",

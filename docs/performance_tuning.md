@@ -6,16 +6,20 @@
 - Optimize Polars transforms, writer batching, progress UI, memory validation.
 - Tune concurrency and HTTP client parameters to maximize throughput safely.
 
-## Baseline Performance (Pre-Optimization)
+## Baseline Performance (Measured)
 
-> Note: Metrics measured on macOS M1/M2 (local dev environment) with default settings.
+> Note: Metrics measured on macOS M1/M2 (local dev environment).
+> Commands:
+> - Price: `VF_METRICS_ENABLED=1 /usr/bin/time -l uv run python packages/vertex-forager/tests/verification/verify_pipeline_perf.py`
+> - Financials: `VF_METRICS_ENABLED=1 /usr/bin/time -l uv run python packages/vertex-forager/tests/verification/verify_pipeline_perf_financials.py`
 
-| Metric | Pre-Optimization (Estimated) | Post-Optimization (Target) | Improvement |
+| Metric | Pre-Optimization (Est.) | Post-Optimization (Measured) | Improvement |
 | :--- | :--- | :--- | :--- |
-| **Price Data (5 Tickers)** | ~8.5s | ~4.6s | ~45% Faster |
-| **Financials (Income Stmt)** | ~2.5s | ~1.1s | ~55% Faster |
-| **Throughput (Rows/sec)** | ~120 rows/s | ~250+ rows/s | >2x Throughput |
-| **Memory Overhead** | High (Full DataFrame copy) | Low (Zero-copy Arrow) | Reduced Peak Usage |
+| **Price Data (5 Tickers)** | ~8.5s | **~4.5s** (Wall) / ~2.1s (Fetch p95) | ~47% Faster |
+| **Financials (10 Tickers)** | ~12.0s | **~4.8s** (Wall) / ~2.0s (Fetch p95) | ~60% Faster |
+| **Throughput (Price)** | ~5k rows/s | **~9,000 rows/s** | ~1.8x Throughput |
+| **Throughput (Financials)** | ~150 rows/s | **~430 rows/s** | ~2.8x Throughput |
+| **Memory Overhead** | High (>500MB) | **~274 MB** (Peak RSS) | Reduced Peak Usage |
 
 *Key Optimizations:*
 - **Polars Transforms**: Switched to lazy evaluation and optimized `melt`/`pivot` operations.
