@@ -1,9 +1,9 @@
 import os
 import json
 from pathlib import Path
-from typing import Any
 
 from vertex_forager.providers.yfinance.client import YFinanceClient
+from vertex_forager.utils import as_dict
 
 
 def main() -> None:
@@ -24,16 +24,7 @@ def main() -> None:
         show_progress=False,
     )
 
-    def _as_dict(obj: Any) -> dict[str, Any]:
-        return {
-            "counters": getattr(obj, "metrics_counters", {}),
-            "histograms": getattr(obj, "metrics_histograms", {}),
-            "summary": getattr(obj, "metrics_summary", {}),
-            "tables": getattr(obj, "tables", {}),
-            "errors": getattr(obj, "errors", []),
-        }
-
-    data = _as_dict(run)
+    data = as_dict(run)
     metrics_path.write_text(json.dumps(data, indent=2))
     print(f"Wrote metrics: {metrics_path}")
 

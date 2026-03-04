@@ -322,6 +322,14 @@ def clear() -> None:
 
 @main.group()
 def tune() -> None:
+    """Tuning and profiling commands.
+
+    Args:
+        None
+
+    Returns:
+        None
+    """
     pass
 
 @tune.command("profile")
@@ -335,19 +343,14 @@ def tune_profile(kind: str, output_dir: Path | None, tickers: str | None, start_
     out_dir.mkdir(parents=True, exist_ok=True)
     if kind == "price":
         from vertex_forager.providers.yfinance.client import YFinanceClient
+        from vertex_forager.utils import as_dict
         db_path = out_dir / "profile_run.duckdb"
         if db_path.exists():
             db_path.unlink()
         client = YFinanceClient(rate_limit=60, metrics_enabled=True, structured_logs=False)
         _tickers = [t.strip().upper() for t in (tickers or "AAPL,MSFT,NVDA,GOOGL,AMZN").split(",")]
         run = client.get_price_data(tickers=_tickers, connect_db=db_path, show_progress=False, start_date=start_date, end_date=end_date)
-        data = {
-            "counters": getattr(run, "metrics_counters", {}),
-            "histograms": getattr(run, "metrics_histograms", {}),
-            "summary": getattr(run, "metrics_summary", {}),
-            "tables": getattr(run, "tables", {}),
-            "errors": getattr(run, "errors", []),
-        }
+        data = as_dict(run)
         metrics_path = out_dir / "profile_metrics.json"
         metrics_path.write_text(json.dumps(data, indent=2))
         click.echo(str(metrics_path))
@@ -356,6 +359,7 @@ def tune_profile(kind: str, output_dir: Path | None, tickers: str | None, start_
     else:
         from vertex_forager.providers.yfinance.client import YFinanceClient
         from vertex_forager.providers.sharadar.client import SharadarClient
+        from vertex_forager.utils import as_dict
         db_path = out_dir / "profile_financials.duckdb"
         if db_path.exists():
             db_path.unlink()
@@ -369,22 +373,14 @@ def tune_profile(kind: str, output_dir: Path | None, tickers: str | None, start_
             try:
                 shc = SharadarClient(api_key=sh_key, rate_limit=60, structured_logs=False)
                 sh_run = shc.get_fundamental_data(tickers=yf_tickers[:5], connect_db=db_path, dimension="MRT")
-            except Exception:
+            except Exception as e:
+                logger.warning(f"Sharadar verification skipped due to error: {e}")
                 sh_run = None
-        def _as_dict(obj: Any) -> dict[str, Any]:
-            if obj is None:
-                return {}
-            return {
-                "counters": getattr(obj, "metrics_counters", {}),
-                "histograms": getattr(obj, "metrics_histograms", {}),
-                "summary": getattr(obj, "metrics_summary", {}),
-                "tables": getattr(obj, "tables", {}),
-                "errors": getattr(obj, "errors", []),
-            }
         data = {
-            "yfinance_financials": _as_dict(yf_run),
-            "sharadar_sf1_optional": _as_dict(sh_run),
+            "yfinance_financials": as_dict(yf_run),
+            "sharadar_sf1_optional": as_dict(sh_run),
         }
+
         metrics_path = out_dir / "profile_financials_metrics.json"
         metrics_path.write_text(json.dumps(data, indent=2))
         click.echo(str(metrics_path))
@@ -407,6 +403,7 @@ def tune_profile(kind: str, output_dir: Path | None, tickers: str | None, start_
 def tune_sweep(output_dir: Path | None, include_sharadar: bool, concurrency_list: str | None, flush_rows_list: str | None, keepalive_list: str | None, connections_list: str | None, timeout_list: str | None, rank_by: str, rank_alpha: float, sample_count: int | None, sample_seed: int, rank_error_penalty: float) -> None:
     from vertex_forager.providers.yfinance.client import YFinanceClient
     from vertex_forager.providers.sharadar.client import SharadarClient
+    from vertex_forager.utils import set_env, load_tickers_env
     out_dir = output_dir or Path(os.getenv("VF_PROFILE_OUTPUT_DIR") or (Path.cwd() / "output" / "forager-profiles"))
     out_dir.mkdir(parents=True, exist_ok=True)
     db_path = out_dir / "profile_sweep.duckdb"
@@ -446,29 +443,17 @@ def tune_sweep(output_dir: Path | None, include_sharadar: bool, concurrency_list
     if sample_count and sample_count > 0 and sample_count < len(combos):
         rnd = random.Random(sample_seed)
         combos = rnd.sample(combos, sample_count)
-    def _set_env(cfg: dict[str, Any]) -> None:
-        for k, v in cfg.items():
-            if v is None:
-                os.environ.pop(k, None)
-            else:
-                os.environ[k] = str(v)
-    def _load_tickers_env(name: str, default: list[str]) -> list[str]:
-        v = os.getenv(name)
-        if not v:
-            return default
-        toks = [t.strip().upper() for t in v.split(",") if t.strip()]
-        return toks or default
-    yf_tickers_price = _load_tickers_env("YF_TICKERS_PRICE", ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN"])
-    yf_tickers_fin = _load_tickers_env("YF_TICKERS_FIN", ["AAPL", "MSFT", "NVDA"])
+    yf_tickers_price = load_tickers_env("YF_TICKERS_PRICE", ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN"])
+    yf_tickers_fin = load_tickers_env("YF_TICKERS_FIN", ["AAPL", "MSFT", "NVDA"])
     yf_start = os.getenv("YF_PRICE_START_DATE")
     yf_end = os.getenv("YF_PRICE_END_DATE")
     sh_key = os.getenv("SHARADAR_API_KEY") if include_sharadar else None
-    sh_tickers = _load_tickers_env("SH_TICKERS", ["AAPL", "MSFT", "NVDA"])
+    sh_tickers = load_tickers_env("SH_TICKERS", ["AAPL", "MSFT", "NVDA"])
     sh_start = os.getenv("SH_START_DATE")
     sh_end = os.getenv("SH_END_DATE")
     results: dict[str, Any] = {"runs": []}
     for cfg in combos:
-        _set_env(cfg)
+        set_env(cfg)
         entry: dict[str, Any] = {"env": dict(cfg), "measurements": {}}
         yfc = YFinanceClient(rate_limit=60, structured_logs=False)
         t0 = time.monotonic()
@@ -558,7 +543,7 @@ def tune_export_best(output_dir: Path | None, write_file: Path | None) -> None:
     _collect("yfinance_financials")
     content = "\n".join(lines)
     if write_file:
-        Path(write_file).write_text(content)
+        write_file.write_text(content)
         click.echo(str(write_file))
     else:
         click.echo(content)

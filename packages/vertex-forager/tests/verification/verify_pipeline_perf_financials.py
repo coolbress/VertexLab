@@ -1,18 +1,10 @@
 import os
 import json
 from pathlib import Path
-from typing import Any, List
 
 from vertex_forager.providers.yfinance.client import YFinanceClient
 from vertex_forager.providers.sharadar.client import SharadarClient
-
-
-def _load_tickers_env(name: str, default: List[str]) -> List[str]:
-    v = os.getenv(name)
-    if not v:
-        return default
-    toks = [t.strip().upper() for t in v.split(",") if t.strip()]
-    return toks or default
+from vertex_forager.utils import as_dict, load_tickers_env
 
 
 def main() -> None:
@@ -28,7 +20,7 @@ def main() -> None:
     os.environ.setdefault("VF_METRICS_ENABLED", "1")
 
     # ---------- YFinance Financials ----------
-    yf_tickers = _load_tickers_env(
+    yf_tickers = load_tickers_env(
         "YF_TICKERS",
         ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "NFLX", "ADBE", "CSCO"],
     )
@@ -52,23 +44,13 @@ def main() -> None:
                 connect_db=db_path,
                 dimension="MRT",
             )
-        except Exception:
+        except Exception as e:
+            print(f"Sharadar verification skipped due to error: {e}")
             sh_run = None
 
-    def _as_dict(obj: Any) -> dict[str, Any]:
-        if obj is None:
-            return {}
-        return {
-            "counters": getattr(obj, "metrics_counters", {}),
-            "histograms": getattr(obj, "metrics_histograms", {}),
-            "summary": getattr(obj, "metrics_summary", {}),
-            "tables": getattr(obj, "tables", {}),
-            "errors": getattr(obj, "errors", []),
-        }
-
     data = {
-        "yfinance_financials": _as_dict(yf_run),
-        "sharadar_sf1_optional": _as_dict(sh_run),
+        "yfinance_financials": as_dict(yf_run),
+        "sharadar_sf1_optional": as_dict(sh_run),
     }
     metrics_path.write_text(json.dumps(data, indent=2))
     print(f"Wrote metrics: {metrics_path}")

@@ -21,6 +21,49 @@ from vertex_forager.exceptions import InputError
 logger = logging.getLogger(__name__)
 
 
+def as_dict(obj: Any) -> dict[str, Any]:
+    """Convert a pipeline result object to a serializable dictionary.
+    
+    Handles cases where the object is None or has different metric structures.
+    """
+    if obj is None:
+        return {}
+    return {
+        "counters": getattr(obj, "metrics_counters", {}),
+        "histograms": getattr(obj, "metrics_histograms", {}),
+        "summary": getattr(obj, "metrics_summary", {}),
+        "tables": getattr(obj, "tables", {}),
+        "errors": getattr(obj, "errors", []),
+    }
+
+def set_env(cfg: dict[str, Any]) -> None:
+    """Apply a configuration dictionary to environment variables.
+    
+    If a value is None, the environment variable is removed.
+    Otherwise, it is set to the string representation of the value.
+    """
+    for k, v in cfg.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = str(v)
+
+def load_tickers_env(name: str, default: list[str]) -> list[str]:
+    """Load a list of tickers from an environment variable.
+    
+    Args:
+        name: Environment variable name.
+        default: Default list to return if variable is missing or empty.
+        
+    Returns:
+        List of uppercase, stripped ticker symbols.
+    """
+    v = os.getenv(name)
+    if not v:
+        return default
+    toks = [t.strip().upper() for t in v.split(",") if t.strip()]
+    return toks or default
+
 def process_symbols(tickers: list[str] | None) -> list[str] | None:
     """Convert tickers to normalized symbols.
 

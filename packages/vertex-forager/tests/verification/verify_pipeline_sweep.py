@@ -6,22 +6,7 @@ from typing import Any, Dict, List
 
 from vertex_forager.providers.yfinance.client import YFinanceClient
 from vertex_forager.providers.sharadar.client import SharadarClient
-
-
-def _set_env(cfg: Dict[str, Any]) -> None:
-    for k, v in cfg.items():
-        if v is None:
-            os.environ.pop(k, None)
-        else:
-            os.environ[k] = str(v)
-
-
-def _load_tickers_env(name: str, default: List[str]) -> List[str]:
-    v = os.getenv(name)
-    if not v:
-        return default
-    toks = [t.strip().upper() for t in v.split(",") if t.strip()]
-    return toks or default
+from vertex_forager.utils import set_env, load_tickers_env
 
 
 def run_sweep() -> Dict[str, Any]:
@@ -43,65 +28,71 @@ def run_sweep() -> Dict[str, Any]:
         {"VF_CONCURRENCY": 24, "VF_FLUSH_THRESHOLD_ROWS": 300000, "VF_HTTP_MAX_KEEPALIVE": 250, "VF_HTTP_MAX_CONNECTIONS": 500, "VF_HTTP_TIMEOUT_S": 45},
     ]
 
-    yf_tickers_price = _load_tickers_env("YF_TICKERS_PRICE", ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN"])
-    yf_tickers_fin = _load_tickers_env("YF_TICKERS_FIN", ["AAPL", "MSFT", "NVDA"])
+    yf_tickers_price = load_tickers_env("YF_TICKERS_PRICE", ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN"])
+    yf_tickers_fin = load_tickers_env("YF_TICKERS_FIN", ["AAPL", "MSFT", "NVDA"])
     yf_start = os.getenv("YF_PRICE_START_DATE")
     yf_end = os.getenv("YF_PRICE_END_DATE")
     sh_key = os.getenv("SHARADAR_API_KEY")
-    sh_tickers = _load_tickers_env("SH_TICKERS", ["AAPL", "MSFT", "NVDA"])
+    sh_tickers = load_tickers_env("SH_TICKERS", ["AAPL", "MSFT", "NVDA"])
     sh_start = os.getenv("SH_START_DATE")
     sh_end = os.getenv("SH_END_DATE")
 
     results: Dict[str, Any] = {"runs": []}
 
+    original_env = os.environ.copy()
     for i, cfg in enumerate(combos):
-        _set_env(cfg)
-        run_entry: Dict[str, Any] = {"env": dict(cfg), "measurements": {}}
+        try:
+            set_env(cfg)
+            run_entry: Dict[str, Any] = {"env": dict(cfg), "measurements": {}}
 
-        # YFinance price
-        yfc = YFinanceClient(rate_limit=60, structured_logs=False)
-        t0 = time.monotonic()
-        yf_price = yfc.get_price_data(tickers=yf_tickers_price, connect_db=db_path, show_progress=False, start_date=yf_start, end_date=yf_end)
-        t1 = time.monotonic()
-        run_entry["measurements"]["yfinance_price"] = {
-            "duration_s": round(t1 - t0, 3),
-            "metrics": {
-                "summary": getattr(yf_price, "metrics_summary", {}),
-                "counters": getattr(yf_price, "metrics_counters", {}),
-            },
-        }
+            # YFinance price
+            yfc = YFinanceClient(rate_limit=60, structured_logs=False)
+            t0 = time.monotonic()
+            yf_price = yfc.get_price_data(tickers=yf_tickers_price, connect_db=db_path, show_progress=False, start_date=yf_start, end_date=yf_end)
+            t1 = time.monotonic()
+            run_entry["measurements"]["yfinance_price"] = {
+                "duration_s": round(t1 - t0, 3),
+                "metrics": {
+                    "summary": getattr(yf_price, "metrics_summary", {}),
+                    "counters": getattr(yf_price, "metrics_counters", {}),
+                },
+            }
 
-        # YFinance financials (annual income_stmt)
-        yfc2 = YFinanceClient(rate_limit=60, structured_logs=False)
-        t2 = time.monotonic()
-        yf_fin = yfc2.get_financials(kind="income_stmt", period="annual", tickers=yf_tickers_fin, connect_db=db_path, show_progress=False)
-        t3 = time.monotonic()
-        run_entry["measurements"]["yfinance_financials"] = {
-            "duration_s": round(t3 - t2, 3),
-            "metrics": {
-                "summary": getattr(yf_fin, "metrics_summary", {}),
-                "counters": getattr(yf_fin, "metrics_counters", {}),
-            },
-        }
+            # YFinance financials (annual income_stmt)
+            yfc2 = YFinanceClient(rate_limit=60, structured_logs=False)
+            t2 = time.monotonic()
+            yf_fin = yfc2.get_financials(kind="income_stmt", period="annual", tickers=yf_tickers_fin, connect_db=db_path, show_progress=False)
+            t3 = time.monotonic()
+            run_entry["measurements"]["yfinance_financials"] = {
+                "duration_s": round(t3 - t2, 3),
+                "metrics": {
+                    "summary": getattr(yf_fin, "metrics_summary", {}),
+                    "counters": getattr(yf_fin, "metrics_counters", {}),
+                },
+            }
 
-        # Optional: Sharadar fundamental MRT if key present
-        if sh_key:
-            try:
-                shc = SharadarClient(api_key=sh_key, rate_limit=60, structured_logs=False)
-                t4 = time.monotonic()
-                sh_fin = shc.get_fundamental_data(tickers=sh_tickers, connect_db=db_path, dimension="MRT", start_date=sh_start, end_date=sh_end)
-                t5 = time.monotonic()
-                run_entry["measurements"]["sharadar_sf1_mrt"] = {
-                    "duration_s": round(t5 - t4, 3),
-                    "metrics": {
-                        "summary": getattr(sh_fin, "metrics_summary", {}),
-                        "counters": getattr(sh_fin, "metrics_counters", {}),
-                    },
-                }
-            except Exception as e:
-                run_entry["measurements"]["sharadar_sf1_mrt"] = {"error": str(e)}
+            # Optional: Sharadar fundamental MRT if key present
+            if sh_key:
+                try:
+                    shc = SharadarClient(api_key=sh_key, rate_limit=60, structured_logs=False)
+                    t4 = time.monotonic()
+                    sh_fin = shc.get_fundamental_data(tickers=sh_tickers, connect_db=db_path, dimension="MRT", start_date=sh_start, end_date=sh_end)
+                    t5 = time.monotonic()
+                    run_entry["measurements"]["sharadar_sf1_mrt"] = {
+                        "duration_s": round(t5 - t4, 3),
+                        "metrics": {
+                            "summary": getattr(sh_fin, "metrics_summary", {}),
+                            "counters": getattr(sh_fin, "metrics_counters", {}),
+                        },
+                    }
+                except Exception as e:
+                    print(f"Sharadar verification skipped due to error: {e}")
+                    run_entry["measurements"]["sharadar_sf1_mrt"] = {"error": str(e)}
 
-        results["runs"].append(run_entry)
+            results["runs"].append(run_entry)
+        finally:
+            os.environ.clear()
+            os.environ.update(original_env)
 
     # Write report with simple best selection by shortest durations
     def _best(run_key: str) -> Dict[str, Any]:
