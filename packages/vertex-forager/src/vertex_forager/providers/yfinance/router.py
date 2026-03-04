@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import logging
+import os
 import pickle
+import time
 from collections.abc import AsyncIterator, Sequence
 import uuid
 from datetime import date, datetime, timezone
 from typing import Any, Final
+from vertex_forager.utils import sanitize_field
 from vertex_forager.providers.yfinance.constants import PRICE_BATCH_SIZE, THREADS_THRESHOLD, PRICE_BATCH_MAX, DATASET_ENDPOINT
 from vertex_forager.providers.yfinance.constants import (
     INTERVAL_KEY,
@@ -49,6 +52,24 @@ from vertex_forager.routers.errors import raise_yfinance_parse_error
 
 logger = logging.getLogger("vertex_forager.providers.yfinance.router")
 
+def _parse_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    if isinstance(value, (int, float)):
+        return bool(int(value))
+    if isinstance(value, str):
+        s = value.strip().lower()
+        if s in ("1", "true", "yes", "on"):
+            return True
+        if s in ("0", "false", "no", "off", ""):
+            return False
+        try:
+            return bool(int(s))
+        except (ValueError, TypeError):
+            return False
+    return False
 class YFinanceRouter(BaseRouter[YFinanceDataset]):
     """Router for Yahoo Finance datasets (via yfinance).
     
@@ -113,6 +134,18 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             logger.debug(LOG_PRICE_BATCH_PARSE_FAIL.format(prefix=ROUTER_LOG_PREFIX, value=raw_bs, default=self.PRICE_BATCH_SIZE))
             bs_int = self.PRICE_BATCH_SIZE
         self._price_batch_size = max(1, min(PRICE_BATCH_MAX, bs_int))
+        structured_logs_arg = kwargs.get("structured_logs")
+        log_verbose_arg = kwargs.get("log_verbose")
+        if structured_logs_arg is not None:
+            self._structured_logs = _parse_bool(structured_logs_arg)
+        else:
+            v_struct = os.getenv("VF_STRUCTURED_LOGS")
+            self._structured_logs = _parse_bool(v_struct)
+        if log_verbose_arg is not None:
+            self._log_verbose = _parse_bool(log_verbose_arg)
+        else:
+            v_verbose = os.getenv("VF_LOG_VERBOSE")
+            self._log_verbose = _parse_bool(v_verbose)
 
     @property
     def provider(self) -> str:
@@ -244,6 +277,20 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             # Apply dataset-specific transformations
             dataset = job.dataset
             observed_at = datetime.now(timezone.utc)
+            if self._structured_logs:
+                sym0 = job.context.get("symbol")
+                att0 = 0
+                try:
+                    att0 = int(job.context.get("attempt", 0))  # type: ignore[arg-type]
+                except (TypeError, ValueError):
+                    logger.debug("bad attempt value: %s", job.context.get("attempt", 0))
+                    att0 = 0
+                msg0 = f"OBS provider={sanitize_field(self.provider)} dataset={sanitize_field(dataset)} symbol={sanitize_field(sym0)} stage=router_parse_enter attempt={att0} duration=0.000s"
+                if self._log_verbose:
+                    logger.info(msg0)
+                else:
+                    logger.debug(msg0)
+            t0 = time.monotonic()
             if dataset == "price":
                 df_pl = self._transform_price(df_pl)
             elif dataset in ("financials", "quarterly_financials", "balance_sheet", "quarterly_balance_sheet", "cashflow", "quarterly_cashflow", "income_stmt", "earnings", "quarterly_earnings"):
@@ -289,6 +336,21 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
                 context=job.context,
             )
 
+            if self._structured_logs:
+                sym1 = job.context.get("symbol")
+                att1 = 0
+                try:
+                    att1 = int(job.context.get("attempt", 0))  # type: ignore[arg-type]
+                except (TypeError, ValueError):
+                    logger.debug("bad attempt value: %s", job.context.get("attempt", 0))
+                    att1 = 0
+                dur1 = time.monotonic() - t0
+                msg1 = f"OBS provider={sanitize_field(self.provider)} dataset={sanitize_field(job.dataset)} symbol={sanitize_field(sym1)} stage=router_parse_exit attempt={att1} duration={dur1:.3f}s packets=1 rows={len(df_pl)}"
+                if self._log_verbose:
+                    logger.info(msg1)
+                else:
+                    logger.debug(msg1)
+
             return ParseResult(packets=[packet], next_jobs=[])
         
         except (pickle.UnpicklingError, ValueError, TypeError) as e:
@@ -303,6 +365,7 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
     # --------------------------------------
     # Generate Jobs Helpers
     # --------------------------------------
+    # sanitize_field from utils is used for key=value logging normalization
     
     def _build_request_params(self, *, dataset: YFinanceDataset) -> dict[str, JSONValue]:
         """Unified parameter builder for yfinance library calls.

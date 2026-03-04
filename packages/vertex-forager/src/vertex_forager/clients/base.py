@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import os
+import time
 from abc import ABC
 import asyncio
 from contextlib import asynccontextmanager, AsyncExitStack, nullcontext
@@ -22,7 +24,7 @@ from vertex_forager.core.contracts import IRouter, IWriter, IMapper
 from vertex_forager.schema.registry import get_table_schema
 from vertex_forager.writers.base import BaseWriter
 from vertex_forager.writers import create_writer
-from vertex_forager.utils import Spinner, create_pbar_updater
+from vertex_forager.utils import Spinner, create_pbar_updater, sanitize_field
 from vertex_forager.core.types import JSONValue, SharadarDataset, YFinanceDataset
 HttpExecutor = _HttpExecutor
 VertexForager = _VertexForager
@@ -105,7 +107,20 @@ class BaseClient(ABC, Generic[T]):
         config_params = kwargs.copy()
         config_params["requests_per_minute"] = rate_limit
 
+        def _env_bool(name: str) -> bool:
+            v = os.getenv(name)
+            if v is None:
+                return False
+            return v.strip().lower() in ("1", "true", "yes", "on")
+        if ("metrics_enabled" not in config_params) or (config_params.get("metrics_enabled") is None):
+            config_params["metrics_enabled"] = _env_bool("VF_METRICS_ENABLED")
+        if ("structured_logs" not in config_params) or (config_params.get("structured_logs") is None):
+            config_params["structured_logs"] = _env_bool("VF_STRUCTURED_LOGS")
+        if ("log_verbose" not in config_params) or (config_params.get("log_verbose") is None):
+            config_params["log_verbose"] = _env_bool("VF_LOG_VERBOSE")
         self._config = EngineConfig(**config_params)
+        self._structured_logs = bool(self._config.structured_logs)
+        self._log_verbose = bool(self._config.log_verbose)
 
         # Initialize FlowController for global rate limiting
         self.controller = FlowController(
@@ -192,6 +207,13 @@ class BaseClient(ABC, Generic[T]):
         pfunc = partial(func, *args, **kwargs)
         return await asyncio.to_thread(pfunc)
 
+    def _safe_int(self, value: Any) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            logger.debug("bad attempt value: %s", value)
+            return 0
+
     async def run_pipeline(
         self,
         *,
@@ -251,9 +273,27 @@ class BaseClient(ABC, Generic[T]):
                     category=FutureWarning,
                     module=r"yfinance(\.|$)",
                 )
+                if self._structured_logs:
+                    sym_count = len(symbols or [])
+                    attempt = self._safe_int(run_kwargs.get("attempt", 0))
+                    msg_s = f"OBS provider={sanitize_field(router.provider)} dataset={sanitize_field(dataset)} symbol=* symbols={sym_count} stage=client_run_start attempt={attempt} duration=0.000s"
+                    if self._log_verbose:
+                        logger.info(msg_s)
+                    else:
+                        logger.debug(msg_s)
+                t0 = time.monotonic()
                 self.last_run = await pipeline.run(
                     dataset=dataset, symbols=symbols, on_progress=on_progress, **run_kwargs
                 )
+                if self._structured_logs:
+                    err_n = len(self.last_run.errors) if self.last_run else 0
+                    dur = time.monotonic() - t0
+                    attempt = self._safe_int(run_kwargs.get("attempt", 0))
+                    msg_e = f"OBS provider={sanitize_field(router.provider)} dataset={sanitize_field(dataset)} symbol=* stage=client_run_end errors={err_n} attempt={attempt} duration={dur:.3f}s"
+                    if self._log_verbose:
+                        logger.info(msg_e)
+                    else:
+                        logger.debug(msg_e)
             return self.last_run
 
     @asynccontextmanager
