@@ -2,7 +2,7 @@
 
 ## Branch Protection
 - Enable Branch Protection on the `main` branch.
-- Require status checks: `quality-check` and `CodeQL`.
+- Require status checks: `Vertex CI / 🛡️ Code Quality Check`, `Type Check / mypy`, `CodeQL / analyze` (exact check names as shown in PR).
 - Disallow direct pushes and require PR reviews.
 
 ### Setup Steps (GitHub UI)
@@ -12,8 +12,8 @@
    - Require a pull request before merging
    - Require status checks to pass before merging
    - Require conversation resolution before merging
-4. Required status checks (select exact names as they appear in PR):
-   - `Vertex CI / quality-check`
+4. Required status checks (select exact names as they appear in PR checks list):
+   - `Vertex CI / 🛡️ Code Quality Check`
    - `Type Check / mypy`
    - `CodeQL / analyze`
 5. Optional hardening:
@@ -44,8 +44,9 @@
 - Dependency issues: upgrade or apply vendor patches.
 
 ## Failure Signals
-- PRs blocked when `quality-check` or `CodeQL` fail.
-- Logs include brief remediation hints and links to findings.
+- Current state: Branch Protection is not enforced (private repo plan constraints). PRs may not be blocked by failing checks.
+- Desired state: PRs are blocked when `Vertex CI / 🛡️ Code Quality Check`, `Type Check / mypy`, or `CodeQL / analyze` fail, and logs include remediation hints and links.
+- Action required: Enable/configure Branch Protection with the exact required status checks to achieve merge blocking; keep remediation/logging as mandatory requirements.
 
 ## Performance
 - Lint checks kept minimal to reduce runtime.

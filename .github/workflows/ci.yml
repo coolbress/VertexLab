@@ -14,6 +14,7 @@ jobs:
     permissions:
       contents: read
       security-events: write
+      actions: read
     env:
       VF_STRUCTURED_LOGS: "1"
       VF_LOG_VERBOSE: "0"
@@ -44,9 +45,16 @@ jobs:
           output: trivy-results.sarif
           skip-dirs: ".hypothesis,.ruff_cache,data,output,packages/vertex-forager/legacy_code"
         continue-on-error: true
+      - name: Check Trivy SARIF presence
+        run: |
+          if [ -f trivy-results.sarif ]; then
+            echo "TRIVY_SARIF_EXISTS=true" >> "$GITHUB_ENV"
+          else
+            echo "TRIVY_SARIF_EXISTS=false" >> "$GITHUB_ENV"
+          fi
       - name: Upload Trivy SARIF to Security tab
-        if: ${{ always() }}
-        uses: github/codeql-action/upload-sarif@v3
+        if: ${{ always() && env.TRIVY_SARIF_EXISTS == 'true' }}
+        uses: github/codeql-action/upload-sarif@7aefa1c9aed02ae41531ec219164e64a0f087410
         with:
           sarif_file: trivy-results.sarif
       - name: Trivy FS Scan (Table Gate)
