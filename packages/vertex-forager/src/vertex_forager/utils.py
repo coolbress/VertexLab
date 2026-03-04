@@ -11,6 +11,7 @@ import sys
 import warnings
 from typing import Any, Callable, Literal
 import re
+import math
 
 import nest_asyncio
 from tqdm.auto import tqdm
@@ -202,10 +203,13 @@ def check_memory_safety(
     except (TypeError, ValueError):
         pass
     try:
-        env_abs_mb = float(os.getenv("VF_MEM_THRESHOLD_ABS_MB", "").strip() or (threshold_absolute / 1024 / 1024))
-        if env_abs_mb > 0:
+        _abs_str = os.getenv("VF_MEM_THRESHOLD_ABS_MB", "").strip()
+        env_abs_mb = float(_abs_str or (threshold_absolute / 1024 / 1024))
+        if env_abs_mb > 0 and math.isfinite(env_abs_mb):
             threshold_absolute = int(env_abs_mb * 1024 * 1024)
-    except (TypeError, ValueError):
+        else:
+            logger.debug(f"Ignoring invalid VF_MEM_THRESHOLD_ABS_MB={_abs_str}")
+    except (TypeError, ValueError, OverflowError):
         pass
     if estimated_size > available_memory * threshold_ratio:
         warnings.warn(
