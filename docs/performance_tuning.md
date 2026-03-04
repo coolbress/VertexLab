@@ -9,9 +9,12 @@
 ## Baseline Performance
 
 > Note: Metrics measured on macOS M1/M2 (local dev environment).
-> Commands:
-> - Price: `VF_METRICS_ENABLED=1 /usr/bin/time -l uv run python packages/vertex-forager/tests/verification/verify_pipeline_perf.py`
-> - Financials: `VF_METRICS_ENABLED=1 /usr/bin/time -l uv run python packages/vertex-forager/tests/verification/verify_pipeline_perf_financials.py`
+> Commands (select based on OS):
+> - macOS (BSD time): `VF_METRICS_ENABLED=1 /usr/bin/time -l uv run python packages/vertex-forager/tests/verification/verify_pipeline_perf.py`
+> - Linux (GNU time): `VF_METRICS_ENABLED=1 /usr/bin/time -v uv run python packages/vertex-forager/tests/verification/verify_pipeline_perf.py`
+> - Portable (POSIX): `VF_METRICS_ENABLED=1 time -p uv run python packages/vertex-forager/tests/verification/verify_pipeline_perf.py`
+>
+> (Same pattern applies for `verify_pipeline_perf_financials.py`)
 > Artifacts (example paths with timestamp):
 > - Price: `output/forager-profiles/{YYYYMMDD_HHMMSS}/profile_metrics.json`
 > - Financials: `output/forager-profiles/{YYYYMMDD_HHMMSS}/profile_financials_metrics.json`
