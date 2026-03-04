@@ -24,7 +24,7 @@ from vertex_forager.core.contracts import IRouter, IWriter, IMapper
 from vertex_forager.schema.registry import get_table_schema
 from vertex_forager.writers.base import BaseWriter
 from vertex_forager.writers import create_writer
-from vertex_forager.utils import Spinner, create_pbar_updater
+from vertex_forager.utils import Spinner, create_pbar_updater, sanitize_field
 from vertex_forager.core.types import JSONValue, SharadarDataset, YFinanceDataset
 HttpExecutor = _HttpExecutor
 VertexForager = _VertexForager
@@ -276,13 +276,7 @@ class BaseClient(ABC, Generic[T]):
                 if self._structured_logs:
                     sym_count = len(symbols or [])
                     attempt = self._safe_int(run_kwargs.get("attempt", 0))
-                    def _sanitize(v: object) -> str:
-                        s = "" if v is None else str(v)
-                        s = s.replace("\n", " ").replace("\r", " ")
-                        s = s.replace("=", "_")
-                        s = "_".join(s.split())
-                        return s
-                    msg_s = f"OBS provider={_sanitize(router.provider)} dataset={_sanitize(dataset)} symbol=* symbols={sym_count} stage=client_run_start attempt={attempt} duration=0.000s"
+                    msg_s = f"OBS provider={sanitize_field(router.provider)} dataset={sanitize_field(dataset)} symbol=* symbols={sym_count} stage=client_run_start attempt={attempt} duration=0.000s"
                     if self._log_verbose:
                         logger.info(msg_s)
                     else:
@@ -295,7 +289,7 @@ class BaseClient(ABC, Generic[T]):
                     err_n = len(self.last_run.errors) if self.last_run else 0
                     dur = time.monotonic() - t0
                     attempt = self._safe_int(run_kwargs.get("attempt", 0))
-                    msg_e = f"OBS provider={_sanitize(router.provider)} dataset={_sanitize(dataset)} symbol=* stage=client_run_end errors={err_n} attempt={attempt} duration={dur:.3f}s"
+                    msg_e = f"OBS provider={sanitize_field(router.provider)} dataset={sanitize_field(dataset)} symbol=* stage=client_run_end errors={err_n} attempt={attempt} duration={dur:.3f}s"
                     if self._log_verbose:
                         logger.info(msg_e)
                     else:

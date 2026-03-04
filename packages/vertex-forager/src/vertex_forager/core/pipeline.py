@@ -678,6 +678,7 @@ class VertexForager:
                 t_w1 = time.monotonic()
                 self._inc("writer_flushes", 1)
                 self._observe("writer_rows", float(write_result.rows))
+                self._inc("rows_written_total", int(write_result.rows))
                 self._log_structured(provider=merged_packet.provider, dataset=merged_packet.table, symbol=None, stage="write_flush", duration_s=(t_w1 - t_w0))
 
                 async with result_lock:
