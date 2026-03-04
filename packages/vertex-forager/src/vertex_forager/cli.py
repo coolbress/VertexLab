@@ -387,30 +387,29 @@ def tune_profile(kind: str, output_dir: Path | None, tickers: str | None, start_
         if db_path.exists():
             db_path.unlink()
 
-@tune.command("sweep")
-@click.option("--output-dir", type=click.Path(path_type=Path), default=None)
-@click.option("--include-sharadar", is_flag=True, default=False)
-@click.option("--concurrency-list", type=str, default=None, help="Comma-separated list of concurrency values")
-@click.option("--flush-rows-list", type=str, default=None, help="Comma-separated list of flush threshold rows")
-@click.option("--keepalive-list", type=str, default=None, help="Comma-separated list of HTTP keepalive counts")
-@click.option("--connections-list", type=str, default=None, help="Comma-separated list of HTTP max connections")
-@click.option("--timeout-list", type=str, default=None, help="Comma-separated list of HTTP timeouts (seconds)")
-@click.option("--rank-by", type=click.Choice(["duration","duration_p95"]), default="duration")
-@click.option("--rank-alpha", type=float, default=0.4)
-@click.option("--sample-count", type=int, default=None)
-@click.option("--sample-seed", type=int, default=42)
-@click.option("--rank-error-penalty", type=float, default=5.0)
-def tune_sweep(output_dir: Path | None, include_sharadar: bool, concurrency_list: str | None, flush_rows_list: str | None, keepalive_list: str | None, connections_list: str | None, timeout_list: str | None, rank_by: str, rank_alpha: float, sample_count: int | None, sample_seed: int, rank_error_penalty: float) -> None:
-    from vertex_forager.providers.yfinance.client import YFinanceClient
-    from vertex_forager.providers.sharadar.client import SharadarClient
-    from vertex_forager.utils import set_env, load_tickers_env
-    out_dir = output_dir or Path(os.getenv("VF_PROFILE_OUTPUT_DIR") or (Path.cwd() / "output" / "forager-profiles"))
-    out_dir.mkdir(parents=True, exist_ok=True)
-    db_path = out_dir / "profile_sweep.duckdb"
-    report_path = out_dir / "profile_sweep_results.json"
-    if db_path.exists():
-        db_path.unlink()
-    os.environ.setdefault("VF_METRICS_ENABLED", "1")
+def _build_sweep_combinations(
+    concurrency_list: str | None,
+    flush_rows_list: str | None,
+    keepalive_list: str | None,
+    connections_list: str | None,
+    timeout_list: str | None,
+    sample_count: int | None,
+    sample_seed: int,
+) -> list[dict[str, Any]]:
+    """Parse list arguments and generate sweep combinations.
+
+    Args:
+        concurrency_list: Comma-separated concurrency values.
+        flush_rows_list: Comma-separated flush threshold values.
+        keepalive_list: Comma-separated keepalive values.
+        connections_list: Comma-separated connection values.
+        timeout_list: Comma-separated timeout values.
+        sample_count: Number of combinations to sample (optional).
+        sample_seed: Seed for random sampling.
+
+    Returns:
+        List of environment configuration dictionaries.
+    """
     def _parse_list(s: str | None, default: list[int]) -> list[int]:
         if not s:
             return default
@@ -426,11 +425,13 @@ def tune_sweep(output_dir: Path | None, include_sharadar: bool, concurrency_list
             except ValueError:
                 continue
         return vals or default
+
     concs = _parse_list(concurrency_list, [8, 12, 16, 20, 24])
     flushes = _parse_list(flush_rows_list, [100_000, 150_000, 200_000, 250_000, 300_000])
     keepalives = _parse_list(keepalive_list, [100, 150, 200, 250])
     connections = _parse_list(connections_list, [200, 300, 400, 500])
     timeouts = _parse_list(timeout_list, [30, 45])
+
     combos: list[dict[str, Any]] = []
     for c, f, k, m, t in itertools.product(concs, flushes, keepalives, connections, timeouts):
         combos.append({
@@ -440,16 +441,42 @@ def tune_sweep(output_dir: Path | None, include_sharadar: bool, concurrency_list
             "VF_HTTP_MAX_CONNECTIONS": m,
             "VF_HTTP_TIMEOUT_S": t,
         })
+    
+    total = len(combos)
     if sample_count is None:
         sample_count = 50  # Default sane limit
 
-    if sample_count > 0 and sample_count < len(combos):
-        click.echo(f"Sampling {sample_count} combinations from {len(combos)} total (seed={sample_seed}).")
+    if sample_count > 0 and sample_count < total:
+        click.echo(f"Sampling {sample_count} combinations from {total} total (seed={sample_seed}).")
         rnd = random.Random(sample_seed)
         combos = rnd.sample(combos, sample_count)
     else:
-        click.echo(f"Running all {len(combos)} combinations.")
+        click.echo(f"Running all {total} combinations.")
+        
+    return combos
+
+def _run_sweep_measurements(
+    combos: list[dict[str, Any]],
+    output_dir: Path,
+    include_sharadar: bool,
+) -> dict[str, Any]:
+    """Execute sweep measurements for each configuration.
+
+    Args:
+        combos: List of configuration dictionaries.
+        output_dir: Directory for temporary database files.
+        include_sharadar: Whether to include Sharadar benchmarks.
+
+    Returns:
+        Dictionary containing run results.
+    """
+    from vertex_forager.providers.yfinance.client import YFinanceClient
+    from vertex_forager.providers.sharadar.client import SharadarClient
+    from vertex_forager.utils import set_env, load_tickers_env
     
+    # Use output_dir for DB paths
+    out_dir = output_dir
+
     yf_tickers_price = load_tickers_env("YF_TICKERS_PRICE", ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN"])
     yf_tickers_fin = load_tickers_env("YF_TICKERS_FIN", ["AAPL", "MSFT", "NVDA"])
     yf_start = os.getenv("YF_PRICE_START_DATE")
@@ -544,9 +571,26 @@ def tune_sweep(output_dir: Path | None, include_sharadar: bool, concurrency_list
     finally:
         os.environ.clear()
         os.environ.update(original_env)
-        # Cleanup main db_path if it was created (though we use combo_db_path now)
-        if db_path.exists():
-            db_path.unlink()
+            
+    return results
+
+def _score_and_rank_results(
+    results: dict[str, Any],
+    rank_by: str,
+    rank_alpha: float,
+    rank_error_penalty: float,
+) -> dict[str, Any]:
+    """Score and rank the sweep results.
+
+    Args:
+        results: Dictionary containing 'runs' list.
+        rank_by: Ranking metric ('duration' or 'duration_p95').
+        rank_alpha: Weight for p95 duration in scoring.
+        rank_error_penalty: Penalty multiplier for error count.
+
+    Returns:
+        Updated results dictionary with 'best' entry added.
+    """
     def _score(r: dict[str, Any], run_key: str) -> float:
         m = r["measurements"].get(run_key, {})
         duration = m.get("duration_s", float("inf"))
@@ -572,21 +616,89 @@ def tune_sweep(output_dir: Path | None, include_sharadar: bool, concurrency_list
                  score += float(err_cnt) * 5.0 # Fallback penalty
 
         return score
+
     def _best(run_key: str) -> dict[str, Any]:
-        ranked = sorted(results["runs"], key=lambda r: _score(r, run_key))
-        return ranked[0] if ranked else {}
-    results["best"] = {"yfinance_price": _best("yfinance_price"), "yfinance_financials": _best("yfinance_financials")}
-    report_path.write_text(json.dumps(results, indent=2))
+        runs = results.get("runs", [])
+        if not runs:
+            return {}
+        ranked = sorted(runs, key=lambda r: _score(r, run_key))
+        return ranked[0]
+        
+    results["best"] = {
+        "yfinance_price": _best("yfinance_price"),
+        "yfinance_financials": _best("yfinance_financials"),
+    }
+    return results
+
+@tune.command("sweep")
+@click.option("--output-dir", type=click.Path(path_type=Path), default=None)
+@click.option("--include-sharadar", is_flag=True, default=False)
+@click.option("--concurrency-list", type=str, default=None, help="Comma-separated list of concurrency values")
+@click.option("--flush-rows-list", type=str, default=None, help="Comma-separated list of flush threshold rows")
+@click.option("--keepalive-list", type=str, default=None, help="Comma-separated list of HTTP keepalive counts")
+@click.option("--connections-list", type=str, default=None, help="Comma-separated list of HTTP max connections")
+@click.option("--timeout-list", type=str, default=None, help="Comma-separated list of HTTP timeouts (seconds)")
+@click.option("--rank-by", type=click.Choice(["duration","duration_p95"]), default="duration")
+@click.option("--rank-alpha", type=float, default=0.4)
+@click.option("--sample-count", type=int, default=None)
+@click.option("--sample-seed", type=int, default=42)
+@click.option("--rank-error-penalty", type=float, default=5.0)
+def tune_sweep(output_dir: Path | None, include_sharadar: bool, concurrency_list: str | None, flush_rows_list: str | None, keepalive_list: str | None, connections_list: str | None, timeout_list: str | None, rank_by: str, rank_alpha: float, sample_count: int | None, sample_seed: int, rank_error_penalty: float) -> None:
+    """Run a parameter sweep to find optimal settings.
+
+    Args:
+        output_dir: Directory to write output files.
+        include_sharadar: Whether to include Sharadar benchmarks.
+        concurrency_list: List of concurrency values to test.
+        flush_rows_list: List of flush thresholds to test.
+        keepalive_list: List of keepalive connection limits.
+        connections_list: List of total connection limits.
+        timeout_list: List of timeout values.
+        rank_by: Metric to rank results by.
+        rank_alpha: Weight factor for p95 duration.
+        sample_count: Number of random samples to run.
+        sample_seed: Random seed for sampling.
+        rank_error_penalty: Score penalty per error.
+
+    Returns:
+        None: Writes profile_sweep_results.json and profile_tuning_best.json.
+    """
+    out_dir = output_dir or Path(os.getenv("VF_PROFILE_OUTPUT_DIR") or (Path.cwd() / "output" / "forager-profiles"))
+    out_dir.mkdir(parents=True, exist_ok=True)
+    report_path = out_dir / "profile_sweep_results.json"
     best_path = out_dir / "profile_tuning_best.json"
+
+    os.environ.setdefault("VF_METRICS_ENABLED", "1")
+    
+    # 1. Build combinations
+    combos = _build_sweep_combinations(
+        concurrency_list, flush_rows_list, keepalive_list, connections_list, timeout_list,
+        sample_count, sample_seed
+    )
+    
+    # 2. Measure
+    results = _run_sweep_measurements(combos, out_dir, include_sharadar)
+    
+    # 3. Score and Rank
+    results = _score_and_rank_results(results, rank_by, rank_alpha, rank_error_penalty)
+    
+    report_path.write_text(json.dumps(results, indent=2))
     best_path.write_text(json.dumps(results["best"], indent=2))
     click.echo(str(report_path))
-    if db_path.exists():
-        db_path.unlink()
 
 @tune.command("export-best")
 @click.option("--output-dir", type=click.Path(path_type=Path), default=None)
 @click.option("--write-file", type=click.Path(path_type=Path), default=None)
 def tune_export_best(output_dir: Path | None, write_file: Path | None) -> None:
+    """Export environment variables from best tuning results.
+
+    Args:
+        output_dir: Directory containing profile_tuning_best.json.
+        write_file: Optional file path to write export commands to.
+
+    Returns:
+        None: Prints or writes export commands.
+    """
     out_dir = output_dir or Path(os.getenv("VF_PROFILE_OUTPUT_DIR") or (Path.cwd() / "output" / "forager-profiles"))
     best_path = out_dir / "profile_tuning_best.json"
     if not best_path.exists():
