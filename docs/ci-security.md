@@ -23,7 +23,9 @@
 
 ## Workflows
 - `quality-check`: Runs Trivy vulnerability scans (secret/config), import cycle/security checks, and the test suite as merge gates.
-- `CodeQL`: Performs static analysis and publishes SARIF results.
+- `CodeQL`: 
+  - Current state — CodeQL is enabled on a public repo and publishes SARIF results to the Security tab.
+  - If `upload: false` — CodeQL runs without publishing; SARIF results are not uploaded. Enable uploads to surface findings.
 
 ## Severity Thresholds
 - High/Critical: Must be fixed or explicitly waived with justification and owner.
