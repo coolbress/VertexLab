@@ -139,7 +139,6 @@ def check_memory_safety(
         threshold_ratio: Ratio of available memory to trigger warning.
         threshold_absolute: Absolute size in bytes to trigger warning.
     """
-    import os
     try:
         env_ratio = float(os.getenv("VF_MEM_THRESHOLD_RATIO", "").strip() or threshold_ratio)
         if 0 < env_ratio <= 1:

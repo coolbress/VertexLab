@@ -461,7 +461,11 @@ def tune_sweep(output_dir: Path | None, include_sharadar: bool, concurrency_list
     results: dict[str, Any] = {"runs": []}
     original_env = os.environ.copy()
     try:
-        for cfg in combos:
+        for idx, cfg in enumerate(combos):
+            combo_db_path = out_dir / f"profile_sweep_{idx}.duckdb"
+            if combo_db_path.exists():
+                combo_db_path.unlink()
+            
             try:
                 set_env(cfg)
                 entry: dict[str, Any] = {"env": dict(cfg), "measurements": {}}
@@ -470,7 +474,7 @@ def tune_sweep(output_dir: Path | None, include_sharadar: bool, concurrency_list
                 try:
                     yfc = YFinanceClient(rate_limit=60, structured_logs=False)
                     t0 = time.monotonic()
-                    yf_price = yfc.get_price_data(tickers=yf_tickers_price, connect_db=db_path, show_progress=False, start_date=yf_start, end_date=yf_end)
+                    yf_price = yfc.get_price_data(tickers=yf_tickers_price, connect_db=combo_db_path, show_progress=False, start_date=yf_start, end_date=yf_end)
                     t1 = time.monotonic()
                     entry["measurements"]["yfinance_price"] = {
                         "duration_s": round(t1 - t0, 3),
@@ -488,7 +492,7 @@ def tune_sweep(output_dir: Path | None, include_sharadar: bool, concurrency_list
                 try:
                     yfc2 = YFinanceClient(rate_limit=60, structured_logs=False)
                     t2 = time.monotonic()
-                    yf_fin = yfc2.get_financials(kind="income_stmt", period="annual", tickers=yf_tickers_fin, connect_db=db_path, show_progress=False)
+                    yf_fin = yfc2.get_financials(kind="income_stmt", period="annual", tickers=yf_tickers_fin, connect_db=combo_db_path, show_progress=False)
                     t3 = time.monotonic()
                     entry["measurements"]["yfinance_financials"] = {
                         "duration_s": round(t3 - t2, 3),
@@ -507,7 +511,7 @@ def tune_sweep(output_dir: Path | None, include_sharadar: bool, concurrency_list
                     try:
                         shc = SharadarClient(api_key=sh_key, rate_limit=60, structured_logs=False)
                         t4 = time.monotonic()
-                        sh_fin = shc.get_fundamental_data(tickers=sh_tickers, connect_db=db_path, dimension="MRT", start_date=sh_start, end_date=sh_end)
+                        sh_fin = shc.get_fundamental_data(tickers=sh_tickers, connect_db=combo_db_path, dimension="MRT", start_date=sh_start, end_date=sh_end)
                         t5 = time.monotonic()
                         entry["measurements"]["sharadar_sf1_mrt"] = {
                             "duration_s": round(t5 - t4, 3),
@@ -524,6 +528,13 @@ def tune_sweep(output_dir: Path | None, include_sharadar: bool, concurrency_list
                 results["runs"].append(entry)
             
             finally:
+                # Cleanup per-combo DB
+                if combo_db_path.exists():
+                    try:
+                        combo_db_path.unlink()
+                    except OSError as e:
+                        logger.warning(f"Failed to cleanup temp DB {combo_db_path}: {e}")
+
                 # Restore environment for next iteration
                 os.environ.clear()
                 os.environ.update(original_env)
@@ -533,6 +544,9 @@ def tune_sweep(output_dir: Path | None, include_sharadar: bool, concurrency_list
     finally:
         os.environ.clear()
         os.environ.update(original_env)
+        # Cleanup main db_path if it was created (though we use combo_db_path now)
+        if db_path.exists():
+            db_path.unlink()
     def _score(r: dict[str, Any], run_key: str) -> float:
         m = r["measurements"].get(run_key, {})
         duration = m.get("duration_s", float("inf"))

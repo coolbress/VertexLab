@@ -1,4 +1,5 @@
 import os
+import logging
 import json
 from pathlib import Path
 
@@ -6,8 +7,25 @@ from vertex_forager.providers.yfinance.client import YFinanceClient
 from vertex_forager.providers.sharadar.client import SharadarClient
 from vertex_forager.utils import as_dict, load_tickers_env
 
+logger = logging.getLogger(__name__)
+
 
 def main() -> None:
+    """Verify pipeline performance for Financials and Sharadar data.
+
+    Executes a financials data collection run (YFinance Income Stmt and optional Sharadar MRT)
+    and writes performance metrics to 'profile_financials_metrics.json'.
+    
+    Env Vars:
+        VF_PROFILE_OUTPUT_DIR: Directory for output files (default: output/forager-profiles).
+        VF_METRICS_ENABLED: Enabled by default ("1").
+        YF_TICKERS: Comma-separated tickers for YFinance (default: top 10 tech).
+        SHARADAR_API_KEY: If present, runs Sharadar verification.
+
+    Side Effects:
+        - Creates/deletes 'profile_financials.duckdb' in output dir.
+        - Writes 'profile_financials_metrics.json'.
+    """
     out_dir_env = os.getenv("VF_PROFILE_OUTPUT_DIR")
     out_dir = Path(out_dir_env) if out_dir_env else (Path.cwd() / "output" / "forager-profiles")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -46,7 +64,7 @@ def main() -> None:
                 dimension="MRT",
             )
         except Exception as e:
-            print(f"Sharadar verification skipped due to error: {e}")
+            logger.warning(f"Sharadar verification skipped due to error: {e}", exc_info=True)
             sh_run = None
             sh_error = str(e)
 
