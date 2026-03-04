@@ -176,7 +176,6 @@ def default_async_client() -> httpx.AsyncClient:
     Returns:
         httpx.AsyncClient: Configured client for HTTP operations.
     """
-    import os
     
     mk = env_int("VF_HTTP_MAX_KEEPALIVE", HTTP_MAX_KEEPALIVE_CONNECTIONS)
     max_keepalive = mk if mk is not None and mk > 0 else HTTP_MAX_KEEPALIVE_CONNECTIONS
