@@ -407,6 +407,30 @@ def get_app_root() -> Path:
     return path
 
 def sanitize_field(v: object) -> str:
+    """Normalize arbitrary input to a safe, single-token string.
+
+    Purpose:
+        Converts any object into a sanitized string suitable for key=value logs,
+        filenames, or identifiers where whitespace and delimiters can break parsing.
+
+    Args:
+        v (object): Input value to normalize. May be None or any object with a string
+            representation.
+
+    Returns:
+        str: Normalized string with these rules:
+            - None maps to an empty string ("").
+            - All whitespace sequences are replaced with a single underscore ("_").
+            - The "=" character is replaced with "_".
+            - Multiple consecutive underscores are collapsed to one.
+            - Leading and trailing underscores are trimmed.
+
+    Examples:
+        - sanitize_field(None) -> ""
+        - sanitize_field("  a  b\tc  ") -> "a_b_c"
+        - sanitize_field("x==y") -> "x_y"
+        - sanitize_field("  __  ") -> ""
+    """
     s = "" if v is None else str(v)
     s = re.sub(r"\s+", "_", s)
     s = s.replace("=", "_")
