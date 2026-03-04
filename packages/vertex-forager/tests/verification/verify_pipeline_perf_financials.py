@@ -7,6 +7,7 @@ from pathlib import Path
 from vertex_forager.providers.yfinance.client import YFinanceClient
 from vertex_forager.providers.sharadar.client import SharadarClient
 from vertex_forager.utils import as_dict, load_tickers_env
+from vertex_forager.exceptions import VertexForagerError
 
 logger = logging.getLogger(__name__)
 
@@ -66,8 +67,8 @@ async def main_async() -> None:
                     connect_db=db_path,
                     dimension="MRT",
                 )
-            except (OSError, asyncio.TimeoutError, ValueError) as e:
-                # Catch expected errors (network, timeout, config)
+            except (OSError, asyncio.TimeoutError, ValueError, VertexForagerError) as e:
+                # Catch expected errors (network, timeout, config, custom app errors)
                 logger.warning(f"Sharadar verification skipped due to error: {e}", exc_info=True)
                 sh_run = None
                 sh_error = str(e)

@@ -434,10 +434,11 @@ def _build_sweep_combinations(
                 continue
             try:
                 x = int(tok)
-                if x > 0:
-                    vals.append(x)
+                if x <= 0:
+                    raise ValueError("Must be positive")
+                vals.append(x)
             except ValueError:
-                continue
+                raise click.BadParameter(f"Invalid value '{tok}' in list '{s}'. Must be positive integers.")
         return vals or default
 
     concs = _parse_list(concurrency_list, [8, 12, 16, 20, 24])
@@ -622,7 +623,10 @@ def _score_and_rank_results(
         errors = metrics.get("errors", [])
         err_cnt = len(errors) if isinstance(errors, list) else 0
         
-        score = float(duration)
+        try:
+            score = float(duration)
+        except (ValueError, TypeError):
+            score = float("inf")
         
         if rank_by == "duration_p95":
             summary = metrics.get("summary", {})
@@ -737,8 +741,7 @@ def tune_export_best(output_dir: Path | None, write_file: Path | None) -> None:
     out_dir = output_dir or Path(os.getenv("VF_PROFILE_OUTPUT_DIR") or (Path.cwd() / "output" / "forager-profiles"))
     best_path = out_dir / "profile_tuning_best.json"
     if not best_path.exists():
-        click.echo(f"# best file not found: {best_path}")
-        return
+        raise click.ClickException(f"Best file not found: {best_path}")
     data = json.loads(best_path.read_text())
     lines: list[str] = []
     def _collect(label: str) -> None:
