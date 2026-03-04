@@ -360,6 +360,7 @@ def tune_profile(kind: str, output_dir: Path | None, tickers: str | None, start_
         db_path = out_dir / "profile_run.duckdb"
         if db_path.exists():
             db_path.unlink()
+        os.environ.setdefault("VF_METRICS_ENABLED", "1")
         client = YFinanceClient(rate_limit=60, metrics_enabled=True, structured_logs=False)
         _tickers = [t.strip().upper() for t in (tickers or "AAPL,MSFT,NVDA,GOOGL,AMZN").split(",")]
         run = asyncio.run(client.get_price_data(tickers=_tickers, connect_db=db_path, show_progress=False, start_date=start_date, end_date=end_date))
@@ -575,15 +576,25 @@ def _run_sweep_measurements(
                     except OSError as e:
                         logger.warning(f"Failed to cleanup temp DB {combo_db_path}: {e}")
 
-                # Restore environment for next iteration
-                os.environ.clear()
-                os.environ.update(original_env)
+                # Restore environment safely
+                current_env = dict(os.environ)
+                added_keys = current_env.keys() - original_env.keys()
+                for k in added_keys:
+                    os.environ.pop(k, None)
+                for k, v in original_env.items():
+                    os.environ[k] = v
+                
                 # Re-apply metrics enabled as it's required for all runs
                 os.environ.setdefault("VF_METRICS_ENABLED", "1")
 
     finally:
-        os.environ.clear()
-        os.environ.update(original_env)
+        # Final environment restore
+        current_env = dict(os.environ)
+        added_keys = current_env.keys() - original_env.keys()
+        for k in added_keys:
+            os.environ.pop(k, None)
+        for k, v in original_env.items():
+            os.environ[k] = v
             
     return results
 
@@ -625,8 +636,8 @@ def _score_and_rank_results(
             try:
                 score += float(err_cnt) * float(rank_error_penalty)
             except (ValueError, TypeError) as e:
-                 logger.warning(f"Error computing penalty score: {e}, inputs: err_cnt={err_cnt}, penalty={rank_error_penalty}")
-                 score += float(err_cnt) * 5.0 # Fallback penalty
+                logger.warning(f"Error computing penalty score: {e}, inputs: err_cnt={err_cnt}, penalty={rank_error_penalty}")
+                score += float(err_cnt) * 5.0 # Fallback penalty
 
         return score
 

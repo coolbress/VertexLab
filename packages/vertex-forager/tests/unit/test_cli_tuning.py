@@ -79,3 +79,5 @@ def test_score_and_rank_results():
     # Tie-break (stable sort): Run 1 comes first
     best_fin = ranked["best"]["yfinance_financials"]
     assert best_fin["measurements"]["yfinance_financials"]["duration_s"] == 5.0
+    # Verify identity to ensure deterministic tie-breaking (Run 1 selected)
+    assert best_fin["env"]["VF_CONCURRENCY"] == 10
