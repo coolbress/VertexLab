@@ -3,7 +3,12 @@ import httpx
 import logging
 from typing import Any, Optional, cast
 from pathlib import Path
+import os
+import json
+import time
 from .utils import get_app_root, get_cache_dir, clear_app_cache
+import itertools
+import random
 
 logger = logging.getLogger(__name__)
 
@@ -252,12 +257,17 @@ def constants(section: str, output_format: str, env_only: bool) -> None:
     
     ENV_VAR_MAPPING: dict[str, tuple[str, str]] = {
         "VF_HTTP_TIMEOUT_S": ("global", "HTTP_TIMEOUT_S"),
-        "VF_DEFAULT_RATE_LIMIT": ("global", "DEFAULT_RATE_LIMIT"),
-        "VF_MAX_CONNECTIONS": ("global", "HTTP_MAX_CONNECTIONS"),
+        "VF_HTTP_MAX_CONNECTIONS": ("global", "HTTP_MAX_CONNECTIONS"),
+        "VF_HTTP_MAX_KEEPALIVE": ("global", "HTTP_MAX_KEEPALIVE_CONNECTIONS"),
+        "VF_FLUSH_THRESHOLD_ROWS": ("global", "FLUSH_THRESHOLD_ROWS"),
+        "VF_CONCURRENCY": ("flow", "CONCURRENCY_MAX"),
     }
     env_vals = {
         "SHARADAR_API_KEY": os.getenv("SHARADAR_API_KEY"),
         **{k: os.getenv(k) for k in ENV_VAR_MAPPING.keys()},
+        "VF_METRICS_ENABLED": os.getenv("VF_METRICS_ENABLED"),
+        "VF_MEM_THRESHOLD_RATIO": os.getenv("VF_MEM_THRESHOLD_RATIO"),
+        "VF_MEM_THRESHOLD_ABS_MB": os.getenv("VF_MEM_THRESHOLD_ABS_MB"),
     }
     env_overrides_obj: dict[str, object] = {k: v for k, v in env_vals.items() if v is not None}
     if "SHARADAR_API_KEY" in env_overrides_obj:
@@ -310,6 +320,248 @@ def clear() -> None:
         clear_app_cache()
         click.echo("🧹 Cache cleared.")
 
+@main.group()
+def tune() -> None:
+    pass
+
+@tune.command("profile")
+@click.option("--kind", type=click.Choice(["price","financials"]), default="price")
+@click.option("--output-dir", type=click.Path(path_type=Path), default=None)
+@click.option("--tickers", type=str, default=None)
+@click.option("--start-date", type=str, default=None)
+@click.option("--end-date", type=str, default=None)
+def tune_profile(kind: str, output_dir: Path | None, tickers: str | None, start_date: str | None, end_date: str | None) -> None:
+    out_dir = output_dir or Path(os.getenv("VF_PROFILE_OUTPUT_DIR") or (Path.cwd() / "output" / "forager-profiles"))
+    out_dir.mkdir(parents=True, exist_ok=True)
+    if kind == "price":
+        from vertex_forager.providers.yfinance.client import YFinanceClient
+        db_path = out_dir / "profile_run.duckdb"
+        if db_path.exists():
+            db_path.unlink()
+        client = YFinanceClient(rate_limit=60, metrics_enabled=True, structured_logs=False)
+        _tickers = [t.strip().upper() for t in (tickers or "AAPL,MSFT,NVDA,GOOGL,AMZN").split(",")]
+        run = client.get_price_data(tickers=_tickers, connect_db=db_path, show_progress=False, start_date=start_date, end_date=end_date)
+        data = {
+            "counters": getattr(run, "metrics_counters", {}),
+            "histograms": getattr(run, "metrics_histograms", {}),
+            "summary": getattr(run, "metrics_summary", {}),
+            "tables": getattr(run, "tables", {}),
+            "errors": getattr(run, "errors", []),
+        }
+        metrics_path = out_dir / "profile_metrics.json"
+        metrics_path.write_text(json.dumps(data, indent=2))
+        click.echo(str(metrics_path))
+        if db_path.exists():
+            db_path.unlink()
+    else:
+        from vertex_forager.providers.yfinance.client import YFinanceClient
+        from vertex_forager.providers.sharadar.client import SharadarClient
+        db_path = out_dir / "profile_financials.duckdb"
+        if db_path.exists():
+            db_path.unlink()
+        os.environ.setdefault("VF_METRICS_ENABLED", "1")
+        yf_tickers = [t.strip().upper() for t in (tickers or os.getenv("YF_TICKERS") or "AAPL,MSFT,NVDA,GOOGL,AMZN,META,TSLA,NFLX,ADBE,CSCO").split(",")]
+        yfc = YFinanceClient(rate_limit=60, structured_logs=False)
+        yf_run = yfc.get_financials(kind="income_stmt", period="annual", tickers=yf_tickers, connect_db=db_path, show_progress=False)
+        sh_key = os.getenv("SHARADAR_API_KEY")
+        sh_run = None
+        if sh_key:
+            try:
+                shc = SharadarClient(api_key=sh_key, rate_limit=60, structured_logs=False)
+                sh_run = shc.get_fundamental_data(tickers=yf_tickers[:5], connect_db=db_path, dimension="MRT")
+            except Exception:
+                sh_run = None
+        def _as_dict(obj: Any) -> dict[str, Any]:
+            if obj is None:
+                return {}
+            return {
+                "counters": getattr(obj, "metrics_counters", {}),
+                "histograms": getattr(obj, "metrics_histograms", {}),
+                "summary": getattr(obj, "metrics_summary", {}),
+                "tables": getattr(obj, "tables", {}),
+                "errors": getattr(obj, "errors", []),
+            }
+        data = {
+            "yfinance_financials": _as_dict(yf_run),
+            "sharadar_sf1_optional": _as_dict(sh_run),
+        }
+        metrics_path = out_dir / "profile_financials_metrics.json"
+        metrics_path.write_text(json.dumps(data, indent=2))
+        click.echo(str(metrics_path))
+        if db_path.exists():
+            db_path.unlink()
+
+@tune.command("sweep")
+@click.option("--output-dir", type=click.Path(path_type=Path), default=None)
+@click.option("--include-sharadar", is_flag=True, default=False)
+@click.option("--concurrency-list", type=str, default=None, help="Comma-separated list of concurrency values")
+@click.option("--flush-rows-list", type=str, default=None, help="Comma-separated list of flush threshold rows")
+@click.option("--keepalive-list", type=str, default=None, help="Comma-separated list of HTTP keepalive counts")
+@click.option("--connections-list", type=str, default=None, help="Comma-separated list of HTTP max connections")
+@click.option("--timeout-list", type=str, default=None, help="Comma-separated list of HTTP timeouts (seconds)")
+@click.option("--rank-by", type=click.Choice(["duration","duration_p95"]), default="duration")
+@click.option("--rank-alpha", type=float, default=0.4)
+@click.option("--sample-count", type=int, default=None)
+@click.option("--sample-seed", type=int, default=42)
+@click.option("--rank-error-penalty", type=float, default=5.0)
+def tune_sweep(output_dir: Path | None, include_sharadar: bool, concurrency_list: str | None, flush_rows_list: str | None, keepalive_list: str | None, connections_list: str | None, timeout_list: str | None, rank_by: str, rank_alpha: float, sample_count: int | None, sample_seed: int, rank_error_penalty: float) -> None:
+    from vertex_forager.providers.yfinance.client import YFinanceClient
+    from vertex_forager.providers.sharadar.client import SharadarClient
+    out_dir = output_dir or Path(os.getenv("VF_PROFILE_OUTPUT_DIR") or (Path.cwd() / "output" / "forager-profiles"))
+    out_dir.mkdir(parents=True, exist_ok=True)
+    db_path = out_dir / "profile_sweep.duckdb"
+    report_path = out_dir / "profile_sweep_results.json"
+    if db_path.exists():
+        db_path.unlink()
+    os.environ.setdefault("VF_METRICS_ENABLED", "1")
+    def _parse_list(s: str | None, default: list[int]) -> list[int]:
+        if not s:
+            return default
+        vals: list[int] = []
+        for tok in s.split(","):
+            tok = tok.strip()
+            if not tok:
+                continue
+            try:
+                x = int(tok)
+                if x > 0:
+                    vals.append(x)
+            except ValueError:
+                continue
+        return vals or default
+    concs = _parse_list(concurrency_list, [8, 12, 16, 20, 24])
+    flushes = _parse_list(flush_rows_list, [100_000, 150_000, 200_000, 250_000, 300_000])
+    keepalives = _parse_list(keepalive_list, [100, 150, 200, 250])
+    connections = _parse_list(connections_list, [200, 300, 400, 500])
+    timeouts = _parse_list(timeout_list, [30, 45])
+    combos: list[dict[str, Any]] = []
+    for c, f, k, m, t in itertools.product(concs, flushes, keepalives, connections, timeouts):
+        combos.append({
+            "VF_CONCURRENCY": c,
+            "VF_FLUSH_THRESHOLD_ROWS": f,
+            "VF_HTTP_MAX_KEEPALIVE": k,
+            "VF_HTTP_MAX_CONNECTIONS": m,
+            "VF_HTTP_TIMEOUT_S": t,
+        })
+    if sample_count and sample_count > 0 and sample_count < len(combos):
+        rnd = random.Random(sample_seed)
+        combos = rnd.sample(combos, sample_count)
+    def _set_env(cfg: dict[str, Any]) -> None:
+        for k, v in cfg.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = str(v)
+    def _load_tickers_env(name: str, default: list[str]) -> list[str]:
+        v = os.getenv(name)
+        if not v:
+            return default
+        toks = [t.strip().upper() for t in v.split(",") if t.strip()]
+        return toks or default
+    yf_tickers_price = _load_tickers_env("YF_TICKERS_PRICE", ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN"])
+    yf_tickers_fin = _load_tickers_env("YF_TICKERS_FIN", ["AAPL", "MSFT", "NVDA"])
+    yf_start = os.getenv("YF_PRICE_START_DATE")
+    yf_end = os.getenv("YF_PRICE_END_DATE")
+    sh_key = os.getenv("SHARADAR_API_KEY") if include_sharadar else None
+    sh_tickers = _load_tickers_env("SH_TICKERS", ["AAPL", "MSFT", "NVDA"])
+    sh_start = os.getenv("SH_START_DATE")
+    sh_end = os.getenv("SH_END_DATE")
+    results: dict[str, Any] = {"runs": []}
+    for cfg in combos:
+        _set_env(cfg)
+        entry: dict[str, Any] = {"env": dict(cfg), "measurements": {}}
+        yfc = YFinanceClient(rate_limit=60, structured_logs=False)
+        t0 = time.monotonic()
+        yf_price = yfc.get_price_data(tickers=yf_tickers_price, connect_db=db_path, show_progress=False, start_date=yf_start, end_date=yf_end)
+        t1 = time.monotonic()
+        entry["measurements"]["yfinance_price"] = {
+            "duration_s": round(t1 - t0, 3),
+            "metrics": {
+                "summary": getattr(yf_price, "metrics_summary", {}),
+                "counters": getattr(yf_price, "metrics_counters", {}),
+                "errors": getattr(yf_price, "errors", []),
+            },
+        }
+        yfc2 = YFinanceClient(rate_limit=60, structured_logs=False)
+        t2 = time.monotonic()
+        yf_fin = yfc2.get_financials(kind="income_stmt", period="annual", tickers=yf_tickers_fin, connect_db=db_path, show_progress=False)
+        t3 = time.monotonic()
+        entry["measurements"]["yfinance_financials"] = {
+            "duration_s": round(t3 - t2, 3),
+            "metrics": {
+                "summary": getattr(yf_fin, "metrics_summary", {}),
+                "counters": getattr(yf_fin, "metrics_counters", {}),
+                "errors": getattr(yf_fin, "errors", []),
+            },
+        }
+        if sh_key:
+            try:
+                shc = SharadarClient(api_key=sh_key, rate_limit=60, structured_logs=False)
+                t4 = time.monotonic()
+                sh_fin = shc.get_fundamental_data(tickers=sh_tickers, connect_db=db_path, dimension="MRT", start_date=sh_start, end_date=sh_end)
+                t5 = time.monotonic()
+                entry["measurements"]["sharadar_sf1_mrt"] = {
+                    "duration_s": round(t5 - t4, 3),
+                    "metrics": {
+                        "summary": getattr(sh_fin, "metrics_summary", {}),
+                        "counters": getattr(sh_fin, "metrics_counters", {}),
+                        "errors": getattr(sh_fin, "errors", []),
+                    },
+                }
+            except Exception as e:
+                entry["measurements"]["sharadar_sf1_mrt"] = {"error": str(e)}
+        results["runs"].append(entry)
+    def _score(r: dict[str, Any], run_key: str) -> float:
+        m = r["measurements"].get(run_key, {})
+        duration = m.get("duration_s", float("inf"))
+        metrics = m.get("metrics", {})
+        errors = metrics.get("errors", [])
+        err_cnt = len(errors) if isinstance(errors, list) else 0
+        if rank_by == "duration":
+            return float(duration) + float(err_cnt) * float(rank_error_penalty)
+        summary = metrics.get("summary", {})
+        p95 = summary.get("http_duration_s_p95", duration)
+        try:
+            return float(duration) + float(rank_alpha) * float(p95) + float(err_cnt) * float(rank_error_penalty)
+        except Exception:
+            return float(duration) + float(err_cnt) * float(rank_error_penalty)
+    def _best(run_key: str) -> dict[str, Any]:
+        ranked = sorted(results["runs"], key=lambda r: _score(r, run_key))
+        return ranked[0] if ranked else {}
+    results["best"] = {"yfinance_price": _best("yfinance_price"), "yfinance_financials": _best("yfinance_financials")}
+    report_path.write_text(json.dumps(results, indent=2))
+    best_path = out_dir / "profile_tuning_best.json"
+    best_path.write_text(json.dumps(results["best"], indent=2))
+    click.echo(str(report_path))
+    if db_path.exists():
+        db_path.unlink()
+
+@tune.command("export-best")
+@click.option("--output-dir", type=click.Path(path_type=Path), default=None)
+@click.option("--write-file", type=click.Path(path_type=Path), default=None)
+def tune_export_best(output_dir: Path | None, write_file: Path | None) -> None:
+    out_dir = output_dir or Path(os.getenv("VF_PROFILE_OUTPUT_DIR") or (Path.cwd() / "output" / "forager-profiles"))
+    best_path = out_dir / "profile_tuning_best.json"
+    if not best_path.exists():
+        click.echo(f"# best file not found: {best_path}")
+        return
+    data = json.loads(best_path.read_text())
+    lines: list[str] = []
+    def _collect(label: str) -> None:
+        entry = data.get(label) or {}
+        env = entry.get("env") or {}
+        lines.append(f"# {label} recommended exports")
+        for k, v in env.items():
+            lines.append(f"export {k}={v}")
+        lines.append("")
+    _collect("yfinance_price")
+    _collect("yfinance_financials")
+    content = "\n".join(lines)
+    if write_file:
+        Path(write_file).write_text(content)
+        click.echo(str(write_file))
+    else:
+        click.echo(content)
 
 if __name__ == "__main__":
     main()

@@ -175,11 +175,33 @@ def default_async_client() -> httpx.AsyncClient:
     Returns:
         httpx.AsyncClient: Configured client for HTTP operations.
     """
+    import os
+    def _env_int(name: str, default: int) -> int:
+        v = os.getenv(name)
+        if v is None:
+            return default
+        try:
+            x = int(v.strip())
+            return x if x > 0 else default
+        except (TypeError, ValueError):
+            return default
+    def _env_float(name: str, default: float) -> float:
+        v = os.getenv(name)
+        if v is None:
+            return default
+        try:
+            x = float(v.strip())
+            return x if x > 0 else default
+        except (TypeError, ValueError):
+            return default
+    max_keepalive = _env_int("VF_HTTP_MAX_KEEPALIVE", HTTP_MAX_KEEPALIVE_CONNECTIONS)
+    max_conns = _env_int("VF_HTTP_MAX_CONNECTIONS", HTTP_MAX_CONNECTIONS)
+    timeout_s = _env_float("VF_HTTP_TIMEOUT_S", HTTP_TIMEOUT_S)
     return httpx.AsyncClient(
         headers={"User-Agent": HTTP_USER_AGENT},
-        timeout=httpx.Timeout(HTTP_TIMEOUT_S),
+        timeout=httpx.Timeout(timeout_s),
         limits=httpx.Limits(
-            max_keepalive_connections=HTTP_MAX_KEEPALIVE_CONNECTIONS,
-            max_connections=HTTP_MAX_CONNECTIONS,
+            max_keepalive_connections=max_keepalive,
+            max_connections=max_conns,
         ),
     )

@@ -85,7 +85,7 @@ def check_memory_safety(
     available_memory: int,
     num_tickers: int,
     threshold_ratio: float = 0.7,
-    threshold_absolute: int = 4 * 1024 * 1024 * 1024,  # 4GB
+    threshold_absolute: int = 4 * 1024 * 1024 * 1024,
 ) -> None:
     """Check if the request is safe for memory usage.
 
@@ -96,6 +96,19 @@ def check_memory_safety(
         threshold_ratio: Ratio of available memory to trigger warning.
         threshold_absolute: Absolute size in bytes to trigger warning.
     """
+    import os
+    try:
+        env_ratio = float(os.getenv("VF_MEM_THRESHOLD_RATIO", "").strip() or threshold_ratio)
+        if env_ratio > 0:
+            threshold_ratio = env_ratio
+    except (TypeError, ValueError):
+        pass
+    try:
+        env_abs_mb = float(os.getenv("VF_MEM_THRESHOLD_ABS_MB", "").strip() or (threshold_absolute / 1024 / 1024))
+        if env_abs_mb > 0:
+            threshold_absolute = int(env_abs_mb * 1024 * 1024)
+    except (TypeError, ValueError):
+        pass
     if estimated_size > available_memory * threshold_ratio:
         warnings.warn(
             f"High memory usage warning: Requesting data for {num_tickers} symbols "
@@ -126,12 +139,14 @@ def create_pbar_updater(pbar: tqdm) -> Callable:
         Callable to update the progress bar.
     """
 
+    updates = 0
     def _update_pbar(
         *,
         job: object | None = None,
         parse_result: object | None = None,
         **_kwargs: object,
     ) -> None:
+        nonlocal updates
         """Update progress bar based on fully processed ticker count.
 
         With Smart Batching, we expect most requests to complete in a single fetch.
@@ -163,6 +178,7 @@ def create_pbar_updater(pbar: tqdm) -> Callable:
             pbar.set_postfix_str("Pagination processing", refresh=True)
         else:
             pbar.update(count)
+            updates += 1
             pbar.set_postfix_str(f"Done: {display_symbol}..", refresh=True)
 
     return _update_pbar

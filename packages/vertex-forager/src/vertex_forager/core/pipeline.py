@@ -195,7 +195,7 @@ class VertexForager:
             k = max(0, min(len(vs) - 1, int(round((p / 100.0) * (len(vs) - 1)))))
             return float(vs[k])
         s: dict[str, float] = {}
-        for key in ("fetch_duration_s", "parse_duration_s", "http_duration_s"):
+        for key in ("fetch_duration_s", "parse_duration_s", "http_duration_s", "writer_flush_duration_s"):
             vals = list(self._hists.get(key, deque()))
             s[f"{key}_p95"] = _pctl(vals, 95.0)
             s[f"{key}_p99"] = _pctl(vals, 99.0)
@@ -645,7 +645,7 @@ class VertexForager:
                 first = packets[0]
                 schema = get_table_schema(first.table)
                 try:
-                    merged_frame = pl.concat(frames, how="vertical")
+                    merged_frame = pl.concat(frames, how="vertical", rechunk=True)
                 except pl.exceptions.PolarsError as e:
                     is_flexible = getattr(self._router, "flexible_schema", False) or (
                         schema is not None and getattr(schema, "flexible_schema", False)
@@ -678,6 +678,7 @@ class VertexForager:
                 write_result = await self._writer.write(merged_packet)
                 t_w1 = time.monotonic()
                 self._inc("writer_flushes", 1)
+                self._observe("writer_flush_duration_s", float(t_w1 - t_w0))
                 self._observe("writer_rows", float(write_result.rows))
                 self._inc("rows_written_total", int(write_result.rows))
                 self._log_structured(provider=merged_packet.provider, dataset=merged_packet.table, symbol=None, stage="write_flush", duration_s=(t_w1 - t_w0))

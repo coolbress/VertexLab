@@ -1,0 +1,81 @@
+import os
+import json
+from pathlib import Path
+from typing import Any, List
+
+from vertex_forager.providers.yfinance.client import YFinanceClient
+from vertex_forager.providers.sharadar.client import SharadarClient
+
+
+def _load_tickers_env(name: str, default: List[str]) -> List[str]:
+    v = os.getenv(name)
+    if not v:
+        return default
+    toks = [t.strip().upper() for t in v.split(",") if t.strip()]
+    return toks or default
+
+
+def main() -> None:
+    out_dir_env = os.getenv("VF_PROFILE_OUTPUT_DIR")
+    out_dir = Path(out_dir_env) if out_dir_env else (Path.cwd() / "output" / "forager-profiles")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    metrics_path = out_dir / "profile_financials_metrics.json"
+    db_path = out_dir / "profile_financials.duckdb"
+    if db_path.exists():
+        db_path.unlink()
+
+    # Apply environment-driven tuning via BaseClient (VF_CONCURRENCY/VF_FLUSH_THRESHOLD_ROWS)
+    os.environ.setdefault("VF_METRICS_ENABLED", "1")
+
+    # ---------- YFinance Financials ----------
+    yf_tickers = _load_tickers_env(
+        "YF_TICKERS",
+        ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "NFLX", "ADBE", "CSCO"],
+    )
+    yfc = YFinanceClient(rate_limit=60, structured_logs=False)
+    yf_run = yfc.get_financials(
+        kind="income_stmt",
+        period="annual",
+        tickers=yf_tickers,
+        connect_db=db_path,
+        show_progress=False,
+    )
+
+    # ---------- Optional: Sharadar (requires SHARADAR_API_KEY) ----------
+    sh_key = os.getenv("SHARADAR_API_KEY")
+    sh_run = None
+    if sh_key:
+        try:
+            shc = SharadarClient(api_key=sh_key, rate_limit=60, structured_logs=False)
+            sh_run = shc.get_fundamental_data(
+                tickers=yf_tickers[:5],
+                connect_db=db_path,
+                dimension="MRT",
+            )
+        except Exception:
+            sh_run = None
+
+    def _as_dict(obj: Any) -> dict[str, Any]:
+        if obj is None:
+            return {}
+        return {
+            "counters": getattr(obj, "metrics_counters", {}),
+            "histograms": getattr(obj, "metrics_histograms", {}),
+            "summary": getattr(obj, "metrics_summary", {}),
+            "tables": getattr(obj, "tables", {}),
+            "errors": getattr(obj, "errors", []),
+        }
+
+    data = {
+        "yfinance_financials": _as_dict(yf_run),
+        "sharadar_sf1_optional": _as_dict(sh_run),
+    }
+    metrics_path.write_text(json.dumps(data, indent=2))
+    print(f"Wrote metrics: {metrics_path}")
+
+    if db_path.exists():
+        db_path.unlink()
+
+
+if __name__ == "__main__":
+    main()

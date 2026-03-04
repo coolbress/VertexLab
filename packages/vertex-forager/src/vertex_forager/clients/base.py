@@ -112,12 +112,28 @@ class BaseClient(ABC, Generic[T]):
             if v is None:
                 return False
             return v.strip().lower() in ("1", "true", "yes", "on")
+        def _env_int(name: str) -> int | None:
+            v = os.getenv(name)
+            if v is None:
+                return None
+            try:
+                return int(v.strip())
+            except (TypeError, ValueError):
+                return None
         if ("metrics_enabled" not in config_params) or (config_params.get("metrics_enabled") is None):
             config_params["metrics_enabled"] = _env_bool("VF_METRICS_ENABLED")
         if ("structured_logs" not in config_params) or (config_params.get("structured_logs") is None):
             config_params["structured_logs"] = _env_bool("VF_STRUCTURED_LOGS")
         if ("log_verbose" not in config_params) or (config_params.get("log_verbose") is None):
             config_params["log_verbose"] = _env_bool("VF_LOG_VERBOSE")
+        if ("concurrency" not in config_params) or (config_params.get("concurrency") is None):
+            ci = _env_int("VF_CONCURRENCY")
+            if ci is not None and ci > 0:
+                config_params["concurrency"] = ci
+        if ("flush_threshold_rows" not in config_params) or (config_params.get("flush_threshold_rows") is None):
+            ft = _env_int("VF_FLUSH_THRESHOLD_ROWS")
+            if ft is not None and ft > 0:
+                config_params["flush_threshold_rows"] = ft
         self._config = EngineConfig(**config_params)
         self._structured_logs = bool(self._config.structured_logs)
         self._log_verbose = bool(self._config.log_verbose)
