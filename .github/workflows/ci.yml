@@ -44,7 +44,6 @@ jobs:
           format: sarif
           output: trivy-results.sarif
           skip-dirs: ".hypothesis,.ruff_cache,data,output,packages/vertex-forager/legacy_code"
-        continue-on-error: true
       - name: Check Trivy SARIF presence
         run: |
           if [ -f trivy-results.sarif ]; then
@@ -55,7 +54,6 @@ jobs:
       - name: Upload Trivy SARIF to Security tab
         if: ${{ always() && env.TRIVY_SARIF_EXISTS == 'true' }}
         uses: github/codeql-action/upload-sarif@7aefa1c9aed02ae41531ec219164e64a0f087410
-        continue-on-error: true
         with:
           sarif_file: trivy-results.sarif
       - name: Trivy FS Scan (Table Gate)
