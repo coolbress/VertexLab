@@ -50,3 +50,4 @@ docs/vertex-forager-collab.md
 *.log
 .hypothesis/
 .ruff_cache/
+packages/vertex-forager/tests/verification/profile_*.json

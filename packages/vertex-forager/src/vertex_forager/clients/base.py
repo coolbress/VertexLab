@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import time
 from abc import ABC
 import asyncio
@@ -24,7 +23,7 @@ from vertex_forager.core.contracts import IRouter, IWriter, IMapper
 from vertex_forager.schema.registry import get_table_schema
 from vertex_forager.writers.base import BaseWriter
 from vertex_forager.writers import create_writer
-from vertex_forager.utils import Spinner, create_pbar_updater, sanitize_field
+from vertex_forager.utils import Spinner, create_pbar_updater, sanitize_field, env_int, env_bool
 from vertex_forager.core.types import JSONValue, SharadarDataset, YFinanceDataset
 HttpExecutor = _HttpExecutor
 VertexForager = _VertexForager
@@ -107,17 +106,20 @@ class BaseClient(ABC, Generic[T]):
         config_params = kwargs.copy()
         config_params["requests_per_minute"] = rate_limit
 
-        def _env_bool(name: str) -> bool:
-            v = os.getenv(name)
-            if v is None:
-                return False
-            return v.strip().lower() in ("1", "true", "yes", "on")
         if ("metrics_enabled" not in config_params) or (config_params.get("metrics_enabled") is None):
-            config_params["metrics_enabled"] = _env_bool("VF_METRICS_ENABLED")
+            config_params["metrics_enabled"] = env_bool("VF_METRICS_ENABLED")
         if ("structured_logs" not in config_params) or (config_params.get("structured_logs") is None):
-            config_params["structured_logs"] = _env_bool("VF_STRUCTURED_LOGS")
+            config_params["structured_logs"] = env_bool("VF_STRUCTURED_LOGS")
         if ("log_verbose" not in config_params) or (config_params.get("log_verbose") is None):
-            config_params["log_verbose"] = _env_bool("VF_LOG_VERBOSE")
+            config_params["log_verbose"] = env_bool("VF_LOG_VERBOSE")
+        if ("concurrency" not in config_params) or (config_params.get("concurrency") is None):
+            ci = env_int("VF_CONCURRENCY")
+            if ci is not None and ci > 0:
+                config_params["concurrency"] = ci
+        if ("flush_threshold_rows" not in config_params) or (config_params.get("flush_threshold_rows") is None):
+            ft = env_int("VF_FLUSH_THRESHOLD_ROWS")
+            if ft is not None and ft > 0:
+                config_params["flush_threshold_rows"] = ft
         self._config = EngineConfig(**config_params)
         self._structured_logs = bool(self._config.structured_logs)
         self._log_verbose = bool(self._config.log_verbose)
@@ -370,12 +372,14 @@ class BaseClient(ABC, Generic[T]):
         """Create progress tracking infrastructure.
         
         Common progress tracking setup that can be used by all providers.
+        Uses `tqdm` only when `show_progress=True`; otherwise returns (None, None)
+        to minimize overhead for high-performance/headless runs.
         
         Args:
             total_items: Total number of items to process
             unit: Unit label (e.g., "tickers", "pages", "it")
             desc: Description for the progress bar
-            show_progress: Whether to show progress bar
+            show_progress: Whether to show progress bar. If False, tqdm is skipped.
             
         Returns:
             tuple: (progress_bar_object, progress_updater_callback)

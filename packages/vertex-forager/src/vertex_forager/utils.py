@@ -11,6 +11,7 @@ import sys
 import warnings
 from typing import Any, Callable, Literal
 import re
+import math
 
 import nest_asyncio
 from tqdm.auto import tqdm
@@ -20,6 +21,49 @@ from dotenv import load_dotenv
 from vertex_forager.exceptions import InputError
 logger = logging.getLogger(__name__)
 
+
+def as_dict(obj: Any) -> dict[str, Any]:
+    """Convert a pipeline result object to a serializable dictionary.
+    
+    Handles cases where the object is None or has different metric structures.
+    """
+    if obj is None:
+        return {}
+    return {
+        "counters": getattr(obj, "metrics_counters", {}),
+        "histograms": getattr(obj, "metrics_histograms", {}),
+        "summary": getattr(obj, "metrics_summary", {}),
+        "tables": getattr(obj, "tables", {}),
+        "errors": getattr(obj, "errors", []),
+    }
+
+def set_env(cfg: dict[str, Any]) -> None:
+    """Apply a configuration dictionary to environment variables.
+    
+    If a value is None, the environment variable is removed.
+    Otherwise, it is set to the string representation of the value.
+    """
+    for k, v in cfg.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = str(v)
+
+def load_tickers_env(name: str, default: list[str]) -> list[str]:
+    """Load a list of tickers from an environment variable.
+    
+    Args:
+        name: Environment variable name.
+        default: Default list to return if variable is missing or empty.
+        
+    Returns:
+        List of uppercase, stripped ticker symbols.
+    """
+    v = os.getenv(name)
+    if not v:
+        return list(default)
+    toks = [t.strip().upper() for t in v.split(",") if t.strip()]
+    return toks if toks else list(default)
 
 def process_symbols(tickers: list[str] | None) -> list[str] | None:
     """Convert tickers to normalized symbols.
@@ -56,6 +100,67 @@ def validate_tickers(symbols: list[str] | tuple[str, ...]) -> None:
             raise InputError("tickers must be non-empty and must not include leading/trailing whitespace")
 
 
+def env_bool(name: str, default: bool = False) -> bool:
+    """Read a boolean environment variable.
+
+    Args:
+        name: Environment variable name.
+        default: Default value if not set.
+
+    Returns:
+        True if value is "1", "true", "yes", "on" (case-insensitive).
+    """
+    v = os.getenv(name)
+    if v is None:
+        return default
+    s = v.strip().lower()
+    truthy = ("1", "true", "yes", "on")
+    falsy = ("0", "false", "no", "off")
+    if s in truthy:
+        return True
+    if s in falsy:
+        return False
+    return default
+
+
+def env_int(name: str, default: int | None = None) -> int | None:
+    """Read an integer environment variable.
+
+    Args:
+        name: Environment variable name.
+        default: Default value if not set or invalid.
+
+    Returns:
+        Integer value, or default if parsing fails.
+    """
+    v = os.getenv(name)
+    if v is None:
+        return default
+    try:
+        return int(v.strip())
+    except (TypeError, ValueError):
+        return default
+
+
+def env_float(name: str, default: float | None = None) -> float | None:
+    """Read a float environment variable.
+
+    Args:
+        name: Environment variable name.
+        default: Default value if not set or invalid.
+
+    Returns:
+        Float value, or default if parsing fails.
+    """
+    v = os.getenv(name)
+    if v is None:
+        return default
+    try:
+        return float(v.strip())
+    except (TypeError, ValueError):
+        return default
+
+
 def validate_memory_usage(
     symbols: list[str] | None,
     connect_db: str | Path | None,
@@ -85,7 +190,7 @@ def check_memory_safety(
     available_memory: int,
     num_tickers: int,
     threshold_ratio: float = 0.7,
-    threshold_absolute: int = 4 * 1024 * 1024 * 1024,  # 4GB
+    threshold_absolute: int = 4 * 1024 * 1024 * 1024,
 ) -> None:
     """Check if the request is safe for memory usage.
 
@@ -96,6 +201,23 @@ def check_memory_safety(
         threshold_ratio: Ratio of available memory to trigger warning.
         threshold_absolute: Absolute size in bytes to trigger warning.
     """
+    try:
+        env_ratio = float(os.getenv("VF_MEM_THRESHOLD_RATIO", "").strip() or threshold_ratio)
+        if 0 < env_ratio <= 1:
+            threshold_ratio = env_ratio
+        else:
+            logger.debug(f"Ignoring invalid VF_MEM_THRESHOLD_RATIO={env_ratio} (must be 0 < x <= 1)")
+    except (TypeError, ValueError):
+        pass
+    try:
+        _abs_str = os.getenv("VF_MEM_THRESHOLD_ABS_MB", "").strip()
+        env_abs_mb = float(_abs_str or (threshold_absolute / 1024 / 1024))
+        if env_abs_mb > 0 and math.isfinite(env_abs_mb):
+            threshold_absolute = int(env_abs_mb * 1024 * 1024)
+        else:
+            logger.debug(f"Ignoring invalid VF_MEM_THRESHOLD_ABS_MB={_abs_str}")
+    except (TypeError, ValueError, OverflowError):
+        pass
     if estimated_size > available_memory * threshold_ratio:
         warnings.warn(
             f"High memory usage warning: Requesting data for {num_tickers} symbols "

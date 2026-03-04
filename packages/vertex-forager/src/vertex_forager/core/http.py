@@ -18,6 +18,7 @@ from vertex_forager.constants import (
     HTTP_USER_AGENT,
 )
 from vertex_forager.core.library import get_library_fetcher
+from vertex_forager.utils import env_int, env_float
 
 
 logger = logging.getLogger("vertex_forager.core.http")
@@ -175,11 +176,20 @@ def default_async_client() -> httpx.AsyncClient:
     Returns:
         httpx.AsyncClient: Configured client for HTTP operations.
     """
+    
+    mk = env_int("VF_HTTP_MAX_KEEPALIVE", HTTP_MAX_KEEPALIVE_CONNECTIONS)
+    max_keepalive = mk if mk is not None and mk > 0 else HTTP_MAX_KEEPALIVE_CONNECTIONS
+
+    mc = env_int("VF_HTTP_MAX_CONNECTIONS", HTTP_MAX_CONNECTIONS)
+    max_conns = mc if mc is not None and mc > 0 else HTTP_MAX_CONNECTIONS
+
+    to = env_float("VF_HTTP_TIMEOUT_S", HTTP_TIMEOUT_S)
+    timeout_s = to if to is not None and to > 0 else HTTP_TIMEOUT_S
     return httpx.AsyncClient(
         headers={"User-Agent": HTTP_USER_AGENT},
-        timeout=httpx.Timeout(HTTP_TIMEOUT_S),
+        timeout=httpx.Timeout(timeout_s),
         limits=httpx.Limits(
-            max_keepalive_connections=HTTP_MAX_KEEPALIVE_CONNECTIONS,
-            max_connections=HTTP_MAX_CONNECTIONS,
+            max_keepalive_connections=max_keepalive,
+            max_connections=max_conns,
         ),
     )

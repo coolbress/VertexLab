@@ -505,18 +505,18 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         if value_vars:
             frame = frame.unpivot(index=id_vars, on=value_vars, variable_name="date", value_name="value")
             if "date" in frame.columns:
-                date_str = pl.col("date").cast(pl.Utf8, strict=False)
-                frame = frame.with_columns(date_str.str.replace(r"[T\s_].*$", "", literal=False).alias("date"))
-                # Normalize pure year values to first day of the year
-                normalized = pl.when(pl.col("date").str.contains(r"^\d{4}$", literal=False)).then(
-                    pl.concat_str([pl.col("date"), pl.lit("-01-01")])
-                ).otherwise(pl.col("date")).alias("date")
-                frame = frame.with_columns(normalized)
-                # Keep only date-like strings (YYYY or YYYY-MM-DD)
+                frame = frame.with_columns(
+                    pl.col("date").cast(pl.Utf8, strict=False).str.replace(r"[T\s_].*$", "", literal=False).alias("date_tmp")
+                )
+                frame = frame.with_columns(
+                    pl.when(pl.col("date_tmp").str.contains(r"^\d{4}$", literal=False))
+                    .then(pl.concat_str([pl.col("date_tmp"), pl.lit("-01-01")]))
+                    .otherwise(pl.col("date_tmp"))
+                    .alias("date")
+                )
+                frame = frame.drop("date_tmp")
                 frame = frame.filter(pl.col("date").str.contains(r"^\d{4}(-\d{2}-\d{2})?$", literal=False))
-                # Ensure numeric type for value
-                if "value" in frame.columns:
-                    frame = frame.with_columns(pl.col("value").cast(pl.Float64, strict=False).alias("value"))
+                frame = frame.with_columns(pl.col("value").cast(pl.Float64, strict=False).alias("value"))
         period = "quarterly" if dataset.startswith("quarterly") else "annual"
         if "period" not in frame.columns:
             frame = frame.with_columns(pl.lit(period).alias("period"))
