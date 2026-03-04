@@ -50,4 +50,4 @@
 
 ## Performance
 - Lint checks kept minimal to reduce runtime.
-- CodeQL runs on push/PR to `main`; consider scheduled runs for deeper scans.
+- CodeQL runs on push/PR to `main`, and weekly scheduled scans are enabled.
