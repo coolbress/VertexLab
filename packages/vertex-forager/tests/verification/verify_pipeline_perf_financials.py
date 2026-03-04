@@ -1,6 +1,7 @@
 import os
 import logging
 import json
+import asyncio
 from pathlib import Path
 
 from vertex_forager.providers.yfinance.client import YFinanceClient
@@ -10,7 +11,7 @@ from vertex_forager.utils import as_dict, load_tickers_env
 logger = logging.getLogger(__name__)
 
 
-def main() -> None:
+async def main_async() -> None:
     """Verify pipeline performance for Financials and Sharadar data.
 
     Executes a financials data collection run (YFinance Income Stmt and optional Sharadar MRT)
@@ -43,7 +44,7 @@ def main() -> None:
         ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "NFLX", "ADBE", "CSCO"],
     )
     yfc = YFinanceClient(rate_limit=60, structured_logs=False)
-    yf_run = yfc.get_financials(
+    yf_run = await yfc.get_financials(
         kind="income_stmt",
         period="annual",
         tickers=yf_tickers,
@@ -58,7 +59,7 @@ def main() -> None:
     if sh_key:
         try:
             shc = SharadarClient(api_key=sh_key, rate_limit=60, structured_logs=False)
-            sh_run = shc.get_fundamental_data(
+            sh_run = await shc.get_fundamental_data(
                 tickers=yf_tickers[:5],
                 connect_db=db_path,
                 dimension="MRT",
@@ -78,6 +79,10 @@ def main() -> None:
 
     if db_path.exists():
         db_path.unlink()
+
+
+def main() -> None:
+    asyncio.run(main_async())
 
 
 if __name__ == "__main__":

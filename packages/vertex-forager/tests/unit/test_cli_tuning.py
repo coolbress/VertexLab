@@ -1,5 +1,3 @@
-import pytest
-from unittest.mock import MagicMock
 from vertex_forager.cli import _build_sweep_combinations, _score_and_rank_results
 
 def test_build_sweep_combinations():

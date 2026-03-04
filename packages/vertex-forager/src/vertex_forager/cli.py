@@ -9,6 +9,7 @@ import time
 from .utils import get_app_root, get_cache_dir, clear_app_cache
 import itertools
 import random
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -339,6 +340,18 @@ def tune() -> None:
 @click.option("--start-date", type=str, default=None)
 @click.option("--end-date", type=str, default=None)
 def tune_profile(kind: str, output_dir: Path | None, tickers: str | None, start_date: str | None, end_date: str | None) -> None:
+    """Run a single profiling run for price or financials data.
+
+    Args:
+        kind: Type of profile ('price' or 'financials').
+        output_dir: Directory for result JSON. If None, uses VF_PROFILE_OUTPUT_DIR or default path.
+        tickers: Comma-separated list of ticker symbols (e.g., 'AAPL,MSFT'). If None, uses defaults.
+        start_date: Start date for price data (YYYY-MM-DD). If None, uses provider default.
+        end_date: End date for price data (YYYY-MM-DD). If None, uses provider default.
+
+    Returns:
+        None: Results are saved to a JSON file and the path is printed to stdout.
+    """
     out_dir = output_dir or Path(os.getenv("VF_PROFILE_OUTPUT_DIR") or (Path.cwd() / "output" / "forager-profiles"))
     out_dir.mkdir(parents=True, exist_ok=True)
     if kind == "price":
@@ -349,7 +362,7 @@ def tune_profile(kind: str, output_dir: Path | None, tickers: str | None, start_
             db_path.unlink()
         client = YFinanceClient(rate_limit=60, metrics_enabled=True, structured_logs=False)
         _tickers = [t.strip().upper() for t in (tickers or "AAPL,MSFT,NVDA,GOOGL,AMZN").split(",")]
-        run = client.get_price_data(tickers=_tickers, connect_db=db_path, show_progress=False, start_date=start_date, end_date=end_date)
+        run = asyncio.run(client.get_price_data(tickers=_tickers, connect_db=db_path, show_progress=False, start_date=start_date, end_date=end_date))
         data = as_dict(run)
         metrics_path = out_dir / "profile_metrics.json"
         metrics_path.write_text(json.dumps(data, indent=2))
@@ -366,13 +379,13 @@ def tune_profile(kind: str, output_dir: Path | None, tickers: str | None, start_
         os.environ.setdefault("VF_METRICS_ENABLED", "1")
         yf_tickers = [t.strip().upper() for t in (tickers or os.getenv("YF_TICKERS") or "AAPL,MSFT,NVDA,GOOGL,AMZN,META,TSLA,NFLX,ADBE,CSCO").split(",")]
         yfc = YFinanceClient(rate_limit=60, structured_logs=False)
-        yf_run = yfc.get_financials(kind="income_stmt", period="annual", tickers=yf_tickers, connect_db=db_path, show_progress=False)
+        yf_run = asyncio.run(yfc.get_financials(kind="income_stmt", period="annual", tickers=yf_tickers, connect_db=db_path, show_progress=False))
         sh_key = os.getenv("SHARADAR_API_KEY")
         sh_run = None
         if sh_key:
             try:
                 shc = SharadarClient(api_key=sh_key, rate_limit=60, structured_logs=False)
-                sh_run = shc.get_fundamental_data(tickers=yf_tickers[:5], connect_db=db_path, dimension="MRT")
+                sh_run = asyncio.run(shc.get_fundamental_data(tickers=yf_tickers[:5], connect_db=db_path, dimension="MRT"))
             except Exception as e:
                 logger.warning(f"Sharadar verification skipped due to error: {e}")
                 sh_run = None
@@ -501,7 +514,7 @@ def _run_sweep_measurements(
                 try:
                     yfc = YFinanceClient(rate_limit=60, structured_logs=False)
                     t0 = time.monotonic()
-                    yf_price = yfc.get_price_data(tickers=yf_tickers_price, connect_db=combo_db_path, show_progress=False, start_date=yf_start, end_date=yf_end)
+                    yf_price = asyncio.run(yfc.get_price_data(tickers=yf_tickers_price, connect_db=combo_db_path, show_progress=False, start_date=yf_start, end_date=yf_end))
                     t1 = time.monotonic()
                     entry["measurements"]["yfinance_price"] = {
                         "duration_s": round(t1 - t0, 3),
@@ -519,7 +532,7 @@ def _run_sweep_measurements(
                 try:
                     yfc2 = YFinanceClient(rate_limit=60, structured_logs=False)
                     t2 = time.monotonic()
-                    yf_fin = yfc2.get_financials(kind="income_stmt", period="annual", tickers=yf_tickers_fin, connect_db=combo_db_path, show_progress=False)
+                    yf_fin = asyncio.run(yfc2.get_financials(kind="income_stmt", period="annual", tickers=yf_tickers_fin, connect_db=combo_db_path, show_progress=False))
                     t3 = time.monotonic()
                     entry["measurements"]["yfinance_financials"] = {
                         "duration_s": round(t3 - t2, 3),
@@ -538,7 +551,7 @@ def _run_sweep_measurements(
                     try:
                         shc = SharadarClient(api_key=sh_key, rate_limit=60, structured_logs=False)
                         t4 = time.monotonic()
-                        sh_fin = shc.get_fundamental_data(tickers=sh_tickers, connect_db=combo_db_path, dimension="MRT", start_date=sh_start, end_date=sh_end)
+                        sh_fin = asyncio.run(shc.get_fundamental_data(tickers=sh_tickers, connect_db=combo_db_path, dimension="MRT", start_date=sh_start, end_date=sh_end))
                         t5 = time.monotonic()
                         entry["measurements"]["sharadar_sf1_mrt"] = {
                             "duration_s": round(t5 - t4, 3),
@@ -621,7 +634,18 @@ def _score_and_rank_results(
         runs = results.get("runs", [])
         if not runs:
             return {}
-        ranked = sorted(runs, key=lambda r: _score(r, run_key))
+        
+        # Filter runs that actually have measurements for the given key and no explicit error
+        valid_runs = []
+        for r in runs:
+            m = r.get("measurements", {}).get(run_key)
+            if m and not m.get("error"):
+                valid_runs.append(r)
+        
+        if not valid_runs:
+            return {}
+
+        ranked = sorted(valid_runs, key=lambda r: _score(r, run_key))
         return ranked[0]
         
     results["best"] = {
