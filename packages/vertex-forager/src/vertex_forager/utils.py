@@ -142,8 +142,10 @@ def check_memory_safety(
     import os
     try:
         env_ratio = float(os.getenv("VF_MEM_THRESHOLD_RATIO", "").strip() or threshold_ratio)
-        if env_ratio > 0:
+        if 0 < env_ratio <= 1:
             threshold_ratio = env_ratio
+        else:
+            logger.debug(f"Ignoring invalid VF_MEM_THRESHOLD_RATIO={env_ratio} (must be 0 < x <= 1)")
     except (TypeError, ValueError):
         pass
     try:

@@ -459,50 +459,80 @@ def tune_sweep(output_dir: Path | None, include_sharadar: bool, concurrency_list
     sh_start = os.getenv("SH_START_DATE")
     sh_end = os.getenv("SH_END_DATE")
     results: dict[str, Any] = {"runs": []}
-    for cfg in combos:
-        set_env(cfg)
-        entry: dict[str, Any] = {"env": dict(cfg), "measurements": {}}
-        yfc = YFinanceClient(rate_limit=60, structured_logs=False)
-        t0 = time.monotonic()
-        yf_price = yfc.get_price_data(tickers=yf_tickers_price, connect_db=db_path, show_progress=False, start_date=yf_start, end_date=yf_end)
-        t1 = time.monotonic()
-        entry["measurements"]["yfinance_price"] = {
-            "duration_s": round(t1 - t0, 3),
-            "metrics": {
-                "summary": getattr(yf_price, "metrics_summary", {}),
-                "counters": getattr(yf_price, "metrics_counters", {}),
-                "errors": getattr(yf_price, "errors", []),
-            },
-        }
-        yfc2 = YFinanceClient(rate_limit=60, structured_logs=False)
-        t2 = time.monotonic()
-        yf_fin = yfc2.get_financials(kind="income_stmt", period="annual", tickers=yf_tickers_fin, connect_db=db_path, show_progress=False)
-        t3 = time.monotonic()
-        entry["measurements"]["yfinance_financials"] = {
-            "duration_s": round(t3 - t2, 3),
-            "metrics": {
-                "summary": getattr(yf_fin, "metrics_summary", {}),
-                "counters": getattr(yf_fin, "metrics_counters", {}),
-                "errors": getattr(yf_fin, "errors", []),
-            },
-        }
-        if sh_key:
+    original_env = os.environ.copy()
+    try:
+        for cfg in combos:
             try:
-                shc = SharadarClient(api_key=sh_key, rate_limit=60, structured_logs=False)
-                t4 = time.monotonic()
-                sh_fin = shc.get_fundamental_data(tickers=sh_tickers, connect_db=db_path, dimension="MRT", start_date=sh_start, end_date=sh_end)
-                t5 = time.monotonic()
-                entry["measurements"]["sharadar_sf1_mrt"] = {
-                    "duration_s": round(t5 - t4, 3),
-                    "metrics": {
-                        "summary": getattr(sh_fin, "metrics_summary", {}),
-                        "counters": getattr(sh_fin, "metrics_counters", {}),
-                        "errors": getattr(sh_fin, "errors", []),
-                    },
-                }
-            except Exception as e:
-                entry["measurements"]["sharadar_sf1_mrt"] = {"error": str(e)}
-        results["runs"].append(entry)
+                set_env(cfg)
+                entry: dict[str, Any] = {"env": dict(cfg), "measurements": {}}
+                
+                # YFinance Price
+                try:
+                    yfc = YFinanceClient(rate_limit=60, structured_logs=False)
+                    t0 = time.monotonic()
+                    yf_price = yfc.get_price_data(tickers=yf_tickers_price, connect_db=db_path, show_progress=False, start_date=yf_start, end_date=yf_end)
+                    t1 = time.monotonic()
+                    entry["measurements"]["yfinance_price"] = {
+                        "duration_s": round(t1 - t0, 3),
+                        "metrics": {
+                            "summary": getattr(yf_price, "metrics_summary", {}),
+                            "counters": getattr(yf_price, "metrics_counters", {}),
+                            "errors": getattr(yf_price, "errors", []),
+                        },
+                    }
+                except Exception as e:
+                    logger.warning(f"YFinance Price sweep error: {e}")
+                    entry["measurements"]["yfinance_price"] = {"error": str(e)}
+
+                # YFinance Financials
+                try:
+                    yfc2 = YFinanceClient(rate_limit=60, structured_logs=False)
+                    t2 = time.monotonic()
+                    yf_fin = yfc2.get_financials(kind="income_stmt", period="annual", tickers=yf_tickers_fin, connect_db=db_path, show_progress=False)
+                    t3 = time.monotonic()
+                    entry["measurements"]["yfinance_financials"] = {
+                        "duration_s": round(t3 - t2, 3),
+                        "metrics": {
+                            "summary": getattr(yf_fin, "metrics_summary", {}),
+                            "counters": getattr(yf_fin, "metrics_counters", {}),
+                            "errors": getattr(yf_fin, "errors", []),
+                        },
+                    }
+                except Exception as e:
+                    logger.warning(f"YFinance Financials sweep error: {e}")
+                    entry["measurements"]["yfinance_financials"] = {"error": str(e)}
+
+                # Sharadar
+                if sh_key:
+                    try:
+                        shc = SharadarClient(api_key=sh_key, rate_limit=60, structured_logs=False)
+                        t4 = time.monotonic()
+                        sh_fin = shc.get_fundamental_data(tickers=sh_tickers, connect_db=db_path, dimension="MRT", start_date=sh_start, end_date=sh_end)
+                        t5 = time.monotonic()
+                        entry["measurements"]["sharadar_sf1_mrt"] = {
+                            "duration_s": round(t5 - t4, 3),
+                            "metrics": {
+                                "summary": getattr(sh_fin, "metrics_summary", {}),
+                                "counters": getattr(sh_fin, "metrics_counters", {}),
+                                "errors": getattr(sh_fin, "errors", []),
+                            },
+                        }
+                    except Exception as e:
+                        logger.warning(f"Sharadar sweep error: {e}")
+                        entry["measurements"]["sharadar_sf1_mrt"] = {"error": str(e)}
+                
+                results["runs"].append(entry)
+            
+            finally:
+                # Restore environment for next iteration
+                os.environ.clear()
+                os.environ.update(original_env)
+                # Re-apply metrics enabled as it's required for all runs
+                os.environ.setdefault("VF_METRICS_ENABLED", "1")
+
+    finally:
+        os.environ.clear()
+        os.environ.update(original_env)
     def _score(r: dict[str, Any], run_key: str) -> float:
         m = r["measurements"].get(run_key, {})
         duration = m.get("duration_s", float("inf"))
