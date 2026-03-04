@@ -386,12 +386,14 @@ class BaseClient(ABC, Generic[T]):
         """Create progress tracking infrastructure.
         
         Common progress tracking setup that can be used by all providers.
+        Uses `tqdm` only when `show_progress=True`; otherwise returns (None, None)
+        to minimize overhead for high-performance/headless runs.
         
         Args:
             total_items: Total number of items to process
             unit: Unit label (e.g., "tickers", "pages", "it")
             desc: Description for the progress bar
-            show_progress: Whether to show progress bar
+            show_progress: Whether to show progress bar. If False, tqdm is skipped.
             
         Returns:
             tuple: (progress_bar_object, progress_updater_callback)
