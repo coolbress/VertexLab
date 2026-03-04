@@ -169,7 +169,7 @@ def create_pbar_updater(pbar: tqdm) -> Callable:
 
 
 class CompactLevelFormatter(logging.Formatter):
-    """로그 레벨을 'Info:' 형태로 표기하는 Formatter."""
+    """Formatter that renders the log level as a compact, capitalized label."""
 
     def format(self, record: logging.LogRecord) -> str:
         original_levelname = record.levelname
@@ -180,7 +180,7 @@ class CompactLevelFormatter(logging.Formatter):
 
 
 class ListHandler(logging.Handler):
-    """로그 레코드를 메모리에 저장하는 핸들러."""
+    """Handler that stores log records in memory for later inspection."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -398,8 +398,18 @@ class Spinner:
 
 
 def get_app_root() -> Path:
-    """데이터 저장소 루트 경로를 반환합니다.
-    환경 변수 'VERTEXFORAGER_ROOT'가 없으면 홈 디렉토리의 '.vertex_forager'를 사용합니다.
+    """Return the application data root directory.
+
+    Uses the 'VERTEXFORAGER_ROOT' environment variable when set; otherwise falls
+    back to the '.vertex_forager' directory under the user's home. The directory
+    is created if it does not exist.
+
+    Returns:
+        Path: Absolute path to the data root directory. If the environment
+        variable is unset, this is '$HOME/.vertex_forager'.
+
+    Raises:
+        OSError: If creating the directory fails due to permission or filesystem errors.
     """
     app_root = os.getenv("VERTEXFORAGER_ROOT")
     path = Path(app_root) if app_root else Path.home() / ".vertex_forager"
@@ -440,14 +450,25 @@ def sanitize_field(v: object) -> str:
 
 
 def get_cache_dir() -> Path:
-    """임시 캐시 디렉토리를 반환합니다."""
+    """Return the temporary cache directory under the app root.
+
+    Returns:
+        Path: Absolute path to the cache directory. Created if missing.
+    """
     cache_path = get_app_root() / "cache"
     cache_path.mkdir(exist_ok=True)
     return cache_path
 
 
 def clear_app_cache() -> None:
-    """캐시 디렉토리 내부를 완전히 비웁니다."""
+    """Clear all contents of the application cache directory.
+
+    Returns:
+        None
+
+    Raises:
+        OSError: If deletion or re-creation of the cache directory fails.
+    """
     app_root = get_app_root().resolve()
     cache_dir = get_cache_dir().resolve()
 
