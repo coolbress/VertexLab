@@ -18,6 +18,7 @@ from vertex_forager.constants import (
     HTTP_USER_AGENT,
 )
 from vertex_forager.core.library import get_library_fetcher
+from vertex_forager.utils import env_int, env_float
 
 
 logger = logging.getLogger("vertex_forager.core.http")
@@ -176,27 +177,15 @@ def default_async_client() -> httpx.AsyncClient:
         httpx.AsyncClient: Configured client for HTTP operations.
     """
     import os
-    def _env_int(name: str, default: int) -> int:
-        v = os.getenv(name)
-        if v is None:
-            return default
-        try:
-            x = int(v.strip())
-            return x if x > 0 else default
-        except (TypeError, ValueError):
-            return default
-    def _env_float(name: str, default: float) -> float:
-        v = os.getenv(name)
-        if v is None:
-            return default
-        try:
-            x = float(v.strip())
-            return x if x > 0 else default
-        except (TypeError, ValueError):
-            return default
-    max_keepalive = _env_int("VF_HTTP_MAX_KEEPALIVE", HTTP_MAX_KEEPALIVE_CONNECTIONS)
-    max_conns = _env_int("VF_HTTP_MAX_CONNECTIONS", HTTP_MAX_CONNECTIONS)
-    timeout_s = _env_float("VF_HTTP_TIMEOUT_S", HTTP_TIMEOUT_S)
+    
+    mk = env_int("VF_HTTP_MAX_KEEPALIVE", HTTP_MAX_KEEPALIVE_CONNECTIONS)
+    max_keepalive = mk if mk is not None and mk > 0 else HTTP_MAX_KEEPALIVE_CONNECTIONS
+
+    mc = env_int("VF_HTTP_MAX_CONNECTIONS", HTTP_MAX_CONNECTIONS)
+    max_conns = mc if mc is not None and mc > 0 else HTTP_MAX_CONNECTIONS
+
+    to = env_float("VF_HTTP_TIMEOUT_S", HTTP_TIMEOUT_S)
+    timeout_s = to if to is not None and to > 0 else HTTP_TIMEOUT_S
     return httpx.AsyncClient(
         headers={"User-Agent": HTTP_USER_AGENT},
         timeout=httpx.Timeout(timeout_s),

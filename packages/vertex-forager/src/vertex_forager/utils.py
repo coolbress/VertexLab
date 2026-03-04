@@ -99,6 +99,60 @@ def validate_tickers(symbols: list[str] | tuple[str, ...]) -> None:
             raise InputError("tickers must be non-empty and must not include leading/trailing whitespace")
 
 
+def env_bool(name: str, default: bool = False) -> bool:
+    """Read a boolean environment variable.
+
+    Args:
+        name: Environment variable name.
+        default: Default value if not set.
+
+    Returns:
+        True if value is "1", "true", "yes", "on" (case-insensitive).
+    """
+    v = os.getenv(name)
+    if v is None:
+        return default
+    return v.strip().lower() in ("1", "true", "yes", "on")
+
+
+def env_int(name: str, default: int | None = None) -> int | None:
+    """Read an integer environment variable.
+
+    Args:
+        name: Environment variable name.
+        default: Default value if not set or invalid.
+
+    Returns:
+        Integer value, or default if parsing fails.
+    """
+    v = os.getenv(name)
+    if v is None:
+        return default
+    try:
+        return int(v.strip())
+    except (TypeError, ValueError):
+        return default
+
+
+def env_float(name: str, default: float | None = None) -> float | None:
+    """Read a float environment variable.
+
+    Args:
+        name: Environment variable name.
+        default: Default value if not set or invalid.
+
+    Returns:
+        Float value, or default if parsing fails.
+    """
+    v = os.getenv(name)
+    if v is None:
+        return default
+    try:
+        return float(v.strip())
+    except (TypeError, ValueError):
+        return default
+
+
 def validate_memory_usage(
     symbols: list[str] | None,
     connect_db: str | Path | None,
