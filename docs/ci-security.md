@@ -22,7 +22,7 @@
    - Dismiss stale pull request approvals when new commits are pushed
 
 ## Workflows
-- `quality-check`: Runs fast lint checks to gate merges.
+- `quality-check`: Runs Trivy vulnerability scans (secret/config), import cycle/security checks, and the test suite as merge gates.
 - `CodeQL`: Performs static analysis and publishes SARIF results.
 
 ## Severity Thresholds
