@@ -11,6 +11,9 @@ jobs:
   quality-check:
     name: 🛡️ Code Quality Check
     runs-on: ubuntu-latest  # 최신 리눅스 환경에서 실행
+    permissions:
+      contents: read
+      security-events: write
     env:
       VF_STRUCTURED_LOGS: "1"
       VF_LOG_VERBOSE: "0"
@@ -29,8 +32,24 @@ jobs:
 
       - name: Install dependencies
         run: uv sync  # 라이브러리 설치 테스트
-      
-      - name: Trivy FS Scan (Config + Secrets)
+      - name: Trivy FS Scan (Config + Secrets, SARIF)
+        id: trivy-sarif
+        uses: aquasecurity/trivy-action@97e0b3872f55f89b95b2f65b3dbab56962816478  # 0.16.1 pinned
+        with:
+          scan-type: fs
+          trivyignores: .trivyignore
+          scanners: secret,config
+          severity: HIGH,CRITICAL
+          format: sarif
+          output: trivy-results.sarif
+          skip-dirs: ".hypothesis,.ruff_cache,data,output,packages/vertex-forager/legacy_code"
+        continue-on-error: true
+      - name: Upload Trivy SARIF to Security tab
+        if: ${{ always() }}
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+      - name: Trivy FS Scan (Table Gate)
         uses: aquasecurity/trivy-action@97e0b3872f55f89b95b2f65b3dbab56962816478  # 0.16.1 pinned
         with:
           scan-type: fs
@@ -40,6 +59,15 @@ jobs:
           format: table
           exit-code: 1
           skip-dirs: ".hypothesis,.ruff_cache,data,output,packages/vertex-forager/legacy_code"
+      - name: Remediation Hints (On Failure)
+        if: ${{ failure() }}
+        run: |
+          echo "::group::Remediation Guidance"
+          echo "See docs/ci-security.md for triage, severity thresholds, and SLA."
+          echo "Common fixes:"
+          echo " - Secrets/config: move to env/CI secrets, rotate, remove from history"
+          echo " - Dependencies: upgrade vulnerable packages"
+          echo "::endgroup::"
       
       - name: Check Import Cycles
         run: python3 scripts/check_cycles.py
