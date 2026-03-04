@@ -55,6 +55,17 @@ def test_build_sweep_combinations_validation():
             sample_seed=42,
         )
 
+    with pytest.raises(click.BadParameter):
+        _build_sweep_combinations(
+            concurrency_list="10,,20",
+            flush_rows_list=None,
+            keepalive_list=None,
+            connections_list=None,
+            timeout_list=None,
+            sample_count=None,
+            sample_seed=42,
+        )
+
 def test_score_and_rank_results_invalid_duration():
     mock_results = {
         "runs": [

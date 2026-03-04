@@ -431,7 +431,7 @@ def _build_sweep_combinations(
         for tok in s.split(","):
             tok = tok.strip()
             if not tok:
-                continue
+                raise click.BadParameter(f"Invalid empty value in list '{s}'.")
             try:
                 x = int(tok)
                 if x <= 0:
@@ -439,7 +439,7 @@ def _build_sweep_combinations(
                 vals.append(x)
             except ValueError:
                 raise click.BadParameter(f"Invalid value '{tok}' in list '{s}'. Must be positive integers.")
-        return vals or default
+        return vals
 
     concs = _parse_list(concurrency_list, [8, 12, 16, 20, 24])
     flushes = _parse_list(flush_rows_list, [100_000, 150_000, 200_000, 250_000, 300_000])
