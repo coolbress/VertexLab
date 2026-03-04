@@ -20,7 +20,7 @@
 *Key Optimizations:*
 - **Polars Transforms**: Switched to lazy evaluation and optimized `melt`/`pivot` operations.
 - **Writer Batching**: Implemented `VF_FLUSH_THRESHOLD_ROWS` to reduce I/O frequency.
-- **Progress UI**: Replaced synchronous `tqdm` with async-friendly chunked logging (optional toggle).
+- **Progress UI**: `tqdm` retained and used conditionally (skipped when `show_progress=False`) for minimal overhead.
 - **Concurrency**: Tuned `VF_CONCURRENCY` and connection pooling for optimal network utilization.
 
 ## Environment Variables
