@@ -12,13 +12,18 @@
 > Commands:
 > - Price: `VF_METRICS_ENABLED=1 /usr/bin/time -l uv run python packages/vertex-forager/tests/verification/verify_pipeline_perf.py`
 > - Financials: `VF_METRICS_ENABLED=1 /usr/bin/time -l uv run python packages/vertex-forager/tests/verification/verify_pipeline_perf_financials.py`
+> Artifacts:
+> - Price: `output/forager-profiles/profile_metrics.json`
+> - Financials: `output/forager-profiles/profile_financials_metrics.json`
+>
+> **Pre-Optimization Values**: Estimated based on manual timing (`time` command) due to lack of profiling tools at that stage; not reproducible.
 
 | Metric | Pre-Optimization (Est.) | Post-Optimization (Measured) | Improvement |
 | :--- | :--- | :--- | :--- |
-| **Price Data (5 Tickers)** | ~8.5s | **~4.5s** (Wall) / ~2.1s (Fetch p95) | ~47% Faster |
-| **Financials (10 Tickers)** | ~12.0s | **~4.8s** (Wall) / ~2.0s (Fetch p95) | ~60% Faster |
-| **Throughput (Price)** | ~5k rows/s | **~9,000 rows/s** | ~1.8x Throughput |
-| **Throughput (Financials)** | ~150 rows/s | **~430 rows/s** | ~2.8x Throughput |
+| **Price Data (5 Tickers)** | ~8.5s | **~4.5s** (Wall) / ~2.1s (Fetch p95) <sup>[1]</sup> | ~47% Faster |
+| **Financials (10 Tickers)** | ~12.0s | **~4.8s** (Wall) / ~2.0s (Fetch p95) <sup>[2]</sup> | ~60% Faster |
+| **Throughput (Price)** | ~5k rows/s | **~9,000 rows/s** <sup>[1]</sup> | ~1.8x Throughput |
+| **Throughput (Financials)** | ~150 rows/s | **~430 rows/s** <sup>[2]</sup> | ~2.8x Throughput |
 | **Memory Overhead** | High (>500MB) | **~274 MB** (Peak RSS) | Reduced Peak Usage |
 
 *Key Optimizations:*
@@ -26,6 +31,10 @@
 - **Writer Batching**: Implemented `VF_FLUSH_THRESHOLD_ROWS` to reduce I/O frequency.
 - **Progress UI**: `tqdm` retained and used conditionally (skipped when `show_progress=False`) for minimal overhead.
 - **Concurrency**: Tuned `VF_CONCURRENCY` and connection pooling for optimal network utilization.
+
+---
+> [1] `$.summary.fetch_duration_s_p95` in `profile_metrics.json`
+> [2] `$.summary.fetch_duration_s_p95` in `profile_financials_metrics.json`
 
 ## Environment Variables
 
