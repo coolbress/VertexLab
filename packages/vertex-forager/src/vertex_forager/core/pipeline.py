@@ -199,6 +199,7 @@ class VertexForager:
             vals = list(self._hists.get(key, deque()))
             s[f"{key}_p95"] = _pctl(vals, 95.0)
             s[f"{key}_p99"] = _pctl(vals, 99.0)
+        s["rows_written_total"] = float(self._counters.get("rows_written_total", 0))
         return s
     def _log_structured(self, *, provider: str, dataset: str, symbol: str | None, stage: str, attempt: int | None = None, duration_s: float | None = None) -> None:
         if not self._structured_logs:
