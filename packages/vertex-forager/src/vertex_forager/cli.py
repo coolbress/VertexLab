@@ -440,9 +440,16 @@ def tune_sweep(output_dir: Path | None, include_sharadar: bool, concurrency_list
             "VF_HTTP_MAX_CONNECTIONS": m,
             "VF_HTTP_TIMEOUT_S": t,
         })
-    if sample_count and sample_count > 0 and sample_count < len(combos):
+    if sample_count is None:
+        sample_count = 50  # Default sane limit
+
+    if sample_count > 0 and sample_count < len(combos):
+        click.echo(f"Sampling {sample_count} combinations from {len(combos)} total (seed={sample_seed}).")
         rnd = random.Random(sample_seed)
         combos = rnd.sample(combos, sample_count)
+    else:
+        click.echo(f"Running all {len(combos)} combinations.")
+    
     yf_tickers_price = load_tickers_env("YF_TICKERS_PRICE", ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN"])
     yf_tickers_fin = load_tickers_env("YF_TICKERS_FIN", ["AAPL", "MSFT", "NVDA"])
     yf_start = os.getenv("YF_PRICE_START_DATE")
@@ -502,14 +509,25 @@ def tune_sweep(output_dir: Path | None, include_sharadar: bool, concurrency_list
         metrics = m.get("metrics", {})
         errors = metrics.get("errors", [])
         err_cnt = len(errors) if isinstance(errors, list) else 0
-        if rank_by == "duration":
-            return float(duration) + float(err_cnt) * float(rank_error_penalty)
-        summary = metrics.get("summary", {})
-        p95 = summary.get("http_duration_s_p95", duration)
-        try:
-            return float(duration) + float(rank_alpha) * float(p95) + float(err_cnt) * float(rank_error_penalty)
-        except Exception:
-            return float(duration) + float(err_cnt) * float(rank_error_penalty)
+        
+        score = float(duration)
+        
+        if rank_by == "duration_p95":
+            summary = metrics.get("summary", {})
+            p95 = summary.get("http_duration_s_p95", duration)
+            try:
+                score += float(rank_alpha) * float(p95)
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Error computing p95 score: {e}, inputs: alpha={rank_alpha}, p95={p95}")
+        
+        if err_cnt > 0:
+            try:
+                score += float(err_cnt) * float(rank_error_penalty)
+            except (ValueError, TypeError) as e:
+                 logger.warning(f"Error computing penalty score: {e}, inputs: err_cnt={err_cnt}, penalty={rank_error_penalty}")
+                 score += float(err_cnt) * 5.0 # Fallback penalty
+
+        return score
     def _best(run_key: str) -> dict[str, Any]:
         ranked = sorted(results["runs"], key=lambda r: _score(r, run_key))
         return ranked[0] if ranked else {}

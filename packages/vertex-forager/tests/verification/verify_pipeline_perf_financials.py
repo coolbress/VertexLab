@@ -36,6 +36,7 @@ def main() -> None:
     # ---------- Optional: Sharadar (requires SHARADAR_API_KEY) ----------
     sh_key = os.getenv("SHARADAR_API_KEY")
     sh_run = None
+    sh_error: str | None = None
     if sh_key:
         try:
             shc = SharadarClient(api_key=sh_key, rate_limit=60, structured_logs=False)
@@ -47,10 +48,12 @@ def main() -> None:
         except Exception as e:
             print(f"Sharadar verification skipped due to error: {e}")
             sh_run = None
+            sh_error = str(e)
 
     data = {
         "yfinance_financials": as_dict(yf_run),
         "sharadar_sf1_optional": as_dict(sh_run),
+        "sharadar_sf1_optional_error": sh_error,
     }
     metrics_path.write_text(json.dumps(data, indent=2))
     print(f"Wrote metrics: {metrics_path}")
