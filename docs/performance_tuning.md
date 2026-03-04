@@ -6,19 +6,19 @@
 - Optimize Polars transforms, writer batching, progress UI, memory validation.
 - Tune concurrency and HTTP client parameters to maximize throughput safely.
 
-## Baseline Performance (Measured)
+## Baseline Performance
 
 > Note: Metrics measured on macOS M1/M2 (local dev environment).
 > Commands:
 > - Price: `VF_METRICS_ENABLED=1 /usr/bin/time -l uv run python packages/vertex-forager/tests/verification/verify_pipeline_perf.py`
 > - Financials: `VF_METRICS_ENABLED=1 /usr/bin/time -l uv run python packages/vertex-forager/tests/verification/verify_pipeline_perf_financials.py`
-> Artifacts:
-> - Price: `output/forager-profiles/profile_metrics.json`
-> - Financials: `output/forager-profiles/profile_financials_metrics.json`
+> Artifacts (example paths with timestamp):
+> - Price: `output/forager-profiles/{YYYYMMDD_HHMMSS}/profile_metrics.json`
+> - Financials: `output/forager-profiles/{YYYYMMDD_HHMMSS}/profile_financials_metrics.json`
 >
 > **Pre-Optimization Values**: Estimated based on manual timing (`time` command) due to lack of profiling tools at that stage; not reproducible.
 
-| Metric | Pre-Optimization (Est.) | Post-Optimization (Measured) | Improvement |
+| Metric | Pre-Optimization (Estimated) | Post-Optimization (Measured) | Improvement |
 | :--- | :--- | :--- | :--- |
 | **Price Data (5 Tickers)** | ~8.5s | **~4.5s** (Wall) / ~2.1s (Fetch p95) <sup>[1]</sup> | ~47% Faster |
 | **Financials (10 Tickers)** | ~12.0s | **~4.8s** (Wall) / ~2.0s (Fetch p95) <sup>[2]</sup> | ~60% Faster |
