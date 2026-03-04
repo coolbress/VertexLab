@@ -36,52 +36,70 @@ async def main_async() -> None:
         db_path.unlink()
 
     # Apply environment-driven tuning via BaseClient (VF_CONCURRENCY/VF_FLUSH_THRESHOLD_ROWS)
+    prev_vf_metrics = os.environ.get("VF_METRICS_ENABLED")
     os.environ.setdefault("VF_METRICS_ENABLED", "1")
 
-    # ---------- YFinance Financials ----------
-    yf_tickers = load_tickers_env(
-        "YF_TICKERS",
-        ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "NFLX", "ADBE", "CSCO"],
-    )
-    yfc = YFinanceClient(rate_limit=60, structured_logs=False)
-    yf_run = await yfc.get_financials(
-        kind="income_stmt",
-        period="annual",
-        tickers=yf_tickers,
-        connect_db=db_path,
-        show_progress=False,
-    )
+    try:
+        # ---------- YFinance Financials ----------
+        yf_tickers = load_tickers_env(
+            "YF_TICKERS",
+            ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "NFLX", "ADBE", "CSCO"],
+        )
+        yfc = YFinanceClient(rate_limit=60, structured_logs=False)
+        yf_run = await yfc.get_financials(
+            kind="income_stmt",
+            period="annual",
+            tickers=yf_tickers,
+            connect_db=db_path,
+            show_progress=False,
+        )
 
-    # ---------- Optional: Sharadar (requires SHARADAR_API_KEY) ----------
-    sh_key = os.getenv("SHARADAR_API_KEY")
-    sh_run = None
-    sh_error: str | None = None
-    if sh_key:
-        try:
-            shc = SharadarClient(api_key=sh_key, rate_limit=60, structured_logs=False)
-            sh_run = await shc.get_fundamental_data(
-                tickers=yf_tickers[:5],
-                connect_db=db_path,
-                dimension="MRT",
-            )
-        except Exception as e:
-            logger.warning(f"Sharadar verification skipped due to error: {e}", exc_info=True)
-            sh_run = None
-            sh_error = str(e)
+        # ---------- Optional: Sharadar (requires SHARADAR_API_KEY) ----------
+        sh_key = os.getenv("SHARADAR_API_KEY")
+        sh_run = None
+        sh_error: str | None = None
+        if sh_key:
+            try:
+                shc = SharadarClient(api_key=sh_key, rate_limit=60, structured_logs=False)
+                sh_run = await shc.get_fundamental_data(
+                    tickers=yf_tickers[:5],
+                    connect_db=db_path,
+                    dimension="MRT",
+                )
+            except Exception as e:
+                logger.warning(f"Sharadar verification skipped due to error: {e}", exc_info=True)
+                sh_run = None
+                sh_error = str(e)
 
-    data = {
-        "yfinance_financials": as_dict(yf_run),
-        "sharadar_sf1_optional": as_dict(sh_run),
-        "sharadar_sf1_optional_error": sh_error,
-    }
-    metrics_path.write_text(json.dumps(data, indent=2))
-    print(f"Wrote metrics: {metrics_path}")
+        data = {
+            "yfinance_financials": as_dict(yf_run),
+            "sharadar_sf1_optional": as_dict(sh_run),
+            "sharadar_sf1_optional_error": sh_error,
+        }
+        metrics_path.write_text(json.dumps(data, indent=2))
+        print(f"Wrote metrics: {metrics_path}")
 
-    if db_path.exists():
-        db_path.unlink()
+    finally:
+        # Restore environment
+        if prev_vf_metrics is None:
+            os.environ.pop("VF_METRICS_ENABLED", None)
+        else:
+            os.environ["VF_METRICS_ENABLED"] = prev_vf_metrics
+            
+        # Cleanup DB
+        if db_path.exists():
+            try:
+                db_path.unlink()
+            except OSError as e:
+                logger.warning(f"Failed to cleanup temp DB {db_path}: {e}")
 
 
 def main() -> None:
+    """Run the financials performance verification pipeline.
+
+    Entry point that wraps main_async() for synchronous execution.
+    See main_async() for full environment variable configuration and side effects.
+    """
     asyncio.run(main_async())
 
 
