@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager, AsyncExitStack, nullcontext
 from functools import partial
 from pathlib import Path
 from typing import Any, Callable, AsyncGenerator, TypeVar, Generic, Union
+from types import TracebackType
 
 import httpx
 import warnings
@@ -147,7 +148,12 @@ class BaseClient(ABC, Generic[T]):
             self._client = default_async_client()
         return self
 
-    async def __aexit__(self, exc_type, exc, tb) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         """Async context manager exit.
 
         Ensures the HTTP client is closed.

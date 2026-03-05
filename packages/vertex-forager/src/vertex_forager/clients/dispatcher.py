@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import Callable, Any, TypeVar, Union
+from typing import Callable, Any, TypeVar, Union, cast
 
 from vertex_forager.clients.base import HttpExecutor
 from vertex_forager.core.config import RunResult
@@ -75,4 +75,4 @@ async def run_pipeline_for(
             client.last_run = await pipeline.run(
                 dataset=dataset, symbols=symbols, on_progress=on_progress, **run_kwargs
             )
-        return client.last_run
+        return cast(RunResult, client.last_run)

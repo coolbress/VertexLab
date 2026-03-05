@@ -99,7 +99,7 @@ class HttpExecutor:
             params[spec.auth.query_param] = spec.auth.token
 
         try:
-            resp = await self._client.run_async(
+            resp: httpx.Response = await self._client.run_async(
                 spec.method.value,
                 spec.url,
                 params=params,
@@ -140,7 +140,7 @@ class HttpExecutor:
             if fetcher is None:
                 raise ValueError(f"Unsupported library scheme: {scheme}")
 
-            def _execute():
+            def _execute() -> Any:
                 return fetcher.fetch(spec)
 
             # Use the client's run_sync method

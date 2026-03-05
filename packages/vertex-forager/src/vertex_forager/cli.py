@@ -646,7 +646,7 @@ def _score_and_rank_results(
         return score
 
     def _best(run_key: str) -> dict[str, Any]:
-        runs = results.get("runs", [])
+        runs = cast(list[dict[str, Any]], results.get("runs", []))
         if not runs:
             return {}
         
@@ -660,7 +660,7 @@ def _score_and_rank_results(
         if not valid_runs:
             return {}
 
-        ranked = sorted(valid_runs, key=lambda r: _score(r, run_key))
+        ranked: list[dict[str, Any]] = sorted(valid_runs, key=lambda r: _score(r, run_key))
         return ranked[0]
         
     results["best"] = {
