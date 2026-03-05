@@ -18,7 +18,7 @@ class DummyYF:
 async def test_core_http_dispatch_library(monkeypatch):
     import vertex_forager.core.http as http_mod
     import vertex_forager.providers.yfinance.fetcher as _yf_fetcher  # noqa: F401
-    http_mod.yf = DummyYF()
+    monkeypatch.setattr(http_mod, "yf", DummyYF)
     spec = RequestSpec(
         url="yfinance://AAPL",
         params={"dataset": "price", "lib": {"type": "ticker_attr", "attr": "info", "kwargs": {}}},
