@@ -814,7 +814,13 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
             raise ValueError(f"Invalid response type for provider={self.provider}: expected object, got {type(decoded_any).__name__}")
         decoded = cast(dict[str, Any], decoded_any)
         if "quandl_error" in decoded:
-            err = decoded.get("quandl_error") or {}
+            raw_err = decoded.get("quandl_error")
+            if isinstance(raw_err, dict):
+                err: dict[str, Any] = raw_err
+            elif isinstance(raw_err, str):
+                err = {"message": raw_err}
+            else:
+                err = {}
             raise_quandl_error(self.provider, err)
         return decoded
 
@@ -833,13 +839,24 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         if not isinstance(datatable_any, dict):
             raise ValueError(f"Invalid datatable for provider={self.provider} dataset={dataset}: expected object")
         datatable = cast(dict[str, Any], datatable_any)
-        records = datatable.get("data") or []
-        columns = datatable.get("columns") or []
-        if not records or not columns:
+        records_any = datatable.get("data")
+        columns_any = datatable.get("columns")
+        # Validate records/columns presence and types
+        if records_any is None:
             return pl.DataFrame()
+        if not isinstance(records_any, list):
+            raise ValueError(f"Invalid datatable.data for provider={self.provider} dataset={dataset}: expected list")
+        records: list[Any] = records_any
+        if len(records) == 0:
+            return pl.DataFrame()
+        if columns_any is None or not isinstance(columns_any, list):
+            raise ValueError(f"Invalid or missing datatable.columns for provider={self.provider} dataset={dataset} (records present)")
+        columns: list[Any] = columns_any
 
         col_names: list[str] = []
         for i, c in enumerate(columns):
+            if not isinstance(c, dict):
+                raise ValueError(f"Invalid column structure at index {i} for provider={self.provider} dataset={dataset}: expected object")
             name = c.get("name")
             col_names.append(name if isinstance(name, str) and name else f"column_{i}")
 
