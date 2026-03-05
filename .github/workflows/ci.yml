@@ -1,4 +1,7 @@
 name: Vertex CI
+#
+# Policy: Actions are SHA-pinned; the inline comment reflects the upstream major version.
+# This workflow enforces bounded runtime via timeout-minutes to avoid long hangs.
 
 # 언제 로봇이 깨어날까요?
 on:
@@ -11,6 +14,7 @@ jobs:
   quality-check:
     name: 🛡️ Code Quality Check
     runs-on: ubuntu-latest  # 최신 리눅스 환경에서 실행
+    timeout-minutes: 20
     permissions:
       contents: read
       security-events: write
