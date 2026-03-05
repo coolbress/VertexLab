@@ -12,7 +12,7 @@ from datetime import date, datetime, timezone
 import polars as pl
 from vertex_forager.utils import mask_secret
 
-from typing import cast, TYPE_CHECKING
+from typing import Any, cast, TYPE_CHECKING
 from vertex_forager.core.types import SharadarDataset, JSONValue
 from vertex_forager.providers.sharadar.constants import (
     MAX_ROWS_PER_REQUEST,
@@ -797,7 +797,7 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
     # --------------------------------------
 
     # ------ Payload decode: JSON→dict and API error checks ------
-    def _decode_payload(self, payload: bytes) -> dict:
+    def _decode_payload(self, payload: bytes) -> dict[str, Any]:
         """Decode the response bytes into a dictionary.
 
         Args:
@@ -809,14 +809,14 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         Raises:
             FetchError: If the API returns a 'quandl_error'.
         """
-        decoded = json.loads(payload.decode("utf-8"))
+        decoded = cast(dict[str, Any], json.loads(payload.decode("utf-8")))
         if "quandl_error" in decoded:
             err = decoded.get("quandl_error") or {}
             raise_quandl_error(self.provider, err)
         return decoded
 
     # ------ Frame load: datatable(columns/data)→Polars DataFrame ------
-    def _datatable_to_frame(self, decoded: dict, dataset: str) -> pl.DataFrame:
+    def _datatable_to_frame(self, decoded: dict[str, Any], dataset: str) -> pl.DataFrame:
         """Convert the 'datatable' portion of the response to a DataFrame.
 
         Args:

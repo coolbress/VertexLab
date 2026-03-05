@@ -1,20 +1,43 @@
-name: Dependabot Automerge
+name: Dependabot Auto Merge
+#
+# Auto-merge for Dependabot PRs only.
+# Conditions:
+# - author is dependabot[bot]
+# - dependencies label is present
+# - base branch is main
+# Auto-merge is enabled with squash; native GitHub auto-merge waits for required checks.
+
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
-
-permissions:
-  contents: write
-  pull-requests: write
+    types: [opened, synchronize, labeled, ready_for_review]
 
 jobs:
   automerge:
-    if: github.actor == 'dependabot[bot]'
+    if: |
+      github.actor == 'dependabot[bot]' &&
+      contains(github.event.pull_request.labels.*.name, 'dependencies') &&
+      github.event.pull_request.base.ref == 'main'
+    permissions:
+      contents: write
+      pull-requests: write
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: Auto-merge when all checks pass
-        if: contains(github.event.pull_request.labels.*.name, 'automerge')
-        run: gh pr merge --auto --squash "${{ github.event.pull_request.number }}"
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - name: Restrict to workflow changes only
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          CHANGED_ALL="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
+          WF_ONLY="$(echo "$CHANGED_ALL" | grep -E '^\.github/workflows/' || true)"
+          OTHER="$(echo "$CHANGED_ALL" | grep -vE '^\.github/workflows/' || true)"
+          if [ -n "$WF_ONLY" ] && [ -z "$OTHER" ]; then
+            echo "WORKFLOW_ONLY=true" >> "$GITHUB_ENV"
+          else
+            echo "WORKFLOW_ONLY=false" >> "$GITHUB_ENV"
+          fi
+      - name: Enable auto-merge (squash) for this PR
+        if: ${{ env.WORKFLOW_ONLY == 'true' }}
+        run: gh pr merge ${{ github.event.pull_request.number }} --squash --auto
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
