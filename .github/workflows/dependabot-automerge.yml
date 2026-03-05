@@ -14,7 +14,7 @@ on:
 jobs:
   automerge:
     if: |
-      github.actor == 'dependabot[bot]' &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
       contains(github.event.pull_request.labels.*.name, 'dependencies') &&
       github.event.pull_request.base.ref == 'main'
     permissions:
@@ -24,6 +24,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
       - name: Restrict to workflow changes only
         run: |
           BASE_SHA="${{ github.event.pull_request.base.sha }}"

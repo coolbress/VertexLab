@@ -809,7 +809,10 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         Raises:
             FetchError: If the API returns a 'quandl_error'.
         """
-        decoded = cast(dict[str, Any], json.loads(payload.decode("utf-8")))
+        decoded_any = json.loads(payload.decode("utf-8"))
+        if not isinstance(decoded_any, dict):
+            raise ValueError(f"Invalid response type for provider={self.provider}: expected object, got {type(decoded_any).__name__}")
+        decoded = cast(dict[str, Any], decoded_any)
         if "quandl_error" in decoded:
             err = decoded.get("quandl_error") or {}
             raise_quandl_error(self.provider, err)
@@ -826,7 +829,10 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         Returns:
             pl.DataFrame: Polars DataFrame containing the data.
         """
-        datatable = decoded.get("datatable") or {}
+        datatable_any = decoded.get("datatable")
+        if not isinstance(datatable_any, dict):
+            raise ValueError(f"Invalid datatable for provider={self.provider} dataset={dataset}: expected object")
+        datatable = cast(dict[str, Any], datatable_any)
         records = datatable.get("data") or []
         columns = datatable.get("columns") or []
         if not records or not columns:
