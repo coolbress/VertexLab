@@ -43,7 +43,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Disable auto-merge when dependencies label removed
-        if: ${{ !contains(github.event.pull_request.labels.*.name, 'dependencies') }}
+        if: ${{ env.WORKFLOW_ONLY == 'false' || !contains(github.event.pull_request.labels.*.name, 'dependencies') }}
         run: |
           PR_ID="$(gh pr view ${{ github.event.pull_request.number }} --json id --jq .id)"
           gh api graphql -f query='mutation($prId:ID!) { disablePullRequestAutoMerge(input:{pullRequestId:$prId}) { clientMutationId } }' -F prId="$PR_ID"
