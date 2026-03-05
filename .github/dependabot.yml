@@ -18,7 +18,3 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "aquasecurity/trivy-action"
         update-types: ["version-update:semver-major"]
-      - dependency-name: "peter-evans/enable-pull-request-automerge"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "peter-evans/auto-merge"
-        update-types: ["version-update:semver-major"]
