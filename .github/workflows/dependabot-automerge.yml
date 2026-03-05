@@ -1,20 +1,51 @@
-name: Dependabot Automerge
+name: Dependabot Auto Merge
+#
+# Auto-merge for Dependabot PRs only.
+# Conditions:
+# - author is dependabot[bot]
+# - dependencies label is present
+# - base branch is main
+# Auto-merge is enabled with squash; native GitHub auto-merge waits for required checks.
+
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
-
-permissions:
-  contents: write
-  pull-requests: write
+    types: [opened, synchronize, labeled, unlabeled, ready_for_review]
 
 jobs:
   automerge:
-    if: github.actor == 'dependabot[bot]'
+    if: |
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.base.ref == 'main'
+    permissions:
+      contents: write
+      pull-requests: write
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: Auto-merge when all checks pass
-        if: contains(github.event.pull_request.labels.*.name, 'automerge')
-        run: gh pr merge --auto --squash "${{ github.event.pull_request.number }}"
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+      - name: Restrict to workflow changes only
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          CHANGED_ALL="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
+          WF_ONLY="$(echo "$CHANGED_ALL" | grep -E '^\.github/workflows/' || true)"
+          OTHER="$(echo "$CHANGED_ALL" | grep -vE '^\.github/workflows/' || true)"
+          if [ -n "$WF_ONLY" ] && [ -z "$OTHER" ]; then
+            echo "WORKFLOW_ONLY=true" >> "$GITHUB_ENV"
+          else
+            echo "WORKFLOW_ONLY=false" >> "$GITHUB_ENV"
+          fi
+      - name: Enable auto-merge (squash) when dependencies label present
+        if: ${{ env.WORKFLOW_ONLY == 'true' && contains(github.event.pull_request.labels.*.name, 'dependencies') }}
+        run: gh pr merge ${{ github.event.pull_request.number }} --squash --auto
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Disable auto-merge when dependencies label removed
+        if: ${{ env.WORKFLOW_ONLY == 'false' || !contains(github.event.pull_request.labels.*.name, 'dependencies') }}
+        run: |
+          PR_ID="$(gh pr view ${{ github.event.pull_request.number }} --json id --jq .id)"
+          gh api graphql -f query='mutation($prId:ID!) { disablePullRequestAutoMerge(input:{pullRequestId:$prId}) { clientMutationId } }' -F prId="$PR_ID"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
