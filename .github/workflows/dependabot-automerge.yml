@@ -9,13 +9,12 @@ name: Dependabot Auto Merge
 
 on:
   pull_request:
-    types: [opened, synchronize, labeled, ready_for_review]
+    types: [opened, synchronize, labeled, unlabeled, ready_for_review]
 
 jobs:
   automerge:
     if: |
       github.event.pull_request.user.login == 'dependabot[bot]' &&
-      contains(github.event.pull_request.labels.*.name, 'dependencies') &&
       github.event.pull_request.base.ref == 'main'
     permissions:
       contents: write
@@ -38,8 +37,15 @@ jobs:
           else
             echo "WORKFLOW_ONLY=false" >> "$GITHUB_ENV"
           fi
-      - name: Enable auto-merge (squash) for this PR
-        if: ${{ env.WORKFLOW_ONLY == 'true' }}
+      - name: Enable auto-merge (squash) when dependencies label present
+        if: ${{ env.WORKFLOW_ONLY == 'true' && contains(github.event.pull_request.labels.*.name, 'dependencies') }}
         run: gh pr merge ${{ github.event.pull_request.number }} --squash --auto
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Disable auto-merge when dependencies label removed
+        if: ${{ env.WORKFLOW_ONLY == 'true' && !contains(github.event.pull_request.labels.*.name, 'dependencies') }}
+        run: |
+          PR_ID="$(gh pr view ${{ github.event.pull_request.number }} --json id --jq .id)"
+          gh api graphql -f query='mutation($prId:ID!) { disablePullRequestAutoMerge(input:{pullRequestId:$prId}) { clientMutationId } }' -F prId="$PR_ID"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
