@@ -33,7 +33,7 @@ from collections import defaultdict, deque
 
 import polars as pl
 from polars.exceptions import ComputeError
-from vertex_forager.exceptions import ValidationError, PrimaryKeyMissingError, PrimaryKeyNullError
+from vertex_forager.exceptions import ValidationError, PrimaryKeyMissingError, PrimaryKeyNullError, FetchError
 from vertex_forager.constants import (
     FLUSH_THRESHOLD_ROWS as DEFAULT_FLUSH_THRESHOLD_ROWS,
     PRIORITY_PAGINATION as CONST_PRIORITY_PAGINATION,
@@ -797,4 +797,4 @@ class VertexForager:
                 self._observe("http_duration_s", dur)
                 self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="http_end", attempt=att_no, duration_s=dur)
                 return resp
-        raise RuntimeError("Fetch failed after all retry attempts")
+        raise FetchError("Fetch failed after all retry attempts")

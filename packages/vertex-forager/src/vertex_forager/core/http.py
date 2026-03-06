@@ -130,7 +130,7 @@ class HttpExecutor:
             ValueError: Unsupported scheme or invalid library call configuration.
             TypeError: Invalid types passed to library call.
         """
-        scheme, payload = spec.url.split("://", 1)
+        scheme = spec.url.split("://", 1)[0]
         params = spec.params
         dataset = params.get("dataset", "price")
 
@@ -158,7 +158,7 @@ class HttpExecutor:
                 prov,
                 scheme,
                 dataset,
-                payload,
+                spec.url.split("://", 1)[1],
                 type(e).__name__,
                 msg,
             )
