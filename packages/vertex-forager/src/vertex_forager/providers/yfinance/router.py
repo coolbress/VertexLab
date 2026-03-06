@@ -152,7 +152,8 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         if allow_pickle_arg is not None:
             self._allow_pickle_compat = _parse_bool(allow_pickle_arg)
         else:
-            v_pickle = os.getenv("VF_ALLOW_PICKLE_COMPAT", "1")
+            # SECURITY: pickle compatibility is disabled by default
+            v_pickle = os.getenv("VF_ALLOW_PICKLE_COMPAT", "0")
             self._allow_pickle_compat = _parse_bool(v_pickle)
 
     @property

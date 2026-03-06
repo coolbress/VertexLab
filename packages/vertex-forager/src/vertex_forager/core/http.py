@@ -165,7 +165,7 @@ class HttpExecutor:
             try:
                 return json.dumps(data).encode("utf-8")
             except (TypeError, ValueError):
-                return json.dumps(str(data)).encode("utf-8")
+                return json.dumps(data, default=str).encode("utf-8")
 
         except (ValueError, TypeError) as e:
             prov = self._client.__class__.__name__

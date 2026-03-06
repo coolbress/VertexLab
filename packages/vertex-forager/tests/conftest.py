@@ -216,7 +216,7 @@ def yfinance_router() -> YFinanceRouter:
     Returns:
         YFinanceRouter: Router instance configured with rate_limit=500 (requests/min).
     """
-    return YFinanceRouter(rate_limit=500)
+    return YFinanceRouter(rate_limit=500, allow_pickle_compat=True)
 
 @pytest.fixture
 def yf_price_df() -> pd.DataFrame:
