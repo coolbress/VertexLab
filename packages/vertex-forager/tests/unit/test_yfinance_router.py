@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import pickle
+import io
+import json
 from vertex_forager.exceptions import TransformError
 
 import pandas as pd
@@ -149,3 +151,32 @@ class TestYFinanceRouterUnit:
         assert frame.get_column("period").to_list() == ["0m", "-1m", "-2m"]
         assert "strongbuy" in frame.columns
         assert frame.get_column("strongbuy").to_list() == [5, 3, 2]
+
+    def test_parse_price_ipc_with_secure_router(self, yfinance_router: YFinanceRouter, yf_price_df: pd.DataFrame) -> None:
+        """Secure router (pickle disabled) should decode IPC-prefixed payload for price dataset."""
+        df_pl = pl.from_pandas(yf_price_df)
+        buf = io.BytesIO()
+        df_pl.write_ipc(buf)
+        payload = b"IPC:" + buf.getvalue()
+        job = self.make_fetch_job(dataset="price", symbol="AAPL")
+        result = yfinance_router.parse(job=job, payload=payload)
+        assert isinstance(result, ParseResult)
+        assert len(result.packets) == 1
+        packet = result.packets[0]
+        assert packet.provider == "yfinance"
+        assert packet.table == "yfinance_price"
+        assert isinstance(packet.frame, pl.DataFrame)
+        assert packet.frame.height == 2
+        assert {"date", "open", "close", "ticker"}.issubset(set(packet.frame.columns))
+
+    def test_parse_news_json_with_secure_router(self, yfinance_router: YFinanceRouter) -> None:
+        """Secure router (pickle disabled) should decode JSON-prefixed payload for news dataset."""
+        good = [{"id": 1, "content": {"title": "T", "provider": {"displayName": "P"}, "contentType": "story", "canonicalUrl": {"url": "u"}, "pubDate": "2025-01-05T09:23:45Z"}}]
+        bad = [{"id": 2, "content": {"title": "X"}}]
+        payload = b"JSON:" + json.dumps(good + bad).encode("utf-8")
+        job = self.make_fetch_job(dataset="news", symbol="AAPL")
+        result = yfinance_router.parse(job=job, payload=payload)
+        assert isinstance(result, ParseResult)
+        frame = result.packets[0].frame
+        assert {"title", "publisher", "type", "link", "published_at"}.issubset(set(frame.columns))
+        assert frame.height == 2
