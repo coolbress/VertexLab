@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import pickle
+from vertex_forager.exceptions import TransformError
 
 import pandas as pd
 import polars as pl
@@ -110,6 +111,12 @@ class TestYFinanceRouterUnit:
         job = self.make_fetch_job(dataset="price", symbol="AAPL")
         with pytest.raises(pickle.UnpicklingError):
             _ = yfinance_router_allow_pickle.parse(job=job, payload=b"not a pickle")
+
+    def test_parse_invalid_payload_raises_when_pickle_not_allowed(self, yfinance_router: YFinanceRouter) -> None:
+        """When pickle compat is disabled, invalid payload should raise ValueError."""
+        job = self.make_fetch_job(dataset="price", symbol="AAPL")
+        with pytest.raises(TransformError):
+            _ = yfinance_router.parse(job=job, payload=b"not a pickle")
 
     def test_transform_insider_purchases_normalizes_columns(self, yfinance_router_allow_pickle: YFinanceRouter) -> None:
         """Verify insider_purchases transform maps and filters columns correctly."""
