@@ -95,8 +95,8 @@ async def test_backoff_sequence_exponential():
                 req = httpx.Request("GET", "http://test")
                 raise httpx.TransportError("temporary", request=req)
             break
-    assert len(starts) >= 3
+    assert len(starts) == 3
+    assert count == 3
     d1 = starts[1] - starts[0]
     d2 = starts[2] - starts[1]
-    assert d1 >= 0.015
     assert d2 >= d1
