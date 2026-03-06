@@ -33,6 +33,8 @@ class RetryConfig(BaseModel):
         max_attempts: Maximum number of retry attempts (default: 3).
         base_backoff_s: Initial backoff duration in seconds (default: 1.0).
         max_backoff_s: Maximum backoff duration in seconds (default: 30.0).
+        enable_http_status_retry: Toggle retry-on-HTTP-status behavior (default: True).
+        retry_status_codes: Tuple of HTTP status codes to trigger retries (default: (429, 503)).
     """
 
     max_attempts: int = DEFAULT_RETRY_MAX_ATTEMPTS

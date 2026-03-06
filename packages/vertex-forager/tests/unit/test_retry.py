@@ -5,12 +5,6 @@ from vertex_forager.core.retry import create_retry_controller
 from vertex_forager.core.config import RetryConfig
 
 
-class _Req:
-    def __init__(self) -> None:
-        self.method = "GET"
-        self.url = "http://test"
-
-
 def _status_error(code: int) -> httpx.HTTPStatusError:
     req = httpx.Request("GET", "http://test")
     resp = httpx.Response(code, request=req)
