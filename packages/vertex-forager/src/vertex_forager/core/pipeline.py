@@ -819,4 +819,3 @@ class VertexForager:
                 self._observe("http_duration_s", dur)
                 self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="http_end", attempt=att_no, duration_s=dur)
                 return resp
-        raise FetchError("Fetch failed after all retry attempts")

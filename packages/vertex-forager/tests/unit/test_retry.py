@@ -63,3 +63,40 @@ async def test_disabled_http_status_retry():
         async for attempt in controller:
             with attempt:
                 raise _status_error(429)
+
+
+@pytest.mark.asyncio
+async def test_retry_on_transport_error():
+    cfg = RetryConfig(max_attempts=3, base_backoff_s=0.01, max_backoff_s=0.02)
+    controller = create_retry_controller(cfg)
+    attempts = 0
+    async for attempt in controller:
+        with attempt:
+            attempts += 1
+            if attempts < 2:
+                req = httpx.Request("GET", "http://test")
+                raise httpx.TransportError("connection failed", request=req)
+            return
+    assert False
+
+
+@pytest.mark.asyncio
+async def test_backoff_sequence_exponential():
+    cfg = RetryConfig(max_attempts=3, base_backoff_s=0.02, max_backoff_s=0.05)
+    controller = create_retry_controller(cfg)
+    import time
+    starts: list[float] = []
+    count = 0
+    async for attempt in controller:
+        starts.append(time.monotonic())
+        with attempt:
+            count += 1
+            if count < 3:
+                req = httpx.Request("GET", "http://test")
+                raise httpx.TransportError("temporary", request=req)
+            break
+    assert len(starts) >= 3
+    d1 = starts[1] - starts[0]
+    d2 = starts[2] - starts[1]
+    assert d1 >= 0.015
+    assert d2 >= d1
