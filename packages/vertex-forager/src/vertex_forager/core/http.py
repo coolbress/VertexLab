@@ -154,7 +154,11 @@ class HttpExecutor:
                 data.write_ipc(buf)
                 return buf.getvalue()
             if isinstance(data, (pd.DataFrame, pd.Series)):
-                df_pl = pl.from_pandas(data if not isinstance(data, pd.Series) else data.to_frame())
+                if isinstance(data, pd.Series):
+                    df_pd = data.to_frame().reset_index()
+                else:
+                    df_pd = data.reset_index()
+                df_pl = pl.from_pandas(df_pd)
                 buf = io.BytesIO()
                 df_pl.write_ipc(buf)
                 return buf.getvalue()

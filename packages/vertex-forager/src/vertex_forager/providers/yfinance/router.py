@@ -39,7 +39,7 @@ from vertex_forager.logging.constants import (
 
 import pandas as pd
 import polars as pl
-from polars.exceptions import ComputeError
+from polars.exceptions import ComputeError, PolarsError
 from vertex_forager.core.config import (
     FetchJob,
     FramePacket,
@@ -148,6 +148,12 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         else:
             v_verbose = os.getenv("VF_LOG_VERBOSE")
             self._log_verbose = _parse_bool(v_verbose)
+        allow_pickle_arg = kwargs.get("allow_pickle_compat")
+        if allow_pickle_arg is not None:
+            self._allow_pickle_compat = _parse_bool(allow_pickle_arg)
+        else:
+            v_pickle = os.getenv("VF_ALLOW_PICKLE_COMPAT", "1")
+            self._allow_pickle_compat = _parse_bool(v_pickle)
 
     @property
     def provider(self) -> str:
@@ -256,13 +262,21 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             # -------- Decode Payload --------
             data_obj: Any | None = None
             df_pl: pl.DataFrame | None = None
+            read_ipc_err: Exception | None = None
+            json_err: Exception | None = None
             try:
                 df_pl = pl.read_ipc(io.BytesIO(payload))
-            except Exception:
+            except (PolarsError, ValueError, TypeError) as e:
+                read_ipc_err = e
                 try:
                     data_obj = json.loads(payload.decode("utf-8"))
-                except Exception:
-                    data_obj = pickle.loads(payload)
+                except (json.JSONDecodeError, UnicodeDecodeError) as je:
+                    json_err = je
+                    if self._allow_pickle_compat:
+                        data_obj = pickle.loads(payload)
+                    else:
+                        msg = f"IPC decode failed: {read_ipc_err}; JSON decode failed: {json_err}"
+                        raise ValueError(msg)
             # -------- Convert to Polars --------
             
             is_batch = bool(job.context.get("is_batch", False))
