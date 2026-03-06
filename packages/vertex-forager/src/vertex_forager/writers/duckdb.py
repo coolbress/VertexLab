@@ -55,9 +55,6 @@ from vertex_forager.writers.constants import (
 from vertex_forager.writers.base import BaseWriter, WriteResult
 from vertex_forager.exceptions import InputError, ValidationError, PrimaryKeyMissingError, PrimaryKeyNullError
 
-# Module-level cache for schema getter to avoid circular imports
-_get_table_schema = None
-
 
 class DuckDBWriter(BaseWriter):
     """DuckDB writer implementation.
@@ -91,6 +88,9 @@ class DuckDBWriter(BaseWriter):
         self._logger = logging.getLogger(__name__)
         # Cache for table existence and schema (table_name -> set of column names)
         self._table_schemas: dict[str, set[str]] = {}
+        # Instance-scoped schema getter to avoid module-level globals
+        from vertex_forager.schema.registry import get_table_schema
+        self._get_table_schema = get_table_schema
 
     def _validate_identifier(self, identifier: str) -> None:
         if not isinstance(identifier, str) or not identifier:
@@ -254,14 +254,7 @@ class DuckDBWriter(BaseWriter):
                     merged_df = pl.concat(frames, how="vertical")
                 except pl.exceptions.PolarsError as e:
                     # Use schema flexible flag to decide diagonal fallback
-                    global _get_table_schema
-                    if _get_table_schema is None:
-                        try:
-                            from vertex_forager.schema.registry import get_table_schema
-                            _get_table_schema = get_table_schema
-                        except ImportError:
-                            _get_table_schema = None
-                    schema = _get_table_schema(table_name) if _get_table_schema else None
+                    schema = self._get_table_schema(table_name) if hasattr(self, "_get_table_schema") else None
                     is_flexible = bool(schema and getattr(schema, "flexible_schema", False))
                     if not is_flexible:
                         raise
@@ -390,17 +383,7 @@ class DuckDBWriter(BaseWriter):
         This replaces the hardcoded KNOWN_PRIMARY_KEYS dictionary.
         Now the schema definition controls the deduplication logic.
         """
-        global _get_table_schema
-        if _get_table_schema is None:
-            try:
-                from vertex_forager.schema.registry import get_table_schema
-
-                _get_table_schema = get_table_schema
-            except ImportError:
-                # Should not happen in normal execution
-                return ()
-
-        schema = _get_table_schema(table_name)
+        schema = self._get_table_schema(table_name) if hasattr(self, "_get_table_schema") else None
         if schema and schema.unique_key:
             return schema.unique_key
         return ()

@@ -3,7 +3,6 @@ from __future__ import annotations
 import warnings
 from typing import Callable, Any, TypeVar, Union, cast
 
-from vertex_forager.clients.base import HttpExecutor
 from vertex_forager.core.config import RunResult
 from vertex_forager.core.contracts import IRouter, IWriter, IMapper
 from vertex_forager.core.types import JSONValue, SharadarDataset, YFinanceDataset
@@ -46,6 +45,8 @@ async def run_pipeline_for(
         PrimaryKeyMissingError: Required PK columns are missing.
         PrimaryKeyNullError: PK columns contain nulls.
     """
+    # Import dependencies inside function to respect test-time patching
+    from vertex_forager.clients.base import HttpExecutor
     # Import VertexForager via base to allow test patching on vertex_forager.clients.base.VertexForager
     from vertex_forager.clients.base import VertexForager
     from vertex_forager.constants import RESERVED_PIPELINE_KEYS

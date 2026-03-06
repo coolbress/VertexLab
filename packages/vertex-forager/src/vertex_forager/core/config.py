@@ -167,8 +167,8 @@ class EngineConfig(BaseModel):
     """
 
     # 1. Core Parameters
-    requests_per_minute: int
-    concurrency: int | None = None
+    requests_per_minute: int = Field(..., gt=0)
+    concurrency: int | None = Field(default=None, gt=0)
 
     # 2. Retry Configuration
     retry: RetryConfig = Field(default_factory=RetryConfig)
