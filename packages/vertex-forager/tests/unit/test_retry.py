@@ -1,0 +1,65 @@
+from __future__ import annotations
+import httpx
+import pytest
+from vertex_forager.core.retry import create_retry_controller
+from vertex_forager.core.config import RetryConfig
+
+
+class _Req:
+    def __init__(self) -> None:
+        self.method = "GET"
+        self.url = "http://test"
+
+
+def _status_error(code: int) -> httpx.HTTPStatusError:
+    req = httpx.Request("GET", "http://test")
+    resp = httpx.Response(code, request=req)
+    return httpx.HTTPStatusError("err", request=req, response=resp)
+
+
+@pytest.mark.asyncio
+async def test_retry_on_429_enabled():
+    cfg = RetryConfig(max_attempts=3, base_backoff_s=0.01, max_backoff_s=0.02, enable_http_status_retry=True, retry_status_codes=(429, 503))
+    controller = create_retry_controller(cfg)
+    attempts = 0
+    async for attempt in controller:
+        with attempt:
+            attempts += 1
+            if attempts < 2:
+                raise _status_error(429)
+            return
+    assert False
+
+
+@pytest.mark.asyncio
+async def test_retry_on_503_enabled():
+    cfg = RetryConfig(max_attempts=3, base_backoff_s=0.01, max_backoff_s=0.02, enable_http_status_retry=True, retry_status_codes=(429, 503))
+    controller = create_retry_controller(cfg)
+    attempts = 0
+    async for attempt in controller:
+        with attempt:
+            attempts += 1
+            if attempts < 2:
+                raise _status_error(503)
+            return
+    assert False
+
+
+@pytest.mark.asyncio
+async def test_no_retry_on_400():
+    cfg = RetryConfig(max_attempts=2, base_backoff_s=0.01, max_backoff_s=0.02, enable_http_status_retry=True, retry_status_codes=(429, 503))
+    controller = create_retry_controller(cfg)
+    with pytest.raises(httpx.HTTPStatusError):
+        async for attempt in controller:
+            with attempt:
+                raise _status_error(400)
+
+
+@pytest.mark.asyncio
+async def test_disabled_http_status_retry():
+    cfg = RetryConfig(max_attempts=2, base_backoff_s=0.01, max_backoff_s=0.02, enable_http_status_retry=False, retry_status_codes=(429, 503))
+    controller = create_retry_controller(cfg)
+    with pytest.raises(httpx.HTTPStatusError):
+        async for attempt in controller:
+            with attempt:
+                raise _status_error(429)

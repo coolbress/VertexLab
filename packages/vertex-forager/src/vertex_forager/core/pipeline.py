@@ -800,7 +800,20 @@ class VertexForager:
                 async with self.controller.throttle():
                     t0 = time.monotonic()
                     self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="http_start", attempt=att_no)
-                    resp = await self._http.fetch(job.spec)
+                    try:
+                        resp = await self._http.fetch(job.spec)
+                    except Exception as e:
+                        reason = "error"
+                        if isinstance(e, httpx.HTTPStatusError):
+                            resp0 = getattr(e, "response", None)
+                            sc = getattr(resp0, "status_code", None)
+                            reason = f"http_status_{sc}"
+                        elif isinstance(e, httpx.TransportError):
+                            reason = "transport_error"
+                        else:
+                            reason = type(e).__name__
+                        self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage=f"http_retry_reason:{reason}", attempt=att_no)
+                        raise
                 t1 = time.monotonic()
                 dur = t1 - t0
                 self._observe("http_duration_s", dur)

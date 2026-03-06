@@ -38,6 +38,8 @@ class RetryConfig(BaseModel):
     max_attempts: int = DEFAULT_RETRY_MAX_ATTEMPTS
     base_backoff_s: float = DEFAULT_RETRY_BASE_BACKOFF_S
     max_backoff_s: float = DEFAULT_RETRY_MAX_BACKOFF_S
+    enable_http_status_retry: bool = True
+    retry_status_codes: tuple[int, ...] = (429, 503)
 
 
 class HttpMethod(str, Enum):
