@@ -587,6 +587,15 @@ class VertexForager:
                 logger.error(f"[Worker-{worker_id}] Error processing {job.symbol}: {exc}")
                 self._inc("errors_total", 1)
                 self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="error")
+            except FetchError as exc:
+                worker_exc = exc
+                async with result_lock:
+                    result.errors.append(
+                        f"{job.provider}:{job.dataset}:{job.symbol}:{exc}"
+                    )
+                logger.error(f"[Worker-{worker_id}] Fetch exhausted for {job.symbol}: {exc}")
+                self._inc("errors_total", 1)
+                self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="error_fetch")
             except Exception as exc:
                 worker_exc = exc
                 async with result_lock:
