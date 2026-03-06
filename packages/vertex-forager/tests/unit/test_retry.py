@@ -49,20 +49,26 @@ async def test_retry_on_503_enabled():
 async def test_no_retry_on_400():
     cfg = RetryConfig(max_attempts=2, base_backoff_s=0.01, max_backoff_s=0.02, enable_http_status_retry=True, retry_status_codes=(429, 503))
     controller = create_retry_controller(cfg)
+    attempts = 0
     with pytest.raises(httpx.HTTPStatusError):
         async for attempt in controller:
             with attempt:
+                attempts += 1
                 raise _status_error(400)
+    assert attempts == 1
 
 
 @pytest.mark.asyncio
 async def test_disabled_http_status_retry():
     cfg = RetryConfig(max_attempts=2, base_backoff_s=0.01, max_backoff_s=0.02, enable_http_status_retry=False, retry_status_codes=(429, 503))
     controller = create_retry_controller(cfg)
+    attempts = 0
     with pytest.raises(httpx.HTTPStatusError):
         async for attempt in controller:
             with attempt:
+                attempts += 1
                 raise _status_error(429)
+    assert attempts == 1
 
 
 @pytest.mark.asyncio
