@@ -279,6 +279,8 @@ class BaseClient(ABC, Generic[T]):
             writer=writer,
             mapper=mapper,
             on_progress=on_progress,
+            http_executor_cls=HttpExecutor,
+            vertex_forager_cls=VertexForager,
             **run_kwargs,
         )
 
