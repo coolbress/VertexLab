@@ -9,7 +9,7 @@ import httpx
 from tenacity import (
     AsyncRetrying,
     before_sleep_log,
-    retry_if_exception,
+    retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
 )
@@ -36,16 +36,6 @@ def create_retry_controller(
     Returns:
         AsyncRetrying: Configured retry controller.
     """
-    def _should_retry(exc: BaseException) -> bool:
-        if isinstance(exc, retry_on):
-            return True
-        if config.enable_http_status_retry and isinstance(exc, httpx.HTTPStatusError):
-            resp = getattr(exc, "response", None)
-            status = getattr(resp, "status_code", None)
-            if status in set(config.retry_status_codes):
-                return True
-        return False
-
     return AsyncRetrying(
         stop=stop_after_attempt(config.max_attempts),
         wait=wait_exponential(
@@ -53,7 +43,7 @@ def create_retry_controller(
             max=config.max_backoff_s,
             exp_base=2,
         ),
-        retry=retry_if_exception(_should_retry),
+        retry=retry_if_exception_type(retry_on),
         before_sleep=before_sleep_log(logger, log_level),
         reraise=True,
     )
