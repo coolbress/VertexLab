@@ -214,6 +214,8 @@ class EngineConfig(BaseModel):
         """
         if self.requests_per_minute <= 0:
             raise ValueError("requests_per_minute must be positive")
+        if self.concurrency is not None and self.concurrency <= 0:
+            raise ValueError("concurrency must be positive if specified")
 
 
 class RunResult(BaseModel):

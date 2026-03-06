@@ -33,7 +33,7 @@ from collections import defaultdict, deque
 
 import polars as pl
 from polars.exceptions import ComputeError
-from vertex_forager.exceptions import ValidationError, PrimaryKeyMissingError, PrimaryKeyNullError
+from vertex_forager.exceptions import ValidationError, PrimaryKeyMissingError, PrimaryKeyNullError, FetchError
 from vertex_forager.constants import (
     FLUSH_THRESHOLD_ROWS as DEFAULT_FLUSH_THRESHOLD_ROWS,
     PRIORITY_PAGINATION as CONST_PRIORITY_PAGINATION,
@@ -587,6 +587,15 @@ class VertexForager:
                 logger.error(f"[Worker-{worker_id}] Error processing {job.symbol}: {exc}")
                 self._inc("errors_total", 1)
                 self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="error")
+            except FetchError as exc:
+                worker_exc = exc
+                async with result_lock:
+                    result.errors.append(
+                        f"{job.provider}:{job.dataset}:{job.symbol}:{exc}"
+                    )
+                logger.error(f"[Worker-{worker_id}] Fetch exhausted for {job.symbol}: {exc}")
+                self._inc("errors_total", 1)
+                self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="error_fetch")
             except Exception as exc:
                 worker_exc = exc
                 async with result_lock:
@@ -797,4 +806,4 @@ class VertexForager:
                 self._observe("http_duration_s", dur)
                 self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="http_end", attempt=att_no, duration_s=dur)
                 return resp
-        raise RuntimeError("Fetch failed after all retry attempts")
+        raise FetchError("Fetch failed after all retry attempts")
