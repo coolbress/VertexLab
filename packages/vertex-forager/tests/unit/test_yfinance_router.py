@@ -50,11 +50,11 @@ class TestYFinanceRouterUnit:
             assert job.spec.url == f"yfinance://{sym}"
             assert job.context.get("is_batch") is not True
 
-    def test_parse_returns_frame_for_price_dataset(self, yfinance_router: YFinanceRouter, yf_price_df: pd.DataFrame) -> None:
+    def test_parse_returns_frame_for_price_dataset(self, yfinance_router_allow_pickle: YFinanceRouter, yf_price_df: pd.DataFrame) -> None:
         """Verify parse returns a populated frame for price payload."""
         payload = pickle.dumps(yf_price_df)
         job = self.make_fetch_job(dataset="price", symbol="AAPL")
-        result = yfinance_router.parse(job=job, payload=payload)
+        result = yfinance_router_allow_pickle.parse(job=job, payload=payload)
         assert isinstance(result, ParseResult)
         assert len(result.packets) == 1
         packet = result.packets[0]
@@ -64,20 +64,20 @@ class TestYFinanceRouterUnit:
         assert packet.frame.height == 2
         assert {"date", "open", "close", "ticker"}.issubset(set(packet.frame.columns))
 
-    def test_parse_handles_empty_dataframe(self, yfinance_router: YFinanceRouter) -> None:
+    def test_parse_handles_empty_dataframe(self, yfinance_router_allow_pickle: YFinanceRouter) -> None:
         """Verify parse returns zero packets for empty DataFrame payload."""
         empty_df = pd.DataFrame(columns=["date", "open", "close", "ticker"])
         payload = pickle.dumps(empty_df)
         job = self.make_fetch_job(dataset="price", symbol="AAPL")
-        result = yfinance_router.parse(job=job, payload=payload)
+        result = yfinance_router_allow_pickle.parse(job=job, payload=payload)
         assert isinstance(result, ParseResult)
         assert len(result.packets) == 0
 
-    def test_transform_financials_melts_and_normalizes_date(self, yfinance_router: YFinanceRouter) -> None:
+    def test_transform_financials_melts_and_normalizes_date(self, yfinance_router_allow_pickle: YFinanceRouter) -> None:
         df = pd.DataFrame({"breakdown": ["Revenue", "NetIncome"], "2024-01-01 00:00:00": [1, 2], "2024-02-01": [3, 4]})
         payload = pickle.dumps(df)
         job = self.make_fetch_job(dataset="financials", symbol="AAPL")
-        result = yfinance_router.parse(job=job, payload=payload)
+        result = yfinance_router_allow_pickle.parse(job=job, payload=payload)
         assert isinstance(result, ParseResult)
         assert len(result.packets) == 1
         frame = result.packets[0].frame
@@ -86,32 +86,32 @@ class TestYFinanceRouterUnit:
         dates = frame.get_column("date").cast(pl.Utf8, strict=False).to_list()
         assert all((" " not in (d or "")) and ("T" not in (d or "")) for d in dates)
 
-    def test_transform_news_defensive_paths(self, yfinance_router: YFinanceRouter) -> None:
+    def test_transform_news_defensive_paths(self, yfinance_router_allow_pickle: YFinanceRouter) -> None:
         good = [{"id": 1, "content": {"title": "T", "provider": {"displayName": "P"}, "contentType": "story", "canonicalUrl": {"url": "u"}, "pubDate": "2025-01-05T09:23:45Z"}}]
         bad = [{"id": 2, "content": {"title": "X"}}]
         payload = pickle.dumps(good + bad)
         job = self.make_fetch_job(dataset="news", symbol="AAPL")
-        result = yfinance_router.parse(job=job, payload=payload)
+        result = yfinance_router_allow_pickle.parse(job=job, payload=payload)
         assert isinstance(result, ParseResult)
         frame = result.packets[0].frame
         assert {"title", "publisher", "type", "link", "published_at"}.issubset(set(frame.columns))
         assert frame.height == 2
 
-    def test_transform_calendar_list_to_first(self, yfinance_router: YFinanceRouter) -> None:
+    def test_transform_calendar_list_to_first(self, yfinance_router_allow_pickle: YFinanceRouter) -> None:
         payload = pickle.dumps([{"earnings_date": ["2024-01-01", "2024-01-02"]}])
         job = self.make_fetch_job(dataset="calendar", symbol="AAPL")
-        result = yfinance_router.parse(job=job, payload=payload)
+        result = yfinance_router_allow_pickle.parse(job=job, payload=payload)
         assert isinstance(result, ParseResult)
         frame = result.packets[0].frame
         assert "earnings_date" in frame.columns
         assert frame.get_column("earnings_date").to_list()[0] == "2024-01-01"
 
-    def test_parse_invalid_payload_raises(self, yfinance_router: YFinanceRouter) -> None:
+    def test_parse_invalid_payload_raises(self, yfinance_router_allow_pickle: YFinanceRouter) -> None:
         job = self.make_fetch_job(dataset="price", symbol="AAPL")
         with pytest.raises(pickle.UnpicklingError):
-            _ = yfinance_router.parse(job=job, payload=b"not a pickle")
+            _ = yfinance_router_allow_pickle.parse(job=job, payload=b"not a pickle")
 
-    def test_transform_insider_purchases_normalizes_columns(self, yfinance_router: YFinanceRouter) -> None:
+    def test_transform_insider_purchases_normalizes_columns(self, yfinance_router_allow_pickle: YFinanceRouter) -> None:
         """Verify insider_purchases transform maps and filters columns correctly."""
         df = pd.DataFrame({
             "Insider Purchases (Last 6 months)": ["Purchases", None, "Sales"],
@@ -119,14 +119,14 @@ class TestYFinanceRouterUnit:
         })
         payload = pickle.dumps(df)
         job = self.make_fetch_job(dataset="insider_purchases", symbol="AAPL")
-        result = yfinance_router.parse(job=job, payload=payload)
+        result = yfinance_router_allow_pickle.parse(job=job, payload=payload)
         frame = result.packets[0].frame
         assert "insider_purchases_last_6m" in frame.columns
         assert frame.height == 2
         assert frame.get_column("insider_purchases_last_6m").to_list() == ["Purchases", "Sales"]
         assert frame.get_column("other_col").to_list() == [1, 3]
 
-    def test_transform_recommendations_includes_period(self, yfinance_router: YFinanceRouter) -> None:
+    def test_transform_recommendations_includes_period(self, yfinance_router_allow_pickle: YFinanceRouter) -> None:
         """Verify recommendations transform includes period column."""
         df = pd.DataFrame({
             "period": ["0m", "-1m", "-2m"],
@@ -135,7 +135,7 @@ class TestYFinanceRouterUnit:
         })
         payload = pickle.dumps(df)
         job = self.make_fetch_job(dataset="recommendations", symbol="AAPL")
-        result = yfinance_router.parse(job=job, payload=payload)
+        result = yfinance_router_allow_pickle.parse(job=job, payload=payload)
         frame = result.packets[0].frame
         assert "period" in frame.columns
         assert frame.height == 3

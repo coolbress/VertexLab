@@ -8,6 +8,7 @@ import io
 import json
 import polars as pl
 import pandas as pd
+from polars.exceptions import ComputeError
 try:
     import yfinance as yf  # test compatibility: allow monkeypatching core.http.yf
 except ImportError:
@@ -152,20 +153,23 @@ class HttpExecutor:
             if isinstance(data, pl.DataFrame):
                 buf = io.BytesIO()
                 data.write_ipc(buf)
-                return buf.getvalue()
+                return b"IPC:" + buf.getvalue()
             if isinstance(data, (pd.DataFrame, pd.Series)):
                 if isinstance(data, pd.Series):
                     df_pd = data.to_frame().reset_index()
                 else:
                     df_pd = data.reset_index()
-                df_pl = pl.from_pandas(df_pd)
+                try:
+                    df_pl = pl.from_pandas(df_pd)
+                except (ValueError, TypeError, ComputeError):
+                    return b"JSON:" + json.dumps(df_pd.to_dict(orient="records"), default=str).encode("utf-8")
                 buf = io.BytesIO()
                 df_pl.write_ipc(buf)
-                return buf.getvalue()
+                return b"IPC:" + buf.getvalue()
             try:
-                return json.dumps(data).encode("utf-8")
+                return b"JSON:" + json.dumps(data).encode("utf-8")
             except (TypeError, ValueError):
-                return json.dumps(data, default=str).encode("utf-8")
+                return b"JSON:" + json.dumps(data, default=str).encode("utf-8")
 
         except (ValueError, TypeError) as e:
             prov = self._client.__class__.__name__

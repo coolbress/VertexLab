@@ -216,6 +216,14 @@ def yfinance_router() -> YFinanceRouter:
     Returns:
         YFinanceRouter: Router instance configured with rate_limit=500 (requests/min).
     """
+    return YFinanceRouter(rate_limit=500, allow_pickle_compat=False)
+
+@pytest.fixture
+def yfinance_router_allow_pickle() -> YFinanceRouter:
+    """Create a YFinanceRouter with legacy pickle compatibility enabled (unsafe).
+    
+    This fixture is only for tests that require pickled payloads.
+    """
     return YFinanceRouter(rate_limit=500, allow_pickle_compat=True)
 
 @pytest.fixture

@@ -28,6 +28,7 @@ async def test_core_http_dispatch_library(monkeypatch):
             return fn()
     ex = HttpExecutor(client=Client())
     payload = await ex.fetch(spec)
-    obj = json.loads(payload.decode("utf-8"))
+    assert payload.startswith(b"JSON:")
+    obj = json.loads(payload[5:].decode("utf-8"))
     assert isinstance(obj, dict)
     assert obj.get("ok") == 1 or obj.get("ok") == "1"

@@ -265,19 +265,24 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             df_pl: pl.DataFrame | None = None
             read_ipc_err: Exception | None = None
             json_err: Exception | None = None
-            try:
-                df_pl = pl.read_ipc(io.BytesIO(payload))
-            except (PolarsError, ValueError, TypeError) as e:
-                read_ipc_err = e
+            if payload.startswith(b"IPC:"):
+                df_pl = pl.read_ipc(io.BytesIO(payload[4:]))
+            elif payload.startswith(b"JSON:"):
+                data_obj = json.loads(payload[5:].decode("utf-8"))
+            else:
                 try:
-                    data_obj = json.loads(payload.decode("utf-8"))
-                except (json.JSONDecodeError, UnicodeDecodeError) as je:
-                    json_err = je
-                    if self._allow_pickle_compat:
-                        data_obj = pickle.loads(payload)
-                    else:
-                        msg = f"IPC decode failed: {read_ipc_err}; JSON decode failed: {json_err}"
-                        raise ValueError(msg)
+                    df_pl = pl.read_ipc(io.BytesIO(payload))
+                except (PolarsError, ValueError, TypeError) as e:
+                    read_ipc_err = e
+                    try:
+                        data_obj = json.loads(payload.decode("utf-8"))
+                    except (json.JSONDecodeError, UnicodeDecodeError) as je:
+                        json_err = je
+                        if self._allow_pickle_compat:
+                            data_obj = pickle.loads(payload)
+                        else:
+                            msg = f"IPC decode failed: {read_ipc_err}; JSON decode failed: {json_err}"
+                            raise ValueError(msg)
             # -------- Convert to Polars --------
             
             is_batch = bool(job.context.get("is_batch", False))
