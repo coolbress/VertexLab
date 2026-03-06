@@ -18,7 +18,7 @@ from httpx import Response
 
 from vertex_forager.core.config import RequestSpec, HttpMethod, RequestAuth
 from vertex_forager.core.http import HttpExecutor
-import pickle
+import json
 
 
 class TestHttpExecutor:
@@ -270,7 +270,8 @@ class TestHttpExecutorYFinance:
             params={"dataset": "info", "lib": {"type": "ticker_attr", "attr": "info", "kwargs": {}}},
         )
         result = await http_executor.fetch(spec)
-        assert result == pickle.dumps({"ok": "yes"})
+        assert result.startswith(b"JSON:")
+        assert json.loads(result[5:].decode("utf-8")) == {"ok": "yes"}
         mock_async_client.run_async.assert_not_called()
         assert mock_async_client.run_sync.call_count == 1
 
@@ -292,7 +293,8 @@ class TestHttpExecutorYFinance:
             params={"dataset": "price", "lib": {"type": "download", "kwargs": {"period": "1d"}}},
         )
         result = await http_executor.fetch(spec)
-        assert result == pickle.dumps("downloaded")
+        assert result.startswith(b"JSON:")
+        assert json.loads(result[5:].decode("utf-8")) == "downloaded"
         mock_async_client.run_async.assert_not_called()
         assert mock_async_client.run_sync.call_count == 1
 

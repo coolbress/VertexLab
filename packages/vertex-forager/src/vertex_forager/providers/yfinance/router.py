@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import logging
 import os
-import pickle
 import time
+import io
+import json
+import pickle
 from collections.abc import AsyncIterator, Sequence
 import uuid
 from datetime import date, datetime, timezone
@@ -37,7 +39,7 @@ from vertex_forager.logging.constants import (
 
 import pandas as pd
 import polars as pl
-from polars.exceptions import ComputeError
+from polars.exceptions import ComputeError, PolarsError
 from vertex_forager.core.config import (
     FetchJob,
     FramePacket,
@@ -146,6 +148,13 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         else:
             v_verbose = os.getenv("VF_LOG_VERBOSE")
             self._log_verbose = _parse_bool(v_verbose)
+        allow_pickle_arg = kwargs.get("allow_pickle_compat")
+        if allow_pickle_arg is not None:
+            self._allow_pickle_compat = _parse_bool(allow_pickle_arg)
+        else:
+            # SECURITY: pickle compatibility is disabled by default
+            v_pickle = os.getenv("VF_ALLOW_PICKLE_COMPAT", "0")
+            self._allow_pickle_compat = _parse_bool(v_pickle)
 
     @property
     def provider(self) -> str:
@@ -251,16 +260,34 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             if empty_result:
                 return empty_result
 
-            # -------- Deserialize Pickle --------
-            
-            # SECURITY WARNING: pickle.loads can execute arbitrary code; only use with trusted sources.
-            # Raw Data from HttpExecutor
-            data = pickle.loads(payload)
-
+            # -------- Decode Payload --------
+            data_obj: Any | None = None
+            df_pl: pl.DataFrame | None = None
+            read_ipc_err: Exception | None = None
+            json_err: Exception | None = None
+            if payload.startswith(b"IPC:"):
+                df_pl = pl.read_ipc(io.BytesIO(payload[4:]))
+            elif payload.startswith(b"JSON:"):
+                data_obj = json.loads(payload[5:].decode("utf-8"))
+            else:
+                try:
+                    df_pl = pl.read_ipc(io.BytesIO(payload))
+                except (PolarsError, ValueError, TypeError) as e:
+                    read_ipc_err = e
+                    try:
+                        data_obj = json.loads(payload.decode("utf-8"))
+                    except (json.JSONDecodeError, UnicodeDecodeError) as je:
+                        json_err = je
+                        if self._allow_pickle_compat:
+                            data_obj = pickle.loads(payload)
+                        else:
+                            msg = f"IPC decode failed: {read_ipc_err}; JSON decode failed: {json_err}"
+                            raise ValueError(msg)
             # -------- Convert to Polars --------
             
             is_batch = bool(job.context.get("is_batch", False))
-            df_pl = self._convert_to_polars(data, is_batch=is_batch)
+            if df_pl is None:
+                df_pl = self._convert_to_polars(data_obj, is_batch=is_batch)
 
             # Check empty DataFrame using BaseRouter helper
             empty_result = self._check_empty_response(frame=df_pl)
