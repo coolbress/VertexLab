@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import logging
 import os
-import pickle
 import time
+import io
+import json
+import pickle
 from collections.abc import AsyncIterator, Sequence
 import uuid
 from datetime import date, datetime, timezone
@@ -251,16 +253,21 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             if empty_result:
                 return empty_result
 
-            # -------- Deserialize Pickle --------
-            
-            # SECURITY WARNING: pickle.loads can execute arbitrary code; only use with trusted sources.
-            # Raw Data from HttpExecutor
-            data = pickle.loads(payload)
-
+            # -------- Decode Payload --------
+            data_obj: Any | None = None
+            df_pl: pl.DataFrame | None = None
+            try:
+                df_pl = pl.read_ipc(io.BytesIO(payload))
+            except Exception:
+                try:
+                    data_obj = json.loads(payload.decode("utf-8"))
+                except Exception:
+                    data_obj = pickle.loads(payload)
             # -------- Convert to Polars --------
             
             is_batch = bool(job.context.get("is_batch", False))
-            df_pl = self._convert_to_polars(data, is_batch=is_batch)
+            if df_pl is None:
+                df_pl = self._convert_to_polars(data_obj, is_batch=is_batch)
 
             # Check empty DataFrame using BaseRouter helper
             empty_result = self._check_empty_response(frame=df_pl)

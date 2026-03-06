@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-import pickle
 import logging
 from typing import Any
 import re
 import httpx
+import io
+import json
+import polars as pl
+import pandas as pd
 try:
     import yfinance as yf  # test compatibility: allow monkeypatching core.http.yf
 except ImportError:
@@ -124,7 +127,7 @@ class HttpExecutor:
             spec: Request specification with a library URL scheme (e.g., yfinance://).
         
         Returns:
-            bytes: Pickled Python object returned from the library call.
+            bytes: Serialized payload (IPC for DataFrame-like, JSON for others).
         
         Raises:
             ValueError: Unsupported scheme or invalid library call configuration.
@@ -145,10 +148,20 @@ class HttpExecutor:
 
             # Use the client's run_sync method
             data = await self._client.run_sync(_execute)
-            
-            # Use pickle to preserve the exact Python object structure (Raw Data)
-            # This allows the Router to handle normalization and schema mapping properly.
-            return pickle.dumps(data)
+            # Serialize payload: IPC for DataFrame-like, JSON for others
+            if isinstance(data, pl.DataFrame):
+                buf = io.BytesIO()
+                data.write_ipc(buf)
+                return buf.getvalue()
+            if isinstance(data, (pd.DataFrame, pd.Series)):
+                df_pl = pl.from_pandas(data if not isinstance(data, pd.Series) else data.to_frame())
+                buf = io.BytesIO()
+                df_pl.write_ipc(buf)
+                return buf.getvalue()
+            try:
+                return json.dumps(data).encode("utf-8")
+            except (TypeError, ValueError):
+                return json.dumps(str(data)).encode("utf-8")
 
         except (ValueError, TypeError) as e:
             prov = self._client.__class__.__name__
