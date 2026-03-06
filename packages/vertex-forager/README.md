@@ -30,6 +30,7 @@ Status: Alpha • Python 3.10+ • License: MIT
 
 ```bash
 # Using pip
+pip install vertex-forager
 
 # Using uv
 uv pip install vertex-forager
@@ -111,7 +112,7 @@ client = create_client(provider="sharadar", api_key=os.environ["SHARADAR_API_KEY
 df = client.get_price_data(tickers=["AAPL", "MSFT"])
 print(df)
 
-res = client.get_price_data(tickers=["AAPL", "MSFT"], connect_db="duckdb://./forager.duckdb"])
+res = client.get_price_data(tickers=["AAPL", "MSFT"], connect_db="duckdb://./forager.duckdb")
 print(res)  # RunResult
 ```
 
