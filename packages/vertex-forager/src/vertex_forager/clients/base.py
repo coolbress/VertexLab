@@ -11,7 +11,6 @@ from typing import Any, Callable, AsyncGenerator, TypeVar, Generic, Union
 from types import TracebackType
 
 import httpx
-import warnings
 import polars as pl
 from tqdm.auto import tqdm
 
@@ -255,54 +254,56 @@ class BaseClient(ABC, Generic[T]):
             PrimaryKeyMissingError: When required PK columns are absent.
             PrimaryKeyNullError: When PK columns contain nulls.
         """
-        async with self._http_client():
-            http = HttpExecutor(client=self)
-            pipeline = VertexForager(
-                router=router,
-                http=http,
-                writer=writer,
-                mapper=mapper,
-                config=self._config,
-                controller=self.controller,
-            )
+        from vertex_forager.clients.validation import filter_reserved_kwargs
+        reserved = {
+            "router",
+            "dataset",
+            "symbols",
+            "writer",
+            "mapper",
+            "on_progress",
+            "http_executor_cls",
+            "vertex_forager_cls",
+        }
+        run_kwargs = filter_reserved_kwargs(kwargs, reserved)
 
-            from vertex_forager.clients.validation import filter_reserved_kwargs
-            reserved = {"router", "dataset", "symbols", "writer", "mapper", "on_progress"}
-            run_kwargs = filter_reserved_kwargs(kwargs, reserved)
+        # Structured log: start
+        if self._structured_logs:
+            sym_count = len(symbols or [])
+            attempt = self._safe_int(run_kwargs.get("attempt", 0))
+            msg_s = f"OBS provider={sanitize_field(router.provider)} dataset={sanitize_field(dataset)} symbol=* symbols={sym_count} stage=client_run_start attempt={attempt} duration=0.000s"
+            if self._log_verbose:
+                logger.info(msg_s)
+            else:
+                logger.debug(msg_s)
 
-            with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    "ignore",
-                    category=FutureWarning,
-                    module=r"pandas(\.|$)",
-                )
-                warnings.filterwarnings(
-                    "ignore",
-                    category=FutureWarning,
-                    module=r"yfinance(\.|$)",
-                )
-                if self._structured_logs:
-                    sym_count = len(symbols or [])
-                    attempt = self._safe_int(run_kwargs.get("attempt", 0))
-                    msg_s = f"OBS provider={sanitize_field(router.provider)} dataset={sanitize_field(dataset)} symbol=* symbols={sym_count} stage=client_run_start attempt={attempt} duration=0.000s"
-                    if self._log_verbose:
-                        logger.info(msg_s)
-                    else:
-                        logger.debug(msg_s)
-                t0 = time.monotonic()
-                self.last_run = await pipeline.run(
-                    dataset=dataset, symbols=symbols, on_progress=on_progress, **run_kwargs
-                )
-                if self._structured_logs:
-                    err_n = len(self.last_run.errors) if self.last_run else 0
-                    dur = time.monotonic() - t0
-                    attempt = self._safe_int(run_kwargs.get("attempt", 0))
-                    msg_e = f"OBS provider={sanitize_field(router.provider)} dataset={sanitize_field(dataset)} symbol=* stage=client_run_end errors={err_n} attempt={attempt} duration={dur:.3f}s"
-                    if self._log_verbose:
-                        logger.info(msg_e)
-                    else:
-                        logger.debug(msg_e)
-            return self.last_run
+        # Delegate orchestration to dispatcher
+        from vertex_forager.clients.dispatcher import run_pipeline_for
+        t0 = time.monotonic()
+        self.last_run = await run_pipeline_for(
+            client=self,
+            router=router,
+            dataset=dataset,
+            symbols=symbols,
+            writer=writer,
+            mapper=mapper,
+            on_progress=on_progress,
+            http_executor_cls=HttpExecutor,
+            vertex_forager_cls=VertexForager,
+            **run_kwargs,
+        )
+
+        # Structured log: end
+        if self._structured_logs:
+            err_n = len(self.last_run.errors) if self.last_run else 0
+            dur = time.monotonic() - t0
+            attempt = self._safe_int(run_kwargs.get("attempt", 0))
+            msg_e = f"OBS provider={sanitize_field(router.provider)} dataset={sanitize_field(dataset)} symbol=* stage=client_run_end errors={err_n} attempt={attempt} duration={dur:.3f}s"
+            if self._log_verbose:
+                logger.info(msg_e)
+            else:
+                logger.debug(msg_e)
+        return self.last_run
 
     @asynccontextmanager
     async def _http_client(self) -> AsyncGenerator[httpx.AsyncClient, None]:

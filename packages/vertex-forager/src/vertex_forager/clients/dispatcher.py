@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import warnings
-from typing import Callable, Any, TypeVar, Union, cast
+from typing import Callable, Any, TypeVar, Union, cast, Type, Optional
+from vertex_forager.core.http import HttpExecutor as DefaultHttpExecutor
+from vertex_forager.core.pipeline import VertexForager as DefaultVertexForager
 
-from vertex_forager.clients.base import HttpExecutor
 from vertex_forager.core.config import RunResult
 from vertex_forager.core.contracts import IRouter, IWriter, IMapper
 from vertex_forager.core.types import JSONValue, SharadarDataset, YFinanceDataset
@@ -19,6 +20,8 @@ async def run_pipeline_for(
     writer: IWriter,
     mapper: IMapper,
     on_progress: Callable[..., None] | None = None,
+    http_executor_cls: Optional[Type[Any]] = None,
+    vertex_forager_cls: Optional[Type[Any]] = None,
     **kwargs: JSONValue,
 ) -> RunResult:
     """Execute the VertexForager pipeline using the provided client context.
@@ -46,12 +49,10 @@ async def run_pipeline_for(
         PrimaryKeyMissingError: Required PK columns are missing.
         PrimaryKeyNullError: PK columns contain nulls.
     """
-    # Import VertexForager via base to allow test patching on vertex_forager.clients.base.VertexForager
-    from vertex_forager.clients.base import VertexForager
     from vertex_forager.constants import RESERVED_PIPELINE_KEYS
     async with client._http_client():
-        http = HttpExecutor(client=client)
-        pipeline = VertexForager(
+        http = (http_executor_cls or DefaultHttpExecutor)(client=client)
+        pipeline = (vertex_forager_cls or DefaultVertexForager)(
             router=router,
             http=http,
             writer=writer,
