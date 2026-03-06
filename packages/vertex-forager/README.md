@@ -5,6 +5,7 @@ Provider-agnostic data collection for financial markets. Centralized transport, 
 Status: Alpha • Python 3.10+ • License: MIT
 
 ## Table of Contents
+
 - Features
 - Installation
 - Quick Start
@@ -17,6 +18,7 @@ Status: Alpha • Python 3.10+ • License: MIT
 - License
 
 ## Features
+
 - Provider-agnostic core with centralized HTTP transport and retry
 - Scheme-based library fetchers (e.g., `yfinance://`) with safe invocation rules
 - Structured logs and error accumulation with `RunResult`
@@ -25,15 +27,16 @@ Status: Alpha • Python 3.10+ • License: MIT
 
 ## Installation
 
+
 ```bash
 # Using pip
-pip install vertex-forager
 
 # Using uv
 uv pip install vertex-forager
 ```
 
 ## Quick Start
+
 Use provider-specific clients directly (no manual router/writer setup).
 
 ### YFinance (library provider)
@@ -59,9 +62,10 @@ print(res)  # RunResult
 ### Sharadar (HTTP provider)
 
 ```python
+import os
 from vertex_forager import create_client
 
-client = create_client(provider="sharadar", api_key="YOUR_API_KEY", rate_limit=120)
+client = create_client(provider="sharadar", api_key=os.environ["SHARADAR_API_KEY"], rate_limit=120)
 df = client.get_price_data(tickers=["AAPL", "MSFT"])
 print(df)
 ```
@@ -69,23 +73,25 @@ print(df)
 Persist to DuckDB:
 
 ```python
+import os
 from vertex_forager import create_client
 
-client = create_client(provider="sharadar", api_key="YOUR_API_KEY", rate_limit=120)
+client = create_client(provider="sharadar", api_key=os.environ["SHARADAR_API_KEY"], rate_limit=120)
 res = client.get_price_data(tickers=["AAPL", "MSFT"], connect_db="duckdb://./forager.duckdb")
 print(res)  # RunResult
 ```
 
 ## Providers
+
 - Sharadar (Nasdaq Data Link): HTTP JSON; datasets include `price`, `daily`, `fundamental`, `actions`, `tickers`, `sp500`
 - YFinance: library-backed data via `yfinance://` scheme; datasets include `info`, `price`, `dividends`, `splits`, `actions`, `calendar`, `news`
 
 ## Provider Client Examples
 
+
 ### YFinanceClient
 
 ```python
-from vertex_forager import create_client
 
 client = create_client(provider="yfinance", rate_limit=60)
 df = client.get_price_data(tickers=["AAPL", "MSFT"])
@@ -98,17 +104,19 @@ print(res)  # RunResult
 ### SharadarClient
 
 ```python
+import os
 from vertex_forager import create_client
 
-client = create_client(provider="sharadar", api_key="YOUR_API_KEY", rate_limit=120)
+client = create_client(provider="sharadar", api_key=os.environ["SHARADAR_API_KEY"], rate_limit=120)
 df = client.get_price_data(tickers=["AAPL", "MSFT"])
 print(df)
 
-res = client.get_price_data(tickers=["AAPL", "MSFT"], connect_db="duckdb://./forager.duckdb")
+res = client.get_price_data(tickers=["AAPL", "MSFT"], connect_db="duckdb://./forager.duckdb"])
 print(res)  # RunResult
 ```
 
 ## Configuration
+
 - EngineConfig
   - `requests_per_minute`: positive integer (required)
   - `concurrency`: optional positive integer
@@ -120,6 +128,7 @@ print(res)  # RunResult
   - In-memory: `memory://`
 
 ## Usage Patterns
+
 - Transport decoupling: Routers are transport-agnostic; normalize after decoding
 - Scheme-based fetchers: non-HTTP library calls routed via plugin registry
 - Error handling:
@@ -128,6 +137,7 @@ print(res)  # RunResult
   - Retry exhaustion categorized as fetch-specific error
 
 ## Examples
+
 - Notebooks:
   - packages/vertex-forager/examples/sharadar.ipynb
   - packages/vertex-forager/examples/yfinance_examples.ipynb
@@ -136,6 +146,7 @@ print(res)  # RunResult
   - tests/verification/verify_pipeline_perf.py
 
 ## FAQ
+
 - Do I need an API key?
   - Sharadar requires `SHARADAR_API_KEY`; YFinance does not.
 - How do I change concurrency?
@@ -145,18 +156,20 @@ print(res)  # RunResult
 
 ## Public API
 
+
 ```python
 from vertex_forager import (
   SharadarClient, YFinanceClient,
   create_client, create_router,
-  EngineConfig, RunResult,
   FetchError, ValidationError, WriterError,
 )
 ```
 
 ## Contributing
+
 - Use uv for environment management; run ruff/mypy/pytest before PRs.
 - Keep provider-specific logic isolated in provider modules.
 
 ## License
+
 MIT
