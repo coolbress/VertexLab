@@ -255,7 +255,16 @@ class BaseClient(ABC, Generic[T]):
             PrimaryKeyNullError: When PK columns contain nulls.
         """
         from vertex_forager.clients.validation import filter_reserved_kwargs
-        reserved = {"router", "dataset", "symbols", "writer", "mapper", "on_progress"}
+        reserved = {
+            "router",
+            "dataset",
+            "symbols",
+            "writer",
+            "mapper",
+            "on_progress",
+            "http_executor_cls",
+            "vertex_forager_cls",
+        }
         run_kwargs = filter_reserved_kwargs(kwargs, reserved)
 
         # Structured log: start
