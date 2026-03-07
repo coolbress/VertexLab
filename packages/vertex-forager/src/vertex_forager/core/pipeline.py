@@ -26,6 +26,7 @@ import logging
 import time
 import itertools
 import httpx
+import os
 from typing import Any, TYPE_CHECKING, cast
 from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Sequence, Callable
@@ -60,7 +61,7 @@ from vertex_forager.core.controller import FlowController
 from vertex_forager.core.retry import create_retry_controller
 from vertex_forager.core.contracts import IRouter, IWriter, IMapper
 from vertex_forager.schema.registry import get_table_schema
-from vertex_forager.utils import sanitize_field
+from vertex_forager.utils import sanitize_field, get_cache_dir
 
 if TYPE_CHECKING:
     pass
@@ -638,6 +639,45 @@ class VertexForager:
             f"WRITER: Adaptive bulk writing enabled. Threshold={threshold} rows"
         )
 
+        async def _spool_to_dlq_and_rescue(table: str, packets: list[FramePacket], err: Exception) -> None:
+            first = packets[0]
+            fpath = None
+            try:
+                frames = [p.frame for p in packets]
+                try:
+                    merged = pl.concat(frames, how="vertical", rechunk=True)
+                except pl.exceptions.PolarsError:
+                    merged = pl.concat(frames, how="diagonal")
+                dlq_dir = get_cache_dir() / "dlq" / table
+                dlq_dir.mkdir(parents=True, exist_ok=True)
+                ts = int(time.time() * 1000)
+                fpath = dlq_dir / f"batch_{ts}.ipc"
+                merged.write_ipc(fpath)
+                try:
+                    os.chmod(fpath, 0o600)
+                except Exception:
+                    pass
+                self._log_structured(provider=first.provider, dataset=table, symbol=None, stage="dlq_spooled")
+            except Exception as e_spool:
+                async with result_lock:
+                    result.errors.append(f"DLQSpoolError:{table}:{type(e_spool).__name__}:{e_spool}")
+            rescued = 0
+            remaining = 0
+            for pkt in packets:
+                try:
+                    wr = await self._writer.write(pkt)
+                    async with result_lock:
+                        result.tables[wr.table] = result.tables.get(wr.table, 0) + wr.rows
+                    rescued += 1
+                except Exception as e2:
+                    async with result_lock:
+                        if fpath is not None:
+                            result.errors.append(f"DLQ:{table}:{str(fpath)}:{type(err).__name__}:{err}")
+                        result.errors.append(f"DLQItem:{table}:{type(e2).__name__}:{e2}")
+                    remaining += 1
+            self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_rescued_{rescued}")
+            self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_remaining_{remaining}")
+
         async def flush(table: str) -> None:
             """Flush the buffer for a specific table.
 
@@ -705,6 +745,7 @@ class VertexForager:
                 async with result_lock:
                     result.errors.append(f"WriterError:{table}:{e}")
                     self._inc("errors_total", 1)
+                await _spool_to_dlq_and_rescue(table, packets, e)
                 buffers[table] = []
                 buffer_rows[table] = 0
                 if isinstance(e, PrimaryKeyMissingError):
@@ -719,6 +760,7 @@ class VertexForager:
                     async with result_lock:
                         result.errors.append(f"DuckDBError:{table}:{e}")
                         self._inc("errors_total", 1)
+                    await _spool_to_dlq_and_rescue(table, packets, e)
                     buffers[table] = []
                     buffer_rows[table] = 0
                     logger.exception(f"WRITER: DuckDB error for {table}: {e}")
@@ -726,6 +768,7 @@ class VertexForager:
                     async with result_lock:
                         result.errors.append(f"UnexpectedWriterError:{table}:{e}")
                         self._inc("errors_total", 1)
+                    await _spool_to_dlq_and_rescue(table, packets, e)
                     buffers[table] = []
                     buffer_rows[table] = 0
                     logger.exception(f"WRITER: Unexpected error writing batch for {table}: {e}")
