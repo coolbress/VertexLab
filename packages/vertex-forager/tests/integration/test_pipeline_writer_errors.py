@@ -71,5 +71,11 @@ async def test_pipeline_records_writer_validation_errors(tmp_path: Path) -> None
         assert isinstance(res, RunResult)
         assert any(err.startswith("WriterError:yfinance_price:") for err in res.errors)
         assert any("DLQ" in err for err in res.errors)
+        # Verify DLQ IPC file exists and is readable
+        dlq_dir = tmp_path / "app" / "cache" / "dlq" / "yfinance_price"
+        files = list(dlq_dir.glob("batch_*.ipc"))
+        assert len(files) >= 1
+        df = pl.read_ipc(files[0])
+        assert df.shape[0] >= 1
     finally:
         await writer.close()

@@ -146,11 +146,16 @@ async def test_dlq_spool_and_per_packet_rescue(tmp_path) -> None:
     async def _write_ok(pkt: FramePacket) -> WriteResult:
         return WriteResult(table=pkt.table, rows=len(pkt.frame))
 
-    mock_writer.write.side_effect = [
-        Exception("Disk Full"),
-        _write_ok,  # first packet rescue success
-        Exception("Row Error"),  # second packet rescue failure
-    ]
+    call_count = {"n": 0}
+    async def write_side_effect(pkt: FramePacket) -> WriteResult:
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            raise Exception("Disk Full")  # merged write fails
+        elif call_count["n"] == 2:
+            return WriteResult(table=pkt.table, rows=len(pkt.frame))
+        else:
+            raise Exception("Row Error")
+    mock_writer.write.side_effect = write_side_effect
 
     mock_router = MagicMock()
     mock_http = MagicMock()
@@ -178,4 +183,42 @@ async def test_dlq_spool_and_per_packet_rescue(tmp_path) -> None:
         await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
 
     assert any(err.startswith("DLQItem:fail_test:") for err in result.errors)
-    assert "DLQSummary:fail_test:" in "\n".join(result.errors) or True
+    assert "DLQSummary:fail_test:" not in "\n".join(result.errors)
+    assert result.tables.get("fail_test", 0) == 1
+
+@pytest.mark.asyncio
+async def test_dlq_summary_after_consecutive_failures(tmp_path) -> None:
+    os.environ["VERTEXFORAGER_ROOT"] = str(tmp_path / "app")
+
+    mock_writer = AsyncMock(spec=BaseWriter)
+    async def write_side_effect(pkt: FramePacket) -> WriteResult:
+        raise Exception("Disk Full")
+    mock_writer.write.side_effect = write_side_effect
+
+    mock_router = MagicMock()
+    mock_http = MagicMock()
+    mock_mapper = MagicMock()
+    mock_controller = MagicMock()
+
+    forager = VertexForager(
+        router=mock_router,
+        http=mock_http,
+        writer=mock_writer,
+        mapper=mock_mapper,
+        config=EngineConfig(requests_per_minute=100),
+        controller=mock_controller,
+    )
+
+    pkt_q: "asyncio.Queue[FramePacket | None]" = asyncio.Queue()
+    result = RunResult(provider="test")
+    result_lock = asyncio.Lock()
+
+    for i in range(4):
+        pkt_q.put_nowait(FramePacket(provider="test", table="fail_test", frame=pl.DataFrame({"id": [i]}), observed_at=datetime.now()))
+    pkt_q.put_nowait(None)
+
+    with pytest.raises(Exception, match="Disk Full"):
+        await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
+
+    errors_text = "\n".join(result.errors)
+    assert "DLQSummary:fail_test:" in errors_text

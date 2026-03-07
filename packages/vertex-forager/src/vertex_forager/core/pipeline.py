@@ -643,42 +643,8 @@ class VertexForager:
             if not packets:
                 return
             first = packets[0]
-            fpath = None
-            try:
-                frames = [p.frame for p in packets]
-                try:
-                    merged = pl.concat(frames, how="vertical", rechunk=True)
-                except pl.exceptions.PolarsError:
-                    merged = pl.concat(frames, how="diagonal")
-                dlq_dir = get_cache_dir() / "dlq" / table
-                dlq_dir.mkdir(parents=True, exist_ok=True)
-                ts = int(time.time() * 1000)
-                fpath = dlq_dir / f"batch_{ts}.ipc"
-                tmp_path = fpath.parent / (fpath.name + ".tmp")
-                with open(tmp_path, "wb") as fh:
-                    merged.write_ipc(fh)
-                    fh.flush()
-                    os.fsync(fh.fileno())
-                os.replace(tmp_path, fpath)
-                try:
-                    dir_fd = os.open(str(dlq_dir), os.O_RDONLY)
-                    try:
-                        os.fsync(dir_fd)
-                    finally:
-                        os.close(dir_fd)
-                except Exception:
-                    pass
-                try:
-                    os.chmod(fpath, 0o600)
-                except Exception:
-                    pass
-                self._log_structured(provider=first.provider, dataset=table, symbol=None, stage="dlq_spooled")
-            except Exception as e_spool:
-                async with result_lock:
-                    result.errors.append(f"DLQSpoolError:{table}:{type(e_spool).__name__}:{e_spool}")
             rescued = 0
-            remaining = 0
-            original_err_logged = False
+            failed_packets: list[FramePacket] = []
             max_consecutive_failures = 3
             consecutive_failures = 0
             for pkt in packets:
@@ -689,19 +655,52 @@ class VertexForager:
                     rescued += 1
                     consecutive_failures = 0
                 except Exception as e2:
+                    failed_packets.append(pkt)
                     async with result_lock:
-                        if fpath is not None and not original_err_logged:
-                            result.errors.append(f"DLQ:{table}:{str(fpath)}:{type(err).__name__}:{err}")
-                            original_err_logged = True
                         result.errors.append(f"DLQItem:{table}:{type(e2).__name__}:{e2}")
-                    remaining += 1
                     consecutive_failures += 1
                     if consecutive_failures >= max_consecutive_failures:
-                        leftover = len(packets) - (rescued + remaining)
+                        leftover = len(packets) - (rescued + len(failed_packets))
                         if leftover > 0:
                             async with result_lock:
                                 result.errors.append(f"DLQSummary:{table}:consecutive_failures={consecutive_failures}:remaining={leftover}")
                         break
+            remaining = len(failed_packets)
+            if remaining > 0:
+                try:
+                    frames = [p.frame for p in failed_packets]
+                    try:
+                        merged = pl.concat(frames, how="vertical", rechunk=True)
+                    except pl.exceptions.PolarsError:
+                        merged = pl.concat(frames, how="diagonal")
+                    dlq_dir = get_cache_dir() / "dlq" / table
+                    dlq_dir.mkdir(parents=True, exist_ok=True)
+                    ts_ns = time.time_ns()
+                    fpath = dlq_dir / f"batch_{ts_ns}.ipc"
+                    tmp_path = fpath.parent / (f"{fpath.name}.tmp")
+                    with open(tmp_path, "wb") as fh:
+                        merged.write_ipc(fh)
+                        fh.flush()
+                        os.fsync(fh.fileno())
+                    os.replace(tmp_path, fpath)
+                    try:
+                        dir_fd = os.open(str(dlq_dir), os.O_RDONLY)
+                        try:
+                            os.fsync(dir_fd)
+                        finally:
+                            os.close(dir_fd)
+                    except Exception:
+                        pass
+                    try:
+                        os.chmod(fpath, 0o600)
+                    except Exception:
+                        pass
+                    self._log_structured(provider=first.provider, dataset=table, symbol=None, stage="dlq_spooled")
+                    async with result_lock:
+                        result.errors.append(f"DLQ:{table}:{str(fpath)}:{type(err).__name__}:{err}")
+                except Exception as e_spool:
+                    async with result_lock:
+                        result.errors.append(f"DLQSpoolError:{table}:{type(e_spool).__name__}:{e_spool}")
             self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_rescued_{rescued}")
             self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_remaining_{remaining}")
 
