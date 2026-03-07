@@ -61,7 +61,7 @@ from vertex_forager.core.controller import FlowController
 from vertex_forager.core.retry import create_retry_controller
 from vertex_forager.core.contracts import IRouter, IWriter, IMapper
 from vertex_forager.schema.registry import get_table_schema
-from vertex_forager.utils import sanitize_field, get_cache_dir
+from vertex_forager.utils import sanitize_field, get_cache_dir, cleanup_dlq_tmp
 
 if TYPE_CHECKING:
     pass
@@ -266,6 +266,13 @@ class VertexForager:
         pkt_q: asyncio.Queue[FramePacket | None] = asyncio.Queue(
             maxsize=self._config.queue_max
         )
+        # Periodic cleanup of stale DLQ temp files
+        if getattr(self._config, "dlq_tmp_periodic_cleanup", False):
+            try:
+                cleanup_dlq_tmp(int(getattr(self._config, "dlq_tmp_retention_s", 86400)))
+            except Exception as _e_clean:
+                logger.warning("PIPELINE: DLQ periodic cleanup failed: %s", _e_clean)
+
         if self._metrics_enabled:
             self._counters = {}
             self._hists = {}
@@ -702,6 +709,21 @@ class VertexForager:
                     async with result_lock:
                         result.errors.append(f"DLQ:{table}:{str(fpath)}:{type(err).__name__}:{err}")
                 except Exception as e_spool:
+                    # On-error cleanup of tmp
+                    if getattr(self._config, "dlq_tmp_cleanup_on_error", False):
+                        try:
+                            if "tmp_path" in locals() and tmp_path.exists():
+                                tmp_path.unlink()
+                                try:
+                                    dir_fd = os.open(str(tmp_path.parent), os.O_RDONLY)
+                                    try:
+                                        os.fsync(dir_fd)
+                                    finally:
+                                        os.close(dir_fd)
+                                except Exception:
+                                    pass
+                        except Exception as _e_del:
+                            logger.warning("DLQ tmp on-error cleanup failed for %s: %s", tmp_path, _e_del)
                     async with result_lock:
                         result.errors.append(f"DLQSpoolError:{table}:{type(e_spool).__name__}:{e_spool}")
             self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_rescued_{rescued}")
