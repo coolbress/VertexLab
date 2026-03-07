@@ -171,6 +171,15 @@ from vertex_forager import (
 - Use uv for environment management; run ruff/mypy/pytest before PRs.
 - Keep provider-specific logic isolated in provider modules.
 
+## Server-side HTTP Status Retry
+
+- Configurable retries for specific HTTP status codes (default: 429, 503).
+- Controlled exponential backoff with max attempts; transport errors continue to retry.
+- Configuration:
+  - EngineConfig.retry.enable_http_status_retry: bool (default True)
+  - EngineConfig.retry.retry_status_codes: tuple[int, ...] (default (429, 503))
+- Structured logs include retry attempt metadata when enabled.
+
 ## License
 
 MIT
