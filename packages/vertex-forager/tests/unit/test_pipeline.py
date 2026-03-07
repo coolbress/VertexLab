@@ -142,9 +142,6 @@ async def test_dlq_spool_and_per_packet_rescue(tmp_path, monkeypatch) -> None:
 
     mock_writer = AsyncMock(spec=BaseWriter)
 
-    async def _write_ok(pkt: FramePacket) -> WriteResult:
-        return WriteResult(table=pkt.table, rows=len(pkt.frame))
-
     call_count = {"n": 0}
     async def write_side_effect(pkt: FramePacket) -> WriteResult:
         call_count["n"] += 1
