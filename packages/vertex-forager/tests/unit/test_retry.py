@@ -100,3 +100,14 @@ async def test_backoff_sequence_exponential():
     d1 = starts[1] - starts[0]
     d2 = starts[2] - starts[1]
     assert d2 >= d1
+
+
+@pytest.mark.asyncio
+async def test_retry_exhaustion_reraises_transport_error():
+    cfg = RetryConfig(max_attempts=3, base_backoff_s=0.005, max_backoff_s=0.02)
+    controller = create_retry_controller(cfg)
+    with pytest.raises(httpx.TransportError):
+        async for attempt in controller:
+            with attempt:
+                req = httpx.Request("GET", "http://test")
+                raise httpx.TransportError("persistent failure", request=req)
