@@ -12,7 +12,6 @@ from datetime import datetime
 import polars as pl
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-import os
 
 from vertex_forager.core.pipeline import VertexForager, RunResult
 from vertex_forager.core.config import FramePacket, EngineConfig
@@ -138,8 +137,8 @@ async def test_writer_failure_propagates_exception() -> None:
 
 
 @pytest.mark.asyncio
-async def test_dlq_spool_and_per_packet_rescue(tmp_path) -> None:
-    os.environ["VERTEXFORAGER_ROOT"] = str(tmp_path / "app")
+async def test_dlq_spool_and_per_packet_rescue(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "app"))
 
     mock_writer = AsyncMock(spec=BaseWriter)
 
@@ -187,8 +186,8 @@ async def test_dlq_spool_and_per_packet_rescue(tmp_path) -> None:
     assert result.tables.get("fail_test", 0) == 1
 
 @pytest.mark.asyncio
-async def test_dlq_summary_after_consecutive_failures(tmp_path) -> None:
-    os.environ["VERTEXFORAGER_ROOT"] = str(tmp_path / "app")
+async def test_dlq_summary_after_consecutive_failures(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "app"))
 
     mock_writer = AsyncMock(spec=BaseWriter)
     async def write_side_effect(pkt: FramePacket) -> WriteResult:
@@ -222,3 +221,10 @@ async def test_dlq_summary_after_consecutive_failures(tmp_path) -> None:
 
     errors_text = "\n".join(result.errors)
     assert "DLQSummary:fail_test:" in errors_text
+    # Verify DLQ IPC contains all 4 ids
+    dlq_dir = tmp_path / "app" / "cache" / "dlq" / "fail_test"
+    files = list(dlq_dir.glob("batch_*.ipc"))
+    assert len(files) >= 1
+    df = pl.read_ipc(files[0])
+    assert df.shape[0] == 4
+    assert set(df.get_column("id").to_list()) == {0, 1, 2, 3}

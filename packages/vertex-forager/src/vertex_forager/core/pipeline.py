@@ -660,8 +660,11 @@ class VertexForager:
                         result.errors.append(f"DLQItem:{table}:{type(e2).__name__}:{e2}")
                     consecutive_failures += 1
                     if consecutive_failures >= max_consecutive_failures:
-                        leftover = len(packets) - (rescued + len(failed_packets))
-                        if leftover > 0:
+                        processed = rescued + len(failed_packets)
+                        if processed < len(packets):
+                            # Append remaining unprocessed packets to fail list to ensure they are spooled
+                            failed_packets.extend(packets[processed:])
+                            leftover = len(packets) - processed
                             async with result_lock:
                                 result.errors.append(f"DLQSummary:{table}:consecutive_failures={consecutive_failures}:remaining={leftover}")
                         break
