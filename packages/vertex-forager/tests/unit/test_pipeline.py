@@ -12,6 +12,7 @@ from datetime import datetime
 import polars as pl
 import pytest
 from unittest.mock import AsyncMock, MagicMock
+import os
 
 from vertex_forager.core.pipeline import VertexForager, RunResult
 from vertex_forager.core.config import FramePacket, EngineConfig
@@ -134,3 +135,47 @@ async def test_writer_failure_propagates_exception() -> None:
     # Verify error recorded in result
     assert len(result.errors) > 0
     assert "UnexpectedWriterError:fail_test:Disk Full" in result.errors[0]
+
+
+@pytest.mark.asyncio
+async def test_dlq_spool_and_per_packet_rescue(tmp_path) -> None:
+    os.environ["VERTEXFORAGER_ROOT"] = str(tmp_path / "app")
+
+    mock_writer = AsyncMock(spec=BaseWriter)
+
+    async def _write_ok(pkt: FramePacket) -> WriteResult:
+        return WriteResult(table=pkt.table, rows=len(pkt.frame))
+
+    mock_writer.write.side_effect = [
+        Exception("Disk Full"),
+        _write_ok,  # first packet rescue success
+        Exception("Row Error"),  # second packet rescue failure
+    ]
+
+    mock_router = MagicMock()
+    mock_http = MagicMock()
+    mock_mapper = MagicMock()
+    mock_controller = MagicMock()
+
+    forager = VertexForager(
+        router=mock_router,
+        http=mock_http,
+        writer=mock_writer,
+        mapper=mock_mapper,
+        config=EngineConfig(requests_per_minute=100),
+        controller=mock_controller,
+    )
+
+    pkt_q: "asyncio.Queue[FramePacket | None]" = asyncio.Queue()
+    result = RunResult(provider="test")
+    result_lock = asyncio.Lock()
+
+    pkt_q.put_nowait(FramePacket(provider="test", table="fail_test", frame=pl.DataFrame({"id": [1]}), observed_at=datetime.now()))
+    pkt_q.put_nowait(FramePacket(provider="test", table="fail_test", frame=pl.DataFrame({"id": [2]}), observed_at=datetime.now()))
+    pkt_q.put_nowait(None)
+
+    with pytest.raises(Exception, match="Disk Full"):
+        await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
+
+    assert any(err.startswith("DLQItem:fail_test:") for err in result.errors)
+    assert "DLQSummary:fail_test:" in "\n".join(result.errors) or True

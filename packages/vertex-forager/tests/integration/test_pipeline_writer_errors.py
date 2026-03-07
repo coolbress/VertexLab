@@ -12,6 +12,7 @@ from vertex_forager.core.config import EngineConfig, RunResult, FetchJob, Reques
 from vertex_forager.core.contracts import IRouter, IMapper
 from vertex_forager.writers.duckdb import DuckDBWriter
 from vertex_forager.core.pipeline import VertexForager
+import os
 from vertex_forager.core.http import HttpExecutor
 
 
@@ -59,6 +60,7 @@ class StubMapper(IMapper):
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_pipeline_records_writer_validation_errors(tmp_path: Path) -> None:
+    os.environ["VERTEXFORAGER_ROOT"] = str(tmp_path / "app")
     client = StubClient()
     router = StubRouter()
     writer = DuckDBWriter(str(tmp_path / "err.duckdb"))
@@ -68,5 +70,6 @@ async def test_pipeline_records_writer_validation_errors(tmp_path: Path) -> None
         res = await pipeline.run(dataset="price", symbols=None)
         assert isinstance(res, RunResult)
         assert any(err.startswith("WriterError:yfinance_price:") for err in res.errors)
+        assert any("DLQ" in err for err in res.errors)
     finally:
         await writer.close()
