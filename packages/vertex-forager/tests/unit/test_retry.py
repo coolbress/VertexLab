@@ -106,8 +106,11 @@ async def test_backoff_sequence_exponential():
 async def test_retry_exhaustion_reraises_transport_error():
     cfg = RetryConfig(max_attempts=3, base_backoff_s=0.005, max_backoff_s=0.02)
     controller = create_retry_controller(cfg)
+    attempts = 0
     with pytest.raises(httpx.TransportError):
         async for attempt in controller:
             with attempt:
+                attempts += 1
                 req = httpx.Request("GET", "http://test")
                 raise httpx.TransportError("persistent failure", request=req)
+    assert attempts == cfg.max_attempts
