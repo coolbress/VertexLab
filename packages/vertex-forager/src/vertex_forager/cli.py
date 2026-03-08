@@ -779,6 +779,15 @@ def tune_export_best(output_dir: Path | None, write_file: Path | None) -> None:
 def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None, dry_run: bool, delete_on_success: bool, clean_tmp: bool, retention_s: int, report: Path | None, progress: bool, verbose: bool, strict: bool) -> None:
     """Recover failed DLQ batches into the target DuckDB database.
     
+    Usage:
+        vertex-forager recover --dir "$VERTEXFORAGER_ROOT/cache/dlq" --dry-run --report /tmp/dlq_report.json
+        vertex-forager recover --table sharadar_sf1 --dir "$VERTEXFORAGER_ROOT/cache/dlq" --db /path/to/target.duckdb --delete-on-success
+        vertex-forager recover --dir "$VERTEXFORAGER_ROOT/cache/dlq" --dry-run --strict --progress
+    
+    Caution:
+        Deletion occurs only after a successful writer close.
+        Prefer --dry-run first to preview counts and affected files.
+    
     Args:
         dlq_dir: Base DLQ directory containing per-table subdirectories.
         tables: Specific table(s) to recover; if empty, recover all.
@@ -788,6 +797,9 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
         clean_tmp: Remove stale .ipc.tmp files before recovery.
         retention_s: Age threshold for cleaning .ipc.tmp files.
         report: Optional path to write a JSON summary.
+        progress: Show per-file progress output.
+        verbose: Print per-file details without requiring --report.
+        strict: Exit non-zero if any failures occur.
     """
     try:
         base = dlq_dir or (get_cache_dir() / "dlq")
