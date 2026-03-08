@@ -171,6 +171,7 @@
 | Reports | Keep last N runs (e.g., 30) | Audit and forensic trail |
 
 ## Diagrams
+
 - High-level Flow
 
 ```mermaid
