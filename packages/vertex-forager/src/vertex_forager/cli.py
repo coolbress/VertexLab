@@ -846,26 +846,28 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
                 file_reports: list[dict[str, Any]] = []
                 for f in ipc_files:
                     try:
+                        df_rows = 0
                         df = pl.read_ipc(f)
-                        rows_scanned += int(df.height)
+                        df_rows = int(df.height)
+                        rows_scanned += df_rows
                         if progress_flag:
-                            click.echo(f"[scan] {table} {f.name} rows={int(df.height)}")
+                            click.echo(f"[scan] {table} {f.name} rows={df_rows}")
                         if dry:
-                            file_reports.append({"file": str(f), "rows": int(df.height), "status": "scanned"})
+                            file_reports.append({"file": str(f), "rows": df_rows, "status": "scanned"})
                             continue
                         pkt = FramePacket(provider="dlq", table=table, frame=df, observed_at=datetime.now())
                         if w is None:
                             raise RuntimeError("recover: writer is not initialized")
                         res = await w.write(pkt)
                         rows_written += int(res.rows)
-                        file_reports.append({"file": str(f), "rows": int(df.height), "status": "written"})
+                        file_reports.append({"file": str(f), "rows": df_rows, "status": "written"})
                         if progress_flag:
                             click.echo(f"[write] {table} {f.name} rows={int(res.rows)}")
                         if deletes:
                             del_cand.setdefault(table, []).append(f)
                     except Exception as e:
-                        summ["errors"].append(f"RecoverFail:{table}:{f}:{e}")
-                        file_reports.append({"file": str(f), "rows": 0, "status": "failed", "error": str(e)})
+                        summ["errors"].append(f"RecoverFail:{table}:{f}:rows={locals().get('df_rows', 0)}:{e}")
+                        file_reports.append({"file": str(f), "rows": locals().get("df_rows", 0), "status": "failed", "error": str(e)})
                 return {"files_scanned": len(ipc_files), "rows_scanned": rows_scanned, "rows_written": rows_written, "details": file_reports}
             def _process_deletions(del_cand: dict[str, list[Path]], summ: dict[str, Any], deletes: bool, dry: bool, closed_ok_flag: bool) -> None:
                 if deletes and not dry and closed_ok_flag:
