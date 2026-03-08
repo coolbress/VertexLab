@@ -834,9 +834,11 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
         async def _run() -> None:
             writer: DuckDBWriter | None = None
             delete_candidates: dict[str, list[Path]] = {}
-            async def _scan_table(table: str, base_dir: Path, progress_flag: bool, dry: bool, w: DuckDBWriter | None, deletes: bool, del_cand: dict[str, list[Path]], summ: dict[str, Any]) -> dict[str, Any] | None:
+            async def _scan_table(table: str, base_dir: Path, progress_flag: bool, dry: bool, w: DuckDBWriter | None, deletes: bool, del_cand: dict[str, list[Path]], summ: dict[str, Any], is_explicit: bool) -> dict[str, Any] | None:
                 tbl_dir = base_dir / table
                 if not tbl_dir.exists():
+                    if is_explicit:
+                        summ["errors"].append(f"RecoverFail:{table}:{tbl_dir}:missing_table")
                     return None
                 ipc_files = sorted([p for p in tbl_dir.glob("batch_*.ipc") if p.is_file()])
                 rows_scanned = 0
@@ -863,6 +865,7 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
                             del_cand.setdefault(table, []).append(f)
                     except Exception as e:
                         summ["errors"].append(f"RecoverFail:{table}:{f}:{e}")
+                        file_reports.append({"file": str(f), "rows": 0, "status": "failed", "error": str(e)})
                 return {"files_scanned": len(ipc_files), "rows_scanned": rows_scanned, "rows_written": rows_written, "details": file_reports}
             def _process_deletions(del_cand: dict[str, list[Path]], summ: dict[str, Any], deletes: bool, dry: bool, closed_ok_flag: bool) -> None:
                 if deletes and not dry and closed_ok_flag:
@@ -907,8 +910,13 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
                     if target_db is None:
                         raise RuntimeError("recover: missing target DB")
                     writer = DuckDBWriter(target_db)
+                # Determine explicit tables set for error signaling on missing directories
+                explicit_set: set[str] = set()
+                if tables:
+                    raw_tables_local = [t.strip() for t in tables if t and t.strip()]
+                    explicit_set = set(raw_tables_local)
                 for tbl in selected_tables:
-                    result = await _scan_table(tbl, base, progress, dry_run, writer, delete_on_success, delete_candidates, summary)
+                    result = await _scan_table(tbl, base, progress, dry_run, writer, delete_on_success, delete_candidates, summary, tbl in explicit_set)
                     if result is not None:
                         summary["tables"][tbl] = result
             finally:
