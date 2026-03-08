@@ -723,7 +723,8 @@ class VertexForager:
                     ts_ns = time.time_ns()
                     fpath = dlq_dir / f"batch_{ts_ns}.ipc"
                     tmp_path = fpath.parent / (f"{fpath.name}.tmp")
-                    with open(tmp_path, "wb") as fh:
+                    fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                    with os.fdopen(fd, "wb") as fh:
                         merged.write_ipc(fh)
                         fh.flush()
                         os.fsync(fh.fileno())
@@ -734,10 +735,6 @@ class VertexForager:
                             os.fsync(dir_fd)
                         finally:
                             os.close(dir_fd)
-                    except Exception:
-                        pass
-                    try:
-                        os.chmod(fpath, 0o600)
                     except Exception:
                         pass
                     self._log_structured(provider=first.provider, dataset=table, symbol=None, stage="dlq_spooled")
@@ -759,6 +756,11 @@ class VertexForager:
                                     pass
                         except Exception as _e_del:
                             logger.warning("DLQ tmp on-error cleanup failed for %s: %s", tmp_path, _e_del)
+                    # Preserve failed packets for post-mortem handling
+                    async with result_lock:
+                        pending = result.dlq_pending.get(table, [])
+                        pending.extend(failed_packets)
+                        result.dlq_pending[table] = pending
                     async with result_lock:
                         result.errors.append(f"DLQSpoolError:{table}:{type(e_spool).__name__}:{e_spool}")
                     raise

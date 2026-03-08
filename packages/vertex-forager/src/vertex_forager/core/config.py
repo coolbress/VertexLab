@@ -240,6 +240,7 @@ class RunResult(BaseModel):
     metrics_counters: dict[str, int] = Field(default_factory=dict)
     metrics_histograms: dict[str, list[float]] = Field(default_factory=dict)
     metrics_summary: dict[str, float] = Field(default_factory=dict)
+    dlq_pending: dict[str, list[FramePacket]] = Field(default_factory=dict)
 
     def add_rows(self, *, table: str, rows: int) -> None:
         self.tables[table] = self.tables.get(table, 0) + rows

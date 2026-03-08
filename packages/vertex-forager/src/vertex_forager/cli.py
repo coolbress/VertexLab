@@ -818,12 +818,12 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
         summary: dict[str, Any] = {"base": str(base), "db": str(target_db) if target_db else None, "dry_run": dry_run, "tables": {}, "errors": []}
         async def _run() -> None:
             writer: DuckDBWriter | None = None
+            delete_candidates: dict[str, list[Path]] = {}
             try:
                 if not dry_run:
                     if target_db is None:
                         raise RuntimeError("recover: missing target DB")
                     writer = DuckDBWriter(target_db)
-                delete_candidates: dict[str, list[Path]] = {}
                 for tbl in selected_tables:
                     tbl_dir = base / tbl
                     if not tbl_dir.exists():
