@@ -232,6 +232,9 @@ class RunResult(BaseModel):
         provider: Data provider name.
         tables: Dictionary mapping table names to row counts (default: empty dict).
         errors: List of error messages encountered (default: empty list).
+        dlq_pending: Packets preserved for post-mortem/dead-letter processing when DLQ spool/dispatch fails.
+            Keys are table names and values are lists of FramePacket instances. Items are appended by
+            writer/rescue logic upon spool errors and can be consumed by operator recovery flows.
     """
 
     provider: str
@@ -240,7 +243,10 @@ class RunResult(BaseModel):
     metrics_counters: dict[str, int] = Field(default_factory=dict)
     metrics_histograms: dict[str, list[float]] = Field(default_factory=dict)
     metrics_summary: dict[str, float] = Field(default_factory=dict)
-    dlq_pending: dict[str, list[FramePacket]] = Field(default_factory=dict)
+    dlq_pending: dict[str, list[FramePacket]] = Field(
+        default_factory=dict,
+        description="Packets preserved per table for post-mortem DLQ handling when spool/dispatch fails",
+    )
 
     def add_rows(self, *, table: str, rows: int) -> None:
         self.tables[table] = self.tables.get(table, 0) + rows
