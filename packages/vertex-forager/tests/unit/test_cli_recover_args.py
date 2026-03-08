@@ -1,15 +1,15 @@
-import os
 import json
 import polars as pl
 from pathlib import Path
 from click.testing import CliRunner
+import pytest
 from vertex_forager.cli import main
 from vertex_forager.utils import get_cache_dir
 
 
-def _make_dlq(tmp_path: Path, table: str, rows: int = 3) -> Path:
+def _make_dlq(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, table: str, rows: int = 3) -> Path:
     base = tmp_path / "app"
-    os.environ["VERTEXFORAGER_ROOT"] = str(base)
+    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(base))
     dlq_tbl = get_cache_dir() / "dlq" / table
     dlq_tbl.mkdir(parents=True, exist_ok=True)
     df = pl.DataFrame({"a": list(range(rows))})
@@ -19,25 +19,25 @@ def _make_dlq(tmp_path: Path, table: str, rows: int = 3) -> Path:
     return dlq_tbl
 
 
-def test_recover_dedup_tables_argument_parsing(tmp_path):
-    _make_dlq(tmp_path, "t1")
+def test_recover_dedup_tables_argument_parsing(tmp_path, monkeypatch: pytest.MonkeyPatch):
+    _make_dlq(tmp_path, monkeypatch, "t1")
     runner = CliRunner()
     res = runner.invoke(main, ["recover", "--dir", str(get_cache_dir() / "dlq"), "--table", "t1", "--table", "t1", "--dry-run"])
     assert res.exit_code == 0
     assert "✅ Recover summary:" in res.output
 
 
-def test_recover_env_db_empty_rejected(tmp_path):
-    _make_dlq(tmp_path, "t2")
-    os.environ["VF_RECOVER_DB"] = ""
+def test_recover_env_db_empty_rejected(tmp_path, monkeypatch: pytest.MonkeyPatch):
+    _make_dlq(tmp_path, monkeypatch, "t2")
+    monkeypatch.setenv("VF_RECOVER_DB", "")
     runner = CliRunner()
     res = runner.invoke(main, ["recover", "--dir", str(get_cache_dir() / "dlq")])
     assert res.exit_code != 0
     assert "Missing target DB" in str(res.output)
 
 
-def test_recover_report_schema(tmp_path):
-    _make_dlq(tmp_path, "t3", rows=4)
+def test_recover_report_schema(tmp_path, monkeypatch: pytest.MonkeyPatch):
+    _make_dlq(tmp_path, monkeypatch, "t3", rows=4)
     runner = CliRunner()
     report_path = tmp_path / "report.json"
     res = runner.invoke(main, ["recover", "--dir", str(get_cache_dir() / "dlq"), "--table", "t3", "--dry-run", "--report", str(report_path)])
@@ -49,8 +49,8 @@ def test_recover_report_schema(tmp_path):
     assert "files_scanned" in t and "rows_scanned" in t and "rows_written" in t and "details" in t
 
 
-def test_recover_progress_and_verbose(tmp_path):
-    _make_dlq(tmp_path, "t4", rows=2)
+def test_recover_progress_and_verbose(tmp_path, monkeypatch: pytest.MonkeyPatch):
+    _make_dlq(tmp_path, monkeypatch, "t4", rows=2)
     runner = CliRunner()
     res = runner.invoke(main, ["recover", "--dir", str(get_cache_dir() / "dlq"), "--table", "t4", "--dry-run", "--progress", "--verbose"])
     assert res.exit_code == 0
@@ -58,9 +58,9 @@ def test_recover_progress_and_verbose(tmp_path):
     assert "[detail] t4 file=" in res.output
 
 
-def test_recover_strict_with_read_error(tmp_path):
+def test_recover_strict_with_read_error(tmp_path, monkeypatch: pytest.MonkeyPatch):
     base = tmp_path / "app"
-    os.environ["VERTEXFORAGER_ROOT"] = str(base)
+    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(base))
     dlq_tbl = get_cache_dir() / "dlq" / "t_err"
     dlq_tbl.mkdir(parents=True, exist_ok=True)
     bad = dlq_tbl / "batch_bad.ipc"
