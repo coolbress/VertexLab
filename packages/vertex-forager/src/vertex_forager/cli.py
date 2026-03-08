@@ -876,8 +876,7 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
                         await writer.close()
                     except Exception as e_close:
                         closed_ok = False
-                        for tbl in selected_tables:
-                            summary["errors"].append(f"CloseFail:{tbl}:{e_close}")
+                        summary["errors"].append(f"CloseFail:{e_close}")
                         logger.warning(f"Recover: writer close failed: {e_close}")
                 # Perform deletions only if writer closed successfully
                 if delete_on_success and not dry_run and closed_ok:
@@ -928,7 +927,6 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
             except Exception as e_rep:
                 raise click.ClickException(f"Failed to write report: {e_rep}")
         else:
-            # Print brief summary
             total_rows = sum(int(v.get("rows_written", 0)) for v in summary["tables"].values())
             ec = summary.get("error_counts", {})
             msg = f"✅ Recover summary: tables={len(summary['tables'])} rows={total_rows} errors={len(summary['errors'])}"
@@ -940,8 +938,8 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
                     details = info.get("details", [])
                     for d in details:
                         click.echo(f"[detail] {tbl} file={d.get('file')} rows={d.get('rows')} status={d.get('status')}")
-            if strict and summary["errors"]:
-                raise click.ClickException("Errors encountered during recovery. See --report for details.")
+        if strict and summary["errors"]:
+            raise click.ClickException("Errors encountered during recovery. See --report for details.")
     except click.ClickException:
         raise
     except Exception as e:
