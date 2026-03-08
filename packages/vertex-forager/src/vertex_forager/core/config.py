@@ -184,7 +184,7 @@ class EngineConfig(BaseModel):
     log_verbose: bool = False
     dlq_tmp_cleanup_on_error: bool = True
     dlq_tmp_periodic_cleanup: bool = True
-    dlq_tmp_retention_s: int = 86400
+    dlq_tmp_retention_s: int = Field(default=86400, ge=0)
 
     @property
     def fetch_concurrency(self) -> int | None:
@@ -245,6 +245,7 @@ class RunResult(BaseModel):
     metrics_summary: dict[str, float] = Field(default_factory=dict)
     dlq_pending: dict[str, list[FramePacket]] = Field(
         default_factory=dict,
+        exclude=True,
         description="Packets preserved per table for post-mortem DLQ handling when spool/dispatch fails",
     )
 
