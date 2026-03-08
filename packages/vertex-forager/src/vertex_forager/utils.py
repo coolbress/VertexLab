@@ -622,10 +622,11 @@ def clear_app_cache() -> None:
     cache_dir.mkdir(parents=True, exist_ok=True)
 
 
-def cleanup_dlq_tmp(retention_s: int) -> int:
-    """Remove stale DLQ temporary files (*.ipc.tmp) older than retention_s.
+def cleanup_dlq_tmp(base: Path | None, retention_s: int) -> int:
+    """Remove stale DLQ temporary files (*.ipc.tmp) under the given DLQ root.
 
     Args:
+        base: Base DLQ directory. If None, defaults to get_cache_dir()/\"dlq\".
         retention_s: Age threshold in seconds; files older than this are deleted.
 
     Returns:
@@ -634,7 +635,7 @@ def cleanup_dlq_tmp(retention_s: int) -> int:
     Raises:
         ValueError: If retention_s is negative.
     """
-    base = get_cache_dir() / "dlq"
+    base = base or (get_cache_dir() / "dlq")
     if not base.exists():
         return 0
     now = time.time()

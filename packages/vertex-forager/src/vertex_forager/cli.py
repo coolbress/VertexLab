@@ -792,16 +792,23 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
             raise click.ClickException(f"DLQ directory not found: {base}")
         if clean_tmp:
             try:
-                deleted = cleanup_dlq_tmp(retention_s)
+                deleted = cleanup_dlq_tmp(base, retention_s)
                 click.echo(f"🧹 Cleaned {deleted} stale .ipc.tmp files")
             except ValueError as e:
                 raise click.ClickException(str(e))
-        target_db = db_path or Path(os.getenv("VF_RECOVER_DB") or "")
-        if not dry_run and (not target_db or str(target_db).strip() == ""):
+        env_db = os.getenv("VF_RECOVER_DB")
+        target_db = db_path or (Path(env_db) if env_db and env_db.strip() else None)
+        if not dry_run and target_db is None:
             raise click.ClickException("Missing target DB. Provide --db or set VF_RECOVER_DB")
         selected_tables: list[str]
         if tables:
-            selected_tables = [t.strip() for t in tables if t and t.strip()]
+            raw_tables = [t.strip() for t in tables if t and t.strip()]
+            seen: set[str] = set()
+            selected_tables = []
+            for t in raw_tables:
+                if t not in seen:
+                    seen.add(t)
+                    selected_tables.append(t)
         else:
             # Discover table subdirs
             selected_tables = sorted([p.name for p in base.iterdir() if p.is_dir()])
@@ -813,7 +820,10 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
             writer: DuckDBWriter | None = None
             try:
                 if not dry_run:
+                    if target_db is None:
+                        raise RuntimeError("recover: missing target DB")
                     writer = DuckDBWriter(target_db)
+                delete_candidates: dict[str, list[Path]] = {}
                 for tbl in selected_tables:
                     tbl_dir = base / tbl
                     if not tbl_dir.exists():
@@ -834,27 +844,49 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
                             written_rows += int(res.rows)
                             file_reports.append({"file": str(f), "rows": int(df.height), "status": "written"})
                             if delete_on_success:
-                                try:
-                                    f.unlink()
-                                    try:
-                                        dir_fd = os.open(str(f.parent), os.O_RDONLY)
-                                        try:
-                                            os.fsync(dir_fd)
-                                        finally:
-                                            os.close(dir_fd)
-                                    except Exception:
-                                        pass
-                                except Exception as e_del:
-                                    summary["errors"].append(f"DeleteFail:{tbl}:{f}:{e_del}")
+                                delete_candidates.setdefault(tbl, []).append(f)
                         except Exception as e:
                             summary["errors"].append(f"RecoverFail:{tbl}:{f}:{e}")
                     summary["tables"][tbl] = {"files": len(ipc_files), "rows": written_rows, "details": file_reports}
             finally:
+                closed_ok = True
                 if writer is not None:
                     try:
                         await writer.close()
                     except Exception as e_close:
+                        closed_ok = False
+                        for tbl in selected_tables:
+                            summary["errors"].append(f"CloseFail:{tbl}:{e_close}")
                         logger.warning(f"Recover: writer close failed: {e_close}")
+                # Perform deletions only if writer closed successfully
+                if delete_on_success and not dry_run and closed_ok:
+                    for tbl, files in delete_candidates.items():
+                        for f in files:
+                            try:
+                                f.unlink()
+                                try:
+                                    dir_fd = os.open(str(f.parent), os.O_RDONLY)
+                                    try:
+                                        os.fsync(dir_fd)
+                                    finally:
+                                        os.close(dir_fd)
+                                except Exception:
+                                    pass
+                                # Update status to deleted
+                                details = summary["tables"].get(tbl, {}).get("details", [])
+                                for entry in details:
+                                    if entry.get("file") == str(f) and entry.get("status") == "written":
+                                        entry["status"] = "deleted"
+                            except Exception as e_del:
+                                summary["errors"].append(f"DeleteFail:{tbl}:{f}:{e_del}")
+                # Mark files as failed on close failure
+                if delete_on_success and not dry_run and not closed_ok:
+                    for tbl, files in delete_candidates.items():
+                        details = summary["tables"].get(tbl, {}).get("details", [])
+                        for f in files:
+                            for entry in details:
+                                if entry.get("file") == str(f) and entry.get("status") == "written":
+                                    entry["status"] = "close_failed"
         asyncio.run(_run())
         if report:
             try:

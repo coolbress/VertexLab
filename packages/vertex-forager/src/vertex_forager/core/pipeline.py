@@ -269,7 +269,7 @@ class VertexForager:
         # Periodic cleanup of stale DLQ temp files
         if getattr(self._config, "dlq_tmp_periodic_cleanup", False):
             try:
-                cleanup_dlq_tmp(int(getattr(self._config, "dlq_tmp_retention_s", 86400)))
+                cleanup_dlq_tmp(get_cache_dir() / "dlq", int(getattr(self._config, "dlq_tmp_retention_s", 86400)))
             except Exception as _e_clean:
                 logger.warning("PIPELINE: DLQ periodic cleanup failed: %s", _e_clean)
 

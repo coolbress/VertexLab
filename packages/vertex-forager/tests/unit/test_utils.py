@@ -113,6 +113,6 @@ def test_cleanup_dlq_tmp_removes_old_files(tmp_path, monkeypatch):
     # Set mtime to old
     old_time = time.time() - 1000
     os.utime(f, (old_time, old_time))
-    deleted = cleanup_dlq_tmp(retention_s=1)
+    deleted = cleanup_dlq_tmp(base=base.parent, retention_s=1)
     assert deleted >= 1
     assert not f.exists()
