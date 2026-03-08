@@ -656,6 +656,40 @@ class VertexForager:
             consecutive_failures = 0
             for pkt in packets:
                 try:
+                    # Validation: ensure PK columns exist and are non-null before rescue write
+                    schema = get_table_schema(pkt.table)
+                    if schema and schema.unique_key:
+                        for col in schema.unique_key:
+                            if col not in pkt.frame.columns:
+                                failed_packets.append(pkt)
+                                async with result_lock:
+                                    result.errors.append(f"DLQItem:{table}:{PrimaryKeyMissingError(table=table, column=col)}")
+                                consecutive_failures += 1
+                                if consecutive_failures >= max_consecutive_failures:
+                                    processed = rescued + len(failed_packets)
+                                    if processed < len(packets):
+                                        failed_packets.extend(packets[processed:])
+                                        leftover = len(packets) - processed
+                                        async with result_lock:
+                                            result.errors.append(f"DLQSummary:{table}:consecutive_failures={consecutive_failures}:remaining={leftover}")
+                                    break
+                                continue
+                            nulls = pkt.frame.get_column(col).null_count()
+                            if nulls > 0:
+                                failed_packets.append(pkt)
+                                async with result_lock:
+                                    result.errors.append(f"DLQItem:{table}:{PrimaryKeyNullError(table=table, column=col, null_count=nulls)}")
+                                consecutive_failures += 1
+                                if consecutive_failures >= max_consecutive_failures:
+                                    processed = rescued + len(failed_packets)
+                                    if processed < len(packets):
+                                        failed_packets.extend(packets[processed:])
+                                        leftover = len(packets) - processed
+                                        async with result_lock:
+                                            result.errors.append(f"DLQSummary:{table}:consecutive_failures={consecutive_failures}:remaining={leftover}")
+                                    break
+                                continue
+
                     wr = await self._writer.write(pkt)
                     async with result_lock:
                         result.tables[wr.table] = result.tables.get(wr.table, 0) + wr.rows
@@ -726,6 +760,7 @@ class VertexForager:
                             logger.warning("DLQ tmp on-error cleanup failed for %s: %s", tmp_path, _e_del)
                     async with result_lock:
                         result.errors.append(f"DLQSpoolError:{table}:{type(e_spool).__name__}:{e_spool}")
+                    raise
             self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_rescued_{rescued}")
             self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_remaining_{remaining}")
 

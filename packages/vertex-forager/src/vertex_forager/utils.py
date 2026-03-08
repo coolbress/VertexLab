@@ -625,20 +625,29 @@ def clear_app_cache() -> None:
 def cleanup_dlq_tmp(retention_s: int) -> int:
     """Remove stale DLQ temporary files (*.ipc.tmp) older than retention_s.
 
+    Args:
+        retention_s: Age threshold in seconds; files older than this are deleted.
+
     Returns:
         int: Number of files deleted.
+
+    Raises:
+        ValueError: If retention_s is negative.
     """
     base = get_cache_dir() / "dlq"
     if not base.exists():
         return 0
     now = time.time()
     deleted = 0
+    retention = float(retention_s)
+    if retention < 0:
+        raise ValueError("cleanup_dlq_tmp: retention_s must be non-negative")
     try:
         for f in base.rglob("*.ipc.tmp"):
             try:
                 st = f.stat()
                 age = now - st.st_mtime
-                if age >= max(0, float(retention_s)):
+                if age >= retention:
                     try:
                         f.unlink()
                         deleted += 1

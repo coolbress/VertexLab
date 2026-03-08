@@ -10,27 +10,27 @@
 - Each job goes through rate limiting and retry (with exponential backoff) before HTTP execution.
 - The response bytes are parsed into FramePackets by the provider-specific Router.
 - Code references:
-  - Pipeline orchestration: [pipeline.py:run](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/core/pipeline.py#L215-L300)
-  - Retry and throttle: [pipeline.py:_fetch_with_retry](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/core/pipeline.py#L794-L822)
+  - Pipeline orchestration: [pipeline.py:run](packages/vertex-forager/src/vertex_forager/core/pipeline.py)
+  - Retry and throttle: [pipeline.py:_fetch_with_retry](packages/vertex-forager/src/vertex_forager/core/pipeline.py)
 
 ## Normalize
 - The Mapper enforces target schema: column presence, types, and provider-specific transformations.
 - Normalized FramePackets advance to the writer queue.
-- Code reference: [pipeline.py:normalize in run](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/core/pipeline.py#L546-L557)
+- Code reference: [pipeline.py:normalize in run](packages/vertex-forager/src/vertex_forager/core/pipeline.py)
 
 ## Buffer & Flush
 - Writer worker maintains per-table buffers for adaptive batching.
 - When buffer row-count reaches the flush threshold, frames are merged:
   - Vertical concat with rechunk; diagonal concat fallback for flexible schemas.
   - Primary key enforcement: missing or null PK columns raise errors before writing.
-- Code reference: [pipeline.py:_writer_worker flush](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/core/pipeline.py#L641-L703)
+- Code reference: [pipeline.py:_writer_worker flush](packages/vertex-forager/src/vertex_forager/core/pipeline.py)
 
 ## Persist to DB
 - DuckDBWriter performs transactional upserts, returning WriteResult per packet/bulk.
 - Stateless write per packet; bulk write returns one result per input packet.
 - Code references:
-  - [duckdb.py:write](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/writers/duckdb.py#L124-L145)
-  - [duckdb.py:write_bulk](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/writers/duckdb.py#L147-L173)
+  - [duckdb.py:write](packages/vertex-forager/src/vertex_forager/writers/duckdb.py)
+  - [duckdb.py:write_bulk](packages/vertex-forager/src/vertex_forager/writers/duckdb.py)
 
 ## Failure Handling: DLQ + Rescue
 - If flush fails, the pipeline:
@@ -42,7 +42,7 @@
   - File permissions are restricted (chmod 600) when possible.
 - Consecutive failure threshold:
   - Stops rescue after N consecutive failures and records a summary for remaining packets.
-- Code reference: [pipeline.py:_spool_to_dlq_and_rescue](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/core/pipeline.py#L642-L708)
+- Code reference: [pipeline.py:_spool_to_dlq_and_rescue](packages/vertex-forager/src/vertex_forager/core/pipeline.py)
 
 ## DLQ Layout
 - Base: `$VERTEXFORAGER_ROOT/cache/dlq/{table}/`
@@ -58,8 +58,8 @@
   - `fetch_duration_s`, `parse_duration_s`, `http_duration_s`, `writer_flush_duration_s`
   - `rows_written_total`, `errors_total`
 - Code references:
-  - Log helper: [pipeline.py:_log_structured](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/core/pipeline.py#L204-L213)
-  - Summary: [pipeline.py:metrics summary](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/core/pipeline.py#L196-L203)
+  - Log helper: [pipeline.py:_log_structured](packages/vertex-forager/src/vertex_forager/core/pipeline.py)
+  - Summary: [pipeline.py:metrics summary](packages/vertex-forager/src/vertex_forager/core/pipeline.py)
 
 ## Cleanup & Retention
 - Temp files `.ipc.tmp` are removed in two ways:
@@ -70,9 +70,9 @@
   - `EngineConfig.dlq_tmp_periodic_cleanup` (default True)
   - `EngineConfig.dlq_tmp_retention_s` (default 86400)
 - Code references:
-  - On-error cleanup: [pipeline.py:DLQ spool exception](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/core/pipeline.py#L699-L716)
-  - Periodic cleanup: [pipeline.py:run start cleanup](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/core/pipeline.py#L241-L248)
-  - Cleanup function: [utils.py:cleanup_dlq_tmp](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/utils.py#L624-L660)
+  - On-error cleanup: [pipeline.py:DLQ spool exception](packages/vertex-forager/src/vertex_forager/core/pipeline.py)
+  - Periodic cleanup: [pipeline.py:run start cleanup](packages/vertex-forager/src/vertex_forager/core/pipeline.py)
+  - Cleanup function: [utils.py:cleanup_dlq_tmp](packages/vertex-forager/src/vertex_forager/utils.py)
 
 ## Recovery Workflow
 - Identify DLQ artifacts under `$VERTEXFORAGER_ROOT/cache/dlq/{table}/batch_*.ipc`.
@@ -86,11 +86,11 @@
 - EngineConfig:
   - `requests_per_minute`: rate limiting baseline
   - `concurrency`: optional fixed concurrency
-  - `retry`: [`RetryConfig`](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/core/config.py#L29-L45)
+  - `retry`: [`RetryConfig`](packages/vertex-forager/src/vertex_forager/core/config.py)
   - `flush_threshold_rows`: buffer size per table
   - `metrics_enabled`, `structured_logs`, `log_verbose`
   - `dlq_tmp_cleanup_on_error`, `dlq_tmp_periodic_cleanup`, `dlq_tmp_retention_s`
-- Code reference: [config.py:EngineConfig](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/core/config.py#L157-L185)
+- Code reference: [config.py:EngineConfig](packages/vertex-forager/src/vertex_forager/core/config.py)
 
 ## File Layout
 - DuckDB database file (example): user-provided path via Writer configuration
@@ -98,7 +98,7 @@
   - `$VERTEXFORAGER_ROOT/cache/`: general temp storage
   - `dlq/{table}/batch_{time_ns}.ipc`: DLQ artifacts for failed packets
 - Utilities:
-  - `get_app_root()`, `get_cache_dir()`: [utils.py](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/utils.py#L522-L583)
+  - `get_app_root()`, `get_cache_dir()`: [utils.py](packages/vertex-forager/src/vertex_forager/utils.py)
 
 ## Example Flow
 - YFinance “price” dataset for AAPL:
@@ -112,8 +112,8 @@
 - Unit tests verify writer failure propagation, DLQ creation/rescue, summary behavior, and tmp cleanup.
 - Integration test verifies DLQ IPC existence and readability under validation errors.
 - Code references:
-  - Unit: [tests/unit/test_pipeline.py](file:///Users/coolbress/vertex-lab/packages/vertex-forager/tests/unit/test_pipeline.py)
-  - Integration: [tests/integration/test_pipeline_writer_errors.py](file:///Users/coolbress/vertex-lab/packages/vertex-forager/tests/integration/test_pipeline_writer_errors.py)
+  - Unit: [tests/unit/test_pipeline.py](packages/vertex-forager/tests/unit/test_pipeline.py)
+  - Integration: [tests/integration/test_pipeline_writer_errors.py](packages/vertex-forager/tests/integration/test_pipeline_writer_errors.py)
 
 ## Operator Guide
 - DLQ Recovery CLI (proposed)
