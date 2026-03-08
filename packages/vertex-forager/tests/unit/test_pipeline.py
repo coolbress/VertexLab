@@ -91,7 +91,7 @@ async def test_adaptive_batching_worker_drains_queue_correctly() -> None:
 
 
 @pytest.mark.asyncio
-async def test_writer_failure_propagates_exception() -> None:
+async def test_writer_failure_propagates_exception(tmp_path, monkeypatch) -> None:
     """Verify that writer failure raises exception and records error."""
 
     # Setup Mocks
@@ -103,6 +103,7 @@ async def test_writer_failure_propagates_exception() -> None:
     mock_mapper = MagicMock()
     mock_controller = MagicMock()
 
+    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "app"))
     forager = VertexForager(
         router=mock_router,
         http=mock_http,
@@ -262,7 +263,7 @@ async def test_dlq_tmp_on_error_cleanup(tmp_path, monkeypatch) -> None:
         pkt_q.put_nowait(FramePacket(provider="test", table="fail_test", frame=pl.DataFrame({"id": [i]}), observed_at=datetime.now()))
     pkt_q.put_nowait(None)
 
-    with pytest.raises(Exception, match="Disk Full"):
+    with pytest.raises(Exception, match="replace failed"):
         await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
 
     # Verify tmp cleanup: no *.ipc.tmp files remain
