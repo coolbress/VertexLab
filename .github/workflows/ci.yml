@@ -37,6 +37,11 @@ jobs:
 
       - name: Install dependencies
         run: uv sync  # 라이브러리 설치 테스트
+      - name: Cache Trivy DB
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/trivy
+          key: ${{ runner.os }}-trivy-db
       - name: Trivy FS Scan (Config + Secrets, SARIF)
         id: trivy-sarif
         uses: aquasecurity/trivy-action@97e0b3872f55f89b95b2f65b3dbab56962816478  # 0.16.1 pinned
@@ -47,7 +52,7 @@ jobs:
           severity: HIGH,CRITICAL
           format: sarif
           output: trivy-results.sarif
-          skip-dirs: ".hypothesis,.ruff_cache,data,output,packages/vertex-forager/legacy_code"
+          skip-dirs: ".hypothesis,.ruff_cache,data,output,packages/vertex-forager/legacy_code,.venv,.tox,.cache,build,dist,node_modules"
       - name: Check Trivy SARIF presence
         run: |
           if [ -f trivy-results.sarif ]; then
@@ -56,7 +61,7 @@ jobs:
             echo "TRIVY_SARIF_EXISTS=false" >> "$GITHUB_ENV"
           fi
       - name: Upload Trivy SARIF to Security tab
-        if: ${{ always() && env.TRIVY_SARIF_EXISTS == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        if: ${{ always() && env.TRIVY_SARIF_EXISTS == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         uses: github/codeql-action/upload-sarif@c793b717bc78562f491db7b0e93a3a178b099162  # v4 pinned
         with:
           sarif_file: trivy-results.sarif
@@ -69,7 +74,7 @@ jobs:
           severity: HIGH,CRITICAL
           format: table
           exit-code: 1
-          skip-dirs: ".hypothesis,.ruff_cache,data,output,packages/vertex-forager/legacy_code"
+          skip-dirs: ".hypothesis,.ruff_cache,data,output,packages/vertex-forager/legacy_code,.venv,.tox,.cache,build,dist,node_modules"
       - name: Remediation Hints (On Failure)
         if: ${{ failure() }}
         run: |
