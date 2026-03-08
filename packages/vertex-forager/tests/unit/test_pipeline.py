@@ -230,9 +230,6 @@ async def test_dlq_summary_after_consecutive_failures(tmp_path, monkeypatch) -> 
 @pytest.mark.asyncio
 async def test_dlq_tmp_on_error_cleanup(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "app"))
-    # Patch os.replace to simulate failure after tmp is written
-    import vertex_forager.core.pipeline as pipeline_mod
-    monkeypatch.setattr(pipeline_mod.os, "replace", lambda src, dst: (_ for _ in ()).throw(OSError("replace failed")))
 
     mock_writer = AsyncMock(spec=BaseWriter)
     async def write_side_effect(pkt: FramePacket) -> WriteResult:
@@ -245,7 +242,49 @@ async def test_dlq_tmp_on_error_cleanup(tmp_path, monkeypatch) -> None:
     mock_controller = MagicMock()
 
     cfg = EngineConfig(requests_per_minute=100)
-    # Ensure cleanup flags are enabled (defaults True)
+    forager = VertexForager(
+        router=mock_router,
+        http=mock_http,
+        writer=mock_writer,
+        mapper=mock_mapper,
+        config=cfg,
+        controller=mock_controller,
+    )
+
+    pkt_q: "asyncio.Queue[FramePacket | None]" = asyncio.Queue()
+    result = RunResult(provider="test")
+    result_lock = asyncio.Lock()
+
+    for i in range(2):
+        pkt_q.put_nowait(FramePacket(provider="test", table="fail_test", frame=pl.DataFrame({"id": [i]}), observed_at=datetime.now()))
+    pkt_q.put_nowait(None)
+
+    with pytest.raises(Exception, match="Disk Full"):
+        await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
+
+    dlq_dir = tmp_path / "app" / "cache" / "dlq" / "fail_test"
+    assert dlq_dir.exists()
+    assert list(dlq_dir.glob("*.ipc.tmp")) == []
+
+@pytest.mark.asyncio
+async def test_dlq_tmp_cleanup_on_spool_failure(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "app"))
+    import vertex_forager.core.pipeline as pipeline_mod
+    def fake_replace(src, dst):
+        raise OSError("replace failed")
+    monkeypatch.setattr(pipeline_mod.os, "replace", fake_replace)
+
+    mock_writer = AsyncMock(spec=BaseWriter)
+    async def write_side_effect(pkt: FramePacket) -> WriteResult:
+        raise Exception("Disk Full")
+    mock_writer.write.side_effect = write_side_effect
+
+    mock_router = MagicMock()
+    mock_http = MagicMock()
+    mock_mapper = MagicMock()
+    mock_controller = MagicMock()
+
+    cfg = EngineConfig(requests_per_minute=100)
     forager = VertexForager(
         router=mock_router,
         http=mock_http,
@@ -266,7 +305,6 @@ async def test_dlq_tmp_on_error_cleanup(tmp_path, monkeypatch) -> None:
     with pytest.raises(Exception, match="replace failed"):
         await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
 
-    # Verify tmp cleanup: no *.ipc.tmp files remain
     dlq_dir = tmp_path / "app" / "cache" / "dlq" / "fail_test"
     assert dlq_dir.exists()
     assert list(dlq_dir.glob("*.ipc.tmp")) == []

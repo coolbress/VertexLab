@@ -712,6 +712,7 @@ class VertexForager:
             remaining = len(failed_packets)
             if remaining > 0:
                 try:
+                    tmp_path = None
                     frames = [p.frame for p in failed_packets]
                     try:
                         merged = pl.concat(frames, how="vertical", rechunk=True)
@@ -746,7 +747,7 @@ class VertexForager:
                     # On-error cleanup of tmp
                     if getattr(self._config, "dlq_tmp_cleanup_on_error", False):
                         try:
-                            if "tmp_path" in locals() and tmp_path.exists():
+                            if tmp_path is not None and tmp_path.exists():
                                 tmp_path.unlink()
                                 try:
                                     dir_fd = os.open(str(tmp_path.parent), os.O_RDONLY)
