@@ -53,11 +53,13 @@ jobs:
         with:
           scan-type: fs
           trivyignores: .trivyignore
-          scanners: secret,config
+          scanners: secret,misconfig
           severity: HIGH,CRITICAL
           format: sarif
           output: trivy-results.sarif
           skip-dirs: ".hypothesis,.ruff_cache,data,output,packages/vertex-forager/legacy_code,.venv,.tox,.cache,build,dist,node_modules"
+        env:
+          TRIVY_SKIP_VERSION_CHECK: "true"
       - name: Check Trivy SARIF presence
         run: |
           if [ -f trivy-results.sarif ]; then
@@ -75,11 +77,13 @@ jobs:
         with:
           scan-type: fs
           trivyignores: .trivyignore
-          scanners: secret,config
+          scanners: secret,misconfig
           severity: HIGH,CRITICAL
           format: table
           exit-code: 1
           skip-dirs: ".hypothesis,.ruff_cache,data,output,packages/vertex-forager/legacy_code,.venv,.tox,.cache,build,dist,node_modules"
+        env:
+          TRIVY_SKIP_VERSION_CHECK: "true"
       - name: Remediation Hints (On Failure)
         if: ${{ failure() }}
         run: |
