@@ -149,6 +149,9 @@
     - --clean-tmp: Remove stale `.ipc.tmp` before recovery
     - --retention-s: Age threshold for tmp cleanup (default: 86400)
     - --report: Write JSON report with table/file details and errors
+    - --progress: Show per-file progress
+    - --verbose: Print per-file details without report
+    - --strict: Exit non-zero if any failures occurred
   - Examples:
 
     ```bash
@@ -160,7 +163,20 @@
 
     # Recover a single table and delete IPC files on success
     vertex-forager recover --table sharadar_sf1 --dir "$VERTEXFORAGER_ROOT/cache/dlq" --db /path/to/target.duckdb --delete-on-success
+
+    # Strict mode with progress and report
+    vertex-forager recover --dir "$VERTEXFORAGER_ROOT/cache/dlq" --dry-run --strict --progress --report /tmp/dlq_report.json
     ```
+
+## Separation of Concerns
+
+- Pipeline
+  - Performs minimal housekeeping only: periodic sweep of temporary DLQ artifacts (.ipc.tmp) when runs start
+  - Configurable via EngineConfig (dlq_tmp_periodic_cleanup, dlq_tmp_retention_s ≥ 0)
+- Operator (CLI)
+  - Discovers, analyzes, reinjects, and deletes DLQ IPC files using the Recover CLI
+  - Recommended to schedule CLI runs (dry-run → review report → reinject → delete) as cron jobs
+  - Keep reports for auditing; avoid mixing bulk deletion/recovery into pipeline execution
 
 - Operational Checklist
   - Monitor structured logs for dlq_spooled, dlq_rescued_{n}, dlq_remaining_{n}

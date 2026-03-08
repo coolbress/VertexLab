@@ -773,8 +773,20 @@ def tune_export_best(output_dir: Path | None, write_file: Path | None) -> None:
 @click.option("--clean-tmp", is_flag=True, default=False, help="Remove stale .ipc.tmp files before recovery")
 @click.option("--retention-s", type=int, default=86400, help="Retention window for .ipc.tmp cleanup (seconds)")
 @click.option("--report", type=click.Path(path_type=Path), default=None, help="Write JSON report to this path")
-def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None, dry_run: bool, delete_on_success: bool, clean_tmp: bool, retention_s: int, report: Path | None) -> None:
+@click.option("--progress", is_flag=True, default=False, help="Show per-file progress during recovery")
+@click.option("--verbose", is_flag=True, default=False, help="Print per-file details without requiring --report")
+@click.option("--strict", is_flag=True, default=False, help="Exit non-zero if any failures occur (RecoverFail/CloseFail/DeleteFail)")
+def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None, dry_run: bool, delete_on_success: bool, clean_tmp: bool, retention_s: int, report: Path | None, progress: bool, verbose: bool, strict: bool) -> None:
     """Recover failed DLQ batches into the target DuckDB database.
+    
+    Usage:
+        vertex-forager recover --dir "$VERTEXFORAGER_ROOT/cache/dlq" --dry-run --report /tmp/dlq_report.json
+        vertex-forager recover --table sharadar_sf1 --dir "$VERTEXFORAGER_ROOT/cache/dlq" --db /path/to/target.duckdb --delete-on-success
+        vertex-forager recover --dir "$VERTEXFORAGER_ROOT/cache/dlq" --dry-run --strict --progress
+    
+    Caution:
+        Deletion occurs only after a successful writer close.
+        Prefer --dry-run first to preview counts and affected files.
     
     Args:
         dlq_dir: Base DLQ directory containing per-table subdirectories.
@@ -785,6 +797,9 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
         clean_tmp: Remove stale .ipc.tmp files before recovery.
         retention_s: Age threshold for cleaning .ipc.tmp files.
         report: Optional path to write a JSON summary.
+        progress: Show per-file progress output.
+        verbose: Print per-file details without requiring --report.
+        strict: Exit non-zero if any failures occur.
     """
     try:
         base = dlq_dir or (get_cache_dir() / "dlq")
@@ -815,52 +830,48 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
         if not selected_tables:
             click.echo("No tables selected or found under DLQ.")
             return
-        summary: dict[str, Any] = {"base": str(base), "db": str(target_db) if target_db else None, "dry_run": dry_run, "tables": {}, "errors": []}
+        summary: dict[str, Any] = {"base": str(base), "db": str(target_db) if target_db else None, "dry_run": dry_run, "tables": {}, "errors": [], "error_counts": {}}
         async def _run() -> None:
             writer: DuckDBWriter | None = None
             delete_candidates: dict[str, list[Path]] = {}
-            try:
-                if not dry_run:
-                    if target_db is None:
-                        raise RuntimeError("recover: missing target DB")
-                    writer = DuckDBWriter(target_db)
-                for tbl in selected_tables:
-                    tbl_dir = base / tbl
-                    if not tbl_dir.exists():
-                        continue
-                    ipc_files = sorted([p for p in tbl_dir.glob("batch_*.ipc") if p.is_file()])
-                    written_rows = 0
-                    file_reports: list[dict[str, Any]] = []
-                    for f in ipc_files:
-                        try:
-                            df = pl.read_ipc(f)
-                            if dry_run:
-                                file_reports.append({"file": str(f), "rows": int(df.height), "status": "scanned"})
-                                continue
-                            pkt = FramePacket(provider="dlq", table=tbl, frame=df, observed_at=datetime.now())
-                            if writer is None:
-                                raise RuntimeError("recover: writer is not initialized")
-                            res = await writer.write(pkt)
-                            written_rows += int(res.rows)
-                            file_reports.append({"file": str(f), "rows": int(df.height), "status": "written"})
-                            if delete_on_success:
-                                delete_candidates.setdefault(tbl, []).append(f)
-                        except Exception as e:
-                            summary["errors"].append(f"RecoverFail:{tbl}:{f}:{e}")
-                    summary["tables"][tbl] = {"files": len(ipc_files), "rows": written_rows, "details": file_reports}
-            finally:
-                closed_ok = True
-                if writer is not None:
+            async def _scan_table(table: str, base_dir: Path, progress_flag: bool, dry: bool, w: DuckDBWriter | None, deletes: bool, del_cand: dict[str, list[Path]], summ: dict[str, Any], is_explicit: bool) -> dict[str, Any] | None:
+                tbl_dir = base_dir / table
+                if not tbl_dir.exists():
+                    if is_explicit:
+                        summ["errors"].append(f"RecoverFail:{table}:{tbl_dir}:missing_table")
+                    return None
+                ipc_files = sorted([p for p in tbl_dir.glob("batch_*.ipc") if p.is_file()])
+                rows_scanned = 0
+                rows_written = 0
+                file_reports: list[dict[str, Any]] = []
+                for f in ipc_files:
                     try:
-                        await writer.close()
-                    except Exception as e_close:
-                        closed_ok = False
-                        for tbl in selected_tables:
-                            summary["errors"].append(f"CloseFail:{tbl}:{e_close}")
-                        logger.warning(f"Recover: writer close failed: {e_close}")
-                # Perform deletions only if writer closed successfully
-                if delete_on_success and not dry_run and closed_ok:
-                    for tbl, files in delete_candidates.items():
+                        df_rows = 0
+                        df = pl.read_ipc(f)
+                        df_rows = int(df.height)
+                        rows_scanned += df_rows
+                        if progress_flag:
+                            click.echo(f"[scan] {table} {f.name} rows={df_rows}")
+                        if dry:
+                            file_reports.append({"file": str(f), "rows": df_rows, "status": "scanned"})
+                            continue
+                        pkt = FramePacket(provider="dlq", table=table, frame=df, observed_at=datetime.now())
+                        if w is None:
+                            raise RuntimeError("recover: writer is not initialized")
+                        res = await w.write(pkt)
+                        rows_written += int(res.rows)
+                        file_reports.append({"file": str(f), "rows": df_rows, "status": "written"})
+                        if progress_flag:
+                            click.echo(f"[write] {table} {f.name} rows={int(res.rows)}")
+                        if deletes:
+                            del_cand.setdefault(table, []).append(f)
+                    except Exception as e:
+                        summ["errors"].append(f"RecoverFail:{table}:{f}:rows={df_rows}:{e}")
+                        file_reports.append({"file": str(f), "rows": df_rows, "status": "failed", "error": str(e)})
+                return {"files_scanned": len(ipc_files), "rows_scanned": rows_scanned, "rows_written": rows_written, "details": file_reports}
+            def _process_deletions(del_cand: dict[str, list[Path]], summ: dict[str, Any], deletes: bool, dry: bool, closed_ok_flag: bool) -> None:
+                if deletes and not dry and closed_ok_flag:
+                    for tbl, files in del_cand.items():
                         for f in files:
                             try:
                                 f.unlink()
@@ -872,21 +883,59 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
                                         os.close(dir_fd)
                                 except Exception:
                                     pass
-                                # Update status to deleted
-                                details = summary["tables"].get(tbl, {}).get("details", [])
+                                details = summ["tables"].get(tbl, {}).get("details", [])
                                 for entry in details:
                                     if entry.get("file") == str(f) and entry.get("status") == "written":
                                         entry["status"] = "deleted"
                             except Exception as e_del:
-                                summary["errors"].append(f"DeleteFail:{tbl}:{f}:{e_del}")
-                # Mark files as failed on close failure
-                if delete_on_success and not dry_run and not closed_ok:
-                    for tbl, files in delete_candidates.items():
-                        details = summary["tables"].get(tbl, {}).get("details", [])
+                                summ["errors"].append(f"DeleteFail:{tbl}:{f}:{e_del}")
+                                details = summ["tables"].get(tbl, {}).get("details", [])
+                                for entry in details:
+                                    if entry.get("file") == str(f) and entry.get("status") == "written":
+                                        entry["status"] = "delete_failed"
+                if not closed_ok_flag:
+                    for tbl, files in del_cand.items():
+                        details = summ["tables"].get(tbl, {}).get("details", [])
                         for f in files:
                             for entry in details:
                                 if entry.get("file") == str(f) and entry.get("status") == "written":
                                     entry["status"] = "close_failed"
+            def _aggregate_errors(summ: dict[str, Any]) -> None:
+                counts: dict[str, int] = {"RecoverFail": 0, "CloseFail": 0, "DeleteFail": 0}
+                for msg in summ["errors"]:
+                    if isinstance(msg, str):
+                        if msg.startswith("RecoverFail:"):
+                            counts["RecoverFail"] += 1
+                        elif msg.startswith("CloseFail:"):
+                            counts["CloseFail"] += 1
+                        elif msg.startswith("DeleteFail:"):
+                            counts["DeleteFail"] += 1
+                summ["error_counts"] = counts
+            try:
+                if not dry_run:
+                    if target_db is None:
+                        raise RuntimeError("recover: missing target DB")
+                    writer = DuckDBWriter(target_db)
+                # Determine explicit tables set for error signaling on missing directories
+                explicit_set: set[str] = set()
+                if tables:
+                    raw_tables_local = [t.strip() for t in tables if t and t.strip()]
+                    explicit_set = set(raw_tables_local)
+                for tbl in selected_tables:
+                    result = await _scan_table(tbl, base, progress, dry_run, writer, delete_on_success, delete_candidates, summary, tbl in explicit_set)
+                    if result is not None:
+                        summary["tables"][tbl] = result
+            finally:
+                closed_ok = True
+                if writer is not None:
+                    try:
+                        await writer.close()
+                    except Exception as e_close:
+                        closed_ok = False
+                        summary["errors"].append(f"CloseFail:writer:{e_close}")
+                        logger.warning(f"Recover: writer close failed: {e_close}")
+                _process_deletions(delete_candidates, summary, delete_on_success, dry_run, closed_ok)
+            _aggregate_errors(summary)
         asyncio.run(_run())
         if report:
             try:
@@ -895,10 +944,20 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
                 click.echo(str(report))
             except Exception as e_rep:
                 raise click.ClickException(f"Failed to write report: {e_rep}")
-        else:
-            # Print brief summary
-            total_rows = sum(int(v.get("rows", 0)) for v in summary["tables"].values())
-            click.echo(f"✅ Recover summary: tables={len(summary['tables'])} rows={total_rows} errors={len(summary['errors'])}")
+        total_rows_scanned = sum(int(v.get("rows_scanned", 0) or 0) for v in summary["tables"].values())
+        total_rows_written = sum(int(v.get("rows_written", 0) or 0) for v in summary["tables"].values())
+        ec = summary.get("error_counts", {})
+        msg = f"✅ Recover summary: tables={len(summary['tables'])} rows_scanned={total_rows_scanned} rows_written={total_rows_written} errors={len(summary['errors'])}"
+        if ec:
+            msg += f" (RecoverFail={ec.get('RecoverFail', 0)} CloseFail={ec.get('CloseFail', 0)} DeleteFail={ec.get('DeleteFail', 0)})"
+        click.echo(msg)
+        if verbose:
+            for tbl, info in summary["tables"].items():
+                details = info.get("details", [])
+                for d in details:
+                    click.echo(f"[detail] {tbl} file={d.get('file')} rows={d.get('rows')} status={d.get('status')}")
+        if strict and summary["errors"]:
+            raise click.ClickException("Errors encountered during recovery. See --report for details.")
     except click.ClickException:
         raise
     except Exception as e:
