@@ -91,7 +91,7 @@ async def test_adaptive_batching_worker_drains_queue_correctly() -> None:
 
 
 @pytest.mark.asyncio
-async def test_writer_failure_propagates_exception() -> None:
+async def test_writer_failure_propagates_exception(tmp_path, monkeypatch) -> None:
     """Verify that writer failure raises exception and records error."""
 
     # Setup Mocks
@@ -103,6 +103,7 @@ async def test_writer_failure_propagates_exception() -> None:
     mock_mapper = MagicMock()
     mock_controller = MagicMock()
 
+    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "app"))
     forager = VertexForager(
         router=mock_router,
         http=mock_http,
@@ -134,3 +135,176 @@ async def test_writer_failure_propagates_exception() -> None:
     # Verify error recorded in result
     assert len(result.errors) > 0
     assert "UnexpectedWriterError:fail_test:Disk Full" in result.errors[0]
+
+
+@pytest.mark.asyncio
+async def test_dlq_spool_and_per_packet_rescue(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "app"))
+
+    mock_writer = AsyncMock(spec=BaseWriter)
+
+    call_count = {"n": 0}
+    async def write_side_effect(pkt: FramePacket) -> WriteResult:
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            raise Exception("Disk Full")  # merged write fails
+        elif call_count["n"] == 2:
+            return WriteResult(table=pkt.table, rows=len(pkt.frame))
+        else:
+            raise Exception("Row Error")
+    mock_writer.write.side_effect = write_side_effect
+
+    mock_router = MagicMock()
+    mock_http = MagicMock()
+    mock_mapper = MagicMock()
+    mock_controller = MagicMock()
+
+    forager = VertexForager(
+        router=mock_router,
+        http=mock_http,
+        writer=mock_writer,
+        mapper=mock_mapper,
+        config=EngineConfig(requests_per_minute=100),
+        controller=mock_controller,
+    )
+
+    pkt_q: "asyncio.Queue[FramePacket | None]" = asyncio.Queue()
+    result = RunResult(provider="test")
+    result_lock = asyncio.Lock()
+
+    pkt_q.put_nowait(FramePacket(provider="test", table="fail_test", frame=pl.DataFrame({"id": [1]}), observed_at=datetime.now()))
+    pkt_q.put_nowait(FramePacket(provider="test", table="fail_test", frame=pl.DataFrame({"id": [2]}), observed_at=datetime.now()))
+    pkt_q.put_nowait(None)
+
+    with pytest.raises(Exception, match="Disk Full"):
+        await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
+
+    assert any(err.startswith("DLQItem:fail_test:") for err in result.errors)
+    assert "DLQSummary:fail_test:" not in "\n".join(result.errors)
+    assert result.tables.get("fail_test", 0) == 1
+
+@pytest.mark.asyncio
+async def test_dlq_summary_after_consecutive_failures(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "app"))
+
+    mock_writer = AsyncMock(spec=BaseWriter)
+    async def write_side_effect(pkt: FramePacket) -> WriteResult:
+        raise Exception("Disk Full")
+    mock_writer.write.side_effect = write_side_effect
+
+    mock_router = MagicMock()
+    mock_http = MagicMock()
+    mock_mapper = MagicMock()
+    mock_controller = MagicMock()
+
+    forager = VertexForager(
+        router=mock_router,
+        http=mock_http,
+        writer=mock_writer,
+        mapper=mock_mapper,
+        config=EngineConfig(requests_per_minute=100),
+        controller=mock_controller,
+    )
+
+    pkt_q: "asyncio.Queue[FramePacket | None]" = asyncio.Queue()
+    result = RunResult(provider="test")
+    result_lock = asyncio.Lock()
+
+    for i in range(4):
+        pkt_q.put_nowait(FramePacket(provider="test", table="fail_test", frame=pl.DataFrame({"id": [i]}), observed_at=datetime.now()))
+    pkt_q.put_nowait(None)
+
+    with pytest.raises(Exception, match="Disk Full"):
+        await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
+
+    errors_text = "\n".join(result.errors)
+    assert "DLQSummary:fail_test:" in errors_text
+    # Verify DLQ IPC contains all 4 ids
+    dlq_dir = tmp_path / "app" / "cache" / "dlq" / "fail_test"
+    files = list(dlq_dir.glob("batch_*.ipc"))
+    assert len(files) >= 1
+    df = pl.read_ipc(files[0])
+    assert df.shape[0] == 4
+    assert set(df.get_column("id").to_list()) == {0, 1, 2, 3}
+
+@pytest.mark.asyncio
+async def test_dlq_tmp_on_error_cleanup(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "app"))
+
+    mock_writer = AsyncMock(spec=BaseWriter)
+    async def write_side_effect(pkt: FramePacket) -> WriteResult:
+        raise Exception("Disk Full")
+    mock_writer.write.side_effect = write_side_effect
+
+    mock_router = MagicMock()
+    mock_http = MagicMock()
+    mock_mapper = MagicMock()
+    mock_controller = MagicMock()
+
+    cfg = EngineConfig(requests_per_minute=100)
+    forager = VertexForager(
+        router=mock_router,
+        http=mock_http,
+        writer=mock_writer,
+        mapper=mock_mapper,
+        config=cfg,
+        controller=mock_controller,
+    )
+
+    pkt_q: "asyncio.Queue[FramePacket | None]" = asyncio.Queue()
+    result = RunResult(provider="test")
+    result_lock = asyncio.Lock()
+
+    for i in range(2):
+        pkt_q.put_nowait(FramePacket(provider="test", table="fail_test", frame=pl.DataFrame({"id": [i]}), observed_at=datetime.now()))
+    pkt_q.put_nowait(None)
+
+    with pytest.raises(Exception, match="Disk Full"):
+        await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
+
+    dlq_dir = tmp_path / "app" / "cache" / "dlq" / "fail_test"
+    assert dlq_dir.exists()
+    assert list(dlq_dir.glob("*.ipc.tmp")) == []
+
+@pytest.mark.asyncio
+async def test_dlq_tmp_cleanup_on_spool_failure(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "app"))
+    import vertex_forager.core.pipeline as pipeline_mod
+    def fake_replace(src, dst):
+        raise OSError("replace failed")
+    monkeypatch.setattr(pipeline_mod.os, "replace", fake_replace)
+
+    mock_writer = AsyncMock(spec=BaseWriter)
+    async def write_side_effect(pkt: FramePacket) -> WriteResult:
+        raise Exception("Disk Full")
+    mock_writer.write.side_effect = write_side_effect
+
+    mock_router = MagicMock()
+    mock_http = MagicMock()
+    mock_mapper = MagicMock()
+    mock_controller = MagicMock()
+
+    cfg = EngineConfig(requests_per_minute=100)
+    forager = VertexForager(
+        router=mock_router,
+        http=mock_http,
+        writer=mock_writer,
+        mapper=mock_mapper,
+        config=cfg,
+        controller=mock_controller,
+    )
+
+    pkt_q: "asyncio.Queue[FramePacket | None]" = asyncio.Queue()
+    result = RunResult(provider="test")
+    result_lock = asyncio.Lock()
+
+    for i in range(2):
+        pkt_q.put_nowait(FramePacket(provider="test", table="fail_test", frame=pl.DataFrame({"id": [i]}), observed_at=datetime.now()))
+    pkt_q.put_nowait(None)
+
+    with pytest.raises(Exception, match="replace failed"):
+        await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
+
+    dlq_dir = tmp_path / "app" / "cache" / "dlq" / "fail_test"
+    assert dlq_dir.exists()
+    assert list(dlq_dir.glob("*.ipc.tmp")) == []

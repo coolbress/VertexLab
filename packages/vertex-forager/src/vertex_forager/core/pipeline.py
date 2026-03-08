@@ -26,6 +26,7 @@ import logging
 import time
 import itertools
 import httpx
+import os
 from typing import Any, TYPE_CHECKING, cast
 from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Sequence, Callable
@@ -60,7 +61,7 @@ from vertex_forager.core.controller import FlowController
 from vertex_forager.core.retry import create_retry_controller
 from vertex_forager.core.contracts import IRouter, IWriter, IMapper
 from vertex_forager.schema.registry import get_table_schema
-from vertex_forager.utils import sanitize_field
+from vertex_forager.utils import sanitize_field, get_cache_dir, cleanup_dlq_tmp
 
 if TYPE_CHECKING:
     pass
@@ -265,6 +266,13 @@ class VertexForager:
         pkt_q: asyncio.Queue[FramePacket | None] = asyncio.Queue(
             maxsize=self._config.queue_max
         )
+        # Periodic cleanup of stale DLQ temp files
+        if getattr(self._config, "dlq_tmp_periodic_cleanup", False):
+            try:
+                cleanup_dlq_tmp(get_cache_dir() / "dlq", int(getattr(self._config, "dlq_tmp_retention_s", 86400)))
+            except Exception as _e_clean:
+                logger.warning("PIPELINE: DLQ periodic cleanup failed: %s", _e_clean)
+
         if self._metrics_enabled:
             self._counters = {}
             self._hists = {}
@@ -638,6 +646,127 @@ class VertexForager:
             f"WRITER: Adaptive bulk writing enabled. Threshold={threshold} rows"
         )
 
+        async def _spool_to_dlq_and_rescue(table: str, packets: list[FramePacket], err: Exception) -> None:
+            if not packets:
+                return
+            first = packets[0]
+            rescued = 0
+            failed_packets: list[FramePacket] = []
+            max_consecutive_failures = 3
+            consecutive_failures = 0
+            for pkt in packets:
+                try:
+                    # Validation: ensure PK columns exist and are non-null before rescue write
+                    schema = get_table_schema(pkt.table)
+                    if schema and schema.unique_key:
+                        for col in schema.unique_key:
+                            if col not in pkt.frame.columns:
+                                failed_packets.append(pkt)
+                                async with result_lock:
+                                    result.errors.append(f"DLQItem:{table}:{PrimaryKeyMissingError(table=table, column=col)}")
+                                consecutive_failures += 1
+                                if consecutive_failures >= max_consecutive_failures:
+                                    processed = rescued + len(failed_packets)
+                                    if processed < len(packets):
+                                        failed_packets.extend(packets[processed:])
+                                        leftover = len(packets) - processed
+                                        async with result_lock:
+                                            result.errors.append(f"DLQSummary:{table}:consecutive_failures={consecutive_failures}:remaining={leftover}")
+                                    break
+                                continue
+                            nulls = pkt.frame.get_column(col).null_count()
+                            if nulls > 0:
+                                failed_packets.append(pkt)
+                                async with result_lock:
+                                    result.errors.append(f"DLQItem:{table}:{PrimaryKeyNullError(table=table, column=col, null_count=nulls)}")
+                                consecutive_failures += 1
+                                if consecutive_failures >= max_consecutive_failures:
+                                    processed = rescued + len(failed_packets)
+                                    if processed < len(packets):
+                                        failed_packets.extend(packets[processed:])
+                                        leftover = len(packets) - processed
+                                        async with result_lock:
+                                            result.errors.append(f"DLQSummary:{table}:consecutive_failures={consecutive_failures}:remaining={leftover}")
+                                    break
+                                continue
+
+                    wr = await self._writer.write(pkt)
+                    async with result_lock:
+                        result.tables[wr.table] = result.tables.get(wr.table, 0) + wr.rows
+                    rescued += 1
+                    consecutive_failures = 0
+                except Exception as e2:
+                    failed_packets.append(pkt)
+                    async with result_lock:
+                        result.errors.append(f"DLQItem:{table}:{type(e2).__name__}:{e2}")
+                    consecutive_failures += 1
+                    if consecutive_failures >= max_consecutive_failures:
+                        processed = rescued + len(failed_packets)
+                        if processed < len(packets):
+                            # Append remaining unprocessed packets to fail list to ensure they are spooled
+                            failed_packets.extend(packets[processed:])
+                            leftover = len(packets) - processed
+                            async with result_lock:
+                                result.errors.append(f"DLQSummary:{table}:consecutive_failures={consecutive_failures}:remaining={leftover}")
+                        break
+            remaining = len(failed_packets)
+            if remaining > 0:
+                try:
+                    tmp_path = None
+                    frames = [p.frame for p in failed_packets]
+                    try:
+                        merged = pl.concat(frames, how="vertical", rechunk=True)
+                    except pl.exceptions.PolarsError:
+                        merged = pl.concat(frames, how="diagonal")
+                    dlq_dir = get_cache_dir() / "dlq" / table
+                    dlq_dir.mkdir(parents=True, exist_ok=True)
+                    ts_ns = time.time_ns()
+                    fpath = dlq_dir / f"batch_{ts_ns}.ipc"
+                    tmp_path = fpath.parent / (f"{fpath.name}.tmp")
+                    fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                    with os.fdopen(fd, "wb") as fh:
+                        merged.write_ipc(fh)
+                        fh.flush()
+                        os.fsync(fh.fileno())
+                    os.replace(tmp_path, fpath)
+                    try:
+                        dir_fd = os.open(str(dlq_dir), os.O_RDONLY)
+                        try:
+                            os.fsync(dir_fd)
+                        finally:
+                            os.close(dir_fd)
+                    except Exception:
+                        pass
+                    self._log_structured(provider=first.provider, dataset=table, symbol=None, stage="dlq_spooled")
+                    async with result_lock:
+                        result.errors.append(f"DLQ:{table}:{str(fpath)}:{type(err).__name__}:{err}")
+                except Exception as e_spool:
+                    # On-error cleanup of tmp
+                    if getattr(self._config, "dlq_tmp_cleanup_on_error", False):
+                        try:
+                            if tmp_path is not None and tmp_path.exists():
+                                tmp_path.unlink()
+                                try:
+                                    dir_fd = os.open(str(tmp_path.parent), os.O_RDONLY)
+                                    try:
+                                        os.fsync(dir_fd)
+                                    finally:
+                                        os.close(dir_fd)
+                                except Exception:
+                                    pass
+                        except Exception as _e_del:
+                            logger.warning("DLQ tmp on-error cleanup failed for %s: %s", tmp_path, _e_del)
+                    # Preserve failed packets for post-mortem handling
+                    async with result_lock:
+                        pending = result.dlq_pending.get(table, [])
+                        pending.extend(failed_packets)
+                        result.dlq_pending[table] = pending
+                    async with result_lock:
+                        result.errors.append(f"DLQSpoolError:{table}:{type(e_spool).__name__}:{e_spool}")
+                    raise
+            self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_rescued_{rescued}")
+            self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_remaining_{remaining}")
+
         async def flush(table: str) -> None:
             """Flush the buffer for a specific table.
 
@@ -705,6 +834,7 @@ class VertexForager:
                 async with result_lock:
                     result.errors.append(f"WriterError:{table}:{e}")
                     self._inc("errors_total", 1)
+                await _spool_to_dlq_and_rescue(table, packets, e)
                 buffers[table] = []
                 buffer_rows[table] = 0
                 if isinstance(e, PrimaryKeyMissingError):
@@ -719,6 +849,7 @@ class VertexForager:
                     async with result_lock:
                         result.errors.append(f"DuckDBError:{table}:{e}")
                         self._inc("errors_total", 1)
+                    await _spool_to_dlq_and_rescue(table, packets, e)
                     buffers[table] = []
                     buffer_rows[table] = 0
                     logger.exception(f"WRITER: DuckDB error for {table}: {e}")
@@ -726,6 +857,7 @@ class VertexForager:
                     async with result_lock:
                         result.errors.append(f"UnexpectedWriterError:{table}:{e}")
                         self._inc("errors_total", 1)
+                    await _spool_to_dlq_and_rescue(table, packets, e)
                     buffers[table] = []
                     buffer_rows[table] = 0
                     logger.exception(f"WRITER: Unexpected error writing batch for {table}: {e}")

@@ -6,10 +6,14 @@ from pathlib import Path
 import os
 import json
 import time
-from .utils import get_app_root, get_cache_dir, clear_app_cache
+from .utils import get_app_root, get_cache_dir, clear_app_cache, cleanup_dlq_tmp
 import itertools
 import random
 import asyncio
+from datetime import datetime
+import polars as pl
+from vertex_forager.core.config import FramePacket
+from vertex_forager.writers.duckdb import DuckDBWriter
 
 logger = logging.getLogger(__name__)
 
@@ -759,6 +763,147 @@ def tune_export_best(output_dir: Path | None, write_file: Path | None) -> None:
         click.echo(str(write_file))
     else:
         click.echo(content)
+
+@main.command("recover")
+@click.option("--dir", "dlq_dir", type=click.Path(path_type=Path), default=None, help="DLQ root directory (default: $ROOT/cache/dlq)")
+@click.option("--table", "tables", multiple=True, help="Limit recovery to specific table(s)")
+@click.option("--db", "db_path", type=click.Path(path_type=Path), default=None, help="Target DuckDB file path (or set VF_RECOVER_DB)")
+@click.option("--dry-run", is_flag=True, default=False, help="Scan and report without writing")
+@click.option("--delete-on-success", is_flag=True, default=False, help="Delete IPC files after successful reinjection")
+@click.option("--clean-tmp", is_flag=True, default=False, help="Remove stale .ipc.tmp files before recovery")
+@click.option("--retention-s", type=int, default=86400, help="Retention window for .ipc.tmp cleanup (seconds)")
+@click.option("--report", type=click.Path(path_type=Path), default=None, help="Write JSON report to this path")
+def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None, dry_run: bool, delete_on_success: bool, clean_tmp: bool, retention_s: int, report: Path | None) -> None:
+    """Recover failed DLQ batches into the target DuckDB database.
+    
+    Args:
+        dlq_dir: Base DLQ directory containing per-table subdirectories.
+        tables: Specific table(s) to recover; if empty, recover all.
+        db_path: Target DuckDB database file path (or environment VF_RECOVER_DB).
+        dry_run: When True, do not write — only report counts.
+        delete_on_success: Remove IPC files after successful reinjection.
+        clean_tmp: Remove stale .ipc.tmp files before recovery.
+        retention_s: Age threshold for cleaning .ipc.tmp files.
+        report: Optional path to write a JSON summary.
+    """
+    try:
+        base = dlq_dir or (get_cache_dir() / "dlq")
+        if not base.exists():
+            raise click.ClickException(f"DLQ directory not found: {base}")
+        if clean_tmp:
+            try:
+                deleted = cleanup_dlq_tmp(base, retention_s)
+                click.echo(f"🧹 Cleaned {deleted} stale .ipc.tmp files")
+            except ValueError as e:
+                raise click.ClickException(str(e))
+        env_db = os.getenv("VF_RECOVER_DB")
+        target_db = db_path or (Path(env_db) if env_db and env_db.strip() else None)
+        if not dry_run and target_db is None:
+            raise click.ClickException("Missing target DB. Provide --db or set VF_RECOVER_DB")
+        selected_tables: list[str]
+        if tables:
+            raw_tables = [t.strip() for t in tables if t and t.strip()]
+            seen: set[str] = set()
+            selected_tables = []
+            for t in raw_tables:
+                if t not in seen:
+                    seen.add(t)
+                    selected_tables.append(t)
+        else:
+            # Discover table subdirs
+            selected_tables = sorted([p.name for p in base.iterdir() if p.is_dir()])
+        if not selected_tables:
+            click.echo("No tables selected or found under DLQ.")
+            return
+        summary: dict[str, Any] = {"base": str(base), "db": str(target_db) if target_db else None, "dry_run": dry_run, "tables": {}, "errors": []}
+        async def _run() -> None:
+            writer: DuckDBWriter | None = None
+            delete_candidates: dict[str, list[Path]] = {}
+            try:
+                if not dry_run:
+                    if target_db is None:
+                        raise RuntimeError("recover: missing target DB")
+                    writer = DuckDBWriter(target_db)
+                for tbl in selected_tables:
+                    tbl_dir = base / tbl
+                    if not tbl_dir.exists():
+                        continue
+                    ipc_files = sorted([p for p in tbl_dir.glob("batch_*.ipc") if p.is_file()])
+                    written_rows = 0
+                    file_reports: list[dict[str, Any]] = []
+                    for f in ipc_files:
+                        try:
+                            df = pl.read_ipc(f)
+                            if dry_run:
+                                file_reports.append({"file": str(f), "rows": int(df.height), "status": "scanned"})
+                                continue
+                            pkt = FramePacket(provider="dlq", table=tbl, frame=df, observed_at=datetime.now())
+                            if writer is None:
+                                raise RuntimeError("recover: writer is not initialized")
+                            res = await writer.write(pkt)
+                            written_rows += int(res.rows)
+                            file_reports.append({"file": str(f), "rows": int(df.height), "status": "written"})
+                            if delete_on_success:
+                                delete_candidates.setdefault(tbl, []).append(f)
+                        except Exception as e:
+                            summary["errors"].append(f"RecoverFail:{tbl}:{f}:{e}")
+                    summary["tables"][tbl] = {"files": len(ipc_files), "rows": written_rows, "details": file_reports}
+            finally:
+                closed_ok = True
+                if writer is not None:
+                    try:
+                        await writer.close()
+                    except Exception as e_close:
+                        closed_ok = False
+                        for tbl in selected_tables:
+                            summary["errors"].append(f"CloseFail:{tbl}:{e_close}")
+                        logger.warning(f"Recover: writer close failed: {e_close}")
+                # Perform deletions only if writer closed successfully
+                if delete_on_success and not dry_run and closed_ok:
+                    for tbl, files in delete_candidates.items():
+                        for f in files:
+                            try:
+                                f.unlink()
+                                try:
+                                    dir_fd = os.open(str(f.parent), os.O_RDONLY)
+                                    try:
+                                        os.fsync(dir_fd)
+                                    finally:
+                                        os.close(dir_fd)
+                                except Exception:
+                                    pass
+                                # Update status to deleted
+                                details = summary["tables"].get(tbl, {}).get("details", [])
+                                for entry in details:
+                                    if entry.get("file") == str(f) and entry.get("status") == "written":
+                                        entry["status"] = "deleted"
+                            except Exception as e_del:
+                                summary["errors"].append(f"DeleteFail:{tbl}:{f}:{e_del}")
+                # Mark files as failed on close failure
+                if delete_on_success and not dry_run and not closed_ok:
+                    for tbl, files in delete_candidates.items():
+                        details = summary["tables"].get(tbl, {}).get("details", [])
+                        for f in files:
+                            for entry in details:
+                                if entry.get("file") == str(f) and entry.get("status") == "written":
+                                    entry["status"] = "close_failed"
+        asyncio.run(_run())
+        if report:
+            try:
+                Path(report).parent.mkdir(parents=True, exist_ok=True)
+                Path(report).write_text(json.dumps(summary, indent=2))
+                click.echo(str(report))
+            except Exception as e_rep:
+                raise click.ClickException(f"Failed to write report: {e_rep}")
+        else:
+            # Print brief summary
+            total_rows = sum(int(v.get("rows", 0)) for v in summary["tables"].values())
+            click.echo(f"✅ Recover summary: tables={len(summary['tables'])} rows={total_rows} errors={len(summary['errors'])}")
+    except click.ClickException:
+        raise
+    except Exception as e:
+        logger.exception("Unexpected recover error")
+        raise click.ClickException(str(e))
 
 if __name__ == "__main__":
     main()

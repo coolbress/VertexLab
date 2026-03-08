@@ -622,6 +622,53 @@ def clear_app_cache() -> None:
     cache_dir.mkdir(parents=True, exist_ok=True)
 
 
+def cleanup_dlq_tmp(base: Path | None, retention_s: int) -> int:
+    """Remove stale DLQ temporary files (*.ipc.tmp) under the given DLQ root.
+
+    Args:
+        base: Base DLQ directory. If None, defaults to get_cache_dir()/\"dlq\".
+        retention_s: Age threshold in seconds; files older than this are deleted.
+
+    Returns:
+        int: Number of files deleted.
+
+    Raises:
+        ValueError: If retention_s is negative.
+    """
+    base = base or (get_cache_dir() / "dlq")
+    if not base.exists():
+        return 0
+    now = time.time()
+    deleted = 0
+    retention = float(retention_s)
+    if retention < 0:
+        raise ValueError("cleanup_dlq_tmp: retention_s must be non-negative")
+    try:
+        for f in base.rglob("*.ipc.tmp"):
+            try:
+                st = f.stat()
+                age = now - st.st_mtime
+                if age >= retention:
+                    try:
+                        f.unlink()
+                        deleted += 1
+                        # Best-effort directory fsync
+                        try:
+                            dir_fd = os.open(str(f.parent), os.O_RDONLY)
+                            try:
+                                os.fsync(dir_fd)
+                            finally:
+                                os.close(dir_fd)
+                        except Exception:
+                            pass
+                    except Exception as e_del:
+                        logger.warning("DLQ cleanup failed for %s: %s", f, e_del)
+            except FileNotFoundError:
+                continue
+    except Exception as e:
+        logger.error("DLQ cleanup scan failed: %s", e)
+    return deleted
+
 def load_env_file(env_file: Path | None = None) -> None:
     """Load environment variables from a .env file.
 

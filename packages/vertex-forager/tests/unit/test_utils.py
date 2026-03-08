@@ -3,7 +3,9 @@ from unittest.mock import MagicMock, patch
 
 from tqdm import tqdm
 
-from vertex_forager.utils import clear_app_cache, create_pbar_updater
+from vertex_forager.utils import clear_app_cache, create_pbar_updater, cleanup_dlq_tmp, get_cache_dir
+import time
+import os
 
 
 class TestPbarUpdater:
@@ -100,3 +102,17 @@ class TestCacheUtils:
 
         # Should NOT call rmtree
         mock_rmtree.assert_not_called()
+
+def test_cleanup_dlq_tmp_removes_old_files(tmp_path, monkeypatch):
+    # Setup app root and dlq temp file
+    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "app"))
+    base = get_cache_dir() / "dlq" / "tbl"
+    base.mkdir(parents=True, exist_ok=True)
+    f = base / "batch_123.ipc.tmp"
+    f.write_bytes(b"x")
+    # Set mtime to old
+    old_time = time.time() - 1000
+    os.utime(f, (old_time, old_time))
+    deleted = cleanup_dlq_tmp(base=base.parent, retention_s=1)
+    assert deleted >= 1
+    assert not f.exists()
