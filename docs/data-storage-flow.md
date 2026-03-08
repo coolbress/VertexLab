@@ -89,8 +89,15 @@
 - For each artifact:
   - Open with `pl.read_ipc(path)` and re-map if schema evolved.
   - Write via the writer’s standard `write()` or `write_bulk()` to reinject.
-- Recommended CLI enhancements (future):
-  - `recover --table {table} --dir {dlq_dir} --dry-run --delete-on-success --report {path}`
+- CLI support:
+  - Use `vertex-forager recover` to reinject DLQ batches:
+    - `--dir {dlq_dir}` to select DLQ root
+    - `--table {table}` to target a specific table
+    - `--db {duckdb_path}` to set the destination DB
+    - `--dry-run` to scan without writing
+    - `--delete-on-success` to remove IPC after successful write
+    - `--clean-tmp --retention-s {seconds}` to clean stale `.ipc.tmp`
+    - `--report {path}` to write a JSON summary
 
 ## Configuration Keys
 
@@ -131,26 +138,28 @@
 
 ## Operator Guide
 
-- DLQ Recovery CLI (proposed)
-  - Recover failed batches from DLQ into the target DB.
-  - Suggested flags:
-    - --dir: DLQ directory to scan (defaults to $VERTEXFORAGER_ROOT/cache/dlq)
-    - --table: Limit recovery to a specific table
-    - --dry-run: Validate and report without writing
-    - --delete-on-success: Remove IPC after successful reinjection
-    - --report: Write a JSON report with recovered/failed artifacts
-    - --clean-tmp: Remove stale .ipc.tmp files
+- DLQ Recovery CLI
+  - Reinject failed batches from DLQ into the target DuckDB.
+  - Flags:
+    - --dir: DLQ root (default: $VERTEXFORAGER_ROOT/cache/dlq)
+    - --table: Recover only specified table(s)
+    - --db: Destination DuckDB path (required unless --dry-run)
+    - --dry-run: Scan/report without writing
+    - --delete-on-success: Delete IPC on successful reinjection
+    - --clean-tmp: Remove stale `.ipc.tmp` before recovery
+    - --retention-s: Age threshold for tmp cleanup (default: 86400)
+    - --report: Write JSON report with table/file details and errors
   - Examples:
 
     ```bash
-    # Recover all tables from DLQ
-    vertex-forager recover --dir "$VERTEXFORAGER_ROOT/cache/dlq" --report /tmp/dlq_report.json
+    # Recover all tables from DLQ and write report
+    vertex-forager recover --dir "$VERTEXFORAGER_ROOT/cache/dlq" --db /path/to/target.duckdb --report /tmp/dlq_report.json
 
-    # Recover a single table with dry-run and cleanup
-    vertex-forager recover --table yfinance_price --dry-run --clean-tmp
+    # Dry-run for a single table with tmp cleanup
+    vertex-forager recover --table yfinance_price --dir "$VERTEXFORAGER_ROOT/cache/dlq" --dry-run --clean-tmp --retention-s 86400
 
-    # Recover and delete artifacts on success
-    vertex-forager recover --table sharadar_sf1 --delete-on-success
+    # Recover a single table and delete IPC files on success
+    vertex-forager recover --table sharadar_sf1 --dir "$VERTEXFORAGER_ROOT/cache/dlq" --db /path/to/target.duckdb --delete-on-success
     ```
 
 - Operational Checklist
