@@ -889,7 +889,11 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
                                         entry["status"] = "deleted"
                             except Exception as e_del:
                                 summ["errors"].append(f"DeleteFail:{tbl}:{f}:{e_del}")
-                if deletes and not dry and not closed_ok_flag:
+                                details = summ["tables"].get(tbl, {}).get("details", [])
+                                for entry in details:
+                                    if entry.get("file") == str(f) and entry.get("status") == "written":
+                                        entry["status"] = "delete_failed"
+                if not closed_ok_flag:
                     for tbl, files in del_cand.items():
                         details = summ["tables"].get(tbl, {}).get("details", [])
                         for f in files:
@@ -944,7 +948,7 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
         def _table_rows(info: dict[str, Any]) -> int:
             rw = int(info.get("rows_written", 0) or 0)
             rs = int(info.get("rows_scanned", 0) or 0)
-            return rw if rw > 0 else rs
+            return rw if rw > rs else rs
         total_rows = sum(_table_rows(v) for v in summary["tables"].values())
         ec = summary.get("error_counts", {})
         msg = f"✅ Recover summary: tables={len(summary['tables'])} rows={total_rows} errors={len(summary['errors'])}"
