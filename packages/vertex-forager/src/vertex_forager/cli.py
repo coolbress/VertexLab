@@ -866,8 +866,8 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
                         if deletes:
                             del_cand.setdefault(table, []).append(f)
                     except Exception as e:
-                        summ["errors"].append(f"RecoverFail:{table}:{f}:rows={locals().get('df_rows', 0)}:{e}")
-                        file_reports.append({"file": str(f), "rows": locals().get("df_rows", 0), "status": "failed", "error": str(e)})
+                        summ["errors"].append(f"RecoverFail:{table}:{f}:rows={df_rows}:{e}")
+                        file_reports.append({"file": str(f), "rows": df_rows, "status": "failed", "error": str(e)})
                 return {"files_scanned": len(ipc_files), "rows_scanned": rows_scanned, "rows_written": rows_written, "details": file_reports}
             def _process_deletions(del_cand: dict[str, list[Path]], summ: dict[str, Any], deletes: bool, dry: bool, closed_ok_flag: bool) -> None:
                 if deletes and not dry and closed_ok_flag:
@@ -944,14 +944,10 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
                 click.echo(str(report))
             except Exception as e_rep:
                 raise click.ClickException(f"Failed to write report: {e_rep}")
-        # Always print console summary and verbose details
-        def _table_rows(info: dict[str, Any]) -> int:
-            rw = int(info.get("rows_written", 0) or 0)
-            rs = int(info.get("rows_scanned", 0) or 0)
-            return rw if rw > rs else rs
-        total_rows = sum(_table_rows(v) for v in summary["tables"].values())
+        total_rows_scanned = sum(int(v.get("rows_scanned", 0) or 0) for v in summary["tables"].values())
+        total_rows_written = sum(int(v.get("rows_written", 0) or 0) for v in summary["tables"].values())
         ec = summary.get("error_counts", {})
-        msg = f"✅ Recover summary: tables={len(summary['tables'])} rows={total_rows} errors={len(summary['errors'])}"
+        msg = f"✅ Recover summary: tables={len(summary['tables'])} rows_scanned={total_rows_scanned} rows_written={total_rows_written} errors={len(summary['errors'])}"
         if ec:
             msg += f" (RecoverFail={ec.get('RecoverFail', 0)} CloseFail={ec.get('CloseFail', 0)} DeleteFail={ec.get('DeleteFail', 0)})"
         click.echo(msg)
