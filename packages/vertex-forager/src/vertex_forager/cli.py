@@ -940,18 +940,22 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
                 click.echo(str(report))
             except Exception as e_rep:
                 raise click.ClickException(f"Failed to write report: {e_rep}")
-        else:
-            total_rows = sum(int(v.get("rows_written", 0)) for v in summary["tables"].values())
-            ec = summary.get("error_counts", {})
-            msg = f"✅ Recover summary: tables={len(summary['tables'])} rows={total_rows} errors={len(summary['errors'])}"
-            if ec:
-                msg += f" (RecoverFail={ec.get('RecoverFail', 0)} CloseFail={ec.get('CloseFail', 0)} DeleteFail={ec.get('DeleteFail', 0)})"
-            click.echo(msg)
-            if verbose:
-                for tbl, info in summary["tables"].items():
-                    details = info.get("details", [])
-                    for d in details:
-                        click.echo(f"[detail] {tbl} file={d.get('file')} rows={d.get('rows')} status={d.get('status')}")
+        # Always print console summary and verbose details
+        def _table_rows(info: dict[str, Any]) -> int:
+            rw = int(info.get("rows_written", 0) or 0)
+            rs = int(info.get("rows_scanned", 0) or 0)
+            return rw if rw > 0 else rs
+        total_rows = sum(_table_rows(v) for v in summary["tables"].values())
+        ec = summary.get("error_counts", {})
+        msg = f"✅ Recover summary: tables={len(summary['tables'])} rows={total_rows} errors={len(summary['errors'])}"
+        if ec:
+            msg += f" (RecoverFail={ec.get('RecoverFail', 0)} CloseFail={ec.get('CloseFail', 0)} DeleteFail={ec.get('DeleteFail', 0)})"
+        click.echo(msg)
+        if verbose:
+            for tbl, info in summary["tables"].items():
+                details = info.get("details", [])
+                for d in details:
+                    click.echo(f"[detail] {tbl} file={d.get('file')} rows={d.get('rows')} status={d.get('status')}")
         if strict and summary["errors"]:
             raise click.ClickException("Errors encountered during recovery. See --report for details.")
     except click.ClickException:
