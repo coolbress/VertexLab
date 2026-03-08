@@ -771,9 +771,9 @@ def tune_export_best(output_dir: Path | None, write_file: Path | None) -> None:
 @click.option("--dry-run", is_flag=True, default=False, help="Scan and report without writing")
 @click.option("--delete-on-success", is_flag=True, default=False, help="Delete IPC files after successful reinjection")
 @click.option("--clean-tmp", is_flag=True, default=False, help="Remove stale .ipc.tmp files before recovery")
-@click.option("--retention-s", type=float, default=86400.0, help="Retention window for .ipc.tmp cleanup (seconds)")
+@click.option("--retention-s", type=int, default=86400, help="Retention window for .ipc.tmp cleanup (seconds)")
 @click.option("--report", type=click.Path(path_type=Path), default=None, help="Write JSON report to this path")
-def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None, dry_run: bool, delete_on_success: bool, clean_tmp: bool, retention_s: float, report: Path | None) -> None:
+def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None, dry_run: bool, delete_on_success: bool, clean_tmp: bool, retention_s: int, report: Path | None) -> None:
     """Recover failed DLQ batches into the target DuckDB database.
     
     Args:
@@ -792,7 +792,7 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
             raise click.ClickException(f"DLQ directory not found: {base}")
         if clean_tmp:
             try:
-                deleted = cleanup_dlq_tmp(int(retention_s))
+                deleted = cleanup_dlq_tmp(retention_s)
                 click.echo(f"🧹 Cleaned {deleted} stale .ipc.tmp files")
             except ValueError as e:
                 raise click.ClickException(str(e))
@@ -811,44 +811,50 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
         summary: dict[str, Any] = {"base": str(base), "db": str(target_db) if target_db else None, "dry_run": dry_run, "tables": {}, "errors": []}
         async def _run() -> None:
             writer: DuckDBWriter | None = None
-            if not dry_run:
-                writer = DuckDBWriter(target_db)
-            for tbl in selected_tables:
-                tbl_dir = base / tbl
-                if not tbl_dir.exists():
-                    continue
-                ipc_files = sorted([p for p in tbl_dir.glob("batch_*.ipc") if p.is_file()])
-                written_rows = 0
-                file_reports: list[dict[str, Any]] = []
-                for f in ipc_files:
-                    try:
-                        df = pl.read_ipc(f)
-                        if dry_run:
-                            file_reports.append({"file": str(f), "rows": int(df.height), "status": "scanned"})
-                            continue
-                        pkt = FramePacket(provider="dlq", table=tbl, frame=df, observed_at=datetime.now())
-                        if writer is None:
-                            raise RuntimeError("recover: writer is not initialized")
-                        res = await writer.write(pkt)
-                        written_rows += int(res.rows)
-                        file_reports.append({"file": str(f), "rows": int(df.height), "status": "written"})
-                        if delete_on_success:
-                            try:
-                                f.unlink()
-                                # Best-effort directory fsync
+            try:
+                if not dry_run:
+                    writer = DuckDBWriter(target_db)
+                for tbl in selected_tables:
+                    tbl_dir = base / tbl
+                    if not tbl_dir.exists():
+                        continue
+                    ipc_files = sorted([p for p in tbl_dir.glob("batch_*.ipc") if p.is_file()])
+                    written_rows = 0
+                    file_reports: list[dict[str, Any]] = []
+                    for f in ipc_files:
+                        try:
+                            df = pl.read_ipc(f)
+                            if dry_run:
+                                file_reports.append({"file": str(f), "rows": int(df.height), "status": "scanned"})
+                                continue
+                            pkt = FramePacket(provider="dlq", table=tbl, frame=df, observed_at=datetime.now())
+                            if writer is None:
+                                raise RuntimeError("recover: writer is not initialized")
+                            res = await writer.write(pkt)
+                            written_rows += int(res.rows)
+                            file_reports.append({"file": str(f), "rows": int(df.height), "status": "written"})
+                            if delete_on_success:
                                 try:
-                                    dir_fd = os.open(str(f.parent), os.O_RDONLY)
+                                    f.unlink()
                                     try:
-                                        os.fsync(dir_fd)
-                                    finally:
-                                        os.close(dir_fd)
-                                except Exception:
-                                    pass
-                            except Exception as e_del:
-                                summary["errors"].append(f"DeleteFail:{tbl}:{f}:{e_del}")
-                    except Exception as e:
-                        summary["errors"].append(f"RecoverFail:{tbl}:{f}:{e}")
-                summary["tables"][tbl] = {"files": len(ipc_files), "rows": written_rows, "details": file_reports}
+                                        dir_fd = os.open(str(f.parent), os.O_RDONLY)
+                                        try:
+                                            os.fsync(dir_fd)
+                                        finally:
+                                            os.close(dir_fd)
+                                    except Exception:
+                                        pass
+                                except Exception as e_del:
+                                    summary["errors"].append(f"DeleteFail:{tbl}:{f}:{e_del}")
+                        except Exception as e:
+                            summary["errors"].append(f"RecoverFail:{tbl}:{f}:{e}")
+                    summary["tables"][tbl] = {"files": len(ipc_files), "rows": written_rows, "details": file_reports}
+            finally:
+                if writer is not None:
+                    try:
+                        await writer.close()
+                    except Exception as e_close:
+                        logger.warning(f"Recover: writer close failed: {e_close}")
         asyncio.run(_run())
         if report:
             try:
