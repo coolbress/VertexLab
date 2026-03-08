@@ -773,7 +773,10 @@ def tune_export_best(output_dir: Path | None, write_file: Path | None) -> None:
 @click.option("--clean-tmp", is_flag=True, default=False, help="Remove stale .ipc.tmp files before recovery")
 @click.option("--retention-s", type=int, default=86400, help="Retention window for .ipc.tmp cleanup (seconds)")
 @click.option("--report", type=click.Path(path_type=Path), default=None, help="Write JSON report to this path")
-def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None, dry_run: bool, delete_on_success: bool, clean_tmp: bool, retention_s: int, report: Path | None) -> None:
+@click.option("--progress", is_flag=True, default=False, help="Show per-file progress during recovery")
+@click.option("--verbose", is_flag=True, default=False, help="Print per-file details without requiring --report")
+@click.option("--strict", is_flag=True, default=False, help="Exit non-zero if any failures occur (RecoverFail/CloseFail/DeleteFail)")
+def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None, dry_run: bool, delete_on_success: bool, clean_tmp: bool, retention_s: int, report: Path | None, progress: bool, verbose: bool, strict: bool) -> None:
     """Recover failed DLQ batches into the target DuckDB database.
     
     Args:
@@ -815,7 +818,7 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
         if not selected_tables:
             click.echo("No tables selected or found under DLQ.")
             return
-        summary: dict[str, Any] = {"base": str(base), "db": str(target_db) if target_db else None, "dry_run": dry_run, "tables": {}, "errors": []}
+        summary: dict[str, Any] = {"base": str(base), "db": str(target_db) if target_db else None, "dry_run": dry_run, "tables": {}, "errors": [], "error_counts": {}}
         async def _run() -> None:
             writer: DuckDBWriter | None = None
             delete_candidates: dict[str, list[Path]] = {}
@@ -829,11 +832,15 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
                     if not tbl_dir.exists():
                         continue
                     ipc_files = sorted([p for p in tbl_dir.glob("batch_*.ipc") if p.is_file()])
-                    written_rows = 0
+                    rows_scanned = 0
+                    rows_written = 0
                     file_reports: list[dict[str, Any]] = []
                     for f in ipc_files:
                         try:
                             df = pl.read_ipc(f)
+                            rows_scanned += int(df.height)
+                            if progress:
+                                click.echo(f"[scan] {tbl} {f.name} rows={int(df.height)}")
                             if dry_run:
                                 file_reports.append({"file": str(f), "rows": int(df.height), "status": "scanned"})
                                 continue
@@ -841,13 +848,15 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
                             if writer is None:
                                 raise RuntimeError("recover: writer is not initialized")
                             res = await writer.write(pkt)
-                            written_rows += int(res.rows)
+                            rows_written += int(res.rows)
                             file_reports.append({"file": str(f), "rows": int(df.height), "status": "written"})
+                            if progress:
+                                click.echo(f"[write] {tbl} {f.name} rows={int(res.rows)}")
                             if delete_on_success:
                                 delete_candidates.setdefault(tbl, []).append(f)
                         except Exception as e:
                             summary["errors"].append(f"RecoverFail:{tbl}:{f}:{e}")
-                    summary["tables"][tbl] = {"files": len(ipc_files), "rows": written_rows, "details": file_reports}
+                    summary["tables"][tbl] = {"files_scanned": len(ipc_files), "rows_scanned": rows_scanned, "rows_written": rows_written, "details": file_reports}
             finally:
                 closed_ok = True
                 if writer is not None:
@@ -887,6 +896,17 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
                             for entry in details:
                                 if entry.get("file") == str(f) and entry.get("status") == "written":
                                     entry["status"] = "close_failed"
+            # Aggregate error counts
+            counts: dict[str, int] = {"RecoverFail": 0, "CloseFail": 0, "DeleteFail": 0}
+            for msg in summary["errors"]:
+                if isinstance(msg, str):
+                    if msg.startswith("RecoverFail:"):
+                        counts["RecoverFail"] += 1
+                    elif msg.startswith("CloseFail:"):
+                        counts["CloseFail"] += 1
+                    elif msg.startswith("DeleteFail:"):
+                        counts["DeleteFail"] += 1
+            summary["error_counts"] = counts
         asyncio.run(_run())
         if report:
             try:
@@ -897,8 +917,19 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
                 raise click.ClickException(f"Failed to write report: {e_rep}")
         else:
             # Print brief summary
-            total_rows = sum(int(v.get("rows", 0)) for v in summary["tables"].values())
-            click.echo(f"✅ Recover summary: tables={len(summary['tables'])} rows={total_rows} errors={len(summary['errors'])}")
+            total_rows = sum(int(v.get("rows_written", 0)) for v in summary["tables"].values())
+            ec = summary.get("error_counts", {})
+            msg = f"✅ Recover summary: tables={len(summary['tables'])} rows={total_rows} errors={len(summary['errors'])}"
+            if ec:
+                msg += f" (RecoverFail={ec.get('RecoverFail', 0)} CloseFail={ec.get('CloseFail', 0)} DeleteFail={ec.get('DeleteFail', 0)})"
+            click.echo(msg)
+            if verbose:
+                for tbl, info in summary["tables"].items():
+                    details = info.get("details", [])
+                    for d in details:
+                        click.echo(f"[detail] {tbl} file={d.get('file')} rows={d.get('rows')} status={d.get('status')}")
+            if strict and summary["errors"]:
+                raise click.ClickException("Errors encountered during recovery. See --report for details.")
     except click.ClickException:
         raise
     except Exception as e:
