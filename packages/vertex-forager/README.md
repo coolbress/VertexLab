@@ -182,7 +182,7 @@ from vertex_forager import (
 
 ### Jitter and Opt-in Status Codes
 
-- Backoff uses Full Jitter: sleep is drawn uniformly from [0, min(cap, base_backoff_s * 2^(attempt-1))].
+ - Backoff uses Full Jitter: sleep is drawn uniformly from [0, min(max_backoff_s, base_backoff_s * 2^(attempt-1))].
 - Defaults are conservative. To broaden server error retries when appropriate:
   - EngineConfig.retry.retry_status_codes = (429, 503, 500, 502, 504)
   - Important: Enable broader server error retries ONLY for idempotent operations.
