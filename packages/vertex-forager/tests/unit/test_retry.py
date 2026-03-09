@@ -99,7 +99,10 @@ async def test_backoff_sequence_exponential():
     assert count == 3
     d1 = starts[1] - starts[0]
     d2 = starts[2] - starts[1]
-    assert d2 >= d1
+    # With Full Jitter, waits are uniformly drawn up to the exponential cap
+    margin = 0.2
+    assert d1 >= 0.0 and d1 <= cfg.base_backoff_s + margin
+    assert d2 >= 0.0 and d2 <= min(cfg.max_backoff_s, cfg.base_backoff_s * 2) + margin
 
 
 @pytest.mark.asyncio
@@ -114,3 +117,25 @@ async def test_retry_exhaustion_reraises_transport_error():
                 req = httpx.Request("GET", "http://test")
                 raise httpx.TransportError("persistent failure", request=req)
     assert attempts == cfg.max_attempts
+
+
+@pytest.mark.asyncio
+async def test_backoff_cap_enforced_high_attempts():
+    cfg = RetryConfig(max_attempts=6, base_backoff_s=0.02, max_backoff_s=0.05)
+    controller = create_retry_controller(cfg)
+    import time
+    starts: list[float] = []
+    count = 0
+    async for attempt in controller:
+        starts.append(time.monotonic())
+        with attempt:
+            count += 1
+            if count < cfg.max_attempts:
+                req = httpx.Request("GET", "http://test")
+                raise httpx.TransportError("temporary", request=req)
+            break
+    # Verify cap (max_backoff_s) is respected even at high attempts where expo > cap
+    intervals = [starts[i + 1] - starts[i] for i in range(len(starts) - 1)]
+    margin = 0.2
+    assert len(intervals) >= 5
+    assert max(intervals) <= cfg.max_backoff_s + margin

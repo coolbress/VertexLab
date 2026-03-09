@@ -174,11 +174,20 @@ from vertex_forager import (
 ## Server-side HTTP Status Retry
 
 - Configurable retries for specific HTTP status codes (default: 429, 503).
-- Controlled exponential backoff with max attempts; transport errors continue to retry.
+- Exponential backoff with Full Jitter to reduce thundering herd; transport errors continue to retry.
 - Configuration:
   - EngineConfig.retry.enable_http_status_retry: bool (default True)
   - EngineConfig.retry.retry_status_codes: tuple[int, ...] (default (429, 503))
 - Structured logs include retry attempt metadata when enabled.
+
+### Jitter and Opt-in Status Codes
+
+- Backoff uses Full Jitter: sleep is drawn uniformly from [0, min(max_backoff_s, base_backoff_s * 2^(attempt-1))].
+- Defaults are conservative. To broaden server error retries when appropriate:
+  - EngineConfig.retry.retry_status_codes = (429, 503, 500, 502, 504)
+  - Important: Enable broader server error retries ONLY for idempotent operations.
+    Non-idempotent requests (e.g., POST/PUT without idempotency keys) can cause duplicate side effects.
+    Use idempotency keys or ensure upstream idempotent semantics before opting in.
 
 ## License
 

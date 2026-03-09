@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
+import random
 
 import httpx
 from tenacity import (
@@ -11,8 +12,8 @@ from tenacity import (
     before_sleep_log,
     retry_if_exception,
     stop_after_attempt,
-    wait_exponential,
 )
+from tenacity import RetryCallState
 
 if TYPE_CHECKING:
     from vertex_forager.core.config import RetryConfig
@@ -46,13 +47,15 @@ def create_retry_controller(
                 return True
         return False
 
+    def _wait_capped(retry_state: RetryCallState) -> float:
+        att = retry_state.attempt_number
+        expo = config.base_backoff_s * (2 ** max(0, att - 1))
+        cap = max(0.0, min(config.max_backoff_s, expo))
+        return float(random.uniform(0.0, cap))
+
     return AsyncRetrying(
         stop=stop_after_attempt(config.max_attempts),
-        wait=wait_exponential(
-            multiplier=config.base_backoff_s,
-            max=config.max_backoff_s,
-            exp_base=2,
-        ),
+        wait=_wait_capped,
         retry=retry_if_exception(_should_retry),
         before_sleep=before_sleep_log(logger, log_level),
         reraise=True,
