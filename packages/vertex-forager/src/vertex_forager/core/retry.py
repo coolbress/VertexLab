@@ -12,6 +12,7 @@ from tenacity import (
     retry_if_exception,
     stop_after_attempt,
     wait_exponential,
+    wait_random,
 )
 
 if TYPE_CHECKING:
@@ -52,7 +53,7 @@ def create_retry_controller(
             multiplier=config.base_backoff_s,
             max=config.max_backoff_s,
             exp_base=2,
-        ),
+        ) + wait_random(min=0, max=0.5),
         retry=retry_if_exception(_should_retry),
         before_sleep=before_sleep_log(logger, log_level),
         reraise=True,

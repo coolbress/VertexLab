@@ -35,6 +35,13 @@ class RetryConfig(BaseModel):
         max_backoff_s: Maximum backoff duration in seconds (default: 30.0).
         enable_http_status_retry: Toggle retry-on-HTTP-status behavior (default: True).
         retry_status_codes: Tuple of HTTP status codes to trigger retries (default: (429, 503)).
+
+    Notes:
+        - Backoff uses exponential wait with an added random jitter in [0, 0.5] seconds to reduce
+          thundering herd effects.
+        - Defaults are conservative: retries on 429 (Too Many Requests) and 503 (Service Unavailable).
+        - You may opt-in to broader server errors (e.g., 500, 502, 504) by setting
+          `retry_status_codes=(429, 503, 500, 502, 504)` when appropriate for your environment.
     """
 
     max_attempts: int = DEFAULT_RETRY_MAX_ATTEMPTS
