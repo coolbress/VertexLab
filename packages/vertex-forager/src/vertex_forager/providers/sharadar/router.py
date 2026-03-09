@@ -10,7 +10,6 @@ from typing import Mapping
 from datetime import date, datetime, timezone
 
 import polars as pl
-from vertex_forager.utils import mask_secret
 
 from typing import Any, cast, TYPE_CHECKING
 from vertex_forager.core.types import SharadarDataset, JSONValue
@@ -60,7 +59,6 @@ from vertex_forager.logging.constants import (
     LOG_META_MISSING_COLS,
     LOG_META_PROCESSED,
     LOG_META_PROCESS_FAIL,
-    LOG_AUTH_TOKEN,
     LOG_UNSUPPORTED_DATASET,
     LOG_PAGINATION_START,
     LOG_BATCH_FORCE_SINGLE,
@@ -516,7 +514,7 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         """
         token = self._api_key
         if token:
-            logger.debug(LOG_AUTH_TOKEN.format(prefix=ROUTER_LOG_PREFIX, masked=mask_secret(token)))
+            logger.debug(f"{ROUTER_LOG_PREFIX}: Auth token configured")
         return RequestAuth(kind="query", token=token, query_param=API_KEY_QUERY_PARAM)
 
     # ------ URL resolution: build dataset-specific endpoint ------
