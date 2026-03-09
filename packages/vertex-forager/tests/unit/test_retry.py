@@ -99,9 +99,10 @@ async def test_backoff_sequence_exponential():
     assert count == 3
     d1 = starts[1] - starts[0]
     d2 = starts[2] - starts[1]
-    # With jitter added, intervals should be at least the exponential base waits
-    assert d1 >= cfg.base_backoff_s
-    assert d2 >= cfg.base_backoff_s * 2
+    # With Full Jitter, waits are uniformly drawn up to the exponential cap
+    margin = 0.2
+    assert d1 >= 0.0 and d1 <= cfg.base_backoff_s + margin
+    assert d2 >= 0.0 and d2 <= min(cfg.max_backoff_s, cfg.base_backoff_s * 2) + margin
 
 
 @pytest.mark.asyncio

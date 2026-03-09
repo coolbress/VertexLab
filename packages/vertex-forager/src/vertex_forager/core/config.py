@@ -37,8 +37,7 @@ class RetryConfig(BaseModel):
         retry_status_codes: Tuple of HTTP status codes to trigger retries (default: (429, 503)).
 
     Notes:
-        - Backoff uses exponential wait with an added random jitter in [0, 0.5] seconds to reduce
-          thundering herd effects.
+        - Backoff uses Full Jitter: sleep is drawn uniformly from [0, min(max_backoff_s, base_backoff_s * 2^(attempt-1))].
         - Defaults are conservative: retries on 429 (Too Many Requests) and 503 (Service Unavailable).
         - You may opt-in to broader server errors (e.g., 500, 502, 504) by setting
           `retry_status_codes=(429, 503, 500, 502, 504)` when appropriate for your environment.

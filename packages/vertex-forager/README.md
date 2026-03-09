@@ -174,7 +174,7 @@ from vertex_forager import (
 ## Server-side HTTP Status Retry
 
 - Configurable retries for specific HTTP status codes (default: 429, 503).
-- Exponential backoff with jitter to reduce thundering herd; transport errors continue to retry.
+- Exponential backoff with Full Jitter to reduce thundering herd; transport errors continue to retry.
 - Configuration:
   - EngineConfig.retry.enable_http_status_retry: bool (default True)
   - EngineConfig.retry.retry_status_codes: tuple[int, ...] (default (429, 503))
@@ -182,7 +182,7 @@ from vertex_forager import (
 
 ### Jitter and Opt-in Status Codes
 
-- Backoff adds a random jitter in [0, 0.5] seconds to disperse concurrent retries.
+- Backoff uses Full Jitter: sleep is drawn uniformly from [0, min(cap, base_backoff_s * 2^(attempt-1))].
 - Defaults are conservative. To broaden server error retries when appropriate:
   - EngineConfig.retry.retry_status_codes = (429, 503, 500, 502, 504)
 
