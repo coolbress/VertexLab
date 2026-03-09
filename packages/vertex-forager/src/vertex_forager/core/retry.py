@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
+import random
 
 import httpx
 from tenacity import (
@@ -11,8 +12,6 @@ from tenacity import (
     before_sleep_log,
     retry_if_exception,
     stop_after_attempt,
-    wait_exponential,
-    wait_random,
 )
 
 if TYPE_CHECKING:
@@ -47,13 +46,15 @@ def create_retry_controller(
                 return True
         return False
 
+    def _wait_capped(retry_state) -> float:
+        att = getattr(retry_state, "attempt_number", 1)
+        base = min(config.max_backoff_s, config.base_backoff_s * (2 ** max(0, att - 1)))
+        jitter = random.uniform(0.0, 0.5)
+        return min(config.max_backoff_s, base + jitter)
+
     return AsyncRetrying(
         stop=stop_after_attempt(config.max_attempts),
-        wait=wait_exponential(
-            multiplier=config.base_backoff_s,
-            max=config.max_backoff_s,
-            exp_base=2,
-        ) + wait_random(min=0, max=0.5),
+        wait=_wait_capped,
         retry=retry_if_exception(_should_retry),
         before_sleep=before_sleep_log(logger, log_level),
         reraise=True,
