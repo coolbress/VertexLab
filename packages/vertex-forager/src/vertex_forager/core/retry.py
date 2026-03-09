@@ -13,6 +13,7 @@ from tenacity import (
     retry_if_exception,
     stop_after_attempt,
 )
+from tenacity import RetryCallState
 
 if TYPE_CHECKING:
     from vertex_forager.core.config import RetryConfig
@@ -46,11 +47,11 @@ def create_retry_controller(
                 return True
         return False
 
-    def _wait_capped(retry_state) -> float:
-        att = getattr(retry_state, "attempt_number", 1)
-        base = min(config.max_backoff_s, config.base_backoff_s * (2 ** max(0, att - 1)))
+    def _wait_capped(retry_state: RetryCallState) -> float:
+        att = retry_state.attempt_number
+        base = float(min(config.max_backoff_s, config.base_backoff_s * (2 ** max(0, att - 1))))
         jitter = random.uniform(0.0, 0.5)
-        return min(config.max_backoff_s, base + jitter)
+        return float(min(config.max_backoff_s, base + jitter))
 
     return AsyncRetrying(
         stop=stop_after_attempt(config.max_attempts),
