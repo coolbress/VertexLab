@@ -185,6 +185,9 @@ from vertex_forager import (
 - Backoff uses Full Jitter: sleep is drawn uniformly from [0, min(cap, base_backoff_s * 2^(attempt-1))].
 - Defaults are conservative. To broaden server error retries when appropriate:
   - EngineConfig.retry.retry_status_codes = (429, 503, 500, 502, 504)
+  - Important: Enable broader server error retries ONLY for idempotent operations.
+    Non-idempotent requests (e.g., POST/PUT without idempotency keys) can cause duplicate side effects.
+    Use idempotency keys or ensure upstream idempotent semantics before opting in.
 
 ## License
 

@@ -50,7 +50,7 @@ def create_retry_controller(
     def _wait_capped(retry_state: RetryCallState) -> float:
         att = retry_state.attempt_number
         expo = config.base_backoff_s * (2 ** max(0, att - 1))
-        cap = min(config.max_backoff_s, expo)
+        cap = max(0.0, min(config.max_backoff_s, expo))
         return float(random.uniform(0.0, cap))
 
     return AsyncRetrying(

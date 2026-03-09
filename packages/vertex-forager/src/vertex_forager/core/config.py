@@ -39,13 +39,14 @@ class RetryConfig(BaseModel):
     Notes:
         - Backoff uses Full Jitter: sleep is drawn uniformly from [0, min(max_backoff_s, base_backoff_s * 2^(attempt-1))].
         - Defaults are conservative: retries on 429 (Too Many Requests) and 503 (Service Unavailable).
-        - You may opt-in to broader server errors (e.g., 500, 502, 504) by setting
-          `retry_status_codes=(429, 503, 500, 502, 504)` when appropriate for your environment.
+        - Opt-in to broader server errors (e.g., 500, 502, 504) ONLY when requests are idempotent.
+          Non-idempotent operations (e.g., POST/PUT without idempotency keys) may cause duplicate side effects.
+          Use idempotency keys or upstream idempotent semantics before enabling broader codes.
     """
 
     max_attempts: int = DEFAULT_RETRY_MAX_ATTEMPTS
-    base_backoff_s: float = DEFAULT_RETRY_BASE_BACKOFF_S
-    max_backoff_s: float = DEFAULT_RETRY_MAX_BACKOFF_S
+    base_backoff_s: float = Field(default=DEFAULT_RETRY_BASE_BACKOFF_S, ge=0.0)
+    max_backoff_s: float = Field(default=DEFAULT_RETRY_MAX_BACKOFF_S, ge=0.0)
     enable_http_status_retry: bool = True
     retry_status_codes: tuple[int, ...] = (429, 503)
 
