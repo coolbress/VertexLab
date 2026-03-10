@@ -343,7 +343,8 @@ class DuckDBWriter(BaseWriter):
             return
         self._logger.info(LOG_COMPACTING.format(prefix=DK_LOG_PREFIX))
         self._logger.info("Compacting DuckDB database...")
-        # Reclaim space and merge wal into the main DB file
+        # DuckDB note: VACUUM is a PostgreSQL-compatibility alias and does not reclaim disk space itself.
+        # The subsequent CHECKPOINT merges the WAL into the main DB and is responsible for truncation/space reclamation.
         self._conn.execute("VACUUM")
         # Create a new database checkpoint to incorporate WAL and reduce recovery time
         try:
