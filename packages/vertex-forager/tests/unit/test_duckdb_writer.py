@@ -189,8 +189,10 @@ def test_compact_sync_checkpoint_warning_on_error(tmp_path: Path, caplog: pytest
 
     caplog.set_level(logging.WARNING)
     writer = DuckDBWriter(tmp_path / "t.duckdb")
-    writer._conn = cast(duckdb.DuckDBPyConnection, _FakeConn())
+    fake = _FakeConn()
+    writer._conn = cast(duckdb.DuckDBPyConnection, fake)
     writer._compact_sync()
+    assert fake.calls == 2
     assert any("CHECKPOINT failed or unsupported" in rec.message for rec in caplog.records)
 
 
