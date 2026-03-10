@@ -172,3 +172,42 @@ class TestDuckDBWriter:
         count = row[0]
         assert count == 2
         conn.close()
+
+
+def test_compact_sync_checkpoint_warning_on_error(tmp_path: Path, caplog) -> None:
+    import logging
+    from vertex_forager.writers.duckdb import DuckDBWriter
+    import duckdb
+    from typing import cast
+
+    class _FakeConn:
+        def __init__(self) -> None:
+            self.calls = 0
+        def execute(self, sql: str):
+            self.calls += 1
+            if self.calls == 2:
+                raise duckdb.Error("unsupported")
+            return None
+
+    caplog.set_level(logging.WARNING)
+    writer = DuckDBWriter(tmp_path / "t.duckdb")
+    writer._conn = cast(duckdb.DuckDBPyConnection, _FakeConn())
+    writer._compact_sync()
+    assert any("CHECKPOINT failed or unsupported" in rec.message for rec in caplog.records)
+
+
+def test_compact_sync_checkpoint_ok(tmp_path: Path) -> None:
+    from vertex_forager.writers.duckdb import DuckDBWriter
+    import duckdb
+    from typing import cast
+
+    class _FakeConnOK:
+        def __init__(self) -> None:
+            self.calls = 0
+        def execute(self, sql: str):
+            self.calls += 1
+            return None
+
+    writer = DuckDBWriter(tmp_path / "t2.duckdb")
+    writer._conn = cast(duckdb.DuckDBPyConnection, _FakeConnOK())
+    writer._compact_sync()
