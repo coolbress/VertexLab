@@ -321,7 +321,7 @@ class DuckDBWriter(BaseWriter):
     async def compact(self) -> None:
         """
         Optimize database storage.
-        Runs VACUUM and WAL CHECKPOINT(TRUNCATE) to reclaim space and enforce compression.
+        Runs VACUUM and CHECKPOINT to reclaim space and enforce compression.
 
         Args:
             None
@@ -345,12 +345,12 @@ class DuckDBWriter(BaseWriter):
         self._logger.info("Compacting DuckDB database...")
         # Reclaim space and merge wal into the main DB file
         self._conn.execute("VACUUM")
-        # Truncate WAL to prevent unbounded growth and reduce recovery time
+        # Create a new database checkpoint to incorporate WAL and reduce recovery time
         try:
-            self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            self._conn.execute("CHECKPOINT")
         except duckdb.Error as e:
-            # Older DuckDB versions or non-WAL configurations may not support this pragma
-            self._logger.warning(f"{DK_LOG_PREFIX}: wal_checkpoint(TRUNCATE) failed or unsupported: {e}")
+            # Environments may not support CHECKPOINT (unlikely) or DB not in WAL mode
+            self._logger.warning(f"{DK_LOG_PREFIX}: CHECKPOINT failed or unsupported: {e}")
         self._logger.info(LOG_COMPACT_DONE.format(prefix=DK_LOG_PREFIX))
 
     async def close(self) -> None:
