@@ -1,6 +1,4 @@
 from __future__ import annotations
-
-import os
 from datetime import datetime
 import polars as pl
 import asyncio
@@ -13,8 +11,8 @@ from vertex_forager.writers.base import BaseWriter, WriteResult
 
 
 @pytest.mark.asyncio
-async def test_dlq_ipc_file_mode_is_0600(tmp_path) -> None:
-    os.environ["VERTEXFORAGER_ROOT"] = str(tmp_path / "app")
+async def test_dlq_ipc_file_mode_is_0600(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "app"))
 
     mock_writer = AsyncMock(spec=BaseWriter)
     async def write_side_effect(pkt: FramePacket) -> WriteResult:

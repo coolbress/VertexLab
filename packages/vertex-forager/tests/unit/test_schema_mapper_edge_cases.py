@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import polars as pl
 from vertex_forager.core.config import FramePacket
 from vertex_forager.schema.mapper import SchemaMapper
@@ -21,7 +21,7 @@ def test_schema_mapper_casts_and_preserves_extra_columns() -> None:
         provider="sharadar",
         table="sharadar_sep",
         frame=df,
-        observed_at=datetime.utcnow(),
+        observed_at=datetime.now(timezone.utc),
     )
     out = mapper.normalize(packet=pkt)
     # date should exist and be cast to Date with null (strict=False)
