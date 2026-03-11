@@ -951,4 +951,7 @@ class VertexForager:
                 self._observe("http_duration_s", dur)
                 self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="http_end", attempt=att_no, duration_s=dur)
                 return resp
+        # Unreachable at runtime with tenacity.AsyncRetrying(reraise=True):
+        # the last exception is re-raised inside the loop when attempts are exhausted.
+        # Kept for static analysis clarity and as a defensive fallback.
         raise FetchError("Fetch failed after all retry attempts")
