@@ -81,6 +81,19 @@ class PrimaryKeyNullError(ValidationError):
         super().__init__(f"PK column '{column}' in table '{table}' has {null_count} nulls")
 
 class DLQSpoolError(VertexForagerError):
+    """Dead Letter Queue (DLQ) spooling failure.
+
+    Raised when persisting failed packets to the DLQ fails. Carries counts that
+    summarize partial rescue progress and remaining items.
+
+    Attributes:
+        rescued: Number of items successfully rescued (written) before the spool attempt.
+        remaining: Number of items left to persist in the DLQ when the failure occurred.
+        original: Optional underlying exception that triggered the spool failure.
+
+    Example:
+        raise DLQSpoolError(rescued=1, remaining=3, original=exc)
+    """
     def __init__(self, *, rescued: int, remaining: int, original: Exception | None = None) -> None:
         self.rescued = rescued
         self.remaining = remaining
