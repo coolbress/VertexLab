@@ -687,8 +687,15 @@ class VertexForager:
             for pkt in packets:
                 try:
                     schema = get_table_schema(pkt.table)
-                    is_valid, _reason = _validate_pk_for_rescue(pkt, schema)
+                    is_valid, reason = _validate_pk_for_rescue(pkt, schema)
                     if not is_valid:
+                        logger.debug(
+                            "DLQ rescue skipped: PK validation failed reason=%s table=%s provider=%s rows=%d",
+                            reason,
+                            table,
+                            pkt.provider,
+                            len(pkt.frame),
+                        )
                         failed_packets.append(pkt)
                         consecutive_failures += 1
                         if consecutive_failures >= max_consecutive_failures:
