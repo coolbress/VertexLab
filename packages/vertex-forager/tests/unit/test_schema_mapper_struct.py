@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import polars as pl
+import pytest
 from datetime import datetime, timezone
 from vertex_forager.core.config import FramePacket
 from vertex_forager.schema.mapper import SchemaMapper
 from vertex_forager.schema.config import TableSchema
 
 
-def test_schema_mapper_nested_struct_cast_and_mismatch(monkeypatch) -> None:
+def test_schema_mapper_nested_struct_cast_and_mismatch(monkeypatch: pytest.MonkeyPatch) -> None:
     # Define a temporary schema with a nested struct column
     struct_dtype = pl.Struct({"a": pl.Int64, "b": pl.Utf8})
     schema = TableSchema(
@@ -28,7 +29,7 @@ def test_schema_mapper_nested_struct_cast_and_mismatch(monkeypatch) -> None:
     # Input rows include mixed/partial types for the struct to exercise non-strict casting
     data = [
         {"provider": "test", "meta": {"a": 1, "b": "x"}},           # already matches
-        {"provider": "test", "meta": {"a": "2", "b": 3}},           # needs casting (int->str, str->int)
+        {"provider": "test", "meta": {"a": "2", "b": 3}},           # needs casting (str->int, int->str)
         {"provider": "test", "meta": {"a": None, "b": None}},       # nulls
     ]
     df = pl.DataFrame(data)
@@ -49,4 +50,5 @@ def test_schema_mapper_nested_struct_cast_and_mismatch(monkeypatch) -> None:
     # The struct fields should be present; values may be casted or null under strict=False
     f_a = out.frame.select(pl.col("meta").struct.field("a")).to_series()
     f_b = out.frame.select(pl.col("meta").struct.field("b")).to_series()
-    assert f_a.len() == 3 and f_b.len() == 3
+    assert f_a.to_list() == ["1", "2", None]
+    assert f_b.to_list() == ["x", "3", None]

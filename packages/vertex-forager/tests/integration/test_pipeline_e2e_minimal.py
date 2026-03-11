@@ -38,13 +38,17 @@ def test_e2e_pipeline_with_duckdb(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(HttpExecutor, "fetch", _fake_fetch)
 
     writer = DuckDBWriter(tmp_path / "e2e.duckdb")
-    engine = VertexForager(
-        router=_Router(),
-        http=HttpExecutor(client=object()),
-        writer=writer,
-        mapper=SchemaMapper(),
-        config=EngineConfig(requests_per_minute=60),
-        controller=FlowController(requests_per_minute=60, concurrency_limit=4),
-    )
-    res = asyncio.run(engine.run(dataset="any", symbols=None))
-    assert res.tables.get("e2e_table", 0) == 1
+    try:
+        engine = VertexForager(
+            router=_Router(),
+            http=HttpExecutor(client=object()),
+            writer=writer,
+            mapper=SchemaMapper(),
+            config=EngineConfig(requests_per_minute=60),
+            controller=FlowController(requests_per_minute=60, concurrency_limit=4),
+        )
+        res = asyncio.run(engine.run(dataset="any", symbols=None))
+        assert res.tables.get("e2e_table", 0) == 1
+    finally:
+        # Ensure DuckDB connection is closed even on failure
+        asyncio.run(writer.close())
