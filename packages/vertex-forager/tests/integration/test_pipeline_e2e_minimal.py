@@ -31,9 +31,11 @@ class _Router:
 
 
 class _FakeHttpClient:
-    # Optional hook to exercise before_http_request path if present
+    # Hook to exercise before_http_request path: inject test header
     def before_http_request(self, spec: RequestSpec) -> RequestSpec:
-        return spec
+        updated_headers = dict(spec.headers)
+        updated_headers["X-Test-Hook"] = "1"
+        return spec.model_copy(update={"headers": updated_headers})
 
     class _Resp:
         def __init__(self, content: bytes):
@@ -54,6 +56,9 @@ class _FakeHttpClient:
         timeout: float | None = None,
     ) -> "_FakeHttpClient._Resp":
         # Return a simple JSON-ish body; router.parse ignores payload content in this test
+        # Validate that before_http_request injection propagated into headers
+        if headers is None or headers.get("X-Test-Hook") != "1":
+            raise AssertionError("before_http_request header not propagated to HttpExecutor._fetch_http")
         return _FakeHttpClient._Resp(b"{}")
 
 
