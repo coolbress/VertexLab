@@ -54,12 +54,8 @@ def test_e2e_pipeline_with_duckdb(tmp_path, monkeypatch) -> None:
     finally:
         # Ensure DuckDB connection is closed even on failure
         asyncio.run(writer.close())
-    # Reopen DB to verify actual persisted contents
-    con = duckdb.connect(str(db_path))
-    try:
+    with duckdb.connect(str(db_path)) as con:
         row = con.execute("SELECT count(*) FROM e2e_table").fetchone()
         assert row is not None
         cnt = row[0]
         assert cnt == res.tables.get("e2e_table", 0) == 1
-    finally:
-        con.close()
