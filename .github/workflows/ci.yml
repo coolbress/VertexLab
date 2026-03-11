@@ -39,7 +39,7 @@ jobs:
         run: uv sync  # 라이브러리 설치 테스트
       - name: Trivy FS Scan (Config + Secrets, SARIF)
         id: trivy-sarif
-        uses: aquasecurity/trivy-action@97e0b3872f55f89b95b2f65b3dbab56962816478  # 0.16.1 pinned
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # 0.16.1 pinned
         with:
           scan-type: fs
           trivyignores: .trivyignore
@@ -63,7 +63,7 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
       - name: Trivy FS Scan (Table Gate)
-        uses: aquasecurity/trivy-action@97e0b3872f55f89b95b2f65b3dbab56962816478  # 0.16.1 pinned
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # 0.16.1 pinned
         with:
           scan-type: fs
           trivyignores: .trivyignore
