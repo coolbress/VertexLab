@@ -128,13 +128,13 @@ async def test_writer_failure_propagates_exception(tmp_path, monkeypatch) -> Non
     # Add None to trigger flush
     pkt_q.put_nowait(None)
 
-    # Run worker and expect exception
-    with pytest.raises(Exception, match="Disk Full"):
-        await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
-
-    # Verify error recorded in result
-    assert len(result.errors) > 0
-    assert "UnexpectedWriterError:fail_test:Disk Full" in result.errors[0]
+    # Run worker; summary error recorded (no duplicate Writer:Unexpected)
+    await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
+    # Verify exactly one error with DLQ summary
+    assert len(result.errors) == 1
+    err0 = result.errors[0]
+    assert "UnexpectedWriterError:fail_test:Disk Full" in err0
+    assert "DLQ=" in err0
 
 
 @pytest.mark.asyncio
@@ -176,13 +176,13 @@ async def test_dlq_spool_and_per_packet_rescue(tmp_path, monkeypatch) -> None:
     pkt_q.put_nowait(FramePacket(provider="test", table="fail_test", frame=pl.DataFrame({"id": [2]}), observed_at=datetime.now()))
     pkt_q.put_nowait(None)
 
-    with pytest.raises(Exception, match="Disk Full"):
-        await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
+    await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
 
     # Single summarized error with DLQ status (no per-item DLQ lines)
-    errors_text = "\n".join(result.errors)
-    assert "WriterError:fail_test:Disk Full" in errors_text
-    assert "DLQ=" in errors_text
+    assert len(result.errors) == 1
+    err0 = result.errors[0]
+    assert "WriterError:fail_test: Disk Full".replace("  ", " ") in err0 or "WriterError:fail_test:Disk Full" in err0
+    assert "DLQ=" in err0
     assert result.tables.get("fail_test", 0) == 1
 
 @pytest.mark.asyncio
@@ -216,13 +216,13 @@ async def test_dlq_summary_after_consecutive_failures(tmp_path, monkeypatch) -> 
         pkt_q.put_nowait(FramePacket(provider="test", table="fail_test", frame=pl.DataFrame({"id": [i]}), observed_at=datetime.now()))
     pkt_q.put_nowait(None)
 
-    with pytest.raises(Exception, match="Disk Full"):
-        await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
+    await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
 
-    errors_text = "\n".join(result.errors)
     # Summarized entry should indicate spooled and remaining count
-    assert "UnexpectedWriterError:fail_test:Disk Full" in errors_text
-    assert "DLQ=spooled" in errors_text
+    assert len(result.errors) == 1
+    err0 = result.errors[0]
+    assert "UnexpectedWriterError:fail_test:Disk Full" in err0
+    assert "DLQ=spooled" in err0
     # Verify DLQ IPC contains all 4 ids
     dlq_dir = tmp_path / "app" / "cache" / "dlq" / "fail_test"
     files = list(dlq_dir.glob("batch_*.ipc"))
@@ -263,8 +263,7 @@ async def test_dlq_tmp_on_error_cleanup(tmp_path, monkeypatch) -> None:
         pkt_q.put_nowait(FramePacket(provider="test", table="fail_test", frame=pl.DataFrame({"id": [i]}), observed_at=datetime.now()))
     pkt_q.put_nowait(None)
 
-    with pytest.raises(Exception, match="Disk Full"):
-        await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
+    await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
 
     dlq_dir = tmp_path / "app" / "cache" / "dlq" / "fail_test"
     assert dlq_dir.exists()

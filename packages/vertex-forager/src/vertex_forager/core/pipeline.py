@@ -742,8 +742,11 @@ class VertexForager:
                     except Exception:
                         pass
                     self._log_structured(provider=first.provider, dataset=table, symbol=None, stage="dlq_spooled")
+                    # Emit per-count structured logs even on early return
+                    self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_rescued_{rescued}")
+                    self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_remaining_{remaining}")
                     return {"status": "spooled", "rescued": rescued, "remaining": remaining, "path": str(fpath), "error": None}
-                except Exception:
+                except Exception as exc:
                     # On-error cleanup of tmp
                     if getattr(self._config, "dlq_tmp_cleanup_on_error", False):
                         try:
@@ -764,7 +767,8 @@ class VertexForager:
                         pending = result.dlq_pending.get(table, [])
                         pending.extend(failed_packets)
                         result.dlq_pending[table] = pending
-                    raise
+                    # Re-raise original exception to preserve context
+                    raise exc
             self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_rescued_{rescued}")
             self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_remaining_{remaining}")
             # All failed packets were spooled; if none remained, still return a status
@@ -888,7 +892,8 @@ class VertexForager:
                     buffers[table] = []
                     buffer_rows[table] = 0
                     logger.exception(f"WRITER: Unexpected error writing batch for {table}: {e}")
-                    raise
+                    # Do not re-raise to avoid outer handler adding duplicate Writer:Unexpected
+                    return
 
         while True:
             packet = await pkt_q.get()
