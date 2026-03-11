@@ -813,7 +813,7 @@ class VertexForager:
                         f"(DLQ=noop; rescued={status['rescued']}; remaining={status['remaining']})"
                     )
                 case "spool_failed":
-                    # Not expected in current flow (we re-raise on spool failure), but format defensively
+                    # Built and appended before re-raising the spool exception to the outer handler.
                     summary = (
                         f"{prefix}:{table}:{exc} "
                         f"(DLQ=spool_failed; rescued={status['rescued']}; remaining={status['remaining']})"
