@@ -887,6 +887,10 @@ class VertexForager:
                     buffers[table] = []
                     buffer_rows[table] = 0
                     logger.exception(f"WRITER: Spool failed after writer error for {table}: {spool_exc}")
+                    try:
+                        setattr(spool_exc, "_already_reported", True)
+                    except Exception:
+                        pass
                     raise
                 summary = _build_writer_error_summary(status=status, table=table, prefix="WriterError", exc=e)
                 async with result_lock:
@@ -913,6 +917,10 @@ class VertexForager:
                         buffers[table] = []
                         buffer_rows[table] = 0
                         logger.exception(f"WRITER: Spool failed after DuckDB error for {table}: {spool_exc}")
+                        try:
+                            setattr(spool_exc, "_already_reported", True)
+                        except Exception:
+                            pass
                         raise
                     summary = _build_writer_error_summary(status=status, table=table, prefix="DuckDBError", exc=e)
                     async with result_lock:
@@ -932,6 +940,10 @@ class VertexForager:
                         buffers[table] = []
                         buffer_rows[table] = 0
                         logger.exception(f"WRITER: Spool failed after unexpected error for {table}: {spool_exc}")
+                        try:
+                            setattr(spool_exc, "_already_reported", True)
+                        except Exception:
+                            pass
                         raise
                     summary = _build_writer_error_summary(status=status, table=table, prefix="UnexpectedWriterError", exc=e)
                     async with result_lock:
@@ -980,7 +992,8 @@ class VertexForager:
                 raise
             except Exception as e:
                 async with result_lock:
-                    result.errors.append(f"Writer:Unexpected:{e}")
+                    if not getattr(e, "_already_reported", False):
+                        result.errors.append(f"Writer:Unexpected:{e}")
                 logger.exception("WRITER: Unexpected error")
                 raise
             finally:
