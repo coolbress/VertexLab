@@ -1,6 +1,7 @@
 # Writer Fan-out Roadmap: Table Sharding or External OLAP (Future)
 
 ## Context
+
 - Current pipeline uses a single writer instance (e.g., DuckDBWriter) that upserts normalized frames with PK-based uniqueness and schema evolution.
 - DuckDB offers excellent single-node performance but does not support multi-writer concurrency to the same database file safely.
 - Growth scenarios require higher ingest throughput and isolation across tables/domains, motivating fan-out or migration to managed OLAP.
@@ -11,47 +12,59 @@ Related code references:
 - Pipeline write path: [core/pipeline.py](../packages/vertex-forager/src/vertex_forager/core/pipeline.py)
 
 ## Preconditions
+
 - Do not open the same DuckDB file from multiple writers concurrently.
 - Consider external OLAP if multi-writer durability/scale is required beyond single-node DuckDB.
 - Maintain strict PK-based idempotency and error isolation (DLQ) semantics.
 
 ## Design Goals
+
 - Remove the single-writer bottleneck when throughput increases.
 - Preserve atomicity/consistency guarantees and provide clear error isolation and reprocessing.
 - Integrate with existing backpressure/rate limiting (FlowController) and metrics hooks.
 
 ## Option A: Table-Level Fan-out (Multiple Sinks)
+
 ### Overview
+
 - Partition by table (and optionally by domain or date-range), route each partition to its own destination (e.g., separate DuckDB files).
 - A single orchestrator process owns routing and ensures no two writers touch the same file concurrently.
 
 ### Architecture
+
 - Add a fan-out dispatcher (in pipeline or writer facade) that maps `FramePacket.table` → destination URI.
 - Instantiate one writer per destination (e.g., `duckdb://./dbs/sharadar_sep.duckdb`, `duckdb://./dbs/yfinance_price.duckdb`).
 - Route writes by table; maintain per-writer async locks to prevent overlapping transactions.
 
 ### Transactionality & Ordering
+
 - Ordering within a table is preserved by routing; writers use upsert with unique index (PK).
 - For strict ordering across domains, retain current queue priority (pagination-first) and flush strategy.
 
 ### Error Isolation & Reprocessing
+
 - DLQ remains per table; failures in one destination do not block others.
 - Recovery uses existing `vertex-forager recover` flow to reinject IPC batches to a chosen destination.
 
 ### Backpressure & Resource Management
+
 - Limit concurrent writer flushes per destination.
 - Reuse existing metrics hooks to emit per-destination write latency p95/p99 and rows written.
 - Use environment tunables for HTTP concurrency independently of writer concurrency.
 
 ### Pros/Cons
+
 - Pros: Minimal change to storage engine; straightforward routing; easy rollback.
 - Cons: More files to manage; single-node limits still apply; backups/compaction must run per file.
 
 ## Option B: External OLAP (MotherDuck, ClickHouse)
+
 ### Overview
+
 - Migrate hot tables (or all tables) to an OLAP store that supports concurrent writers, columnar compression, and distributed compute.
 
 ### Architecture
+
 - Introduce new writer(s): `MotherDuckWriter`, `ClickHouseWriter`, with shared `BaseWriter` interface.
 - Configuration maps table → destination URI (e.g., `md://db.schema/table`, `ch://host:port/db/table`).
 - Preserve `write` and `write_bulk` semantics; implement upsert via:
@@ -59,22 +72,27 @@ Related code references:
   - ClickHouse: INSERT with ReplacingMergeTree; deduplication keyed by PK + version or UUID.
 
 ### Transactionality & Ordering
+
 - Idempotency enforced via PK (and possibly version column); eventual consistency accepted for CH merge engines.
 - Ordering across shards is not required if consumer queries rely on PK/analysis_date ordering.
 
 ### Error Isolation & Reprocessing
+
 - Keep DLQ in IPC form for failed batches; add per-destination DLQ routing.
 - Provide a simple “reinject to OLAP” CLI path analogous to DuckDB recover.
 
 ### Backpressure & Resource Management
+
 - Writers manage connection pools (MotherDuck over DuckDB/HTTP, ClickHouse native protocol/HTTP).
 - Expose max connections/keepalive where applicable; reuse existing `default_async_client` env tunables for HTTP flows.
 
 ### Pros/Cons
+
 - Pros: Horizontal scalability, managed durability, better analytical performance for large datasets.
 - Cons: New dependencies and credentials; upsert/idempotency logic varies by engine; migration complexity.
 
 ## Migration Path
+
 1. Stage 0 (Current): Single DuckDBWriter per run; PK indexes; DLQ isolation.
 2. Stage 1 (Fan-out Local): Table → separate DuckDB files; dispatcher ensures single-writer per file.
 3. Stage 2 (Hybrid): Move hot tables to MotherDuck/ClickHouse; cold tables remain on DuckDB; dual writers via routing.
@@ -97,6 +115,7 @@ Related code references:
 4. Stage 3 (Full OLAP): All tables reside in OLAP; DuckDB used for local dev/testing or as cache.
 
 ## Configuration Sketch
+
 ```yaml
 writers:
   default: "duckdb://./forager.duckdb"
