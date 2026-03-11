@@ -343,7 +343,15 @@ class DuckDBWriter(BaseWriter):
             return
         self._logger.info(LOG_COMPACTING.format(prefix=DK_LOG_PREFIX))
         self._logger.info("Compacting DuckDB database...")
+        # DuckDB note: VACUUM is a PostgreSQL-compatibility alias and does not reclaim disk space itself.
+        # The subsequent CHECKPOINT merges the WAL into the main DB and is responsible for truncation/space reclamation.
         self._conn.execute("VACUUM")
+        # Create a new database checkpoint to incorporate WAL and reduce recovery time
+        try:
+            self._conn.execute("CHECKPOINT")
+        except duckdb.Error as e:
+            # Environments may not support CHECKPOINT (unlikely) or DB not in WAL mode
+            self._logger.warning(f"{DK_LOG_PREFIX}: CHECKPOINT failed or unsupported: {e}")
         self._logger.info(LOG_COMPACT_DONE.format(prefix=DK_LOG_PREFIX))
 
     async def close(self) -> None:
