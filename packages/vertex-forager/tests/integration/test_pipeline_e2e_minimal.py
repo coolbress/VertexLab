@@ -30,20 +30,40 @@ class _Router:
         return ParseResult(packets=[pkt], next_jobs=[])
 
 
-async def _fake_fetch(_self, _spec: RequestSpec) -> bytes:  # pragma: no cover - trivial stub
-    return b"{}"
+class _FakeHttpClient:
+    # Optional hook to exercise before_http_request path if present
+    def before_http_request(self, spec: RequestSpec) -> RequestSpec:
+        return spec
+
+    class _Resp:
+        def __init__(self, content: bytes):
+            self.content = content
+
+        def raise_for_status(self) -> None:
+            return None
+
+    async def run_async(
+        self,
+        method: str,
+        url: str,
+        *,
+        params: dict | None = None,
+        headers: dict | None = None,
+        json: dict | None = None,
+        content: bytes | None = None,
+        timeout: float | None = None,
+    ) -> "_FakeHttpClient._Resp":
+        # Return a simple JSON-ish body; router.parse ignores payload content in this test
+        return _FakeHttpClient._Resp(b"{}")
 
 
-def test_e2e_pipeline_with_duckdb(tmp_path, monkeypatch) -> None:
-    # Patch HttpExecutor.fetch to avoid network
-    monkeypatch.setattr(HttpExecutor, "fetch", _fake_fetch)
-
+def test_e2e_pipeline_with_duckdb(tmp_path) -> None:
     db_path = tmp_path / "e2e.duckdb"
     writer = DuckDBWriter(db_path)
     try:
         engine = VertexForager(
             router=_Router(),
-            http=HttpExecutor(client=object()),
+            http=HttpExecutor(client=_FakeHttpClient()),
             writer=writer,
             mapper=SchemaMapper(),
             config=EngineConfig(requests_per_minute=60),
