@@ -21,10 +21,9 @@ def test_schema_mapper_nested_struct_cast_and_mismatch(monkeypatch: pytest.Monke
         analysis_date_col=None,
     )
 
-    # Monkeypatch registry lookup to return our temporary schema
-    import vertex_forager.schema.registry as reg
-
-    monkeypatch.setattr(reg, "get_table_schema", lambda name: schema if name == "tmp_struct_tbl" else None)
+    # Monkeypatch mapper module's imported get_table_schema so normalize() uses the stub
+    import vertex_forager.schema.mapper as mapper_mod
+    monkeypatch.setattr(mapper_mod, "get_table_schema", lambda name: schema if name == "tmp_struct_tbl" else None)
 
     # Input rows include mixed/partial types for the struct to exercise non-strict casting
     data = [
@@ -47,8 +46,11 @@ def test_schema_mapper_nested_struct_cast_and_mismatch(monkeypatch: pytest.Monke
     assert "meta" in out.frame.columns
     assert isinstance(out.frame.schema["meta"], pl.Struct)
 
-    # The struct fields should be present; values may be casted or null under strict=False
+    # The struct fields should be present and types reflect schema under strict=False casting
     f_a = out.frame.select(pl.col("meta").struct.field("a")).to_series()
     f_b = out.frame.select(pl.col("meta").struct.field("b")).to_series()
-    assert f_a.to_list() == ["1", "2", None]
+    assert f_a.dtype == pl.Int64
+    assert f_b.dtype == pl.Utf8
+    # Values: cast string "2" -> 2; integer 1 stays 1; None stays None; int 3 -> "3" for b already matches Utf8
+    assert f_a.to_list() == [1, 2, None]
     assert f_b.to_list() == ["x", "3", None]

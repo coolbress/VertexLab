@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import AsyncIterator
 from collections.abc import Sequence
 
+import duckdb
 import polars as pl
 
 from vertex_forager.core.pipeline import VertexForager
@@ -37,7 +38,8 @@ def test_e2e_pipeline_with_duckdb(tmp_path, monkeypatch) -> None:
     # Patch HttpExecutor.fetch to avoid network
     monkeypatch.setattr(HttpExecutor, "fetch", _fake_fetch)
 
-    writer = DuckDBWriter(tmp_path / "e2e.duckdb")
+    db_path = tmp_path / "e2e.duckdb"
+    writer = DuckDBWriter(db_path)
     try:
         engine = VertexForager(
             router=_Router(),
@@ -52,3 +54,12 @@ def test_e2e_pipeline_with_duckdb(tmp_path, monkeypatch) -> None:
     finally:
         # Ensure DuckDB connection is closed even on failure
         asyncio.run(writer.close())
+    # Reopen DB to verify actual persisted contents
+    con = duckdb.connect(str(db_path))
+    try:
+        row = con.execute("SELECT count(*) FROM e2e_table").fetchone()
+        assert row is not None
+        cnt = row[0]
+        assert cnt == res.tables.get("e2e_table", 0) == 1
+    finally:
+        con.close()
