@@ -131,11 +131,13 @@ limits:
 ```
 
 ## Observability & Operations
+
 - Metrics: per-destination counters, flush latency p95/p99, rows written.
 - Logs: structured events for `write_flush`, `dlq_spooled`, `dlq_rescued_*`.
 - Maintenance: periodic VACUUM/CHECKPOINT for DuckDB; retention policies for DLQ; connection health checks for OLAP.
 
 ## Configuration Examples
+
 - MotherDuck DSN
   - `md://database.schema/table`
   - Auth: environment variable `MOTHERDUCK_TOKEN` loaded by writer; avoid printing tokens in logs.
@@ -152,14 +154,17 @@ limits:
   - `writers.routes.yfinance_price: md://forager.public/yfinance_price`
 
 ## Security
+
 - Credentials loaded via environment or secrets manager; never logged.
 - Rotate keys via client/writer lifecycle hooks (similar to `before_http_request` in HttpExecutor).
 
 ## Risks & Trade-offs
+
 - Multi-destination complexity in configuration and monitoring.
 - Upsert semantics differ across OLAP engines; carefully define idempotency.
 - Operational overhead for backups and schema evolution across multiple stores.
 
 ## Acceptance Criteria
+
 - This document captures trade-offs, architecture options, and a phased migration plan.
 - No code changes are required to maintain current single-writer correctness.
