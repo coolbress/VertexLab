@@ -1,5 +1,5 @@
 from __future__ import annotations
-from datetime import datetime
+from datetime import datetime, timezone
 import polars as pl
 import asyncio
 import pytest
@@ -37,7 +37,7 @@ async def test_dlq_ipc_file_mode_is_0600(tmp_path, monkeypatch) -> None:
     result = RunResult(provider="test")
     result_lock = asyncio.Lock()
 
-    pkt_q.put_nowait(FramePacket(provider="test", table="perm_test", frame=pl.DataFrame({"id": [1]}), observed_at=datetime.now()))
+    pkt_q.put_nowait(FramePacket(provider="test", table="perm_test", frame=pl.DataFrame({"id": [1]}), observed_at=datetime.now(timezone.utc)))
     pkt_q.put_nowait(None)
 
     with pytest.raises(Exception, match="Disk Full"):
