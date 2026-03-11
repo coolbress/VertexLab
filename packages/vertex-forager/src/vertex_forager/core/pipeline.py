@@ -678,27 +678,36 @@ class VertexForager:
                 try:
                     # Validation: ensure PK columns exist and are non-null before rescue write
                     schema = get_table_schema(pkt.table)
+                    should_write = True
+                    abort_outer = False
                     if schema and schema.unique_key:
                         for col in schema.unique_key:
                             if col not in pkt.frame.columns:
                                 failed_packets.append(pkt)
+                                should_write = False
                                 consecutive_failures += 1
                                 if consecutive_failures >= max_consecutive_failures:
                                     processed = rescued + len(failed_packets)
                                     if processed < len(packets):
                                         failed_packets.extend(packets[processed:])
-                                    break
-                                continue
+                                    abort_outer = True
+                                break
                             nulls = pkt.frame.get_column(col).null_count()
                             if nulls > 0:
                                 failed_packets.append(pkt)
+                                should_write = False
                                 consecutive_failures += 1
                                 if consecutive_failures >= max_consecutive_failures:
                                     processed = rescued + len(failed_packets)
                                     if processed < len(packets):
                                         failed_packets.extend(packets[processed:])
-                                    break
-                                continue
+                                    abort_outer = True
+                                break
+                    if abort_outer:
+                        break
+                    if not should_write:
+                        # Skip rescue write for this pkt due to PK validation failure
+                        continue
 
                     wr = await self._writer.write(pkt)
                     async with result_lock:
