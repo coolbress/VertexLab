@@ -22,4 +22,4 @@
   - [Constants Reference](CONSTANTS.md)
 
 ## Navigation
-- Back to project root: ../README.md
+- [Back to project root](../README.md)

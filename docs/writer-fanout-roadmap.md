@@ -6,9 +6,9 @@
 - Growth scenarios require higher ingest throughput and isolation across tables/domains, motivating fan-out or migration to managed OLAP.
 
 Related code references:
-- Writer base: [writers/base.py](packages/vertex-forager/src/vertex_forager/writers/base.py)
-- DuckDB writer: [writers/duckdb.py](packages/vertex-forager/src/vertex_forager/writers/duckdb.py)
-- Pipeline write path: [core/pipeline.py](packages/vertex-forager/src/vertex_forager/core/pipeline.py)
+- Writer base: [writers/base.py](../packages/vertex-forager/src/vertex_forager/writers/base.py)
+- DuckDB writer: [writers/duckdb.py](../packages/vertex-forager/src/vertex_forager/writers/duckdb.py)
+- Pipeline write path: [core/pipeline.py](../packages/vertex-forager/src/vertex_forager/core/pipeline.py)
 
 ## Preconditions
 - Do not open the same DuckDB file from multiple writers concurrently.
@@ -122,7 +122,10 @@ limits:
   - Auth: environment variable `MOTHERDUCK_TOKEN` loaded by writer; avoid printing tokens in logs.
   - Network: HTTPS to MotherDuck endpoint; respect corporate proxies if present.
 - ClickHouse DSN
-  - `ch://user:password@host:8443/database/table?secure=true&compression=lz4`
+  - Use an environment variable or secret (avoid inlining credentials). Example:
+    - Env: `export CH_DSN='ch://host:8443/database/table?secure=true&compression=lz4'` and provide credentials via a secrets manager or client config
+    - Reference `CH_DSN` from writer configuration
+  - See also: [CI Security](ci-security.md) and internal “환경 변수/시크릿 매니저 사용” guidance
   - Engine: ReplacingMergeTree with version column or dedup key
   - Network: TLS required in production; allowlist egress; tune max_concurrent_inserts and max_partitions_per_insert
 - Routing sketch
