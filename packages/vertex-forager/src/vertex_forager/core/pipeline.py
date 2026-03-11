@@ -665,9 +665,9 @@ class VertexForager:
             f"WRITER: Adaptive bulk writing enabled. Threshold={threshold} rows"
         )
 
-        async def _spool_to_dlq_and_rescue(table: str, packets: list[FramePacket], err: Exception) -> None:
+        async def _spool_to_dlq_and_rescue(table: str, packets: list[FramePacket], err: Exception) -> dict[str, object]:
             if not packets:
-                return
+                return {"status": "noop", "rescued": 0, "remaining": 0, "path": None, "error": None}
             first = packets[0]
             rescued = 0
             failed_packets: list[FramePacket] = []
@@ -681,31 +681,21 @@ class VertexForager:
                         for col in schema.unique_key:
                             if col not in pkt.frame.columns:
                                 failed_packets.append(pkt)
-                                async with result_lock:
-                                    result.errors.append(f"DLQItem:{table}:{PrimaryKeyMissingError(table=table, column=col)}")
                                 consecutive_failures += 1
                                 if consecutive_failures >= max_consecutive_failures:
                                     processed = rescued + len(failed_packets)
                                     if processed < len(packets):
                                         failed_packets.extend(packets[processed:])
-                                        leftover = len(packets) - processed
-                                        async with result_lock:
-                                            result.errors.append(f"DLQSummary:{table}:consecutive_failures={consecutive_failures}:remaining={leftover}")
                                     break
                                 continue
                             nulls = pkt.frame.get_column(col).null_count()
                             if nulls > 0:
                                 failed_packets.append(pkt)
-                                async with result_lock:
-                                    result.errors.append(f"DLQItem:{table}:{PrimaryKeyNullError(table=table, column=col, null_count=nulls)}")
                                 consecutive_failures += 1
                                 if consecutive_failures >= max_consecutive_failures:
                                     processed = rescued + len(failed_packets)
                                     if processed < len(packets):
                                         failed_packets.extend(packets[processed:])
-                                        leftover = len(packets) - processed
-                                        async with result_lock:
-                                            result.errors.append(f"DLQSummary:{table}:consecutive_failures={consecutive_failures}:remaining={leftover}")
                                     break
                                 continue
 
@@ -714,19 +704,14 @@ class VertexForager:
                         result.tables[wr.table] = result.tables.get(wr.table, 0) + wr.rows
                     rescued += 1
                     consecutive_failures = 0
-                except Exception as e2:
+                except Exception:
                     failed_packets.append(pkt)
-                    async with result_lock:
-                        result.errors.append(f"DLQItem:{table}:{type(e2).__name__}:{e2}")
                     consecutive_failures += 1
                     if consecutive_failures >= max_consecutive_failures:
                         processed = rescued + len(failed_packets)
                         if processed < len(packets):
                             # Append remaining unprocessed packets to fail list to ensure they are spooled
                             failed_packets.extend(packets[processed:])
-                            leftover = len(packets) - processed
-                            async with result_lock:
-                                result.errors.append(f"DLQSummary:{table}:consecutive_failures={consecutive_failures}:remaining={leftover}")
                         break
             remaining = len(failed_packets)
             if remaining > 0:
@@ -757,9 +742,8 @@ class VertexForager:
                     except Exception:
                         pass
                     self._log_structured(provider=first.provider, dataset=table, symbol=None, stage="dlq_spooled")
-                    async with result_lock:
-                        result.errors.append(f"DLQ:{table}:{str(fpath)}:{type(err).__name__}:{err}")
-                except Exception as e_spool:
+                    return {"status": "spooled", "rescued": rescued, "remaining": remaining, "path": str(fpath), "error": None}
+                except Exception:
                     # On-error cleanup of tmp
                     if getattr(self._config, "dlq_tmp_cleanup_on_error", False):
                         try:
@@ -780,11 +764,11 @@ class VertexForager:
                         pending = result.dlq_pending.get(table, [])
                         pending.extend(failed_packets)
                         result.dlq_pending[table] = pending
-                    async with result_lock:
-                        result.errors.append(f"DLQSpoolError:{table}:{type(e_spool).__name__}:{e_spool}")
                     raise
             self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_rescued_{rescued}")
             self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_remaining_{remaining}")
+            # All failed packets were spooled; if none remained, still return a status
+            return {"status": "spooled" if remaining > 0 else "rescued_only", "rescued": rescued, "remaining": remaining, "path": None, "error": None}
 
         async def flush(table: str) -> None:
             """Flush the buffer for a specific table.
@@ -850,10 +834,18 @@ class VertexForager:
                 buffer_rows[table] = 0
 
             except (ComputeError, ValidationError) as e:
+                self._inc("errors_total", 1)
+                status = await _spool_to_dlq_and_rescue(table, packets, e)
+                dlq_status = str(status.get("status"))
+                rescued = status.get("rescued", 0)
+                remaining = status.get("remaining", 0)
+                path = status.get("path")
+                summary = f"WriterError:{table}:{e} (DLQ={dlq_status}; rescued={rescued}; remaining={remaining}"
+                if path:
+                    summary += f"; path={path}"
+                summary += ")"
                 async with result_lock:
-                    result.errors.append(f"WriterError:{table}:{e}")
-                    self._inc("errors_total", 1)
-                await _spool_to_dlq_and_rescue(table, packets, e)
+                    result.errors.append(summary)
                 buffers[table] = []
                 buffer_rows[table] = 0
                 if isinstance(e, PrimaryKeyMissingError):
@@ -865,18 +857,34 @@ class VertexForager:
             except Exception as e:
                 # Check for DuckDB Error if available
                 if _duckdb is not None and isinstance(e, _duckdb.Error):
+                    self._inc("errors_total", 1)
+                    status = await _spool_to_dlq_and_rescue(table, packets, e)
+                    dlq_status = str(status.get("status"))
+                    rescued = status.get("rescued", 0)
+                    remaining = status.get("remaining", 0)
+                    path = status.get("path")
+                    summary = f"DuckDBError:{table}:{e} (DLQ={dlq_status}; rescued={rescued}; remaining={remaining}"
+                    if path:
+                        summary += f"; path={path}"
+                    summary += ")"
                     async with result_lock:
-                        result.errors.append(f"DuckDBError:{table}:{e}")
-                        self._inc("errors_total", 1)
-                    await _spool_to_dlq_and_rescue(table, packets, e)
+                        result.errors.append(summary)
                     buffers[table] = []
                     buffer_rows[table] = 0
                     logger.exception(f"WRITER: DuckDB error for {table}: {e}")
                 else:
+                    self._inc("errors_total", 1)
+                    status = await _spool_to_dlq_and_rescue(table, packets, e)
+                    dlq_status = str(status.get("status"))
+                    rescued = status.get("rescued", 0)
+                    remaining = status.get("remaining", 0)
+                    path = status.get("path")
+                    summary = f"UnexpectedWriterError:{table}:{e} (DLQ={dlq_status}; rescued={rescued}; remaining={remaining}"
+                    if path:
+                        summary += f"; path={path}"
+                    summary += ")"
                     async with result_lock:
-                        result.errors.append(f"UnexpectedWriterError:{table}:{e}")
-                        self._inc("errors_total", 1)
-                    await _spool_to_dlq_and_rescue(table, packets, e)
+                        result.errors.append(summary)
                     buffers[table] = []
                     buffer_rows[table] = 0
                     logger.exception(f"WRITER: Unexpected error writing batch for {table}: {e}")

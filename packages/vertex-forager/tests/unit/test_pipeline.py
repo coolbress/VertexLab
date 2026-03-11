@@ -179,8 +179,10 @@ async def test_dlq_spool_and_per_packet_rescue(tmp_path, monkeypatch) -> None:
     with pytest.raises(Exception, match="Disk Full"):
         await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
 
-    assert any(err.startswith("DLQItem:fail_test:") for err in result.errors)
-    assert "DLQSummary:fail_test:" not in "\n".join(result.errors)
+    # Single summarized error with DLQ status (no per-item DLQ lines)
+    errors_text = "\n".join(result.errors)
+    assert "WriterError:fail_test:Disk Full" in errors_text
+    assert "DLQ=" in errors_text
     assert result.tables.get("fail_test", 0) == 1
 
 @pytest.mark.asyncio
@@ -218,7 +220,9 @@ async def test_dlq_summary_after_consecutive_failures(tmp_path, monkeypatch) -> 
         await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
 
     errors_text = "\n".join(result.errors)
-    assert "DLQSummary:fail_test:" in errors_text
+    # Summarized entry should indicate spooled and remaining count
+    assert "UnexpectedWriterError:fail_test:Disk Full" in errors_text
+    assert "DLQ=spooled" in errors_text
     # Verify DLQ IPC contains all 4 ids
     dlq_dir = tmp_path / "app" / "cache" / "dlq" / "fail_test"
     files = list(dlq_dir.glob("batch_*.ipc"))
