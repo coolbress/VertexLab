@@ -34,7 +34,7 @@ from collections import defaultdict, deque
 
 import polars as pl
 from polars.exceptions import ComputeError
-from vertex_forager.exceptions import ValidationError, PrimaryKeyMissingError, PrimaryKeyNullError, FetchError, VertexForagerError
+from vertex_forager.exceptions import ValidationError, PrimaryKeyMissingError, PrimaryKeyNullError, FetchError
 from vertex_forager.constants import (
     FLUSH_THRESHOLD_ROWS as DEFAULT_FLUSH_THRESHOLD_ROWS,
     PRIORITY_PAGINATION as CONST_PRIORITY_PAGINATION,
@@ -674,39 +674,28 @@ class VertexForager:
             failed_packets: list[FramePacket] = []
             max_consecutive_failures = 3
             consecutive_failures = 0
+
+            def _validate_pk_for_rescue(pkt: FramePacket, schema_obj: Any) -> tuple[bool, str | None]:
+                if schema_obj and getattr(schema_obj, "unique_key", None):
+                    for col in schema_obj.unique_key:
+                        if col not in pkt.frame.columns:
+                            return False, "missing"
+                        nulls = pkt.frame.get_column(col).null_count()
+                        if nulls > 0:
+                            return False, "null"
+                return True, None
             for pkt in packets:
                 try:
-                    # Validation: ensure PK columns exist and are non-null before rescue write
                     schema = get_table_schema(pkt.table)
-                    should_write = True
-                    abort_outer = False
-                    if schema and schema.unique_key:
-                        for col in schema.unique_key:
-                            if col not in pkt.frame.columns:
-                                failed_packets.append(pkt)
-                                should_write = False
-                                consecutive_failures += 1
-                                if consecutive_failures >= max_consecutive_failures:
-                                    processed = rescued + len(failed_packets)
-                                    if processed < len(packets):
-                                        failed_packets.extend(packets[processed:])
-                                    abort_outer = True
-                                break
-                            nulls = pkt.frame.get_column(col).null_count()
-                            if nulls > 0:
-                                failed_packets.append(pkt)
-                                should_write = False
-                                consecutive_failures += 1
-                                if consecutive_failures >= max_consecutive_failures:
-                                    processed = rescued + len(failed_packets)
-                                    if processed < len(packets):
-                                        failed_packets.extend(packets[processed:])
-                                    abort_outer = True
-                                break
-                    if abort_outer:
-                        break
-                    if not should_write:
-                        # Skip rescue write for this pkt due to PK validation failure
+                    is_valid, _reason = _validate_pk_for_rescue(pkt, schema)
+                    if not is_valid:
+                        failed_packets.append(pkt)
+                        consecutive_failures += 1
+                        if consecutive_failures >= max_consecutive_failures:
+                            processed = rescued + len(failed_packets)
+                            if processed < len(packets):
+                                failed_packets.extend(packets[processed:])
+                            break
                         continue
 
                     wr = await self._writer.write(pkt)
@@ -763,42 +752,7 @@ class VertexForager:
                     self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_rescued_{rescued}")
                     self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_remaining_{remaining}")
                     return {"status": "spooled", "rescued": rescued, "remaining": remaining, "path": str(fpath), "error": None}
-                except VertexForagerError as exc:
-                    # On-error cleanup of tmp
-                    if getattr(self._config, "dlq_tmp_cleanup_on_error", False):
-                        try:
-                            if tmp_path is not None and tmp_path.exists():
-                                tmp_path.unlink()
-                                try:
-                                    dir_fd = os.open(str(tmp_path.parent), os.O_RDONLY)
-                                    try:
-                                        os.fsync(dir_fd)
-                                    finally:
-                                        os.close(dir_fd)
-                                except Exception:
-                                    pass
-                        except Exception as _e_del:
-                            logger.warning("DLQ tmp on-error cleanup failed for %s: %s", tmp_path, _e_del)
-                    # Preserve failed packets for post-mortem handling
-                    async with result_lock:
-                        pending = result.dlq_pending.get(table, [])
-                        pending.extend(failed_packets)
-                        result.dlq_pending[table] = pending
-                    # Emit structured summary counts before re-raise
-                    rescued_count = rescued
-                    remaining_count = len(failed_packets)
-                    self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_rescued_{rescued_count}")
-                    self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_remaining_{remaining_count}")
-                    # Attach counts to exception for upstream status propagation
-                    try:
-                        setattr(exc, "_dlq_rescued", rescued_count)
-                        setattr(exc, "_dlq_remaining", remaining_count)
-                    except Exception:
-                        pass
-                    # Re-raise original exception to preserve traceback
-                    raise exc
                 except Exception as exc:
-                    # On-error cleanup of tmp
                     if getattr(self._config, "dlq_tmp_cleanup_on_error", False):
                         try:
                             if tmp_path is not None and tmp_path.exists():
@@ -813,23 +767,19 @@ class VertexForager:
                                     pass
                         except Exception as _e_del:
                             logger.warning("DLQ tmp on-error cleanup failed for %s: %s", tmp_path, _e_del)
-                    # Preserve failed packets for post-mortem handling
                     async with result_lock:
                         pending = result.dlq_pending.get(table, [])
                         pending.extend(failed_packets)
                         result.dlq_pending[table] = pending
-                    # Emit structured summary counts before re-raise
                     rescued_count = rescued
                     remaining_count = len(failed_packets)
                     self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_rescued_{rescued_count}")
                     self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_remaining_{remaining_count}")
-                    # Attach counts to exception for upstream status propagation
                     try:
                         setattr(exc, "_dlq_rescued", rescued_count)
                         setattr(exc, "_dlq_remaining", remaining_count)
                     except Exception:
                         pass
-                    # Re-raise original exception to preserve traceback
                     raise
             self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_rescued_{rescued}")
             self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_remaining_{remaining}")
