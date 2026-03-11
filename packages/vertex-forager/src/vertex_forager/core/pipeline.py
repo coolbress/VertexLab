@@ -27,7 +27,7 @@ import time
 import itertools
 import httpx
 import os
-from typing import Any, TYPE_CHECKING, cast, TypedDict, Literal, Optional
+from typing import Any, TYPE_CHECKING, cast
 from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Sequence, Callable
 from collections import defaultdict, deque
@@ -62,6 +62,7 @@ from vertex_forager.core.retry import create_retry_controller
 from vertex_forager.core.contracts import IRouter, IWriter, IMapper
 from vertex_forager.schema.registry import get_table_schema
 from vertex_forager.utils import sanitize_field, get_cache_dir, cleanup_dlq_tmp
+from vertex_forager.core.types import DLQStatus
 
 if TYPE_CHECKING:
     pass
@@ -76,13 +77,6 @@ except (ImportError, ModuleNotFoundError):
 logger = logging.getLogger("vertex_forager.debug")
 
 Symbols = Sequence[str]
-
-class DLQStatus(TypedDict):
-    status: Literal["noop", "spooled", "rescued_only", "spool_failed"]
-    rescued: int
-    remaining: int
-    path: Optional[str]
-    error: Optional[Exception]
 
 
 class VertexForager:
@@ -785,18 +779,37 @@ class VertexForager:
                     raise exc
             self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_rescued_{rescued}")
             self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_remaining_{remaining}")
-            # All failed packets were spooled; if none remained, still return a status
-            return {"status": "spooled" if remaining > 0 else "rescued_only", "rescued": rescued, "remaining": remaining, "path": None, "error": None}
+            # At this point, any remaining > 0 would have been handled in the spooling block (return/raise).
+            # Return rescued_only for clarity.
+            return {"status": "rescued_only", "rescued": rescued, "remaining": 0, "path": None, "error": None}
 
         def _build_writer_error_summary(*, status: DLQStatus, table: str, prefix: str, exc: Exception) -> str:
-            dlq_status = str(status.get("status"))
-            rescued = status.get("rescued", 0)
-            remaining = status.get("remaining", 0)
-            path = status.get("path")
-            summary = f"{prefix}:{table}:{exc} (DLQ={dlq_status}; rescued={rescued}; remaining={remaining}"
-            if path:
-                summary += f"; path={path}"
-            summary += ")"
+            match status["status"]:
+                case "spooled":
+                    path = status["path"]
+                    summary = (
+                        f"{prefix}:{table}:{exc} "
+                        f"(DLQ=spooled; rescued={status['rescued']}; remaining={status['remaining']}; path={path})"
+                    )
+                case "rescued_only":
+                    summary = (
+                        f"{prefix}:{table}:{exc} "
+                        f"(DLQ=rescued_only; rescued={status['rescued']}; remaining={status['remaining']})"
+                    )
+                case "noop":
+                    summary = (
+                        f"{prefix}:{table}:{exc} "
+                        f"(DLQ=noop; rescued={status['rescued']}; remaining={status['remaining']})"
+                    )
+                case "spool_failed":
+                    # Not expected in current flow (we re-raise on spool failure), but format defensively
+                    summary = (
+                        f"{prefix}:{table}:{exc} "
+                        f"(DLQ=spool_failed; rescued={status['rescued']}; remaining={status['remaining']})"
+                    )
+                case _:
+                    # Fallback if a new status is introduced without updating this function
+                    summary = f"{prefix}:{table}:{exc} (DLQ={status['status']})"
             return summary
 
         async def flush(table: str) -> None:
@@ -864,7 +877,17 @@ class VertexForager:
 
             except (ComputeError, ValidationError) as e:
                 self._inc("errors_total", 1)
-                status = await _spool_to_dlq_and_rescue(table, packets, e)
+                try:
+                    status = await _spool_to_dlq_and_rescue(table, packets, e)
+                except Exception as spool_exc:
+                    status = {"status": "spool_failed", "rescued": 0, "remaining": 0, "path": None, "error": spool_exc}
+                    summary = _build_writer_error_summary(status=status, table=table, prefix="WriterError", exc=e)
+                    async with result_lock:
+                        result.errors.append(summary)
+                    buffers[table] = []
+                    buffer_rows[table] = 0
+                    logger.exception(f"WRITER: Spool failed after writer error for {table}: {spool_exc}")
+                    raise
                 summary = _build_writer_error_summary(status=status, table=table, prefix="WriterError", exc=e)
                 async with result_lock:
                     result.errors.append(summary)
@@ -880,7 +903,17 @@ class VertexForager:
                 # Check for DuckDB Error if available
                 if _duckdb is not None and isinstance(e, _duckdb.Error):
                     self._inc("errors_total", 1)
-                    status = await _spool_to_dlq_and_rescue(table, packets, e)
+                    try:
+                        status = await _spool_to_dlq_and_rescue(table, packets, e)
+                    except Exception as spool_exc:
+                        status = {"status": "spool_failed", "rescued": 0, "remaining": 0, "path": None, "error": spool_exc}
+                        summary = _build_writer_error_summary(status=status, table=table, prefix="DuckDBError", exc=e)
+                        async with result_lock:
+                            result.errors.append(summary)
+                        buffers[table] = []
+                        buffer_rows[table] = 0
+                        logger.exception(f"WRITER: Spool failed after DuckDB error for {table}: {spool_exc}")
+                        raise
                     summary = _build_writer_error_summary(status=status, table=table, prefix="DuckDBError", exc=e)
                     async with result_lock:
                         result.errors.append(summary)
@@ -889,7 +922,17 @@ class VertexForager:
                     logger.exception(f"WRITER: DuckDB error for {table}: {e}")
                 else:
                     self._inc("errors_total", 1)
-                    status = await _spool_to_dlq_and_rescue(table, packets, e)
+                    try:
+                        status = await _spool_to_dlq_and_rescue(table, packets, e)
+                    except Exception as spool_exc:
+                        status = {"status": "spool_failed", "rescued": 0, "remaining": 0, "path": None, "error": spool_exc}
+                        summary = _build_writer_error_summary(status=status, table=table, prefix="UnexpectedWriterError", exc=e)
+                        async with result_lock:
+                            result.errors.append(summary)
+                        buffers[table] = []
+                        buffer_rows[table] = 0
+                        logger.exception(f"WRITER: Spool failed after unexpected error for {table}: {spool_exc}")
+                        raise
                     summary = _build_writer_error_summary(status=status, table=table, prefix="UnexpectedWriterError", exc=e)
                     async with result_lock:
                         result.errors.append(summary)

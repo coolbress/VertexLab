@@ -74,3 +74,33 @@ YFinanceDataset: TypeAlias = Literal[
     "recommendations",
     "actions",
 ]
+
+class DLQStatusSpooled(TypedDict):
+    status: Literal["spooled"]
+    rescued: int
+    remaining: int
+    path: str
+    error: None
+
+class DLQStatusRescuedOnly(TypedDict):
+    status: Literal["rescued_only"]
+    rescued: int
+    remaining: int
+    path: None
+    error: None
+
+class DLQStatusNoop(TypedDict):
+    status: Literal["noop"]
+    rescued: int
+    remaining: int
+    path: None
+    error: None
+
+class DLQStatusSpoolFailed(TypedDict):
+    status: Literal["spool_failed"]
+    rescued: int
+    remaining: int
+    path: None
+    error: Exception
+
+DLQStatus = Union[DLQStatusSpooled, DLQStatusRescuedOnly, DLQStatusNoop, DLQStatusSpoolFailed]
