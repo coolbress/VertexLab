@@ -812,6 +812,35 @@ class VertexForager:
                     summary = f"{prefix}:{table}:{exc} (DLQ={status['status']})"
             return summary
 
+        async def _handle_flush_error(
+            *,
+            table: str,
+            packets: list[FramePacket],
+            exc: Exception,
+            prefix: str,
+        ) -> None:
+            self._inc("errors_total", 1)
+            try:
+                status = await _spool_to_dlq_and_rescue(table, packets, exc)
+            except Exception as spool_exc:
+                status = cast(DLQStatus, {"status": "spool_failed", "rescued": 0, "remaining": 0, "path": None, "error": spool_exc})
+                summary = _build_writer_error_summary(status=status, table=table, prefix=prefix, exc=exc)
+                async with result_lock:
+                    result.errors.append(summary)
+                buffers[table] = []
+                buffer_rows[table] = 0
+                logger.exception(f"WRITER: Spool failed after {prefix} for {table}: {spool_exc}")
+                try:
+                    setattr(spool_exc, "_already_reported", True)
+                except Exception:
+                    pass
+                raise
+            summary = _build_writer_error_summary(status=status, table=table, prefix=prefix, exc=exc)
+            async with result_lock:
+                result.errors.append(summary)
+            buffers[table] = []
+            buffer_rows[table] = 0
+
         async def flush(table: str) -> None:
             """Flush the buffer for a specific table.
 
@@ -876,27 +905,7 @@ class VertexForager:
                 buffer_rows[table] = 0
 
             except (ComputeError, ValidationError) as e:
-                self._inc("errors_total", 1)
-                try:
-                    status = await _spool_to_dlq_and_rescue(table, packets, e)
-                except Exception as spool_exc:
-                    status = {"status": "spool_failed", "rescued": 0, "remaining": 0, "path": None, "error": spool_exc}
-                    summary = _build_writer_error_summary(status=status, table=table, prefix="WriterError", exc=e)
-                    async with result_lock:
-                        result.errors.append(summary)
-                    buffers[table] = []
-                    buffer_rows[table] = 0
-                    logger.exception(f"WRITER: Spool failed after writer error for {table}: {spool_exc}")
-                    try:
-                        setattr(spool_exc, "_already_reported", True)
-                    except Exception:
-                        pass
-                    raise
-                summary = _build_writer_error_summary(status=status, table=table, prefix="WriterError", exc=e)
-                async with result_lock:
-                    result.errors.append(summary)
-                buffers[table] = []
-                buffer_rows[table] = 0
+                await _handle_flush_error(table=table, packets=packets, exc=e, prefix="WriterError")
                 if isinstance(e, PrimaryKeyMissingError):
                     logger.error("WRITER: PKMissing table=%s column=%s", table, e.column)
                 elif isinstance(e, PrimaryKeyNullError):
@@ -906,50 +915,10 @@ class VertexForager:
             except Exception as e:
                 # Check for DuckDB Error if available
                 if _duckdb is not None and isinstance(e, _duckdb.Error):
-                    self._inc("errors_total", 1)
-                    try:
-                        status = await _spool_to_dlq_and_rescue(table, packets, e)
-                    except Exception as spool_exc:
-                        status = {"status": "spool_failed", "rescued": 0, "remaining": 0, "path": None, "error": spool_exc}
-                        summary = _build_writer_error_summary(status=status, table=table, prefix="DuckDBError", exc=e)
-                        async with result_lock:
-                            result.errors.append(summary)
-                        buffers[table] = []
-                        buffer_rows[table] = 0
-                        logger.exception(f"WRITER: Spool failed after DuckDB error for {table}: {spool_exc}")
-                        try:
-                            setattr(spool_exc, "_already_reported", True)
-                        except Exception:
-                            pass
-                        raise
-                    summary = _build_writer_error_summary(status=status, table=table, prefix="DuckDBError", exc=e)
-                    async with result_lock:
-                        result.errors.append(summary)
-                    buffers[table] = []
-                    buffer_rows[table] = 0
+                    await _handle_flush_error(table=table, packets=packets, exc=e, prefix="DuckDBError")
                     logger.exception(f"WRITER: DuckDB error for {table}: {e}")
                 else:
-                    self._inc("errors_total", 1)
-                    try:
-                        status = await _spool_to_dlq_and_rescue(table, packets, e)
-                    except Exception as spool_exc:
-                        status = {"status": "spool_failed", "rescued": 0, "remaining": 0, "path": None, "error": spool_exc}
-                        summary = _build_writer_error_summary(status=status, table=table, prefix="UnexpectedWriterError", exc=e)
-                        async with result_lock:
-                            result.errors.append(summary)
-                        buffers[table] = []
-                        buffer_rows[table] = 0
-                        logger.exception(f"WRITER: Spool failed after unexpected error for {table}: {spool_exc}")
-                        try:
-                            setattr(spool_exc, "_already_reported", True)
-                        except Exception:
-                            pass
-                        raise
-                    summary = _build_writer_error_summary(status=status, table=table, prefix="UnexpectedWriterError", exc=e)
-                    async with result_lock:
-                        result.errors.append(summary)
-                    buffers[table] = []
-                    buffer_rows[table] = 0
+                    await _handle_flush_error(table=table, packets=packets, exc=e, prefix="UnexpectedWriterError")
                     logger.exception(f"WRITER: Unexpected error writing batch for {table}: {e}")
                     # Do not re-raise to avoid outer handler adding duplicate Writer:Unexpected
                     return
