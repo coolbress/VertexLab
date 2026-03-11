@@ -34,7 +34,7 @@ from collections import defaultdict, deque
 
 import polars as pl
 from polars.exceptions import ComputeError
-from vertex_forager.exceptions import ValidationError, PrimaryKeyMissingError, PrimaryKeyNullError, FetchError
+from vertex_forager.exceptions import ValidationError, PrimaryKeyMissingError, PrimaryKeyNullError, FetchError, DLQSpoolError
 from vertex_forager.constants import (
     FLUSH_THRESHOLD_ROWS as DEFAULT_FLUSH_THRESHOLD_ROWS,
     PRIORITY_PAGINATION as CONST_PRIORITY_PAGINATION,
@@ -782,12 +782,7 @@ class VertexForager:
                     remaining_count = len(failed_packets)
                     self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_rescued_{rescued_count}")
                     self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_remaining_{remaining_count}")
-                    try:
-                        setattr(exc, "_dlq_rescued", rescued_count)
-                        setattr(exc, "_dlq_remaining", remaining_count)
-                    except Exception:
-                        pass
-                    raise
+                    raise DLQSpoolError(rescued=rescued_count, remaining=remaining_count, original=exc) from exc
             self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_rescued_{rescued}")
             self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_remaining_{remaining}")
             # At this point, any remaining > 0 would have been handled in the spooling block (return/raise).
@@ -834,8 +829,12 @@ class VertexForager:
             try:
                 status = await _spool_to_dlq_and_rescue(table, packets, exc)
             except Exception as spool_exc:
-                rescued_count = int(getattr(spool_exc, "_dlq_rescued", 0))
-                remaining_count = int(getattr(spool_exc, "_dlq_remaining", 0))
+                if isinstance(spool_exc, DLQSpoolError):
+                    rescued_count = spool_exc.rescued
+                    remaining_count = spool_exc.remaining
+                else:
+                    rescued_count = 0
+                    remaining_count = 0
                 status = cast(DLQStatus, {"status": "spool_failed", "rescued": rescued_count, "remaining": remaining_count, "path": None, "error": spool_exc})
                 summary = _build_writer_error_summary(status=status, table=table, prefix=prefix, exc=exc)
                 async with result_lock:

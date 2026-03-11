@@ -80,6 +80,16 @@ class PrimaryKeyNullError(ValidationError):
         self.null_count = null_count
         super().__init__(f"PK column '{column}' in table '{table}' has {null_count} nulls")
 
+class DLQSpoolError(VertexForagerError):
+    def __init__(self, *, rescued: int, remaining: int, original: Exception | None = None) -> None:
+        self.rescued = rescued
+        self.remaining = remaining
+        self.original = original
+        msg = f"DLQ spool failed: rescued={rescued} remaining={remaining}"
+        if original is not None:
+            msg = f"{msg}: {original}"
+        super().__init__(msg)
+
 __all__ = [
     "VertexForagerError",
     "InputError",
@@ -90,4 +100,5 @@ __all__ = [
     "ValidationError",
     "PrimaryKeyMissingError",
     "PrimaryKeyNullError",
+    "DLQSpoolError",
 ]
