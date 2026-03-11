@@ -10,6 +10,7 @@ from typing import Literal
 import polars as pl
 from pydantic import BaseModel, Field
 from pydantic import field_validator
+from pydantic import ValidationInfo
 from vertex_forager.core.types import JSONValue
 from vertex_forager.constants import (
     FLUSH_THRESHOLD_ROWS,
@@ -44,11 +45,29 @@ class RetryConfig(BaseModel):
           Use idempotency keys or upstream idempotent semantics before enabling broader codes.
     """
 
-    max_attempts: int = DEFAULT_RETRY_MAX_ATTEMPTS
+    max_attempts: int = Field(default=DEFAULT_RETRY_MAX_ATTEMPTS, ge=1)
     base_backoff_s: float = Field(default=DEFAULT_RETRY_BASE_BACKOFF_S, ge=0.0)
     max_backoff_s: float = Field(default=DEFAULT_RETRY_MAX_BACKOFF_S, ge=0.0)
     enable_http_status_retry: bool = True
     retry_status_codes: tuple[int, ...] = (429, 503)
+
+    @field_validator("max_backoff_s")
+    @classmethod
+    def _validate_backoff_window(cls, v: float, info: ValidationInfo) -> float:
+        base = info.data.get("base_backoff_s", DEFAULT_RETRY_BASE_BACKOFF_S)
+        if v < base:
+            raise ValueError("max_backoff_s must be >= base_backoff_s")
+        return v
+
+    @field_validator("retry_status_codes")
+    @classmethod
+    def _validate_retry_codes(cls, v: tuple[int, ...]) -> tuple[int, ...]:
+        if not v:
+            return v
+        for code in v:
+            if code < 100 or code > 599:
+                raise ValueError("retry_status_codes must be valid HTTP status codes (100-599)")
+        return v
 
 
 class HttpMethod(str, Enum):

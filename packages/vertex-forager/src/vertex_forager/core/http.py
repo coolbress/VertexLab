@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+import inspect
 import re
 import httpx
 import io
@@ -92,6 +93,26 @@ class HttpExecutor:
             httpx.HTTPStatusError: Non-2xx HTTP status returned.
             TypeError: When parameters are invalid for the underlying client.
         """
+        # Optional pre-request hook for credential refresh or dynamic headers.
+        hook = getattr(self._client, "before_http_request", None)
+        if callable(hook):
+            try:
+                res = hook(spec)
+                if inspect.iscoroutine(res):
+                    res = await res
+                if res is not None:
+                    if isinstance(res, RequestSpec):
+                        spec = res
+                    elif isinstance(res, dict):
+                        try:
+                            spec = RequestSpec(**res)
+                        except Exception as ve:
+                            logger.debug("before_http_request returned invalid dict: %s", ve, exc_info=True)
+                    else:
+                        logger.debug("before_http_request returned invalid type: %s", type(res))
+            except Exception as e:
+                logger.debug("before_http_request hook raised: %s", e, exc_info=True)
+
         headers: dict[str, str] = dict(spec.headers)
         params: dict[str, "JSONValue"] = dict(spec.params)
 

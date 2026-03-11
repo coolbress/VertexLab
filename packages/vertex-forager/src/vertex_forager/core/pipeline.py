@@ -171,11 +171,18 @@ class VertexForager:
             thread_name_prefix="vertex-forager:parse",
         )
         self._summary: dict[str, float] = {}
+        self._metrics_sink = getattr(config, "metrics_sink", None)
 
     def _inc(self, name: str, amount: int = 1) -> None:
         if not self._metrics_enabled:
             return
         self._counters[name] = self._counters.get(name, 0) + amount
+        sink = self._metrics_sink
+        if sink is not None:
+            try:
+                sink.inc(name, amount)
+            except Exception:
+                pass
 
     def _observe(self, name: str, value: float) -> None:
         if not self._metrics_enabled:
@@ -185,6 +192,12 @@ class VertexForager:
             bucket = deque(maxlen=self._MAX_HIST_SAMPLES)
             self._hists[name] = bucket
         bucket.append(float(value))
+        sink = self._metrics_sink
+        if sink is not None:
+            try:
+                sink.observe(name, float(value))
+            except Exception:
+                pass
 
     def _compute_summary(self) -> dict[str, float]:
         if not self._metrics_enabled:
@@ -385,6 +398,12 @@ class VertexForager:
                 result.metrics_histograms = {k: list(v) for k, v in self._hists.items()}
                 self._summary = self._compute_summary()
                 result.metrics_summary = dict(self._summary)
+                sink = self._metrics_sink
+                if sink is not None:
+                    try:
+                        sink.summary(dict(self._summary))
+                    except Exception:
+                        pass
                 if self._structured_logs:
                     dur_run = time.monotonic() - t_run0
                     msg_s = (
