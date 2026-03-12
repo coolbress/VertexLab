@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 import vertex_forager.core.http as _http_mod
 from vertex_forager.core.config import RequestSpec
 from vertex_forager.core.types import JSONValue
@@ -26,19 +26,20 @@ class YFinanceLibraryFetcher(BaseLibraryFetcher):
         Raises:
             ValueError: When yfinance is unavailable or call specification invalid.
         """
-        if getattr(_http_mod, "yf", None) is None:
+        yf_lib = cast(Any, getattr(_http_mod, "yf", None))
+        if yf_lib is None:
             raise ValueError("yfinance library not available")
         ticker_symbol, dataset, lib = self.parse_spec(spec)
         call_type = lib.get("type")
         kw = lib.get("kwargs")
         call_kwargs: dict[str, JSONValue] = dict(kw) if isinstance(kw, dict) else {}
         if call_type == "download":
-            return _http_mod.yf.download(tickers=ticker_symbol, **call_kwargs)
+            return yf_lib.download(tickers=ticker_symbol, **call_kwargs)
         if call_type == "ticker_attr":
             attr_name = lib.get("attr")
             if not isinstance(attr_name, str) or attr_name.startswith("_") or "__" in attr_name:
                 raise ValueError(f"Unknown yfinance dataset: {dataset} -> {attr_name}")
-            ticker = _http_mod.yf.Ticker(ticker_symbol)
+            ticker = yf_lib.Ticker(ticker_symbol)
             try:
                 attr = getattr(ticker, attr_name)
             except AttributeError:

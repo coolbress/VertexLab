@@ -195,9 +195,6 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         
         # YFinance requires symbols for almost all datasets
         if not symbols:
-            if dataset == "tickers":
-                raise NotImplementedError("YFinance does not support bulk ticker listing.")
-            
             raise ValueError(
             f"YFinance provider requires 'symbols' list for dataset '{dataset}'."
             )

@@ -31,8 +31,8 @@ from vertex_forager.core.config import (
     FetchJob,
     FramePacket,
     RequestAuth,
+    ParseResult,
 )
-from vertex_forager.core.contracts import ParseResult
 from vertex_forager.routers.base import BaseRouter
 from vertex_forager.routers.errors import raise_quandl_error
 from vertex_forager.routers.jobs import (
