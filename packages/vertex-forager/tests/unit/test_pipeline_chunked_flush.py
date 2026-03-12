@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
+from collections import deque
 
 import polars as pl
 import pytest
@@ -10,7 +11,6 @@ import pytest
 from vertex_forager.core.config import EngineConfig, FramePacket, RunResult
 from vertex_forager.core.pipeline import VertexForager
 from vertex_forager.writers.base import BaseWriter, WriteResult
-from collections import deque
 from vertex_forager.exceptions import VertexForagerError
 
 
