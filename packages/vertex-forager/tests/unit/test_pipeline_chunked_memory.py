@@ -39,21 +39,17 @@ def _child_run_memory_peak(chunk_rows: int, conn: Connection) -> None:
         for i in range(num_frames):
             start = i * rows_per_frame
             end = (i + 1) * rows_per_frame
-            base = list(range(start, end))
-            frames.append(
-                pl.DataFrame(
-                    {
-                        "c0": base,
-                        "c1": [x + 1 for x in base],
-                        "c2": [x * 2 for x in base],
-                        "c3": [x ^ 0xAAAA for x in base],
-                        "c4": [x // 3 for x in base],
-                        "c5": [x % 97 for x in base],
-                        "c6": [x * 3 for x in base],
-                        "c7": [x - 1 for x in base],
-                    }
-                )
+            base_df = pl.DataFrame({"c0": pl.arange(start, end, eager=True)})
+            frame = base_df.with_columns(
+                (pl.col("c0") + 1).alias("c1"),
+                (pl.col("c0") * 2).alias("c2"),
+                (pl.col("c0") ^ pl.lit(0xAAAA)).alias("c3"),
+                (pl.col("c0") // 3).alias("c4"),
+                (pl.col("c0") % 97).alias("c5"),
+                (pl.col("c0") * 3).alias("c6"),
+                (pl.col("c0") - 1).alias("c7"),
             )
+            frames.append(frame)
         total_rows = rows_per_frame * num_frames
         # Ensure baseline vs chunked behavior differs ONLY by writer_chunk_rows,
         # not by early threshold flushes
