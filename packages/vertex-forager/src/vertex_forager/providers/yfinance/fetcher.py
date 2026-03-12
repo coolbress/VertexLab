@@ -26,13 +26,13 @@ class YFinanceLibraryFetcher(BaseLibraryFetcher):
         Raises:
             ValueError: When yfinance is unavailable or call specification invalid.
         """
-        if getattr(_http_mod, "yf", None) is None:
+        yf_lib = cast(Any, getattr(_http_mod, "yf", None))
+        if yf_lib is None:
             raise ValueError("yfinance library not available")
         ticker_symbol, dataset, lib = self.parse_spec(spec)
         call_type = lib.get("type")
         kw = lib.get("kwargs")
         call_kwargs: dict[str, JSONValue] = dict(kw) if isinstance(kw, dict) else {}
-        yf_lib = cast(Any, getattr(_http_mod, "yf", None))
         if call_type == "download":
             return yf_lib.download(tickers=ticker_symbol, **call_kwargs)
         if call_type == "ticker_attr":
