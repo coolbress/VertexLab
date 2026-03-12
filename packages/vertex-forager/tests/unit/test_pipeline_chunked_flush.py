@@ -10,8 +10,8 @@ import pytest
 from vertex_forager.core.config import EngineConfig, FramePacket, RunResult
 from vertex_forager.core.pipeline import VertexForager
 from vertex_forager.writers.base import BaseWriter, WriteResult
-from vertex_forager.exceptions import VertexForagerError
 from collections import deque
+from vertex_forager.exceptions import VertexForagerError
 
 
 @pytest.mark.asyncio
@@ -62,17 +62,28 @@ async def test_chunked_flush_writes_multiple_chunks() -> None:
 
     await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
 
-    # Expect 2 writes due to chunking
-    assert mock_writer.write.await_count == 2
+    # Expect 2 writes due to chunking, and verify call order/rows explicitly
+    calls = list(mock_writer.write.await_args_list)
+    assert len(calls) == 2
+    first_rows = len(calls[0].args[0].frame)
+    second_rows = len(calls[1].args[0].frame)
+    # Streaming aggregator fills the first chunk to the limit, then writes the tail
+    assert first_rows == 10000
+    assert second_rows == 1
     assert result.tables.get("chunk_table", 0) == 10001
 
 
 def test_engine_config_writer_chunk_rows_coercion() -> None:
-    # writer_chunk_rows as string should coerce to int in assert_valid
-    cfg = EngineConfig(requests_per_minute=60, writer_chunk_rows="20000")  # type: ignore[arg-type]
+    # Pydantic may coerce at model construction time; explicitly test assert_valid path
+    cfg = EngineConfig(requests_per_minute=60)
+    cfg.writer_chunk_rows = "20000"  # type: ignore[assignment]
     cfg.assert_valid()
     assert isinstance(cfg.writer_chunk_rows, int)
     assert cfg.writer_chunk_rows == 20000
+    # Now assign invalid raw value and verify VertexForagerError path
+    cfg.writer_chunk_rows = "not-an-int"  # type: ignore[assignment]
+    with pytest.raises(VertexForagerError):
+        cfg.assert_valid()
 
 
 @pytest.mark.asyncio
