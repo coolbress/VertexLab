@@ -128,6 +128,25 @@ print(res)  # RunResult
   - DuckDB: `duckdb://./path/to/db.duckdb` (unique index created if PK known)
   - In-memory: `memory://`
 
+## Observability
+
+- Metrics (enabled via `EngineConfig.metrics_enabled=True`)
+  - Counters:
+    - `rows_written_total`
+    - `writer_flushes`
+    - `errors_total`
+    - `dlq_spooled_files_total`, `dlq_rescued_total`, `dlq_remaining_total`, `dlq_spool_failed_total`
+  - Histograms:
+    - `fetch_duration_s`, `parse_duration_s`, `http_duration_s`, `writer_flush_duration_s`
+    - Per table: `writer_flush_duration_s.{table}`, `writer_rows.{table}`
+  - Summary (selected percentiles):
+    - Global p95/p99 for durations
+    - Per table p50/p95/p99 for `writer_flush_duration_s.{table}` and `writer_rows.{table}`
+  - Queue snapshots:
+    - `req_q_len_after_producer`, `req_q_len_after_req_join`, `pkt_q_len_after_producer`, `pkt_q_len_after_pkt_join`
+- Optional spans (no hard dependency)
+  - Set env `VF_OTEL_ENABLED=1` and provide `EngineConfig.tracer` with a `start_span(name, attributes=...)` method to receive spans for `pipeline`, `fetch`, `parse`, and `write_flush`.
+
 ## Usage Patterns
 
 - Transport decoupling: Routers are transport-agnostic; normalize after decoding
