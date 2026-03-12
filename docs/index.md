@@ -24,3 +24,5 @@
 ## Navigation
 
 - [Back to project root](../README.md)
+
+<!-- pr labeler v5 schema smoke test -->
