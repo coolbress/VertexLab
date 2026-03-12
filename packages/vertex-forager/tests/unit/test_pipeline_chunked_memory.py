@@ -101,9 +101,8 @@ def _child_run_memory_peak(chunk_rows: int, conn: Connection) -> None:
     conn.send(res)
     conn.close()
 
-@pytest.mark.asyncio
 @pytest.mark.skipif(os.getenv("VF_ENABLE_MEMORY_PEAK_TEST") != "1", reason="memory-peak test disabled by default")
-async def test_chunked_flush_lower_memory_peak() -> None:
+def test_chunked_flush_lower_memory_peak() -> None:
     ctx = mp.get_context("spawn")
     b_parent, b_child = ctx.Pipe(duplex=False)
     c_parent, c_child = ctx.Pipe(duplex=False)
