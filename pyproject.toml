@@ -22,6 +22,15 @@ markers = [
     "integration: integration tests",
 ]
 
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_unused_ignores = true
+disallow_any_generics = true
+no_implicit_optional = true
+plugins = ["pydantic.mypy"]
+exclude = "packages/vertex-forager/tests"
+
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
