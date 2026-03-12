@@ -1,6 +1,6 @@
 name: PR Labeler
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
 concurrency:
   group: pr-label-${{ github.event.pull_request.number || github.run_id }}
@@ -16,3 +16,4 @@ jobs:
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           sync-labels: true
+          configuration-path: .github/labeler.yml
