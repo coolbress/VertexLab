@@ -7,6 +7,7 @@ import threading
 import time
 import os
 import multiprocessing as mp
+from multiprocessing.connection import Connection
 
 import polars as pl
 import psutil
@@ -17,7 +18,7 @@ from vertex_forager.core.pipeline import VertexForager
 from vertex_forager.writers.base import WriteResult
 
 
-def _child_run_memory_peak(chunk_rows: int, conn) -> None:
+def _child_run_memory_peak(chunk_rows: int, conn: Connection) -> None:
     import asyncio
     from vertex_forager.core.config import FramePacket
     from vertex_forager.writers.base import WriteResult
@@ -81,13 +82,19 @@ async def test_chunked_flush_lower_memory_peak() -> None:
     p_base = ctx.Process(target=_child_run_memory_peak, args=(0, b_child))
     p_chunk = ctx.Process(target=_child_run_memory_peak, args=(50_000, c_child))
     p_base.start()
-    baseline_peak, baseline_calls = b_parent.recv()
+    # Close child ends in parent immediately after start to avoid descriptor leaks
+    b_child.close()
+    # Ensure child exited successfully before receiving to avoid blocking on crash
     p_base.join(timeout=10)
-    assert p_base.exitcode == 0
+    assert p_base.exitcode == 0, f"p_base failed with exit code {p_base.exitcode}"
+    baseline_peak, baseline_calls = b_parent.recv()
+    b_parent.close()
     p_chunk.start()
-    chunked_peak, chunked_calls = c_parent.recv()
+    c_child.close()
     p_chunk.join(timeout=10)
-    assert p_chunk.exitcode == 0
+    assert p_chunk.exitcode == 0, f"p_chunk failed with exit code {p_chunk.exitcode}"
+    chunked_peak, chunked_calls = c_parent.recv()
+    c_parent.close()
     margin = 5 * 1024 * 1024
     assert chunked_calls > 1
     assert baseline_calls == 1
