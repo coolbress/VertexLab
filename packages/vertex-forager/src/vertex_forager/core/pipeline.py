@@ -27,7 +27,7 @@ import time
 import itertools
 import httpx
 import os
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager
 from typing import Any, TYPE_CHECKING, cast, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Sequence, Callable
@@ -247,18 +247,25 @@ class VertexForager:
     @contextmanager
     def _span(self, name: str, **attributes: object) -> Iterator[None]:
         if not self._otel_enabled or self._tracer is None:
-            with nullcontext():
-                yield
+            yield
             return
+        start_span = None
         try:
             start_span = getattr(self._tracer, "start_span", None)
-            if callable(start_span):
-                with start_span(f"vertex_forager.{name}", attributes=attributes):
-                    yield
-            else:
-                yield
         except Exception:
-            # Never fail pipeline due to tracing
+            start_span = None
+        if callable(start_span):
+            cm = None
+            try:
+                cm = start_span(f"vertex_forager.{name}", attributes=attributes)
+            except Exception:
+                cm = None
+            if cm is None:
+                yield
+            else:
+                with cm:
+                    yield
+        else:
             yield
     def _log_structured(self, *, provider: str, dataset: str, symbol: str | None, stage: str, attempt: int | None = None, duration_s: float | None = None) -> None:
         if not self._structured_logs:

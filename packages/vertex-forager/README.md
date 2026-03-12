@@ -135,7 +135,7 @@ print(res)  # RunResult
     - `rows_written_total`
     - `writer_flushes`
     - `errors_total`
-    - `dlq_spooled_files_total`, `dlq_rescued_total`, `dlq_remaining_total`
+    - `dlq_spooled_files_total`, `dlq_rescued_total`, `dlq_remaining_total`, `dlq_spool_failed_total`
   - Histograms:
     - `fetch_duration_s`, `parse_duration_s`, `http_duration_s`, `writer_flush_duration_s`
     - Per table: `writer_flush_duration_s.{table}`, `writer_rows.{table}`
