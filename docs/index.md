@@ -24,3 +24,5 @@
 ## Navigation
 
 - [Back to project root](../README.md)
+
+<!-- pr labeler smoke test target -->
