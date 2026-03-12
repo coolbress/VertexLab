@@ -141,6 +141,15 @@ async def test_chunked_flush_partial_error(tmp_path, monkeypatch) -> None:
     # Exactly one error should be recorded; rows from the first successful chunk counted
     assert len(result.errors) == 1
     assert result.tables.get("chunk_table", 0) == 10000
+    # Verify DLQ spooled file has the two failed rows and error summary records remaining=2
+    dlq_dir = tmp_path / "app" / "cache" / "dlq" / "chunk_table"
+    assert dlq_dir.exists()
+    files = sorted(dlq_dir.glob("batch_*.ipc"))
+    assert len(files) >= 1
+    df = pl.read_ipc(files[0])
+    assert df.shape[0] == 2
+    assert set(df.get_column("id").to_list()) == {10000, 10001}
+    assert any("DLQ=spooled" in e and "remaining=2" in e for e in result.errors)
 
 
 def test_engine_config_writer_chunk_rows_lower_bound() -> None:
