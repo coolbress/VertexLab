@@ -1,16 +1,21 @@
-"package:vertex-forager":
-  - "packages/vertex-forager/**"
-"area:core":
-  - "packages/vertex-forager/src/vertex_forager/core/**"
-"area:writers":
-  - "packages/vertex-forager/src/vertex_forager/writers/**"
-"area:routers":
-  - "packages/vertex-forager/src/vertex_forager/routers/**"
-"area:clients":
-  - "packages/vertex-forager/src/vertex_forager/providers/**"
-"area:docs":
-  - "docs/**"
-  - "README.md"
-"area:ci":
-  - ".github/workflows/**"
-  - ".github/**"
+package:vertex-forager:
+  - changed-files:
+      - any-glob-to-any-file: ["packages/vertex-forager/**"]
+area:core:
+  - changed-files:
+      - any-glob-to-any-file: ["packages/vertex-forager/src/vertex_forager/core/**"]
+area:writers:
+  - changed-files:
+      - any-glob-to-any-file: ["packages/vertex-forager/src/vertex_forager/writers/**"]
+area:routers:
+  - changed-files:
+      - any-glob-to-any-file: ["packages/vertex-forager/src/vertex_forager/routers/**"]
+area:clients:
+  - changed-files:
+      - any-glob-to-any-file: ["packages/vertex-forager/src/vertex_forager/providers/**"]
+area:docs:
+  - changed-files:
+      - any-glob-to-any-file: ["docs/**", "README.md"]
+area:ci:
+  - changed-files:
+      - any-glob-to-any-file: [".github/workflows/**", ".github/**"]
