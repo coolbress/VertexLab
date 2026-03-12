@@ -20,16 +20,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          labels='[
-            {"name":"severity/critical","color":"d73a4a","description":"Critical severity issue"},
-            {"name":"severity/high","color":"b60205","description":"High severity issue"},
-            {"name":"severity/medium","color":"fbca04","description":"Medium severity issue"},
-            {"name":"severity/low","color":"0e8a16","description":"Low severity issue"},
-            {"name":"priority/P1","color":"d73a4a","description":"Highest priority"},
-            {"name":"priority/P2","color":"b60205","description":"High priority"},
-            {"name":"priority/P3","color":"fbca04","description":"Medium priority"},
-            {"name":"priority/P4","color":"0e8a16","description":"Low priority"}
-          ]'
           api() {
             method="$1"; url="$2"; data="${3-}"
             if [ -n "$data" ]; then
@@ -45,37 +35,22 @@ jobs:
           }
           create_or_update() {
             name="$1"; color="$2"; desc="$3"
-            enc_name="$(python3 - <<PY
-import urllib.parse, sys
-print(urllib.parse.quote(sys.argv[1], safe=''))
-PY
-"$name")"
+            enc_name="$(python3 -c "import urllib.parse,sys; import sys as s; print(urllib.parse.quote(s.argv[1], safe=''))" "$name")"
             # Try PATCH (update or rename if exists)
             if ! api PATCH "https://api.github.com/repos/$REPO/labels/$enc_name" "{\"new_name\":\"$name\",\"color\":\"$color\",\"description\":\"$desc\"}"; then
               # If PATCH fails (likely 404), try create
               api POST "https://api.github.com/repos/$REPO/labels" "{\"name\":\"$name\",\"color\":\"$color\",\"description\":\"$desc\"}" || true
             fi
           }
-          python3 - <<'PY' > /tmp/labels.json
-import json, sys
-labels = [
-  {"name":"severity/critical","color":"d73a4a","description":"Critical severity issue"},
-  {"name":"severity/high","color":"b60205","description":"High severity issue"},
-  {"name":"severity/medium","color":"fbca04","description":"Medium severity issue"},
-  {"name":"severity/low","color":"0e8a16","description":"Low severity issue"},
-  {"name":"priority/P1","color":"d73a4a","description":"Highest priority"},
-  {"name":"priority/P2","color":"b60205","description":"High priority"},
-  {"name":"priority/P3","color":"fbca04","description":"Medium priority"},
-  {"name":"priority/P4","color":"0e8a16","description":"Low priority"},
-]
-print(json.dumps(labels))
-PY
-          for row in $(python3 - <<'PY'
-import json
-for item in json.load(open('/tmp/labels.json')):
-    print('|'.join([item['name'], item['color'], item['description'].replace('|','/')]))
-PY
-); do
-            IFS='|' read -r n c d <<< "$row"
+          python3 -c 'print("\n".join([
+            "severity/critical|d73a4a|Critical severity issue",
+            "severity/high|b60205|High severity issue",
+            "severity/medium|fbca04|Medium severity issue",
+            "severity/low|0e8a16|Low severity issue",
+            "priority/P1|d73a4a|Highest priority",
+            "priority/P2|b60205|High priority",
+            "priority/P3|fbca04|Medium priority",
+            "priority/P4|0e8a16|Low priority"
+          ]))' | while IFS='|' read -r n c d; do
             create_or_update "$n" "$c" "$d"
           done
