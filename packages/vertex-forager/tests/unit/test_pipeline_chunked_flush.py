@@ -29,7 +29,7 @@ async def test_chunked_flush_writes_multiple_chunks() -> None:
     mock_mapper = MagicMock()
     mock_controller = MagicMock()
 
-    cfg = EngineConfig(requests_per_minute=100, writer_chunk_rows=10_000)
+    cfg = EngineConfig(requests_per_minute=100, writer_chunk_rows=10_000, metrics_enabled=True)
     forager = VertexForager(
         router=mock_router,
         http=mock_http,
@@ -71,6 +71,11 @@ async def test_chunked_flush_writes_multiple_chunks() -> None:
     assert first_rows == 10000
     assert second_rows == 1
     assert result.tables.get("chunk_table", 0) == 10001
+    # Verify per-chunk contract with current schema: metrics histogram records per-chunk rows in order
+    hist = list(getattr(forager, "_hists").get("writer_rows.chunk_table", []))  # type: ignore[attr-defined]
+    assert len(hist) == 2
+    assert int(hist[0]) == first_rows
+    assert int(hist[1]) == second_rows
 
 
 def test_engine_config_writer_chunk_rows_coercion() -> None:
