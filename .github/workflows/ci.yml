@@ -45,13 +45,17 @@ jobs:
 
       - name: Install dependencies
         run: uv sync  # 라이브러리 설치 테스트
+      - name: Compute cache window
+        id: cache_window
+        run: echo "week=$(date +'%G-%V')" >> "$GITHUB_OUTPUT"
       - name: Cache Trivy DB
         uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306  # v5.0.3 pinned
         with:
           path: |
             ~/.cache/trivy
-          key: ${{ runner.os }}-trivy-db
+          key: ${{ runner.os }}-trivy-db-${{ steps.cache_window.outputs.week }}
           restore-keys: |
+            ${{ runner.os }}-trivy-db-${{ steps.cache_window.outputs.week }}
             ${{ runner.os }}-trivy-db
       - name: Trivy FS Scan (Config + Secrets, SARIF)
         id: trivy-sarif
@@ -114,13 +118,16 @@ jobs:
       - name: Build sdist and wheel (vertex-forager)
         run: |
           pushd packages/vertex-forager
-          uv build
-          ls -l dist
+          OUT="$GITHUB_WORKSPACE/dist/vertex-forager"
+          mkdir -p "$OUT"
+          uv build --out-dir "$OUT"
+          ls -l "$OUT"
           popd
       - name: Smoke install built wheel
         run: |
           pushd packages/vertex-forager
-          WHEEL="$(ls dist/*.whl | head -n1)"
+          OUT="$GITHUB_WORKSPACE/dist/vertex-forager"
+          WHEEL="$(ls "$OUT"/*.whl | head -n1)"
           python -m venv /tmp/verify-wheel
           /tmp/verify-wheel/bin/pip install --upgrade pip
           /tmp/verify-wheel/bin/pip install "$WHEEL"
@@ -131,7 +138,7 @@ jobs:
           print("import ok:", m.__name__)
           PY
           popd
-      - name: pip-audit (PyPI service; fail on HIGH/CRITICAL)
+      - name: pip-audit (fails on any vulnerability)
         uses: pypa/gh-action-pip-audit@1220774d901786e6f652ae159f7b6bc8fea6d266  # v1.1.0 pinned
         with:
           inputs: packages/vertex-forager
