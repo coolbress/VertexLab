@@ -27,7 +27,8 @@ import time
 import itertools
 import httpx
 import os
-from typing import Any, TYPE_CHECKING, cast
+from contextlib import contextmanager, nullcontext
+from typing import Any, TYPE_CHECKING, cast, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Sequence, Callable
 from collections import defaultdict, deque
@@ -137,6 +138,12 @@ class VertexForager:
         self._log_verbose = bool(config.log_verbose)
         self._counters: dict[str, int] = {}
         self._hists: dict[str, deque[float]] = {}
+        # Optional tracing hooks (no hard dependency)
+        self._tracer = getattr(config, "tracer", None)
+        self._otel_enabled = bool(
+            getattr(config, "otel_enabled", False)
+            or str(os.getenv("VF_OTEL_ENABLED", "")).lower() in {"1", "true", "yes"}
+        )
 
         # Track active tasks for graceful shutdown
         self._active_tasks: list[asyncio.Future[Any]] = []
@@ -214,8 +221,45 @@ class VertexForager:
             vals = list(self._hists.get(key, deque()))
             s[f"{key}_p95"] = _pctl(vals, 95.0)
             s[f"{key}_p99"] = _pctl(vals, 99.0)
+        # Per-table writer latencies and rows per flush
+        for key, vals_deque in self._hists.items():
+            if key.startswith("writer_flush_duration_s."):
+                table = key.split(".", 1)[1]
+                vals = list(vals_deque)
+                s[f"writer_flush_duration_s.{table}_p50"] = _pctl(vals, 50.0)
+                s[f"writer_flush_duration_s.{table}_p95"] = _pctl(vals, 95.0)
+                s[f"writer_flush_duration_s.{table}_p99"] = _pctl(vals, 99.0)
+            if key.startswith("writer_rows."):
+                table = key.split(".", 1)[1]
+                vals = list(vals_deque)
+                s[f"writer_rows.{table}_p50"] = _pctl(vals, 50.0)
+                s[f"writer_rows.{table}_p95"] = _pctl(vals, 95.0)
+                s[f"writer_rows.{table}_p99"] = _pctl(vals, 99.0)
+        # DLQ aggregate counters (copy from counters for summary visibility)
+        for agg_key in ("dlq_spooled_files_total", "dlq_rescued_total", "dlq_remaining_total"):
+            if agg_key in self._counters:
+                try:
+                    s[agg_key] = float(self._counters.get(agg_key, 0))
+                except Exception:
+                    pass
         s["rows_written_total"] = float(self._counters.get("rows_written_total", 0))
         return s
+    @contextmanager
+    def _span(self, name: str, **attributes: object) -> Iterator[None]:
+        if not self._otel_enabled or self._tracer is None:
+            with nullcontext():
+                yield
+            return
+        try:
+            start_span = getattr(self._tracer, "start_span", None)
+            if callable(start_span):
+                with start_span(f"vertex_forager.{name}", attributes=attributes):
+                    yield
+            else:
+                yield
+        except Exception:
+            # Never fail pipeline due to tracing
+            yield
     def _log_structured(self, *, provider: str, dataset: str, symbol: str | None, stage: str, attempt: int | None = None, duration_s: float | None = None) -> None:
         if not self._structured_logs:
             return
@@ -337,13 +381,26 @@ class VertexForager:
 
             async def _pipeline_orchestration() -> None:
                 """Orchestrate the producer-fetcher-join sequence."""
-                logger.info("PIPELINE: Starting producer task...")
-                self._log_structured(provider=self._router.provider, dataset=dataset, symbol="*", stage="producer_start")
-                await producer_task
-                logger.info("PIPELINE: Producer completed, waiting for request queue...")
-                self._log_structured(provider=self._router.provider, dataset=dataset, symbol="*", stage="producer_done")
+                with self._span("pipeline", provider=self._router.provider, dataset=dataset):
+                    logger.info("PIPELINE: Starting producer task...")
+                    self._log_structured(provider=self._router.provider, dataset=dataset, symbol="*", stage="producer_start")
+                    await producer_task
+                    logger.info("PIPELINE: Producer completed, waiting for request queue...")
+                    self._log_structured(provider=self._router.provider, dataset=dataset, symbol="*", stage="producer_done")
+                    # Queue length snapshot after producer completes
+                    if self._metrics_enabled:
+                        try:
+                            self._summary["req_q_len_after_producer"] = float(req_q.qsize())
+                            self._summary["pkt_q_len_after_producer"] = float(pkt_q.qsize())
+                        except Exception:
+                            pass
                 await req_q.join()
                 logger.info("PIPELINE: Request queue joined, sending sentinel signals...")
+                if self._metrics_enabled:
+                    try:
+                        self._summary["req_q_len_after_req_join"] = float(req_q.qsize())
+                    except Exception:
+                        pass
                 for _ in range(self.controller.concurrency_limit):
                     # Sentinel with lowest priority (highest number)
                     await req_q.put((self.PRIORITY_SENTINEL, 0, None))
@@ -352,6 +409,11 @@ class VertexForager:
 
                 logger.info("PIPELINE: Fetch tasks completed, waiting for packet queue...")
                 await pkt_q.join()
+                if self._metrics_enabled:
+                    try:
+                        self._summary["pkt_q_len_after_pkt_join"] = float(pkt_q.qsize())
+                    except Exception:
+                        pass
                 for _ in writer_tasks:
                     await pkt_q.put(None)
 
@@ -573,7 +635,8 @@ class VertexForager:
                 self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="fetch_start")
 
                 t_fetch_start = time.monotonic()
-                payload = await self._fetch_with_retry(job)
+                with self._span("fetch", provider=job.provider, dataset=job.dataset, symbol=str(job.symbol)):
+                    payload = await self._fetch_with_retry(job)
                 t_fetch_end = time.monotonic()
                 fetch_latency = t_fetch_end - t_fetch_start
                 self._observe("fetch_duration_s", fetch_latency)
@@ -585,7 +648,8 @@ class VertexForager:
 
                 # Offload CPU-bound parsing to a dedicated thread pool
                 loop = asyncio.get_running_loop()
-                parse_result = await loop.run_in_executor(self._parse_executor, lambda: self._router.parse(job=job, payload=payload))
+                with self._span("parse", provider=job.provider, dataset=job.dataset, symbol=str(job.symbol)):
+                    parse_result = await loop.run_in_executor(self._parse_executor, lambda: self._router.parse(job=job, payload=payload))
                 t2 = time.monotonic()
                 parse_latency = t2 - t1
                 self._observe("parse_duration_s", parse_latency)
@@ -758,6 +822,15 @@ class VertexForager:
                     # Emit per-count structured logs even on early return
                     self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_rescued_{rescued}")
                     self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_remaining_{remaining}")
+                    # Metrics: DLQ spooled and counts
+                    self._inc("dlq_spooled_files_total", 1)
+                    self._inc(f"dlq_spooled_files.{table}", 1)
+                    if rescued:
+                        self._inc("dlq_rescued_total", int(rescued))
+                        self._inc(f"dlq_rescued.{table}", int(rescued))
+                    if remaining:
+                        self._inc("dlq_remaining_total", int(remaining))
+                        self._inc(f"dlq_remaining.{table}", int(remaining))
                     return {"status": "spooled", "rescued": rescued, "remaining": remaining, "path": str(fpath), "error": None}
                 except Exception as exc:
                     if getattr(self._config, "dlq_tmp_cleanup_on_error", False):
@@ -782,11 +855,23 @@ class VertexForager:
                     remaining_count = len(failed_packets)
                     self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_rescued_{rescued_count}")
                     self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_remaining_{remaining_count}")
+                    # Metrics: DLQ spool failed
+                    self._inc("dlq_spool_failed_total", 1)
+                    if rescued_count:
+                        self._inc("dlq_rescued_total", int(rescued_count))
+                        self._inc(f"dlq_rescued.{table}", int(rescued_count))
+                    if remaining_count:
+                        self._inc("dlq_remaining_total", int(remaining_count))
+                        self._inc(f"dlq_remaining.{table}", int(remaining_count))
                     raise DLQSpoolError(rescued=rescued_count, remaining=remaining_count, original=exc) from exc
             self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_rescued_{rescued}")
             self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_remaining_{remaining}")
             # At this point, any remaining > 0 would have been handled in the spooling block (return/raise).
             # Return rescued_only for clarity.
+            # Metrics: rescued only
+            if rescued:
+                self._inc("dlq_rescued_total", int(rescued))
+                self._inc(f"dlq_rescued.{table}", int(rescued))
             return {"status": "rescued_only", "rescued": rescued, "remaining": 0, "path": None, "error": None}
 
         def _build_writer_error_summary(*, status: DLQStatus, table: str, prefix: str, exc: Exception) -> str:
@@ -899,11 +984,15 @@ class VertexForager:
                     f"WRITER: Flushing {len(packets)} packets ({len(merged_frame)} rows) for {table}"
                 )
                 t_w0 = time.monotonic()
-                write_result = await self._writer.write(merged_packet)
+                with self._span("write_flush", table=table, rows=int(len(merged_frame))):
+                    write_result = await self._writer.write(merged_packet)
                 t_w1 = time.monotonic()
                 self._inc("writer_flushes", 1)
                 self._observe("writer_flush_duration_s", float(t_w1 - t_w0))
                 self._observe("writer_rows", float(write_result.rows))
+                # Per-table observations
+                self._observe(f"writer_flush_duration_s.{table}", float(t_w1 - t_w0))
+                self._observe(f"writer_rows.{table}", float(write_result.rows))
                 self._inc("rows_written_total", int(write_result.rows))
                 self._log_structured(provider=merged_packet.provider, dataset=merged_packet.table, symbol=None, stage="write_flush", duration_s=(t_w1 - t_w0))
 
