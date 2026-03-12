@@ -10,8 +10,6 @@ jobs:
   mypy:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,7 +18,7 @@ jobs:
         with:
           python-version: '3.10'
       - name: Setup uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v4
       - name: Install dependencies
         run: uv sync
       - name: Run mypy (strict)
