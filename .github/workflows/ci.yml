@@ -26,6 +26,14 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v4 pinned
+      - name: Cache uv download/build artifacts
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306  # v5.0.3 pinned
+        with:
+          path: |
+            ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('**/pyproject.toml', 'packages/**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-
 
       - name: Install uv
         uses: astral-sh/setup-uv@6ee6290f1cbc4156c0bdd66691b2c144ef8df19a  # v5 pinned
@@ -37,6 +45,14 @@ jobs:
 
       - name: Install dependencies
         run: uv sync  # 라이브러리 설치 테스트
+      - name: Cache Trivy DB
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306  # v5.0.3 pinned
+        with:
+          path: |
+            ~/.cache/trivy
+          key: ${{ runner.os }}-trivy-db
+          restore-keys: |
+            ${{ runner.os }}-trivy-db
       - name: Trivy FS Scan (Config + Secrets, SARIF)
         id: trivy-sarif
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # 0.16.1 pinned
@@ -50,6 +66,7 @@ jobs:
           skip-dirs: ".hypothesis,.ruff_cache,data,output,packages/vertex-forager/legacy_code,.venv,.tox,.cache,build,dist,node_modules"
         env:
           TRIVY_SKIP_VERSION_CHECK: "true"
+          TRIVY_CACHE_DIR: ~/.cache/trivy
       - name: Check Trivy SARIF presence
         run: |
           if [ -f trivy-results.sarif ]; then
@@ -74,6 +91,7 @@ jobs:
           skip-dirs: ".hypothesis,.ruff_cache,data,output,packages/vertex-forager/legacy_code,.venv,.tox,.cache,build,dist,node_modules"
         env:
           TRIVY_SKIP_VERSION_CHECK: "true"
+          TRIVY_CACHE_DIR: ~/.cache/trivy
       - name: Remediation Hints (On Failure)
         if: ${{ failure() }}
         run: |
@@ -93,3 +111,27 @@ jobs:
 
       - name: Run Tests (Pytest with Coverage Gate)
         run: uv run pytest packages/ --tb=short --cov=packages/vertex-forager/src/vertex_forager/core --cov=packages/vertex-forager/src/vertex_forager/clients --cov=packages/vertex-forager/src/vertex_forager/writers --cov=packages/vertex-forager/src/vertex_forager/routers --cov-report=term --cov-fail-under=80
+      - name: Build sdist and wheel (vertex-forager)
+        run: |
+          pushd packages/vertex-forager
+          uv build
+          ls -l dist
+          popd
+      - name: Smoke install built wheel
+        run: |
+          pushd packages/vertex-forager
+          WHEEL="$(ls dist/*.whl | head -n1)"
+          python -m venv /tmp/verify-wheel
+          /tmp/verify-wheel/bin/pip install --upgrade pip
+          /tmp/verify-wheel/bin/pip install "$WHEEL"
+          /tmp/verify-wheel/bin/python - <<'PY'
+          import importlib
+          import sys
+          m = importlib.import_module("vertex_forager")
+          print("import ok:", m.__name__)
+          PY
+          popd
+      - name: pip-audit (PyPI service; fail on HIGH/CRITICAL)
+        uses: pypa/gh-action-pip-audit@1220774d901786e6f652ae159f7b6bc8fea6d266  # v1.1.0 pinned
+        with:
+          inputs: packages/vertex-forager
