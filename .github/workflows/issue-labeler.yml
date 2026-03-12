@@ -50,6 +50,8 @@ jobs:
             }
             const current = await github.rest.issues.listLabelsOnIssue({ owner, repo, issue_number });
             const currentNames = new Set(current.data.map(l => l.name));
+            const prevSeverity = [...currentNames].find(n => n.startsWith("severity/")) || null;
+            const prevPriority = [...currentNames].find(n => n.startsWith("priority/")) || null;
             async function addIfMissing(name) {
               if (!name) return;
               if (!currentNames.has(name)) {
@@ -72,8 +74,22 @@ jobs:
             if (severityLabel) {
               await addIfMissing(severityLabel);
               await removeOthers("severity/", severityLabel);
+              if (prevSeverity !== severityLabel) {
+                const action = prevSeverity ? "changed" : "set";
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number,
+                  body: `Labeler: severity ${action} ${prevSeverity ? `from \`${prevSeverity}\` ` : ""}to \`${severityLabel}\`.`
+                });
+              }
             }
             if (priorityLabel) {
               await addIfMissing(priorityLabel);
               await removeOthers("priority/", priorityLabel);
+              if (prevPriority !== priorityLabel) {
+                const action = prevPriority ? "changed" : "set";
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number,
+                  body: `Labeler: priority ${action} ${prevPriority ? `from \`${prevPriority}\` ` : ""}to \`${priorityLabel}\`.`
+                });
+              }
             }
