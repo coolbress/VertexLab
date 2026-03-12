@@ -17,3 +17,35 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           sync-labels: true
           configuration-path: .github/labeler.yml
+      - name: Fallback labeler via github-script
+        if: failure()
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pr = context.payload.pull_request;
+            if (!pr) {
+              core.warning('No pull_request payload, skipping fallback labeler');
+              return;
+            }
+            const number = pr.number;
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner, repo, pull_number: number, per_page: 100,
+            });
+            const labels = new Set();
+            for (const f of files) {
+              const p = f.filename || '';
+              if (p.startsWith('docs/') || p === 'README.md') labels.add('area:docs');
+              if (p.startsWith('packages/vertex-forager/src/vertex_forager/core/')) labels.add('area:core');
+              if (p.startsWith('packages/vertex-forager/src/vertex_forager/writers/')) labels.add('area:writers');
+              if (p.startsWith('packages/vertex-forager/src/vertex_forager/routers/')) labels.add('area:routers');
+              if (p.startsWith('packages/vertex-forager/src/vertex_forager/providers/')) labels.add('area:clients');
+            }
+            if (labels.size === 0) {
+              core.info('No matching paths for fallback labels');
+              return;
+            }
+            await github.rest.issues.addLabels({
+              owner, repo, issue_number: number, labels: Array.from(labels),
+            });
