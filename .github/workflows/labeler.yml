@@ -79,9 +79,16 @@ jobs:
               'perf:': 'type:perf',
               'test:': 'type:test'
             };
+            // Support conventional commits with optional scope, e.g., "feat(core): ..."
+            const m = title.match(/^(feat|fix|chore|docs|refactor|perf|test)(\([^)]+\))?:\s/);
             let chosen = null;
-            for (const prefix of Object.keys(map)) {
-              if (title.startsWith(prefix)) { chosen = map[prefix]; break; }
+            if (m && m[1]) {
+              chosen = `type:${m[1]}`;
+            } else {
+              // Fallback to simple prefix detection without scope
+              for (const prefix of Object.keys(map)) {
+                if (title.startsWith(prefix)) { chosen = map[prefix]; break; }
+              }
             }
             if (!chosen) {
               core.info('No type:* inferred from title');
