@@ -2,6 +2,9 @@ name: Issue Form Auto Labeler
 on:
   issues:
     types: [opened, edited]
+concurrency:
+  group: issue-label-${{ github.event.issue.number || github.run_id }}
+  cancel-in-progress: true
 permissions:
   contents: read
   issues: write
