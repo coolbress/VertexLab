@@ -32,7 +32,36 @@ def _child_run_memory_peak(chunk_rows: int, conn: Connection) -> None:
 
     async def _run() -> tuple[int, int]:
         writer = FakeWriter()
-        cfg = EngineConfig(requests_per_minute=100, writer_chunk_rows=chunk_rows if chunk_rows > 0 else None)
+        # Build a wider, larger payload to amplify memory differences
+        rows_per_frame = 100_000
+        num_frames = 6
+        frames: list[pl.DataFrame] = []
+        for i in range(num_frames):
+            start = i * rows_per_frame
+            end = (i + 1) * rows_per_frame
+            base = list(range(start, end))
+            frames.append(
+                pl.DataFrame(
+                    {
+                        "c0": base,
+                        "c1": [x + 1 for x in base],
+                        "c2": [x * 2 for x in base],
+                        "c3": [x ^ 0xAAAA for x in base],
+                        "c4": [x // 3 for x in base],
+                        "c5": [x % 97 for x in base],
+                        "c6": [x * 3 for x in base],
+                        "c7": [x - 1 for x in base],
+                    }
+                )
+            )
+        total_rows = rows_per_frame * num_frames
+        # Ensure baseline vs chunked behavior differs ONLY by writer_chunk_rows,
+        # not by early threshold flushes
+        cfg = EngineConfig(
+            requests_per_minute=100,
+            writer_chunk_rows=chunk_rows if chunk_rows > 0 else None,
+            flush_threshold_rows=total_rows + 1,
+        )
         vf = VertexForager(
             router=MagicMock(),
             http=MagicMock(),
@@ -43,7 +72,6 @@ def _child_run_memory_peak(chunk_rows: int, conn: Connection) -> None:
         )
         pkt_q: asyncio.Queue[FramePacket | None] = asyncio.Queue()
         result = RunResult(provider="test")
-        frames = [pl.DataFrame({"id": list(range(i * 50_000, (i + 1) * 50_000))}) for i in range(5)]
         for frame in frames:
             pkt_q.put_nowait(
                 FramePacket(provider="test", table="t", frame=frame, observed_at=datetime.now())
@@ -95,7 +123,9 @@ async def test_chunked_flush_lower_memory_peak() -> None:
     assert p_chunk.exitcode == 0, f"p_chunk failed with exit code {p_chunk.exitcode}"
     chunked_peak, chunked_calls = c_parent.recv()
     c_parent.close()
-    margin = 5 * 1024 * 1024
+    # Use a dynamic margin derived from baseline to be robust across machines:
+    # require at least a 5% drop or 10 MiB, whichever is larger.
+    dynamic_margin = max(int(baseline_peak * 0.05), 10 * 1024 * 1024)
     assert chunked_calls > 1
     assert baseline_calls == 1
-    assert chunked_peak + margin < baseline_peak
+    assert chunked_peak + dynamic_margin < baseline_peak
