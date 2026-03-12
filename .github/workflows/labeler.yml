@@ -14,13 +14,16 @@ jobs:
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
-      - uses: actions/labeler@634933edcd8ababfe52f92936142cc22ac488b1b # v6.0.1
+      - id: labeler
+        continue-on-error: true
+        uses: actions/labeler@634933edcd8ababfe52f92936142cc22ac488b1b # v6.0.1
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           sync-labels: true
           configuration-path: .github/labeler.yml
       - name: Fallback labeler via github-script
-        if: failure()
+        if: ${{ steps.labeler.outcome == 'failure' }}
+        id: fallback
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
@@ -51,3 +54,12 @@ jobs:
             await github.rest.issues.addLabels({
               owner, repo, issue_number: number, labels: Array.from(labels),
             });
+      - name: Labeler outcome gate
+        if: ${{ always() }}
+        run: |
+          echo "labeler_outcome=${{ steps.labeler.outcome }}"
+          echo "fallback_outcome=${{ steps.fallback.outcome }}"
+          if [ "${{ steps.labeler.outcome }}" = "failure" ] && [ "${{ steps.fallback.outcome }}" != "success" ]; then
+            echo "Both actions/labeler and fallback labeler failed"
+            exit 1
+          fi

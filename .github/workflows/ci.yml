@@ -23,6 +23,7 @@ jobs:
       VF_STRUCTURED_LOGS: "1"
       VF_LOG_VERBOSE: "0"
       VF_METRICS_ENABLED: "0"
+      VENV: ${{ github.workspace }}/verify-wheel
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v4 pinned
@@ -128,10 +129,10 @@ jobs:
           pushd packages/vertex-forager
           OUT="$GITHUB_WORKSPACE/dist/vertex-forager"
           WHEEL="$(ls "$OUT"/*.whl | head -n1)"
-          python -m venv /tmp/verify-wheel
-          /tmp/verify-wheel/bin/pip install --upgrade pip
-          /tmp/verify-wheel/bin/pip install "$WHEEL"
-          /tmp/verify-wheel/bin/python - <<'PY'
+          python -m venv "$VENV"
+          "$VENV/bin/pip" install --upgrade pip
+          "$VENV/bin/pip" install "$WHEEL"
+          "$VENV/bin/python" - <<'PY'
           import importlib
           import sys
           m = importlib.import_module("vertex_forager")
@@ -141,4 +142,4 @@ jobs:
       - name: pip-audit (fails on any vulnerability)
         uses: pypa/gh-action-pip-audit@1220774d901786e6f652ae159f7b6bc8fea6d266  # v1.1.0 pinned
         with:
-          inputs: packages/vertex-forager
+          virtual-environment: ${{ env.VENV }}
