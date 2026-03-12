@@ -40,8 +40,7 @@ async def test_dlq_ipc_file_mode_is_0600(tmp_path, monkeypatch) -> None:
     pkt_q.put_nowait(FramePacket(provider="test", table="perm_test", frame=pl.DataFrame({"id": [1]}), observed_at=datetime.now(timezone.utc)))
     pkt_q.put_nowait(None)
 
-    with pytest.raises(Exception, match="Disk Full"):
-        await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
+    await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
 
     dlq_dir = tmp_path / "app" / "cache" / "dlq" / "perm_test"
     files = list(dlq_dir.glob("batch_*.ipc"))

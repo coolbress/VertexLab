@@ -1,0 +1,56 @@
+name: "Feature Request"
+description: "Propose a new feature or enhancement"
+title: "[feat]: "
+labels: ["enhancement", "needs-triage"]
+assignees: []
+body:
+  - type: textarea
+    id: background
+    attributes:
+      label: Problem Statement
+      placeholder: What problem does this feature solve and for whom?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Solution
+      placeholder: High‑level design and intended behavior
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria (AC)
+      description: List verifiable criteria to close this request
+      placeholder: |
+        - [ ] …
+        - [ ] …
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope / Out of Scope
+      placeholder: Be explicit about included and excluded items
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies / Impact
+      placeholder: Migrations, performance, security considerations, rollout/rollback
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      placeholder: Other approaches and trade‑offs
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - P1
+        - P2
+        - P3
+        - P4
+    validations:
+      required: true

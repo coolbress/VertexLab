@@ -1,0 +1,89 @@
+name: "Bug Report"
+description: "Report a defect with clear repro and acceptance details"
+title: "[bug]: "
+labels: ["bug", "needs-triage"]
+assignees: []
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      placeholder: One–two sentences describing what is wrong
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to Reproduce
+      description: Provide the minimal, deterministic repro steps
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected_actual
+    attributes:
+      label: Expected vs Actual
+      placeholder: |
+        Expected: …
+        Actual: …
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - critical
+        - high
+        - medium
+        - low
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - P1
+        - P2
+        - P3
+        - P4
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      placeholder: Who/what is affected? User/data/environment scope
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: OS, Python, package versions, relevant config
+  - type: checkboxes
+    id: regression_workaround
+    attributes:
+      label: Additional Context
+      options:
+        - label: Regression from a previous working version
+        - label: Temporary workaround exists
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs/Artifacts
+      description: Redact secrets before attaching logs, screenshots, or files
+      placeholder: Relevant snippets or links
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre‑submission Checklist
+      options:
+        - label: Reproduced on latest main
+          required: true
+        - label: No secrets/credentials in logs or descriptions
+          required: true
+        - label: Linked related issues/PRs where applicable
+          required: false
