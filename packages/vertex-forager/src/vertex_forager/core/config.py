@@ -257,6 +257,8 @@ class EngineConfig(BaseModel):
                 raise ValueError("writer_chunk_rows must be an integer or None")
             if v < 10_000:
                 raise ValueError("writer_chunk_rows must be >= 10_000 when specified")
+            # Coerce to int for downstream isinstance checks and consistent typing
+            self.writer_chunk_rows = v
 
 
 class RunResult(BaseModel):
