@@ -63,3 +63,48 @@ jobs:
             echo "Both actions/labeler and fallback labeler failed"
             exit 1
           fi
+      - name: Add type:* label from PR title
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            if (!pr) return;
+            const title = (pr.title || '').toLowerCase().trim();
+            const map = {
+              'feat:': 'type:feat',
+              'fix:': 'type:fix',
+              'chore:': 'type:chore',
+              'docs:': 'type:docs',
+              'refactor:': 'type:refactor',
+              'perf:': 'type:perf',
+              'test:': 'type:test'
+            };
+            // Support conventional commits with optional scope, e.g., "feat(core): ..."
+            const m = title.match(/^(feat|fix|chore|docs|refactor|perf|test)(\([^)]+\))?:\s/);
+            let chosen = null;
+            if (m && m[1]) {
+              chosen = `type:${m[1]}`;
+            } else {
+              // Fallback to simple prefix detection without scope
+              for (const prefix of Object.keys(map)) {
+                if (title.startsWith(prefix)) { chosen = map[prefix]; break; }
+              }
+            }
+            if (!chosen) {
+              core.info('No type:* inferred from title');
+              return;
+            }
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const number = pr.number;
+            const current = await github.rest.issues.listLabelsOnIssue({ owner, repo, issue_number: number });
+            const currentNames = new Set(current.data.map(l => l.name));
+            // Remove other type:* labels
+            for (const name of currentNames) {
+              if (name.startsWith('type:') && name !== chosen) {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number: number, name }).catch(()=>{});
+              }
+            }
+            if (!currentNames.has(chosen)) {
+              await github.rest.issues.addLabels({ owner, repo, issue_number: number, labels: [chosen] });
+            }
