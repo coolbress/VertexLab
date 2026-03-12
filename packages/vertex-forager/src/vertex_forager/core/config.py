@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from pydantic import field_validator
 from pydantic import ValidationInfo
 from vertex_forager.core.types import JSONValue
+from vertex_forager.exceptions import VertexForagerError
 from vertex_forager.constants import (
     FLUSH_THRESHOLD_ROWS,
     DEFAULT_RETRY_MAX_ATTEMPTS,
@@ -205,6 +206,7 @@ class EngineConfig(BaseModel):
 
     # 3. Advanced Tuning (Internal Defaults)
     flush_threshold_rows: int = FLUSH_THRESHOLD_ROWS
+    writer_chunk_rows: int | None = None
     metrics_enabled: bool = False
     structured_logs: bool = False
     log_verbose: bool = False
@@ -249,6 +251,15 @@ class EngineConfig(BaseModel):
             raise ValueError("requests_per_minute must be positive")
         if self.concurrency is not None and self.concurrency <= 0:
             raise ValueError("concurrency must be positive if specified")
+        if self.writer_chunk_rows is not None:
+            try:
+                v = int(self.writer_chunk_rows)
+            except (TypeError, ValueError) as e:
+                raise VertexForagerError(f"writer_chunk_rows must be an integer or None: {e}") from e
+            if v < 10_000:
+                raise ValueError("writer_chunk_rows must be >= 10_000 when specified")
+            # Coerce to int for downstream isinstance checks and consistent typing
+            self.writer_chunk_rows = v
 
 
 class RunResult(BaseModel):
