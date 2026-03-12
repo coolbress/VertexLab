@@ -34,7 +34,7 @@ from collections import defaultdict, deque
 
 import polars as pl
 from polars.exceptions import ComputeError
-from vertex_forager.exceptions import ValidationError, PrimaryKeyMissingError, PrimaryKeyNullError, FetchError
+from vertex_forager.exceptions import ValidationError, PrimaryKeyMissingError, PrimaryKeyNullError, FetchError, DLQSpoolError
 from vertex_forager.constants import (
     FLUSH_THRESHOLD_ROWS as DEFAULT_FLUSH_THRESHOLD_ROWS,
     PRIORITY_PAGINATION as CONST_PRIORITY_PAGINATION,
@@ -62,6 +62,7 @@ from vertex_forager.core.retry import create_retry_controller
 from vertex_forager.core.contracts import IRouter, IWriter, IMapper
 from vertex_forager.schema.registry import get_table_schema
 from vertex_forager.utils import sanitize_field, get_cache_dir, cleanup_dlq_tmp
+from vertex_forager.core.types import DLQStatus
 
 if TYPE_CHECKING:
     pass
@@ -665,49 +666,44 @@ class VertexForager:
             f"WRITER: Adaptive bulk writing enabled. Threshold={threshold} rows"
         )
 
-        async def _spool_to_dlq_and_rescue(table: str, packets: list[FramePacket], err: Exception) -> None:
+        async def _spool_to_dlq_and_rescue(table: str, packets: list[FramePacket], err: Exception) -> DLQStatus:
             if not packets:
-                return
+                return {"status": "noop", "rescued": 0, "remaining": 0, "path": None, "error": None}
             first = packets[0]
             rescued = 0
             failed_packets: list[FramePacket] = []
             max_consecutive_failures = 3
             consecutive_failures = 0
+
+            def _validate_pk_for_rescue(pkt: FramePacket, schema_obj: Any) -> tuple[bool, str | None]:
+                if schema_obj and getattr(schema_obj, "unique_key", None):
+                    for col in schema_obj.unique_key:
+                        if col not in pkt.frame.columns:
+                            return False, "missing"
+                        nulls = pkt.frame.get_column(col).null_count()
+                        if nulls > 0:
+                            return False, "null"
+                return True, None
             for pkt in packets:
                 try:
-                    # Validation: ensure PK columns exist and are non-null before rescue write
                     schema = get_table_schema(pkt.table)
-                    if schema and schema.unique_key:
-                        for col in schema.unique_key:
-                            if col not in pkt.frame.columns:
-                                failed_packets.append(pkt)
-                                async with result_lock:
-                                    result.errors.append(f"DLQItem:{table}:{PrimaryKeyMissingError(table=table, column=col)}")
-                                consecutive_failures += 1
-                                if consecutive_failures >= max_consecutive_failures:
-                                    processed = rescued + len(failed_packets)
-                                    if processed < len(packets):
-                                        failed_packets.extend(packets[processed:])
-                                        leftover = len(packets) - processed
-                                        async with result_lock:
-                                            result.errors.append(f"DLQSummary:{table}:consecutive_failures={consecutive_failures}:remaining={leftover}")
-                                    break
-                                continue
-                            nulls = pkt.frame.get_column(col).null_count()
-                            if nulls > 0:
-                                failed_packets.append(pkt)
-                                async with result_lock:
-                                    result.errors.append(f"DLQItem:{table}:{PrimaryKeyNullError(table=table, column=col, null_count=nulls)}")
-                                consecutive_failures += 1
-                                if consecutive_failures >= max_consecutive_failures:
-                                    processed = rescued + len(failed_packets)
-                                    if processed < len(packets):
-                                        failed_packets.extend(packets[processed:])
-                                        leftover = len(packets) - processed
-                                        async with result_lock:
-                                            result.errors.append(f"DLQSummary:{table}:consecutive_failures={consecutive_failures}:remaining={leftover}")
-                                    break
-                                continue
+                    is_valid, reason = _validate_pk_for_rescue(pkt, schema)
+                    if not is_valid:
+                        logger.debug(
+                            "DLQ rescue skipped: PK validation failed reason=%s table=%s provider=%s rows=%d",
+                            reason,
+                            table,
+                            pkt.provider,
+                            len(pkt.frame),
+                        )
+                        failed_packets.append(pkt)
+                        consecutive_failures += 1
+                        if consecutive_failures >= max_consecutive_failures:
+                            processed = rescued + len(failed_packets)
+                            if processed < len(packets):
+                                failed_packets.extend(packets[processed:])
+                            break
+                        continue
 
                     wr = await self._writer.write(pkt)
                     async with result_lock:
@@ -716,17 +712,19 @@ class VertexForager:
                     consecutive_failures = 0
                 except Exception as e2:
                     failed_packets.append(pkt)
-                    async with result_lock:
-                        result.errors.append(f"DLQItem:{table}:{type(e2).__name__}:{e2}")
+                    logger.debug(
+                        "DLQ rescue write failed table=%s provider=%s rows=%d error=%s",
+                        table,
+                        pkt.provider,
+                        len(pkt.frame),
+                        e2,
+                    )
                     consecutive_failures += 1
                     if consecutive_failures >= max_consecutive_failures:
                         processed = rescued + len(failed_packets)
                         if processed < len(packets):
                             # Append remaining unprocessed packets to fail list to ensure they are spooled
                             failed_packets.extend(packets[processed:])
-                            leftover = len(packets) - processed
-                            async with result_lock:
-                                result.errors.append(f"DLQSummary:{table}:consecutive_failures={consecutive_failures}:remaining={leftover}")
                         break
             remaining = len(failed_packets)
             if remaining > 0:
@@ -757,10 +755,11 @@ class VertexForager:
                     except Exception:
                         pass
                     self._log_structured(provider=first.provider, dataset=table, symbol=None, stage="dlq_spooled")
-                    async with result_lock:
-                        result.errors.append(f"DLQ:{table}:{str(fpath)}:{type(err).__name__}:{err}")
-                except Exception as e_spool:
-                    # On-error cleanup of tmp
+                    # Emit per-count structured logs even on early return
+                    self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_rescued_{rescued}")
+                    self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_remaining_{remaining}")
+                    return {"status": "spooled", "rescued": rescued, "remaining": remaining, "path": str(fpath), "error": None}
+                except Exception as exc:
                     if getattr(self._config, "dlq_tmp_cleanup_on_error", False):
                         try:
                             if tmp_path is not None and tmp_path.exists():
@@ -775,16 +774,84 @@ class VertexForager:
                                     pass
                         except Exception as _e_del:
                             logger.warning("DLQ tmp on-error cleanup failed for %s: %s", tmp_path, _e_del)
-                    # Preserve failed packets for post-mortem handling
                     async with result_lock:
                         pending = result.dlq_pending.get(table, [])
                         pending.extend(failed_packets)
                         result.dlq_pending[table] = pending
-                    async with result_lock:
-                        result.errors.append(f"DLQSpoolError:{table}:{type(e_spool).__name__}:{e_spool}")
-                    raise
+                    rescued_count = rescued
+                    remaining_count = len(failed_packets)
+                    self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_rescued_{rescued_count}")
+                    self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_remaining_{remaining_count}")
+                    raise DLQSpoolError(rescued=rescued_count, remaining=remaining_count, original=exc) from exc
             self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_rescued_{rescued}")
             self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_remaining_{remaining}")
+            # At this point, any remaining > 0 would have been handled in the spooling block (return/raise).
+            # Return rescued_only for clarity.
+            return {"status": "rescued_only", "rescued": rescued, "remaining": 0, "path": None, "error": None}
+
+        def _build_writer_error_summary(*, status: DLQStatus, table: str, prefix: str, exc: Exception) -> str:
+            match status["status"]:
+                case "spooled":
+                    path = status["path"]
+                    summary = (
+                        f"{prefix}:{table}:{exc} "
+                        f"(DLQ=spooled; rescued={status['rescued']}; remaining={status['remaining']}; path={path})"
+                    )
+                case "rescued_only":
+                    summary = (
+                        f"{prefix}:{table}:{exc} "
+                        f"(DLQ=rescued_only; rescued={status['rescued']}; remaining={status['remaining']})"
+                    )
+                case "noop":
+                    summary = (
+                        f"{prefix}:{table}:{exc} "
+                        f"(DLQ=noop; rescued={status['rescued']}; remaining={status['remaining']})"
+                    )
+                case "spool_failed":
+                    # Built and appended before re-raising the spool exception to the outer handler.
+                    summary = (
+                        f"{prefix}:{table}:{exc} "
+                        f"(DLQ=spool_failed; rescued={status['rescued']}; remaining={status['remaining']})"
+                    )
+                case _:
+                    # Fallback if a new status is introduced without updating this function
+                    summary = f"{prefix}:{table}:{exc} (DLQ={status['status']})"
+            return summary
+
+        async def _handle_flush_error(
+            *,
+            table: str,
+            packets: list[FramePacket],
+            exc: Exception,
+            prefix: str,
+        ) -> None:
+            self._inc("errors_total", 1)
+            try:
+                status = await _spool_to_dlq_and_rescue(table, packets, exc)
+            except Exception as spool_exc:
+                if isinstance(spool_exc, DLQSpoolError):
+                    rescued_count = spool_exc.rescued
+                    remaining_count = spool_exc.remaining
+                else:
+                    rescued_count = 0
+                    remaining_count = 0
+                status = cast(DLQStatus, {"status": "spool_failed", "rescued": rescued_count, "remaining": remaining_count, "path": None, "error": spool_exc})
+                summary = _build_writer_error_summary(status=status, table=table, prefix=prefix, exc=exc)
+                async with result_lock:
+                    result.errors.append(summary)
+                buffers[table] = []
+                buffer_rows[table] = 0
+                logger.exception(f"WRITER: Spool failed after {prefix} for {table}: {spool_exc}")
+                try:
+                    setattr(spool_exc, "_already_reported", True)
+                except Exception:
+                    pass
+                raise
+            summary = _build_writer_error_summary(status=status, table=table, prefix=prefix, exc=exc)
+            async with result_lock:
+                result.errors.append(summary)
+            buffers[table] = []
+            buffer_rows[table] = 0
 
         async def flush(table: str) -> None:
             """Flush the buffer for a specific table.
@@ -850,12 +917,7 @@ class VertexForager:
                 buffer_rows[table] = 0
 
             except (ComputeError, ValidationError) as e:
-                async with result_lock:
-                    result.errors.append(f"WriterError:{table}:{e}")
-                    self._inc("errors_total", 1)
-                await _spool_to_dlq_and_rescue(table, packets, e)
-                buffers[table] = []
-                buffer_rows[table] = 0
+                await _handle_flush_error(table=table, packets=packets, exc=e, prefix="WriterError")
                 if isinstance(e, PrimaryKeyMissingError):
                     logger.error("WRITER: PKMissing table=%s column=%s", table, e.column)
                 elif isinstance(e, PrimaryKeyNullError):
@@ -865,22 +927,13 @@ class VertexForager:
             except Exception as e:
                 # Check for DuckDB Error if available
                 if _duckdb is not None and isinstance(e, _duckdb.Error):
-                    async with result_lock:
-                        result.errors.append(f"DuckDBError:{table}:{e}")
-                        self._inc("errors_total", 1)
-                    await _spool_to_dlq_and_rescue(table, packets, e)
-                    buffers[table] = []
-                    buffer_rows[table] = 0
+                    await _handle_flush_error(table=table, packets=packets, exc=e, prefix="DuckDBError")
                     logger.exception(f"WRITER: DuckDB error for {table}: {e}")
                 else:
-                    async with result_lock:
-                        result.errors.append(f"UnexpectedWriterError:{table}:{e}")
-                        self._inc("errors_total", 1)
-                    await _spool_to_dlq_and_rescue(table, packets, e)
-                    buffers[table] = []
-                    buffer_rows[table] = 0
+                    await _handle_flush_error(table=table, packets=packets, exc=e, prefix="UnexpectedWriterError")
                     logger.exception(f"WRITER: Unexpected error writing batch for {table}: {e}")
-                    raise
+                    # Do not re-raise to avoid outer handler adding duplicate Writer:Unexpected
+                    return
 
         while True:
             packet = await pkt_q.get()
@@ -920,7 +973,8 @@ class VertexForager:
                 raise
             except Exception as e:
                 async with result_lock:
-                    result.errors.append(f"Writer:Unexpected:{e}")
+                    if not getattr(e, "_already_reported", False):
+                        result.errors.append(f"Writer:Unexpected:{e}")
                 logger.exception("WRITER: Unexpected error")
                 raise
             finally:
