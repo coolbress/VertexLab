@@ -205,6 +205,7 @@ class EngineConfig(BaseModel):
 
     # 3. Advanced Tuning (Internal Defaults)
     flush_threshold_rows: int = FLUSH_THRESHOLD_ROWS
+    writer_chunk_rows: int | None = None
     metrics_enabled: bool = False
     structured_logs: bool = False
     log_verbose: bool = False
@@ -249,6 +250,13 @@ class EngineConfig(BaseModel):
             raise ValueError("requests_per_minute must be positive")
         if self.concurrency is not None and self.concurrency <= 0:
             raise ValueError("concurrency must be positive if specified")
+        if self.writer_chunk_rows is not None:
+            try:
+                v = int(self.writer_chunk_rows)
+            except Exception:
+                raise ValueError("writer_chunk_rows must be an integer or None")
+            if v < 10_000:
+                raise ValueError("writer_chunk_rows must be >= 10_000 when specified")
 
 
 class RunResult(BaseModel):

@@ -990,23 +990,76 @@ class VertexForager:
                 logger.debug(
                     f"WRITER: Flushing {len(packets)} packets ({len(merged_frame)} rows) for {table}"
                 )
-                t_w0 = time.monotonic()
-                with self._span("write_flush", table=table, rows=int(len(merged_frame))):
-                    write_result = await self._writer.write(merged_packet)
-                t_w1 = time.monotonic()
-                self._inc("writer_flushes", 1)
-                self._observe("writer_flush_duration_s", float(t_w1 - t_w0))
-                self._observe("writer_rows", float(write_result.rows))
-                # Per-table observations
-                self._observe(f"writer_flush_duration_s.{table}", float(t_w1 - t_w0))
-                self._observe(f"writer_rows.{table}", float(write_result.rows))
-                self._inc("rows_written_total", int(write_result.rows))
-                self._log_structured(provider=merged_packet.provider, dataset=merged_packet.table, symbol=None, stage="write_flush", duration_s=(t_w1 - t_w0))
+                chunk_size = getattr(self._config, "writer_chunk_rows", None)
+                total_rows = int(len(merged_frame))
+                if isinstance(chunk_size, int) and chunk_size > 0 and total_rows > chunk_size:
+                    chunks = (total_rows + chunk_size - 1) // chunk_size
+                    logger.debug(
+                        f"WRITER: Chunking flush for {table} rows={total_rows} chunk_size={chunk_size} chunks={chunks}"
+                    )
+                    self._log_structured(
+                        provider=merged_packet.provider,
+                        dataset=merged_packet.table,
+                        symbol=None,
+                        stage=f"write_chunking_rows_{total_rows}_size_{chunk_size}_chunks_{chunks}",
+                    )
+                    offset = 0
+                    idx = 0
+                    while offset < total_rows:
+                        length = min(chunk_size, total_rows - offset)
+                        chunk_df = merged_frame.slice(offset, length)
+                        chunk_packet: FramePacket = FramePacket(
+                            provider=merged_packet.provider,
+                            table=merged_packet.table,
+                            frame=chunk_df,
+                            observed_at=merged_packet.observed_at,
+                            context=merged_packet.context,
+                        )
+                        t_w0 = time.monotonic()
+                        with self._span("write_flush", table=table, rows=int(length)):
+                            write_result = await self._writer.write(chunk_packet)
+                        t_w1 = time.monotonic()
+                        self._inc("writer_flushes", 1)
+                        self._observe("writer_flush_duration_s", float(t_w1 - t_w0))
+                        self._observe("writer_rows", float(write_result.rows))
+                        # Per-table observations
+                        self._observe(f"writer_flush_duration_s.{table}", float(t_w1 - t_w0))
+                        self._observe(f"writer_rows.{table}", float(write_result.rows))
+                        self._inc("rows_written_total", int(write_result.rows))
+                        self._log_structured(
+                            provider=merged_packet.provider,
+                            dataset=merged_packet.table,
+                            symbol=None,
+                            stage=f"write_flush_chunk_{idx+1}_of_{chunks}",
+                            duration_s=(t_w1 - t_w0),
+                        )
+                        async with result_lock:
+                            result.tables[write_result.table] = (
+                                result.tables.get(write_result.table, 0) + write_result.rows
+                            )
+                        offset += length
+                        idx += 1
+                else:
+                    t_w0 = time.monotonic()
+                    with self._span("write_flush", table=table, rows=int(len(merged_frame))):
+                        write_result = await self._writer.write(merged_packet)
+                    t_w1 = time.monotonic()
+                    self._inc("writer_flushes", 1)
+                    self._observe("writer_flush_duration_s", float(t_w1 - t_w0))
+                    self._observe("writer_rows", float(write_result.rows))
+                    # Per-table observations
+                    self._observe(f"writer_flush_duration_s.{table}", float(t_w1 - t_w0))
+                    self._observe(f"writer_rows.{table}", float(write_result.rows))
+                    self._inc("rows_written_total", int(write_result.rows))
+                    self._log_structured(provider=merged_packet.provider, dataset=merged_packet.table, symbol=None, stage="write_flush", duration_s=(t_w1 - t_w0))
 
                 async with result_lock:
-                    result.tables[write_result.table] = (
-                        result.tables.get(write_result.table, 0) + write_result.rows
-                    )
+                    # result.tables is already incremented per-chunk in chunked path.
+                    # For non-chunked path, ensure we record rows for the table once.
+                    if not (isinstance(chunk_size, int) and chunk_size > 0 and total_rows > chunk_size):
+                        result.tables[write_result.table] = (
+                            result.tables.get(write_result.table, 0) + write_result.rows
+                        )
 
                 # Clear buffer only after successful write
                 buffers[table] = []
