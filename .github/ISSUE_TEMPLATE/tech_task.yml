@@ -1,0 +1,39 @@
+name: "Technical Task"
+description: "Refactor, tests, build/CI and other non‑feature work"
+title: "[chore]: "
+labels: ["task", "needs-triage"]
+assignees: []
+body:
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+      placeholder: What and why
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope / Out of Scope
+      placeholder: Clearly list included and excluded items
+  - type: textarea
+    id: plan
+    attributes:
+      label: Approach / Checklist
+      placeholder: |
+        - [ ] …
+        - [ ] …
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation
+      placeholder: Tests/benchmarks/CI gates, acceptance checks
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - P1
+        - P2
+        - P3
+        - P4

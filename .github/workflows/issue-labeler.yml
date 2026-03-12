@@ -1,0 +1,95 @@
+name: Issue Form Auto Labeler
+on:
+  issues:
+    types: [opened, edited]
+concurrency:
+  group: issue-label-${{ github.event.issue.number || github.run_id }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+  issues: write
+jobs:
+  apply-labels:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            const body = (context.payload.issue && context.payload.issue.body) || "";
+            function extractField(label) {
+              const patterns = [
+                new RegExp(`${label}\\s*\\n+([^\\n#-].*)`, "i"),
+                new RegExp(`${label}\\s*:\\s*([^\\n#-].*)`, "i"),
+              ];
+              for (const re of patterns) {
+                const m = body.match(re);
+                if (m && m[1]) return m[1].trim();
+              }
+              return null;
+            }
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue_number = context.issue.number;
+            const allowedSeverity = new Set(["critical","high","medium","low"]);
+            const allowedPriority = new Set(["P1","P2","P3","P4"]);
+            let severityRaw = extractField("Severity");
+            let priorityRaw = extractField("Priority");
+            let severityLabel = null;
+            let priorityLabel = null;
+            if (severityRaw) {
+              const sev = String(severityRaw).toLowerCase();
+              if (allowedSeverity.has(sev)) {
+                severityLabel = `severity/${sev}`;
+              }
+            }
+            if (priorityRaw) {
+              const pri = String(priorityRaw).toUpperCase();
+              if (allowedPriority.has(pri)) {
+                priorityLabel = `priority/${pri}`;
+              }
+            }
+            const current = await github.rest.issues.listLabelsOnIssue({ owner, repo, issue_number });
+            const currentNames = new Set(current.data.map(l => l.name));
+            const prevSeverity = [...currentNames].find(n => n.startsWith("severity/")) || null;
+            const prevPriority = [...currentNames].find(n => n.startsWith("priority/")) || null;
+            async function addIfMissing(name) {
+              if (!name) return;
+              if (!currentNames.has(name)) {
+                await github.rest.issues.addLabels({ owner, repo, issue_number, labels: [name] });
+                currentNames.add(name);
+              }
+            }
+            async function removeOthers(prefix, keep) {
+              for (const n of Array.from(currentNames)) {
+                if (n.startsWith(prefix) && n !== keep) {
+                  try {
+                    await github.rest.issues.removeLabel({ owner, repo, issue_number, name: n });
+                    currentNames.delete(n);
+                  } catch (e) {
+                    // ignore missing
+                  }
+                }
+              }
+            }
+            if (severityLabel) {
+              await addIfMissing(severityLabel);
+              await removeOthers("severity/", severityLabel);
+              if (prevSeverity !== severityLabel) {
+                const action = prevSeverity ? "changed" : "set";
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number,
+                  body: `Labeler: severity ${action} ${prevSeverity ? `from \`${prevSeverity}\` ` : ""}to \`${severityLabel}\`.`
+                });
+              }
+            }
+            if (priorityLabel) {
+              await addIfMissing(priorityLabel);
+              await removeOthers("priority/", priorityLabel);
+              if (prevPriority !== priorityLabel) {
+                const action = prevPriority ? "changed" : "set";
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number,
+                  body: `Labeler: priority ${action} ${prevPriority ? `from \`${prevPriority}\` ` : ""}to \`${priorityLabel}\`.`
+                });
+              }
+            }
