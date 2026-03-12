@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from pydantic import field_validator
 from pydantic import ValidationInfo
 from vertex_forager.core.types import JSONValue
+from vertex_forager.exceptions import VertexForagerError
 from vertex_forager.constants import (
     FLUSH_THRESHOLD_ROWS,
     DEFAULT_RETRY_MAX_ATTEMPTS,
@@ -253,8 +254,8 @@ class EngineConfig(BaseModel):
         if self.writer_chunk_rows is not None:
             try:
                 v = int(self.writer_chunk_rows)
-            except Exception:
-                raise ValueError("writer_chunk_rows must be an integer or None")
+            except (TypeError, ValueError) as e:
+                raise VertexForagerError(f"writer_chunk_rows must be an integer or None: {e}") from e
             if v < 10_000:
                 raise ValueError("writer_chunk_rows must be >= 10_000 when specified")
             # Coerce to int for downstream isinstance checks and consistent typing
