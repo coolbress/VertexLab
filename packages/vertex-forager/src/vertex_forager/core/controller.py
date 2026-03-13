@@ -232,11 +232,24 @@ class FlowController:
         self._rpm_ceiling = int(requests_per_minute)
         self._effective_rpm = int(requests_per_minute)
         self._downshift_enabled = bool(downshift_enabled)
-        self._window_s = float(downshift_window_s)
-        self._error_threshold = float(error_rate_threshold)
+        win = float(downshift_window_s)
+        if not math.isfinite(win) or win < 1.0:
+            win = 1.0
+        if win > 3600.0:
+            win = 3600.0
+        self._window_s = win
+        thr = float(error_rate_threshold)
+        if not math.isfinite(thr):
+            thr = 0.0
+        self._error_threshold = min(1.0, max(0.0, thr))
         self._rpm_floor = int(max(1, rpm_floor))
         self._recovery_step = int(max(1, recovery_step))
-        self._healthy_window_s = float(healthy_window_s)
+        healthy = float(healthy_window_s)
+        if not math.isfinite(healthy) or healthy < 1.0:
+            healthy = 1.0
+        if healthy > 3600.0:
+            healthy = 3600.0
+        self._healthy_window_s = healthy
         self._events: deque[tuple[float, bool]] = deque()
         self._last_error_ts = 0.0
         self._last_adjust_ts = 0.0
@@ -256,6 +269,7 @@ class FlowController:
         ok = await self._safe_set_rpm(new)
         if ok:
             self._effective_rpm = new
+            applied = time.monotonic()
             logger.info(
                 "FLOW_EVENT rpm_downshift from=%d to=%d err_ratio=%.3f window_s=%.0f",
                 prev,
@@ -263,15 +277,16 @@ class FlowController:
                 ratio,
                 self._window_s,
             )
-            self._last_adjust_ts = now
-            self._last_downshift_ts = now
+            self._last_adjust_ts = applied
+            self._last_downshift_ts = applied
     
     async def _apply_upshift(self, *, prev: int, new: int, now: float) -> None:
         ok = await self._safe_set_rpm(new)
         if ok:
             self._effective_rpm = new
+            applied = time.monotonic()
             logger.info("FLOW_EVENT rpm_upshift from=%d to=%d", prev, self._effective_rpm)
-            self._last_adjust_ts = now
+            self._last_adjust_ts = applied
 
     @property
     def concurrency_limit(self) -> int:
