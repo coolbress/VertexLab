@@ -245,7 +245,7 @@ class FlowController:
     async def _safe_set_rpm(self, rpm: int) -> None:
         try:
             await self._rate_limiter.set_rpm_async(rpm)
-        except Exception:
+        except RuntimeError:
             logger.exception("FLOW_EVENT rpm_update_failed rpm=%d", rpm)
 
     @property
