@@ -9,12 +9,15 @@ on:
     branches: [ main ]  # main 브랜치에 코드가 올라올 때
   pull_request:
     branches: [ main ]  # 누군가(혹은 내가) merge 요청을 보낼 때
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   quality-check:
     name: 🛡️ Code Quality Check
     runs-on: ubuntu-latest  # 최신 리눅스 환경에서 실행
-    timeout-minutes: 20
+    timeout-minutes: 30
     permissions:
       contents: read
       security-events: write
