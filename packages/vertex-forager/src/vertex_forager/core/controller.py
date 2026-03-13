@@ -345,7 +345,8 @@ class FlowController:
         if is_error:
             self._last_error_ts = now
         if (
-            ratio >= self._error_threshold
+            total >= effective_min
+            and ratio > self._error_threshold
             and self._effective_rpm > self._rpm_floor
             and (self._last_downshift_ts == 0.0 or (now - self._last_downshift_ts) >= self._window_s)
         ):
