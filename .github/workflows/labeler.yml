@@ -30,22 +30,14 @@ jobs:
             const pr = context.payload.pull_request;
             if (!pr) return;
             const title = (pr.title || '').toLowerCase().trim();
-            const m = title.match(/^(feat|fix|chore|docs|refactor|perf|test)(\([^)]+\))?:\s/);
+            const m = title.match(/^(feat|fix|chore|docs|refactor|perf|test)(\([^)]+\))?(!)?:\s/);
             let chosen = null;
             if (m && m[1]) {
               chosen = `type:${m[1]}`;
             } else {
-              const map = {
-                'feat:': 'type:feat',
-                'fix:': 'type:fix',
-                'chore:': 'type:chore',
-                'docs:': 'type:docs',
-                'refactor:': 'type:refactor',
-                'perf:': 'type:perf',
-                'test:': 'type:test'
-              };
-              for (const prefix of Object.keys(map)) {
-                if (title.startsWith(prefix)) { chosen = map[prefix]; break; }
+              const types = ['feat','fix','chore','docs','refactor','perf','test'];
+              for (const t of types) {
+                if (title.startsWith(`${t}!:`) || title.startsWith(`${t}:`)) { chosen = `type:${t}`; break; }
               }
             }
             if (!chosen) {
