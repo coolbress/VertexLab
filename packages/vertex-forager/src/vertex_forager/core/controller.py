@@ -255,6 +255,7 @@ class FlowController:
         self._last_adjust_ts = 0.0
         self._min_sample_size = 10
         self._last_downshift_ts = 0.0
+        self._last_upshift_ts = 0.0
         self._error_count = 0
     
     async def _safe_set_rpm(self, rpm: int) -> bool:
@@ -265,7 +266,7 @@ class FlowController:
             logger.exception("FLOW_EVENT rpm_update_failed rpm=%d", rpm)
             return False
     
-    async def _apply_downshift(self, *, prev: int, new: int, ratio: float, now: float) -> None:
+    async def _apply_downshift(self, *, prev: int, new: int, ratio: float) -> None:
         ok = await self._safe_set_rpm(new)
         if ok:
             self._effective_rpm = new
@@ -280,13 +281,14 @@ class FlowController:
             self._last_adjust_ts = applied
             self._last_downshift_ts = applied
     
-    async def _apply_upshift(self, *, prev: int, new: int, now: float) -> None:
+    async def _apply_upshift(self, *, prev: int, new: int) -> None:
         ok = await self._safe_set_rpm(new)
         if ok:
             self._effective_rpm = new
             applied = time.monotonic()
             logger.info("FLOW_EVENT rpm_upshift from=%d to=%d", prev, self._effective_rpm)
             self._last_adjust_ts = applied
+            self._last_upshift_ts = applied
 
     @property
     def concurrency_limit(self) -> int:
@@ -350,20 +352,22 @@ class FlowController:
             new_rpm = max(self._rpm_floor, int(self._effective_rpm * 0.8))
             if new_rpm != self._effective_rpm:
                 prev_guard = self._last_downshift_ts
-                self._last_downshift_ts = now  # reserve window before scheduling to avoid races
+                self._last_downshift_ts = now
                 try:
                     loop = asyncio.get_running_loop()
-                    loop.create_task(self._apply_downshift(prev=self._effective_rpm, new=new_rpm, ratio=ratio, now=now))
+                    loop.create_task(self._apply_downshift(prev=self._effective_rpm, new=new_rpm, ratio=ratio))
                 except Exception:
-                    # scheduling failed; restore guard
                     self._last_downshift_ts = prev_guard
                     logger.exception("FLOW_EVENT rpm_downshift_schedule_failed new_rpm=%d", new_rpm)
             return
         if (now - max(self._last_error_ts, self._last_adjust_ts) >= self._healthy_window_s) and self._effective_rpm < self._rpm_ceiling:
             new_rpm = min(self._rpm_ceiling, self._effective_rpm + self._recovery_step)
             if new_rpm != self._effective_rpm:
+                prev_up_guard = self._last_upshift_ts
+                self._last_upshift_ts = now
                 try:
                     loop = asyncio.get_running_loop()
-                    loop.create_task(self._apply_upshift(prev=self._effective_rpm, new=new_rpm, now=now))
+                    loop.create_task(self._apply_upshift(prev=self._effective_rpm, new=new_rpm))
                 except Exception:
+                    self._last_upshift_ts = prev_up_guard
                     logger.exception("FLOW_EVENT rpm_upshift_schedule_failed new_rpm=%d", new_rpm)
