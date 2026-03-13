@@ -283,6 +283,12 @@ class FlowController:
             )
             self._last_adjust_ts = applied
             self._last_downshift_ts = applied
+        else:
+            # Roll back optimistic update
+            self._effective_rpm = prev
+            # Allow immediate retry by clearing reservation
+            self._last_downshift_ts = 0.0
+            logger.warning("FLOW_EVENT rpm_downshift_rollback to=%d (apply failed)", prev)
     
     async def _apply_upshift(self, *, prev: int, new: int) -> None:
         ok = await self._safe_set_rpm(new)
@@ -359,9 +365,12 @@ class FlowController:
                 self._last_downshift_ts = now
                 try:
                     loop = asyncio.get_running_loop()
-                    loop.create_task(self._apply_downshift(prev=self._effective_rpm, new=new_rpm, ratio=ratio))
+                    prev_eff = self._effective_rpm
+                    self._effective_rpm = new_rpm  # optimistic update to avoid stale base
+                    loop.create_task(self._apply_downshift(prev=prev_eff, new=new_rpm, ratio=ratio))
                 except Exception:
                     self._last_downshift_ts = prev_guard
+                    self._effective_rpm = prev_eff
                     logger.exception("FLOW_EVENT rpm_downshift_schedule_failed new_rpm=%d", new_rpm)
             return
         if (now - max(self._last_error_ts, self._last_adjust_ts, self._last_upshift_ts) >= self._healthy_window_s) and self._effective_rpm < self._rpm_ceiling:

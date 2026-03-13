@@ -1,4 +1,5 @@
 import time
+import asyncio
 import pytest
 
 from vertex_forager.core.controller import GCRARateLimiter, GradientConcurrencyLimiter, FlowController
@@ -33,3 +34,36 @@ async def test_gradient_limiter_bounds() -> None:
 def test_flow_controller_concurrency_property() -> None:
     fc = FlowController(requests_per_minute=120, concurrency_limit=8)
     assert fc.concurrency_limit == 8
+
+
+@pytest.mark.asyncio
+async def test_record_feedback_triggers_downshift() -> None:
+    fc = FlowController(
+        requests_per_minute=60,
+        concurrency_limit=1,
+        downshift_enabled=True,
+        error_rate_threshold=0.2,
+        rpm_floor=10,
+        downshift_window_s=60,
+    )
+    for _ in range(11):
+        fc.record_feedback(status_code=429)
+    await asyncio.sleep(0.05)
+    assert fc._effective_rpm < 60
+    assert fc._effective_rpm >= 10
+
+
+@pytest.mark.asyncio
+async def test_record_feedback_respects_floor() -> None:
+    fc = FlowController(
+        requests_per_minute=60,
+        concurrency_limit=1,
+        downshift_enabled=True,
+        error_rate_threshold=0.0,
+        rpm_floor=20,
+        downshift_window_s=1,
+    )
+    for _ in range(100):
+        fc.record_feedback(status_code=429)
+    await asyncio.sleep(0.1)
+    assert fc._effective_rpm >= 20
