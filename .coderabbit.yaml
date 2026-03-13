@@ -28,9 +28,6 @@ reviews:
       ignore_usernames:
          - "dependabot[bot]"
          - "github-actions[bot]"
-      labels:
-         - "!automerge"
-         - "!dependencies"
 
    path_instructions:
       - path: "**"
