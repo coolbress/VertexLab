@@ -362,16 +362,17 @@ class FlowController:
             new_rpm = max(self._rpm_floor, int(self._effective_rpm * 0.8))
             if new_rpm != self._effective_rpm:
                 prev_guard = self._last_downshift_ts
+                prev_eff = self._effective_rpm
                 self._last_downshift_ts = now
                 try:
                     loop = asyncio.get_running_loop()
-                    prev_eff = self._effective_rpm
-                    self._effective_rpm = new_rpm  # optimistic update to avoid stale base
+                    # Optimistic update only after ensuring loop is available
+                    self._effective_rpm = new_rpm
                     loop.create_task(self._apply_downshift(prev=prev_eff, new=new_rpm, ratio=ratio))
                 except Exception:
                     self._last_downshift_ts = prev_guard
                     self._effective_rpm = prev_eff
-                    logger.exception("FLOW_EVENT rpm_downshift_schedule_failed new_rpm=%d", new_rpm)
+                    logger.exception("FLOW_EVENT rpm_downshift_schedule_failed new_rpm=%d prev=%d", new_rpm, prev_eff)
             return
         if (now - max(self._last_error_ts, self._last_adjust_ts, self._last_upshift_ts) >= self._healthy_window_s) and self._effective_rpm < self._rpm_ceiling:
             new_rpm = min(self._rpm_ceiling, self._effective_rpm + self._recovery_step)
