@@ -798,6 +798,19 @@ class VertexForager:
                             failed_packets.extend(packets[processed:])
                         break
             remaining = len(failed_packets)
+            if remaining > 0 and not bool(getattr(self._config, "dlq_enabled", True)):
+                self._log_structured(provider=first.provider, dataset=table, symbol=None, stage="dlq_disabled")
+                self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_rescued_{rescued}")
+                self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_remaining_{remaining}")
+                self._inc("dlq_disabled_total", 1)
+                self._inc(f"dlq_disabled.{table}", 1)
+                if rescued:
+                    self._inc("dlq_rescued_total", int(rescued))
+                    self._inc(f"dlq_rescued.{table}", int(rescued))
+                if remaining:
+                    self._inc("dlq_remaining_total", int(remaining))
+                    self._inc(f"dlq_remaining.{table}", int(remaining))
+                return {"status": "disabled", "rescued": rescued, "remaining": remaining, "path": None, "error": None}
             if remaining > 0:
                 try:
                     tmp_path = None
@@ -904,6 +917,11 @@ class VertexForager:
                     summary = (
                         f"{prefix}:{table}:{exc} "
                         f"(DLQ=spool_failed; rescued={status['rescued']}; remaining={status['remaining']})"
+                    )
+                case "disabled":
+                    summary = (
+                        f"{prefix}:{table}:{exc} "
+                        f"(DLQ=disabled; rescued={status['rescued']}; remaining={status['remaining']})"
                     )
                 case _:
                     # Fallback if a new status is introduced without updating this function

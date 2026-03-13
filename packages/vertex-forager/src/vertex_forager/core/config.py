@@ -210,6 +210,7 @@ class EngineConfig(BaseModel):
     metrics_enabled: bool = False
     structured_logs: bool = False
     log_verbose: bool = False
+    dlq_enabled: bool = True
     dlq_tmp_cleanup_on_error: bool = True
     dlq_tmp_periodic_cleanup: bool = True
     dlq_tmp_retention_s: int = Field(default=86400, ge=0)
