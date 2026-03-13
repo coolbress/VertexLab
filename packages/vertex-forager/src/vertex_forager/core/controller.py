@@ -242,7 +242,10 @@ class FlowController:
         if not math.isfinite(thr):
             thr = 0.0
         self._error_threshold = min(1.0, max(0.0, thr))
-        self._rpm_floor = int(max(1, rpm_floor))
+        floor = int(max(1, rpm_floor))
+        if floor > self._rpm_ceiling:
+            floor = self._rpm_ceiling
+        self._rpm_floor = floor
         self._recovery_step = int(max(1, recovery_step))
         healthy = float(healthy_window_s)
         if not math.isfinite(healthy) or healthy < 1.0:
@@ -361,7 +364,7 @@ class FlowController:
                     self._last_downshift_ts = prev_guard
                     logger.exception("FLOW_EVENT rpm_downshift_schedule_failed new_rpm=%d", new_rpm)
             return
-        if (now - max(self._last_error_ts, self._last_adjust_ts) >= self._healthy_window_s) and self._effective_rpm < self._rpm_ceiling:
+        if (now - max(self._last_error_ts, self._last_adjust_ts, self._last_upshift_ts) >= self._healthy_window_s) and self._effective_rpm < self._rpm_ceiling:
             new_rpm = min(self._rpm_ceiling, self._effective_rpm + self._recovery_step)
             if new_rpm != self._effective_rpm:
                 prev_up_guard = self._last_upshift_ts
