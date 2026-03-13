@@ -234,6 +234,7 @@ class FlowController:
         self._last_error_ts = 0.0
         self._last_adjust_ts = 0.0
         self._min_sample_size = 10
+        self._last_downshift_ts = 0.0
 
     @property
     def concurrency_limit(self) -> int:
@@ -287,7 +288,11 @@ class FlowController:
             ratio = err / total if total > 0 else 0.0
         if is_error:
             self._last_error_ts = now
-        if ratio >= self._error_threshold and self._effective_rpm > self._rpm_floor:
+        if (
+            ratio >= self._error_threshold
+            and self._effective_rpm > self._rpm_floor
+            and (self._last_downshift_ts == 0.0 or (now - self._last_downshift_ts) >= self._window_s)
+        ):
             new_rpm = max(self._rpm_floor, int(self._effective_rpm * 0.8))
             if new_rpm != self._effective_rpm:
                 prev = self._effective_rpm
@@ -300,6 +305,7 @@ class FlowController:
                     asyncio.run(self._rate_limiter.set_rpm_async(self._effective_rpm))
                 logger.info("FLOW_EVENT rpm_downshift from=%d to=%d err_ratio=%.3f window_s=%.0f", prev, self._effective_rpm, ratio, self._window_s)
                 self._last_adjust_ts = now
+                self._last_downshift_ts = now
             return
         if (now - max(self._last_error_ts, self._last_adjust_ts) >= self._healthy_window_s) and self._effective_rpm < self._rpm_ceiling:
             new_rpm = min(self._rpm_ceiling, self._effective_rpm + self._recovery_step)
