@@ -190,8 +190,14 @@ class FlowController:
         """Initialize the unified Flow Controller.
         
         Args:
-            requests_per_minute: Allowed requests per minute (RPM).
-            concurrency_limit: Optional max concurrent requests; if None, auto-computed.
+            requests_per_minute: int — Allowed requests per minute (RPM).
+            concurrency_limit: int | None — Optional max concurrent requests; if None, auto-computed.
+            downshift_enabled: bool — Enable adaptive RPM downshift/recovery.
+            downshift_window_s: int — Sliding window (seconds) for error-rate calculation.
+            error_rate_threshold: float — Error/retry ratio threshold to trigger downshift.
+            rpm_floor: int — Minimum RPM allowed during downshift.
+            recovery_step: int — RPM increment applied during each healthy recovery step.
+            healthy_window_s: int — Duration (seconds) of healthy period required to upshift.
         
         Raises:
             ValueError: If requests_per_minute <= 0.
@@ -235,6 +241,12 @@ class FlowController:
         self._last_adjust_ts = 0.0
         self._min_sample_size = 10
         self._last_downshift_ts = 0.0
+    
+    async def _safe_set_rpm(self, rpm: int) -> None:
+        try:
+            await self._rate_limiter.set_rpm_async(rpm)
+        except Exception:
+            logger.exception("FLOW_EVENT rpm_update_failed rpm=%d", rpm)
 
     @property
     def concurrency_limit(self) -> int:
@@ -278,8 +290,6 @@ class FlowController:
         while self._events and self._events[0][0] < cutoff:
             self._events.popleft()
         total = len(self._events)
-        if total == 0:
-            return
         if total < self._min_sample_size:
             ratio = 0.0
             err = 0
@@ -299,10 +309,10 @@ class FlowController:
                 self._effective_rpm = new_rpm
                 try:
                     loop = asyncio.get_running_loop()
-                    loop.create_task(self._rate_limiter.set_rpm_async(self._effective_rpm))
+                    loop.create_task(self._safe_set_rpm(self._effective_rpm))
                 except RuntimeError:
                     # Fallback if no running loop (unlikely in async context)
-                    asyncio.run(self._rate_limiter.set_rpm_async(self._effective_rpm))
+                    asyncio.run(self._safe_set_rpm(self._effective_rpm))
                 logger.info("FLOW_EVENT rpm_downshift from=%d to=%d err_ratio=%.3f window_s=%.0f", prev, self._effective_rpm, ratio, self._window_s)
                 self._last_adjust_ts = now
                 self._last_downshift_ts = now
@@ -314,8 +324,8 @@ class FlowController:
                 self._effective_rpm = new_rpm
                 try:
                     loop = asyncio.get_running_loop()
-                    loop.create_task(self._rate_limiter.set_rpm_async(self._effective_rpm))
+                    loop.create_task(self._safe_set_rpm(self._effective_rpm))
                 except RuntimeError:
-                    asyncio.run(self._rate_limiter.set_rpm_async(self._effective_rpm))
+                    asyncio.run(self._safe_set_rpm(self._effective_rpm))
                 logger.info("FLOW_EVENT rpm_upshift from=%d to=%d", prev, self._effective_rpm)
                 self._last_adjust_ts = now
