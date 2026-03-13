@@ -214,6 +214,14 @@ class EngineConfig(BaseModel):
     dlq_tmp_periodic_cleanup: bool = True
     dlq_tmp_retention_s: int = Field(default=86400, ge=0)
 
+    # 4. Adaptive RPM Downshift
+    downshift_enabled: bool = False
+    downshift_window_s: int = Field(default=60, ge=1)
+    error_rate_threshold: float = Field(default=0.2, ge=0.0, le=1.0)
+    rpm_floor: int = Field(default=1, ge=1)
+    recovery_step: int = Field(default=5, ge=1)
+    healthy_window_s: int = Field(default=60, ge=1)
+
     @property
     def fetch_concurrency(self) -> int | None:
         """Alias for concurrency to maintain semantic clarity.
@@ -260,6 +268,8 @@ class EngineConfig(BaseModel):
                 raise ValueError("writer_chunk_rows must be >= 10_000 when specified")
             # Coerce to int for downstream isinstance checks and consistent typing
             self.writer_chunk_rows = v
+        if self.rpm_floor > self.requests_per_minute:
+            raise ValueError("rpm_floor must be <= requests_per_minute")
 
 
 class RunResult(BaseModel):

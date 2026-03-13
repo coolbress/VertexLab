@@ -130,6 +130,12 @@ class GCRARateLimiter:
 
         self._tat = 0.0  # Theoretical Arrival Time
 
+    def set_rpm(self, rpm: int) -> None:
+        rpm = max(1, int(rpm))
+        self._rpm = rpm
+        self._emission_interval = 60.0 / self._rpm
+        self._burst_offset = self._emission_interval * self._burst_limit
+
     async def acquire(self) -> None:
         """Acquire permission to proceed. Waits if necessary."""
         async with self._lock:
@@ -171,6 +177,13 @@ class FlowController:
         self,
         requests_per_minute: int,
         concurrency_limit: int | None = None,
+        *,
+        downshift_enabled: bool = False,
+        downshift_window_s: int = 60,
+        error_rate_threshold: float = 0.2,
+        rpm_floor: int = 1,
+        recovery_step: int = 5,
+        healthy_window_s: int = 60,
     ) -> None:
         """Initialize the unified Flow Controller.
         
@@ -207,6 +220,17 @@ class FlowController:
             queue_size=GRADIENT_QUEUE_SIZE_DEFAULT,
             smoothing=GRADIENT_SMOOTHING_DEFAULT,
         )
+        self._rpm_ceiling = int(requests_per_minute)
+        self._effective_rpm = int(requests_per_minute)
+        self._downshift_enabled = bool(downshift_enabled)
+        self._window_s = float(downshift_window_s)
+        self._error_threshold = float(error_rate_threshold)
+        self._rpm_floor = int(max(1, rpm_floor))
+        self._recovery_step = int(max(1, recovery_step))
+        self._healthy_window_s = float(healthy_window_s)
+        self._events: deque[tuple[float, bool]] = deque()
+        self._last_error_ts = 0.0
+        self._last_adjust_ts = 0.0
 
     @property
     def concurrency_limit(self) -> int:
@@ -239,3 +263,37 @@ class FlowController:
             end_time = time.monotonic()
             rtt = end_time - start_time
             await self._concurrency_limiter.release(rtt)
+
+    def record_feedback(self, *, status_code: int | None = None, retried: bool = False) -> None:
+        if not self._downshift_enabled:
+            return
+        now = time.monotonic()
+        is_error = retried or (status_code in (429, 503))
+        self._events.append((now, is_error))
+        cutoff = now - self._window_s
+        while self._events and self._events[0][0] < cutoff:
+            self._events.popleft()
+        total = len(self._events)
+        if total == 0:
+            return
+        err = sum(1 for _, e in self._events if e)
+        ratio = err / total if total > 0 else 0.0
+        if is_error:
+            self._last_error_ts = now
+        if ratio >= self._error_threshold and self._effective_rpm > self._rpm_floor:
+            new_rpm = max(self._rpm_floor, int(self._effective_rpm * 0.8))
+            if new_rpm != self._effective_rpm:
+                prev = self._effective_rpm
+                self._effective_rpm = new_rpm
+                self._rate_limiter.set_rpm(self._effective_rpm)
+                logger.info("FLOW_EVENT rpm_downshift from=%d to=%d err_ratio=%.3f window_s=%.0f", prev, self._effective_rpm, ratio, self._window_s)
+                self._last_adjust_ts = now
+            return
+        if (now - max(self._last_error_ts, self._last_adjust_ts) >= self._healthy_window_s) and self._effective_rpm < self._rpm_ceiling:
+            new_rpm = min(self._rpm_ceiling, self._effective_rpm + self._recovery_step)
+            if new_rpm != self._effective_rpm:
+                prev = self._effective_rpm
+                self._effective_rpm = new_rpm
+                self._rate_limiter.set_rpm(self._effective_rpm)
+                logger.info("FLOW_EVENT rpm_upshift from=%d to=%d", prev, self._effective_rpm)
+                self._last_adjust_ts = now

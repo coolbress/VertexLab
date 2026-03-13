@@ -1203,14 +1203,23 @@ class VertexForager:
                     self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="http_start", attempt=att_no)
                     try:
                         resp = await self._http.fetch(job.spec)
+                        rf = getattr(self.controller, "record_feedback", None)
+                        if callable(rf):
+                            rf(status_code=200, retried=bool(att_no and att_no > 1))
                     except Exception as e:
                         reason = "error"
                         if isinstance(e, httpx.HTTPStatusError):
                             resp0 = getattr(e, "response", None)
                             sc = getattr(resp0, "status_code", None)
                             reason = f"http_status_{sc}"
+                            rf = getattr(self.controller, "record_feedback", None)
+                            if callable(rf):
+                                rf(status_code=sc, retried=True)
                         elif isinstance(e, httpx.TransportError):
                             reason = "transport_error"
+                            rf = getattr(self.controller, "record_feedback", None)
+                            if callable(rf):
+                                rf(status_code=None, retried=True)
                         else:
                             reason = type(e).__name__
                         self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage=f"http_retry_reason:{reason}", attempt=att_no)

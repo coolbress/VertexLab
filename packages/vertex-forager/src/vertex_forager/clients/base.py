@@ -128,6 +128,12 @@ class BaseClient(ABC, Generic[T]):
         self.controller = FlowController(
             requests_per_minute=self._config.requests_per_minute,
             concurrency_limit=self._config.fetch_concurrency,
+            downshift_enabled=self._config.downshift_enabled,
+            downshift_window_s=self._config.downshift_window_s,
+            error_rate_threshold=self._config.error_rate_threshold,
+            rpm_floor=self._config.rpm_floor,
+            recovery_step=self._config.recovery_step,
+            healthy_window_s=self._config.healthy_window_s,
         )
         self.last_run: RunResult | None = None
         self._client: httpx.AsyncClient | None = None
