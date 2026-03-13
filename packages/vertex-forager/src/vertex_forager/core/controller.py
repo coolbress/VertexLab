@@ -347,5 +347,8 @@ class FlowController:
         if (now - max(self._last_error_ts, self._last_adjust_ts) >= self._healthy_window_s) and self._effective_rpm < self._rpm_ceiling:
             new_rpm = min(self._rpm_ceiling, self._effective_rpm + self._recovery_step)
             if new_rpm != self._effective_rpm:
-                loop = asyncio.get_running_loop()
-                loop.create_task(self._apply_upshift(prev=self._effective_rpm, new=new_rpm, now=now))
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(self._apply_upshift(prev=self._effective_rpm, new=new_rpm, now=now))
+                except Exception:
+                    logger.exception("FLOW_EVENT rpm_upshift_schedule_failed new_rpm=%d", new_rpm)
