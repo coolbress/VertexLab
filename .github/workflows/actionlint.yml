@@ -16,4 +16,4 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - name: Run actionlint
-        uses: devops-actions/actionlint@e7ee33fbf5aa8c9f9ee1145137f3e52e25d6a35b
+        uses: devops-actions/actionlint@469810fd82c015d3c43815cd2b0e4d02eecc4819
