@@ -46,6 +46,7 @@ jobs:
         if: ${{ env.WORKFLOW_ONLY == 'false' || !contains(github.event.pull_request.labels.*.name, 'dependencies') }}
         run: |
           PR_ID="$(gh pr view ${{ github.event.pull_request.number }} --json id --jq .id)"
+          # shellcheck disable=SC2016
           gh api graphql -f query='mutation($prId:ID!) { disablePullRequestAutoMerge(input:{pullRequestId:$prId}) { clientMutationId } }' -F prId="$PR_ID"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

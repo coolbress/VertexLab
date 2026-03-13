@@ -10,6 +10,7 @@ permissions:
   pull-requests: write
 jobs:
   guard:
+    if: ${{ github.actor != 'dependabot[bot]' && github.actor != 'github-actions[bot]' && github.event.pull_request.user.login != 'dependabot[bot]' && github.event.pull_request.user.login != 'github-actions[bot]' }}
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -22,6 +23,12 @@ jobs:
             const pr = context.payload.pull_request;
             if (!pr) {
               core.setOutput('missing', '[]');
+              return;
+            }
+            // Skip guard for bot-authored PRs as a final safeguard
+            const author = (pr.user && pr.user.login) || '';
+            if (author === 'dependabot[bot]' || author === 'github-actions[bot]') {
+              core.info('Bot-authored PR detected; skipping PR Body Guard checks.');
               return;
             }
             const body = (pr.body || '').toLowerCase();
