@@ -69,13 +69,17 @@ jobs:
             // Sync labels on the PR
             const number = pr.number;
             const current = await github.rest.issues.listLabelsOnIssue({ owner, repo, issue_number: number });
-            const currentNames = new Set(current.data.map(l => l.name));
-            for (const name of currentNames) {
-              if (name.startsWith('type:') && name !== chosen) {
-                await github.rest.issues.removeLabel({ owner, repo, issue_number: number, name }).catch(()=>{});
+            const currentNames = current.data.map(l => l.name || '');
+            // Remove other type:* labels (case-insensitive), but use original casing when removing
+            for (const original of currentNames) {
+              const lower = original.toLowerCase();
+              if (lower.startsWith('type:') && lower !== chosen) {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number: number, name: original }).catch(()=>{});
               }
             }
-            if (!currentNames.has(chosen)) {
+            // Add chosen if not already present (case-insensitive)
+            const hasChosen = currentNames.some(n => (n || '').toLowerCase() === chosen);
+            if (!hasChosen) {
               await github.rest.issues.addLabels({ owner, repo, issue_number: number, labels: [chosen] }).catch((e)=>{
                 core.warning(`Failed adding label ${chosen} to PR #${number}: ${e.message || e}`);
               });
