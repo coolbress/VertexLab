@@ -24,7 +24,7 @@ jobs:
           configuration-path: .github/labeler.yml
       - name: Add type:* label from PR title
         if: ${{ always() }}
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
         with:
           script: |
             const pr = context.payload.pull_request;
@@ -79,7 +79,7 @@ jobs:
       - name: Fallback labeler via github-script
         if: ${{ steps.labeler.outcome == 'failure' }}
         id: fallback
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
         with:
           script: |
             const owner = context.repo.owner;
@@ -101,14 +101,25 @@ jobs:
               if (p.startsWith('packages/vertex-forager/src/vertex_forager/writers/')) labels.add('area:writers');
               if (p.startsWith('packages/vertex-forager/src/vertex_forager/routers/')) labels.add('area:routers');
               if (p.startsWith('packages/vertex-forager/src/vertex_forager/providers/')) labels.add('area:clients');
+              if (p.startsWith('.github/')) labels.add('area:ci');
+              if (p.includes('/tests/') || p.startsWith('tests/')) labels.add('area:tests');
+              if (p.startsWith('scripts/')) labels.add('area:scripts');
             }
             if (labels.size === 0) {
               core.info('No matching paths for fallback labels');
               return;
             }
-            await github.rest.issues.addLabels({
-              owner, repo, issue_number: number, labels: Array.from(labels),
-            });
+            const repoLabels = await github.paginate(github.rest.issues.listLabelsForRepo, { owner, repo, per_page: 100 });
+            const repoLabelNames = new Set(repoLabels.map(l => (l.name || '').toLowerCase()));
+            for (const name of labels) {
+              if (!repoLabelNames.has(name.toLowerCase())) {
+                try {
+                  await github.rest.issues.createLabel({ owner, repo, name, color: 'ededed' });
+                  repoLabelNames.add(name.toLowerCase());
+                } catch (_) {}
+              }
+            }
+            await github.rest.issues.addLabels({ owner, repo, issue_number: number, labels: Array.from(labels) });
       - name: Labeler outcome gate
         if: ${{ always() }}
         run: |

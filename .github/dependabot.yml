@@ -6,6 +6,9 @@ updates:
       interval: "weekly"
     target-branch: "main"
     open-pull-requests-limit: 10
+    rebase-strategy: "auto"
+    commit-message:
+      prefix: "ci(actions)"
     labels:
       - "dependencies"
     ignore:
