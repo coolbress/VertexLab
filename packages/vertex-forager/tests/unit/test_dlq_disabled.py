@@ -41,3 +41,5 @@ async def test_dlq_disabled_skips_spooling(tmp_path: Path, monkeypatch) -> None:
     files = list(dlq_dir.glob("batch_*.ipc"))
     assert files == []
     assert any("DLQ=disabled" in e for e in result.errors)
+    assert result.dlq_counts.get("t_fail", {}).get("remaining", 0) >= 1
+    assert result.dlq_counts.get("t_fail", {}).get("rescued", 0) == 0
