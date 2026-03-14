@@ -40,5 +40,6 @@ async def test_gcra_interval_with_tolerance() -> None:
         t_marks.append(time.monotonic())
     intervals = [t_marks[i] - t_marks[i - 1] for i in range(2, len(t_marks))]
     expected = 60.0 / 120.0
+    tol = 0.2
     for dt in intervals:
-        assert dt >= expected - 0.2
+        assert expected - tol <= dt <= expected + tol

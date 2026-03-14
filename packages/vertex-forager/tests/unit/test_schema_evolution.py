@@ -32,9 +32,13 @@ async def test_flexible_schema_add_column_evolution() -> None:
     pkt_q.put_nowait(None)
     await vf._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
     assert captured["frames"], "writer.write was not called"
-    cols = set(captured["frames"][0].columns)
+    df = captured["frames"][0]
+    cols = set(df.columns)
     assert {"provider", "ticker", "fetched_at"}.issubset(cols)
     assert "extra_col" in cols
+    assert df.shape[0] == 2
+    extras = df.get_column("extra_col").to_list()
+    assert set(extras) == {"x", None}
 
 
 @pytest.mark.asyncio
@@ -54,3 +58,4 @@ async def test_pk_missing_raises_and_spools(tmp_path, monkeypatch) -> None:
     pkt_q.put_nowait(None)
     await vf._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
     assert any("Missing PK column" in e for e in result.errors)
+    assert result.dlq_counts.get("yfinance_price", {}).get("remaining", 0) >= 1
