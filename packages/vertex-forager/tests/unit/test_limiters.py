@@ -23,7 +23,7 @@ async def test_gradient_smoothing_and_clamp() -> None:
     limiter = GradientConcurrencyLimiter(initial_limit=2, min_limit=1, max_limit=3, queue_size=1, smoothing=0.5)
     await limiter.acquire()
     await limiter.release(0.4)
-    _ = limiter.rtt_ema
+    # release(0.4) updates limiter.rtt_ema via EMA; the next release verifies smoothing
     await limiter.acquire()
     await limiter.release(0.6)
     ema2 = limiter.rtt_ema

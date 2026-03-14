@@ -11,7 +11,7 @@ from vertex_forager.writers.base import BaseWriter, WriteResult
 
 
 @pytest.mark.asyncio
-async def test_flexible_schema_add_column_evolution(monkeypatch) -> None:
+async def test_flexible_schema_add_column_evolution() -> None:
     mock_writer = AsyncMock(spec=BaseWriter)
     captured = {"frames": []}
     async def _write(pkt: FramePacket) -> WriteResult:
