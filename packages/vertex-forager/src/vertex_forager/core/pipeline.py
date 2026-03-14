@@ -737,6 +737,15 @@ class VertexForager:
             f"WRITER: Adaptive bulk writing enabled. Threshold={threshold} rows"
         )
 
+        async def _update_dlq_counts(*, table: str, rescued: int, remaining: int) -> None:
+            async with result_lock:
+                entry = result.dlq_counts.get(table) or {"rescued": 0, "remaining": 0}
+                if rescued:
+                    entry["rescued"] = entry.get("rescued", 0) + int(rescued)
+                if remaining:
+                    entry["remaining"] = entry.get("remaining", 0) + int(remaining)
+                result.dlq_counts[table] = entry
+
         async def _spool_to_dlq_and_rescue(table: str, packets: list[FramePacket], err: Exception) -> DLQStatus:
             if not packets:
                 return {"status": "noop", "rescued": 0, "remaining": 0, "path": None, "error": None}
@@ -810,11 +819,7 @@ class VertexForager:
                 if remaining:
                     self._inc("dlq_remaining_total", int(remaining))
                     self._inc(f"dlq_remaining.{table}", int(remaining))
-                async with result_lock:
-                    entry = result.dlq_counts.get(table) or {"rescued": 0, "remaining": 0}
-                    entry["rescued"] = entry.get("rescued", 0) + int(rescued)
-                    entry["remaining"] = entry.get("remaining", 0) + int(remaining)
-                    result.dlq_counts[table] = entry
+                await _update_dlq_counts(table=table, rescued=int(rescued), remaining=int(remaining))
                 return {"status": "disabled", "rescued": rescued, "remaining": remaining, "path": None, "error": None}
             if remaining > 0:
                 try:
@@ -856,11 +861,7 @@ class VertexForager:
                     if remaining:
                         self._inc("dlq_remaining_total", int(remaining))
                         self._inc(f"dlq_remaining.{table}", int(remaining))
-                    async with result_lock:
-                        entry = result.dlq_counts.get(table) or {"rescued": 0, "remaining": 0}
-                        entry["rescued"] = entry.get("rescued", 0) + int(rescued)
-                        entry["remaining"] = entry.get("remaining", 0) + int(remaining)
-                        result.dlq_counts[table] = entry
+                    await _update_dlq_counts(table=table, rescued=int(rescued), remaining=int(remaining))
                     return {"status": "spooled", "rescued": rescued, "remaining": remaining, "path": str(fpath), "error": None}
                 except Exception as exc:
                     if getattr(self._config, "dlq_tmp_cleanup_on_error", False):
@@ -893,11 +894,7 @@ class VertexForager:
                     if remaining_count:
                         self._inc("dlq_remaining_total", int(remaining_count))
                         self._inc(f"dlq_remaining.{table}", int(remaining_count))
-                    async with result_lock:
-                        entry = result.dlq_counts.get(table) or {"rescued": 0, "remaining": 0}
-                        entry["rescued"] = entry.get("rescued", 0) + int(rescued_count)
-                        entry["remaining"] = entry.get("remaining", 0) + int(remaining_count)
-                        result.dlq_counts[table] = entry
+                    await _update_dlq_counts(table=table, rescued=int(rescued_count), remaining=int(remaining_count))
                     raise DLQSpoolError(rescued=rescued_count, remaining=remaining_count, original=exc) from exc
             self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_rescued_{rescued}")
             self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_remaining_{remaining}")
@@ -907,10 +904,7 @@ class VertexForager:
             if rescued:
                 self._inc("dlq_rescued_total", int(rescued))
                 self._inc(f"dlq_rescued.{table}", int(rescued))
-            async with result_lock:
-                entry = result.dlq_counts.get(table) or {"rescued": 0, "remaining": 0}
-                entry["rescued"] = entry.get("rescued", 0) + int(rescued)
-                result.dlq_counts[table] = entry
+            await _update_dlq_counts(table=table, rescued=int(rescued), remaining=0)
             return {"status": "rescued_only", "rescued": rescued, "remaining": 0, "path": None, "error": None}
 
         def _build_writer_error_summary(*, status: DLQStatus, table: str, prefix: str, exc: Exception) -> str:

@@ -43,3 +43,39 @@ async def test_dlq_disabled_skips_spooling(tmp_path: Path, monkeypatch) -> None:
     assert any("DLQ=disabled" in e for e in result.errors)
     assert result.dlq_counts.get("t_fail", {}).get("remaining", 0) >= 1
     assert result.dlq_counts.get("t_fail", {}).get("rescued", 0) == 0
+
+
+@pytest.mark.asyncio
+async def test_dlq_disabled_flush_by_threshold(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "app"))
+    mock_writer = AsyncMock(spec=BaseWriter)
+    async def write_side_effect(pkt: FramePacket) -> WriteResult:
+        raise Exception("Disk Full")
+    mock_writer.write.side_effect = write_side_effect
+    mock_router = MagicMock()
+    mock_http = MagicMock()
+    mock_mapper = MagicMock()
+    mock_controller = MagicMock()
+    # Force flush by size: threshold = 1 row
+    cfg = EngineConfig(requests_per_minute=60, dlq_enabled=False, flush_threshold_rows=1)
+    forager = VertexForager(
+        router=mock_router,
+        http=mock_http,
+        writer=mock_writer,
+        mapper=mock_mapper,
+        config=cfg,
+        controller=mock_controller,
+    )
+    pkt_q: "asyncio.Queue[FramePacket | None]" = asyncio.Queue()
+    result = RunResult(provider="t")
+    result_lock = asyncio.Lock()
+    pkt_q.put_nowait(FramePacket(provider="t", table="t_fail", frame=pl.DataFrame({"id": [1]}), observed_at=datetime.now(timezone.utc)))
+    # This enqueue triggers flush by size; send shutdown after
+    pkt_q.put_nowait(None)
+    await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
+    dlq_dir = tmp_path / "app" / "cache" / "dlq" / "t_fail"
+    files = list(dlq_dir.glob("batch_*.ipc"))
+    assert files == []
+    assert any("DLQ=disabled" in e for e in result.errors)
+    assert result.dlq_counts.get("t_fail", {}).get("remaining", 0) >= 1
+    assert result.dlq_counts.get("t_fail", {}).get("rescued", 0) == 0
