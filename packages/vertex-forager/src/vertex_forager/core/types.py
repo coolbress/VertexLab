@@ -103,4 +103,11 @@ class DLQStatusSpoolFailed(TypedDict):
     path: None
     error: Exception
 
-DLQStatus = Union[DLQStatusSpooled, DLQStatusRescuedOnly, DLQStatusNoop, DLQStatusSpoolFailed]
+class DLQStatusDisabled(TypedDict):
+    status: Literal["disabled"]
+    rescued: int
+    remaining: int
+    path: None
+    error: None
+
+DLQStatus = Union[DLQStatusSpooled, DLQStatusRescuedOnly, DLQStatusNoop, DLQStatusSpoolFailed, DLQStatusDisabled]

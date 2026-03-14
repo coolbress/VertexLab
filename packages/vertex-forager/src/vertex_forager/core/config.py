@@ -210,6 +210,7 @@ class EngineConfig(BaseModel):
     metrics_enabled: bool = False
     structured_logs: bool = False
     log_verbose: bool = False
+    dlq_enabled: bool = True
     dlq_tmp_cleanup_on_error: bool = True
     dlq_tmp_periodic_cleanup: bool = True
     dlq_tmp_retention_s: int = Field(default=86400, ge=0)
@@ -282,6 +283,8 @@ class RunResult(BaseModel):
         dlq_pending: Packets preserved for post-mortem/dead-letter processing when DLQ spool/dispatch fails.
             Keys are table names and values are lists of FramePacket instances. Items are appended by
             writer/rescue logic upon spool errors and can be consumed by operator recovery flows.
+        dlq_counts: Per-table counts for rescued and remaining packets when DLQ is disabled or spooling occurs.
+            Always populated by the pipeline regardless of metrics settings to provide a minimal summary.
     """
 
     provider: str
@@ -294,6 +297,10 @@ class RunResult(BaseModel):
         default_factory=dict,
         exclude=True,
         description="Packets preserved per table for post-mortem DLQ handling when spool/dispatch fails",
+    )
+    dlq_counts: dict[str, dict[str, int]] = Field(
+        default_factory=dict,
+        description="Per-table DLQ counts: {'rescued': int, 'remaining': int}",
     )
 
     def add_rows(self, *, table: str, rows: int) -> None:

@@ -737,6 +737,15 @@ class VertexForager:
             f"WRITER: Adaptive bulk writing enabled. Threshold={threshold} rows"
         )
 
+        async def _update_dlq_counts(*, table: str, rescued: int, remaining: int) -> None:
+            async with result_lock:
+                entry = result.dlq_counts.get(table) or {"rescued": 0, "remaining": 0}
+                if rescued:
+                    entry["rescued"] = entry.get("rescued", 0) + int(rescued)
+                if remaining:
+                    entry["remaining"] = entry.get("remaining", 0) + int(remaining)
+                result.dlq_counts[table] = entry
+
         async def _spool_to_dlq_and_rescue(table: str, packets: list[FramePacket], err: Exception) -> DLQStatus:
             if not packets:
                 return {"status": "noop", "rescued": 0, "remaining": 0, "path": None, "error": None}
@@ -798,6 +807,20 @@ class VertexForager:
                             failed_packets.extend(packets[processed:])
                         break
             remaining = len(failed_packets)
+            if remaining > 0 and not bool(getattr(self._config, "dlq_enabled", True)):
+                self._log_structured(provider=first.provider, dataset=table, symbol=None, stage="dlq_disabled")
+                self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_rescued_{rescued}")
+                self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_remaining_{remaining}")
+                self._inc("dlq_disabled_total", 1)
+                self._inc(f"dlq_disabled.{table}", 1)
+                if rescued:
+                    self._inc("dlq_rescued_total", int(rescued))
+                    self._inc(f"dlq_rescued.{table}", int(rescued))
+                if remaining:
+                    self._inc("dlq_remaining_total", int(remaining))
+                    self._inc(f"dlq_remaining.{table}", int(remaining))
+                await _update_dlq_counts(table=table, rescued=int(rescued), remaining=int(remaining))
+                return {"status": "disabled", "rescued": rescued, "remaining": remaining, "path": None, "error": None}
             if remaining > 0:
                 try:
                     tmp_path = None
@@ -838,6 +861,7 @@ class VertexForager:
                     if remaining:
                         self._inc("dlq_remaining_total", int(remaining))
                         self._inc(f"dlq_remaining.{table}", int(remaining))
+                    await _update_dlq_counts(table=table, rescued=int(rescued), remaining=int(remaining))
                     return {"status": "spooled", "rescued": rescued, "remaining": remaining, "path": str(fpath), "error": None}
                 except Exception as exc:
                     if getattr(self._config, "dlq_tmp_cleanup_on_error", False):
@@ -870,6 +894,7 @@ class VertexForager:
                     if remaining_count:
                         self._inc("dlq_remaining_total", int(remaining_count))
                         self._inc(f"dlq_remaining.{table}", int(remaining_count))
+                    await _update_dlq_counts(table=table, rescued=int(rescued_count), remaining=int(remaining_count))
                     raise DLQSpoolError(rescued=rescued_count, remaining=remaining_count, original=exc) from exc
             self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_rescued_{rescued}")
             self._log_structured(provider=first.provider, dataset=table, symbol=None, stage=f"dlq_remaining_{remaining}")
@@ -879,6 +904,7 @@ class VertexForager:
             if rescued:
                 self._inc("dlq_rescued_total", int(rescued))
                 self._inc(f"dlq_rescued.{table}", int(rescued))
+            await _update_dlq_counts(table=table, rescued=int(rescued), remaining=0)
             return {"status": "rescued_only", "rescued": rescued, "remaining": 0, "path": None, "error": None}
 
         def _build_writer_error_summary(*, status: DLQStatus, table: str, prefix: str, exc: Exception) -> str:
@@ -904,6 +930,11 @@ class VertexForager:
                     summary = (
                         f"{prefix}:{table}:{exc} "
                         f"(DLQ=spool_failed; rescued={status['rescued']}; remaining={status['remaining']})"
+                    )
+                case "disabled":
+                    summary = (
+                        f"{prefix}:{table}:{exc} "
+                        f"(DLQ=disabled; rescued={status['rescued']}; remaining={status['remaining']})"
                     )
                 case _:
                     # Fallback if a new status is introduced without updating this function
