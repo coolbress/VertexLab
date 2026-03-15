@@ -187,11 +187,33 @@ class EngineConfig(BaseModel):
     Consolidates all tuning parameters into a single configuration object.
     Automatically calculates optimal concurrency based on RPM if not provided.
 
+    Attribute Groups:
+        Core: requests_per_minute, concurrency
+        Retry: retry
+        Storage & Flush: flush_threshold_rows, writer_chunk_rows
+        Observability: metrics_enabled, structured_logs, log_verbose
+        DLQ: dlq_enabled, dlq_tmp_cleanup_on_error, dlq_tmp_periodic_cleanup, dlq_tmp_retention_s
+        Adaptive Downshift: downshift_enabled, downshift_window_s, error_rate_threshold, rpm_floor, recovery_step, healthy_window_s
+
     Attributes:
-        requests_per_minute (int): Maximum allowed requests per minute (must be positive).
-        concurrency (int | None): Explicit concurrency limit (optional).
-        retry (RetryConfig): Retry configuration settings (default: RetryConfig()).
-        flush_threshold_rows (int): Number of rows to buffer before flushing (default: 500_000).
+        requests_per_minute (int): Maximum allowed requests per minute; must be > 0.
+        concurrency (int | None): Explicit concurrency limit; if None, executor derives a safe value.
+        retry (RetryConfig): Retry/backoff policy (attempts, backoff window, status codes).
+        flush_threshold_rows (int): Rows buffered per table before flush; higher = fewer large flushes.
+        writer_chunk_rows (int | None): Target per‑chunk rows during flush; when set must be >= 10_000.
+        metrics_enabled (bool): Emit counters/histograms when True.
+        structured_logs (bool): Emit structured stage logs when True.
+        log_verbose (bool): Increase logging verbosity when True.
+        dlq_enabled (bool): Enable on‑disk DLQ spooling; when False, files are not written and summaries/counts still populate.
+        dlq_tmp_cleanup_on_error (bool): Attempt cleanup of temporary DLQ files on writer errors.
+        dlq_tmp_periodic_cleanup (bool): Periodically clean temporary DLQ spool artifacts.
+        dlq_tmp_retention_s (int): Retention window (seconds) for temporary DLQ artifacts (default 86_400 = 1 day).
+        downshift_enabled (bool): Enable adaptive RPM downshift based on error rates.
+        downshift_window_s (int): Sliding window (seconds) to evaluate error rate for downshift.
+        error_rate_threshold (float): Error rate threshold (0..1) to trigger downshift.
+        rpm_floor (int): Minimum RPM when downshift is active; must be <= requests_per_minute.
+        recovery_step (int): RPM increment when recovering from downshift.
+        healthy_window_s (int): Window (seconds) of healthy operation before stepping up RPM.
 
     Raises:
         ValueError: If requests_per_minute is not positive.
