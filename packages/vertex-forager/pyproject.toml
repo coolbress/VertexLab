@@ -7,6 +7,16 @@ authors = [
     { name = "coolbress", email = "81678322+coolbress@users.noreply.github.com" }
 ]
 requires-python = ">=3.10"
+license = { text = "MIT" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Typing :: Typed",
+]
+urls = { "Documentation" = "https://coolbress.github.io/vertex-lab/", "Changelog" = "https://github.com/coolbress/vertex-lab/blob/main/CHANGELOG.md", "Issues" = "https://github.com/coolbress/vertex-lab/issues", "Source" = "https://github.com/coolbress/vertex-lab" }
 dependencies = [
     "click>=8.3.1,<9.0.0",
     "duckdb>=1.4.4,<2.0.0",
@@ -42,6 +52,12 @@ build-backend = "uv_build"
 notebook = [
     "ipywidgets>=8.1.8",
     "ipython>=8.0.0,<9.0.0",
+]
+docs = [
+    "mkdocs>=1.6.0",
+    "mkdocs-material>=9.5.0",
+    "mkdocstrings[python]>=0.25.0",
+    "pymdown-extensions>=10.8",
 ]
 
 [dependency-groups]

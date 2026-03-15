@@ -18,6 +18,10 @@ Thank you for contributing to Vertex Forager!
   - `uv pip install "mkdocs>=1.6.0" "mkdocs-material>=9.5.0" "mkdocstrings[python]>=0.25.0" "pymdown-extensions>=10.8"`
   - `uv run mkdocs serve`
 - API reference uses mkdocstrings. Please add minimal Google-style docstrings for public APIs.
+- Link checking locally (optional):
+  - macOS: `brew install lychee`
+  - Rust: `cargo install lychee --locked`
+  - Run: `pre-commit run lychee -a`
 
 ## Commit/PR guidelines
 - Use conventional prefixes (guard‑approved): `feat:`, `fix:`, `docs:`, `refactor:`, `perf:`, `test:`, `chore:`.

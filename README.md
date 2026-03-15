@@ -1,5 +1,7 @@
 # Vertex Lab - Data Science Platform
 
+[![Docs](https://img.shields.io/badge/docs-online-blue)](https://coolbress.github.io/vertex-lab/)
+
 Modern Python monorepo for financial data collection, analysis, and visualization.
 
 ## 🏗️ Architecture
@@ -119,8 +121,9 @@ packages/vertex-forager/
 2. Ensure all tests pass before creating PR
 3. Include issue number in commit messages
 4. Keep PRs focused and well-documented
-5. Refer to docs for architecture and constants overview:
-   - [docs/index.md](docs/index.md)
+5. Documentation:
+   - Site: https://coolbress.github.io/vertex-lab/
+   - Repo index: [docs/index.md](docs/index.md)
 
 ## 📄 License
 

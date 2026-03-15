@@ -55,6 +55,45 @@ These keys are explicitly passed into pipeline.run and should be removed from an
 ## Provider Integration Guide
 
 - Implement Router that inherits BaseRouter and conforms to interfaces.generate_jobs/parse.
-- Use transforms to standardize frames, add metadata, and parse date ranges.
-- Construct jobs via jobs helpers; adopt make_pagination_context for cursor-based APIs.
-- Map provider-specific errors to standard exceptions with errors helpers.
+
+## Diagrams
+
+### Flowchart — Router → Pipeline
+
+```mermaid
+flowchart TD
+    A[Client call] --> B[Router.generate_jobs]
+    B --> C[FetchJob]
+    C --> D[Pipeline Producer]
+    D --> E[Fetch Worker]
+    E --> F[HttpExecutor.fetch]
+    F --> G[Router.parse]
+    G --> H[ParseResult]
+    H --> I[FramePacket]
+    H --> J{next_jobs?}
+    J -->|yes| D
+    J -->|no| K[Writer persist/collect]
+    I --> K
+    K --> L[Result]
+```
+
+### Sequence — URL Build & Delivery
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Router as ProviderRouter
+    participant Builder as JobBuilder
+    participant Auth as Auth
+    participant Pipeline
+    Client->>Router: generate_jobs(dataset, symbols)
+    Router->>Router: resolve dataset URL
+    loop For each symbol/batch
+        Router->>Builder: build per‑symbol job
+        Builder->>Auth: inject api_key
+        Builder->>Builder: RequestSpec(url, params, auth)
+        Builder-->>Router: FetchJob
+        Router-->>Pipeline: yield job
+    end
+    Pipeline->>Pipeline: execute job.spec
+```

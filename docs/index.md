@@ -1,25 +1,14 @@
 # Documentation Index
 
-- Architecture & Pipeline
-  - [Router ↔ Client Overview](router-client.md)
-  - [Data Storage Flow & DLQ](data-storage-flow.md)
+## Packages
 
-- Writers
-  - [Writer Security](writer-security.md)
-  - [Writer Fan-out Roadmap (Table Sharding or External OLAP)](writer-fanout-roadmap.md)
+- Vertex Forager
+  - Entry: [packages/vertex-forager/docs/index.md](../packages/vertex-forager/docs/index.md)
 
-- Providers & Extensions
-  - [Provider Extension Guide](PROVIDER_EXTENSION_GUIDE.md)
-  - [Provider Plugin Guide](provider_plugin_guide.md)
-
-- Performance & Tuning
-  - [Performance Tuning](performance_tuning.md)
+## Repository Guides
 
 - CI/CD & Security
   - [CI Security](ci-security.md)
-
-- Constants
-  - [Constants Reference](CONSTANTS.md)
 
 ## Navigation
 

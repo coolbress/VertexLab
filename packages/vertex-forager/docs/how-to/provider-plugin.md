@@ -23,7 +23,6 @@ Purpose: Define a clear, provider‑agnostic extension model for non‑HTTP prov
 - Core Dispatch (core/http.py)
   - HttpExecutor.fetch(spec) routes non‑HTTP URLs to the registry and returns pickled Python objects; HTTP returns bytes
 
- 
 ## Security & Safety (Invocation Rules)
 - Allowed calls only:
   - Public methods/attributes; block private/dunder names (startswith("_") or "__" in name)
@@ -35,7 +34,6 @@ Purpose: Define a clear, provider‑agnostic extension model for non‑HTTP prov
 - Errors:
   - Raise ValueError for invalid spec/unsupported call from fetcher; core/http maps/propagates as project‑standard
 
- 
 ## Registry (Idempotent & Unique)
 - register_library_fetcher(fetcher):
   - Enforces unique scheme; raises on duplicate
@@ -48,7 +46,6 @@ Purpose: Define a clear, provider‑agnostic extension model for non‑HTTP prov
 - Library fetch path returns pickled objects; routers decode and normalize (records/frames, strict types, null policy)
 - HTTP path returns raw bytes; routers parse JSON/CSV and normalize similarly
 - Ensure downstream routers remain transport‑agnostic: they only decode/normalize payloads
- 
 
 ## Testing Requirements
 - Unit tests (plugins):
