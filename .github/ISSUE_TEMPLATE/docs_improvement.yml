@@ -1,0 +1,57 @@
+name: Docs improvement
+description: Suggest a documentation improvement
+title: "docs: <short summary>"
+labels:
+  - documentation
+body:
+  - type: checkboxes
+    id: area
+    attributes:
+      label: Area
+      options:
+        - label: README
+        - label: Guides (How‑to/Tutorials)
+        - label: Reference/API
+        - label: Explanation/Architecture
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - P1
+        - P2
+        - P3
+        - P4
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+    validations:
+      required: true
+  - type: textarea
+    id: pages
+    attributes:
+      label: Pages impacted (paths)
+      description: List documentation paths or nav items to be updated
+      placeholder: e.g., packages/vertex-forager/docs/how-to/performance-tuning.md
+    validations:
+      required: true
+  - type: textarea
+    id: links
+    attributes:
+      label: Links/Screenshots
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Define completion checks (mkdocs --strict green, link checker green, etc.)
+      placeholder: |
+        - mkdocs build --strict passes
+        - link checker passes
+        - nav links and anchors verified
+    validations:
+      required: true

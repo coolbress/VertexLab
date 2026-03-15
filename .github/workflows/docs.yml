@@ -1,0 +1,37 @@
+name: docs-ci
+
+on:
+  pull_request:
+    paths:
+      - "mkdocs.yml"
+      - "packages/vertex-forager/docs/**"
+      - ".github/workflows/docs.yml"
+      - "packages/vertex-forager/pyproject.toml"
+      - "packages/vertex-forager/src/**"
+  push:
+    branches: [ "main" ]
+    paths:
+      - "mkdocs.yml"
+      - "packages/vertex-forager/docs/**"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - name: Install docs deps
+        run: |
+          uv pip install -q 'mkdocs>=1.6.0' 'mkdocs-material>=9.5.0' 'mkdocstrings[python]>=0.25.0' 'pymdown-extensions>=10.8'
+      - name: Build docs (strict)
+        run: uv run mkdocs build --strict
+  link-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Link Checker
+        uses: lycheeverse/lychee-action@v1
+        with:
+          args: --verbose --no-progress --max-concurrency 8 --exclude-mail '^$' 'packages/vertex-forager/docs/**/*.md' 'README.md'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

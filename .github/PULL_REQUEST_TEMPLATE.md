@@ -1,47 +1,46 @@
-## Summary
-1–3 lines describing what changed and why
+<!--
+Title convention to help labeler: start with one of
+feat: | fix: | docs: | refactor: | perf: | test: | chore:
+Example: docs: rewrite README and add mkdocs site
+-->
 
-## Linked Issue(s)
-Closes #NN
+## Summary
+- What does this change do?
+- Why is it needed?
+
+## Linked Issue
+- Closes #<id> (if applicable)
 
 ## Type of Change
-- [ ] Bug fix
-- [ ] Feature
-- [ ] Refactor
-- [ ] Docs
-- [ ] Chore / CI
+- [ ] docs
+- [ ] fix
+- [ ] feat
+- [ ] refactor
+- [ ] perf
+- [ ] test
+- [ ] ci/chore
 
 ## Changes
--
--
+- List the user‑visible changes and important internal updates
 
 ## Verification
-- Lint: ruff passed
-- Type: mypy passed
-- Tests: pytest passed and coverage gate (>=80%) met
-- Security: Trivy/CodeQL checked
-- Manual checks (if needed): smoke run / logs verified
+- Steps, commands, or screenshots to demonstrate the change works
 
 ## Security Considerations
-- Data handling/PII impact:
-- Secrets/credentials exposure risk:
-- Dependency or supply-chain changes:
-- Network/attack surface changes:
+- Any secrets/PII, dependency risks, or permissions changes?
 
 ## Risk & Rollback
-- Risk:
-- Rollback: revert commit SHA or toggle/flag
+- Risk level and how to roll back if needed
 
-## Breaking Changes
-- [ ] None
-- If any, describe migration notes here
+## Breaking Change?
+- [ ] Yes (backward-incompatible)
+- [ ] No
 
-## Release Notes
--
+## Screenshots / CLI Output (optional)
+- If helpful, include images or command output
 
 ## Checklist
-- [ ] Quality gates (ruff/mypy/pytest/coverage) pass
-- [ ] Structured logs/metrics impact reviewed
-- [ ] Docs/README/links updated (if applicable)
-- [ ] No secrets/credentials in code or logs
-- [ ] Backward compatibility or migration notes included (if applicable)
+- [ ] ruff/mypy/pytest pass locally
+- [ ] Docs updated (if user‑visible)
+- [ ] Changelog entry (if user‑visible)
+- [ ] No secrets committed

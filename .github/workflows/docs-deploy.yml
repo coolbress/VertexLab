@@ -1,0 +1,43 @@
+name: docs-deploy
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "mkdocs.yml"
+      - "packages/vertex-forager/docs/**"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: astral-sh/setup-uv@v3
+      - name: Install docs deps
+        run: |
+          uv pip install -q 'mkdocs>=1.6.0' 'mkdocs-material>=9.5.0' 'mkdocstrings[python]>=0.25.0' 'pymdown-extensions>=10.8'
+      - name: Build site
+        run: uv run mkdocs build --strict --site-dir ./_site
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./_site
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
