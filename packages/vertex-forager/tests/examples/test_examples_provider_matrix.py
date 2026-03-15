@@ -19,30 +19,30 @@ PROVIDERS = [p.strip() for p in (os.getenv("VF_EXAMPLES_PROVIDER") or "yfinance"
 
 @pytest.mark.skipif(os.getenv("VF_EXAMPLES_SMOKE") != "1", reason="Set VF_EXAMPLES_SMOKE=1 to run example smoke tests")
 @pytest.mark.parametrize("provider", PROVIDERS)
-def test_minimal_inmemory_env_driven(provider: str) -> None:
+def test_minimal_inmemory_env_driven(provider: str, monkeypatch: pytest.MonkeyPatch) -> None:
     if provider == "sharadar" and not os.getenv("SHARADAR_API_KEY"):
         pytest.skip("Requires SHARADAR_API_KEY to run Sharadar example")
     root = Path(__file__).resolve().parents[4]
     example = root / "packages" / "vertex-forager" / "examples" / "minimal_inmemory.py"
     mod = _import_from_file(example)
-    os.environ["VF_PROVIDER"] = provider
-    os.environ.setdefault("VF_TICKERS", "AAPL,MSFT")
+    monkeypatch.setenv("VF_PROVIDER", provider)
+    monkeypatch.setenv("VF_TICKERS", "AAPL,MSFT")
     assert hasattr(mod, "main")
     mod.main()  # type: ignore[attr-defined]
 
 
 @pytest.mark.skipif(os.getenv("VF_EXAMPLES_SMOKE") != "1", reason="Set VF_EXAMPLES_SMOKE=1 to run example smoke tests")
 @pytest.mark.parametrize("provider", PROVIDERS)
-def test_advanced_duckdb_runs(provider: str, tmp_path) -> None:
+def test_advanced_duckdb_runs(provider: str, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     if provider == "sharadar" and not os.getenv("SHARADAR_API_KEY"):
         pytest.skip("Requires SHARADAR_API_KEY for sharadar")
     root = Path(__file__).resolve().parents[4]
     example = root / "packages" / "vertex-forager" / "examples" / "advanced_duckdb_metrics.py"
     mod = _import_from_file(example)
     db = tmp_path / "forager.duckdb"
-    os.environ["VF_PROVIDER"] = provider
-    os.environ["VF_TICKERS"] = "AAPL,MSFT"
-    os.environ["VF_DUCKDB_PATH"] = str(db)
+    monkeypatch.setenv("VF_PROVIDER", provider)
+    monkeypatch.setenv("VF_TICKERS", "AAPL,MSFT")
+    monkeypatch.setenv("VF_DUCKDB_PATH", str(db))
     assert hasattr(mod, "main")
     mod.main()  # type: ignore[attr-defined]
     assert db.exists()

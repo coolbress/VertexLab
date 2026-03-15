@@ -123,7 +123,7 @@ packages/vertex-forager/
 4. Keep PRs focused and well-documented
 5. Documentation:
    - Site: https://coolbress.github.io/vertex-lab/
-   - Repo index: [docs/index.md](docs/index.md)
+   - Repo index: [packages/vertex-forager/docs/index.md](packages/vertex-forager/docs/index.md)
 
 ## 📄 License
 

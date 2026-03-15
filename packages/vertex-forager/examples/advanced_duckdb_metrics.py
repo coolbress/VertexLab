@@ -23,7 +23,7 @@ def main() -> None:
     kwargs = {}
     if provider == "sharadar":
         kwargs["api_key"] = os.environ["SHARADAR_API_KEY"]
-    client = create_client(provider=provider, **kwargs)
+    client = create_client(provider=provider, metrics_enabled=True, **kwargs)
 
     tickers = _tickers_from_env()
     db = _db_path()

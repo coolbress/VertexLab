@@ -220,9 +220,9 @@ print(res)  # RunResult
 
 - Scripts (uv):
   - Minimal in‑memory (single ticker):
-    - `uv run python packages/vertex-forager/examples/minimal_yf_inmemory.py` (env: `VF_TICKER=AAPL`)
+    - `VF_TICKERS=AAPL uv run python packages/vertex-forager/examples/minimal_inmemory.py`
   - Advanced (multi‑ticker, DuckDB, metrics, chunked flush):
-    - `uv run python packages/vertex-forager/examples/advanced_yf_duckdb_metrics.py`
+    - `uv run python packages/vertex-forager/examples/advanced_duckdb_metrics.py`
       - env: `VF_TICKERS="AAPL,MSFT"`, `VF_DUCKDB_PATH=./forager.duckdb`
 - CLI equivalents:
   - See [CLI Equivalents](docs/how-to/cli-equivalents.md)
