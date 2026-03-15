@@ -10,17 +10,19 @@ Disable on‑disk DLQ spooling when local persistence is not allowed, while stil
 
 ## Steps
 
-1) Configure:
+1) Configure (apply via client creation):
 
 ```python
-from vertex_forager.core.config import EngineConfig
+import os
+from vertex_forager import create_client
 
-cfg = EngineConfig(
-    requests_per_minute=60,
+client = create_client(
+    provider=os.getenv("VF_PROVIDER", "yfinance").strip(),
+    rate_limit=60,
     dlq_enabled=False,
     # optional: metrics/logs
-    metrics_enabled=True,          # to emit counters/histograms
-    structured_logs=True,          # to emit structured stages
+    metrics_enabled=True,          # emit counters/histograms
+    structured_logs=True,          # emit structured stages
 )
 ```
 

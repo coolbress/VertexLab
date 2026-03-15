@@ -9,6 +9,7 @@ site_dir: site
 theme:
   name: material
   language: en
+  font: false
   features:
     - content.code.copy
     - navigation.tabs
@@ -45,7 +46,11 @@ markdown_extensions:
       permalink: true
   - tables
   - pymdownx.details
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
 
 nav:
   - Overview: index.md

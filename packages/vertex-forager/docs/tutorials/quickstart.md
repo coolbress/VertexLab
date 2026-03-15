@@ -33,21 +33,23 @@ df = client.get_price_data(tickers=tickers, show_progress=False)
 print(df)
 ```
 
-## Run Examples
+## Run Examples (DuckDB persist)
 
-- Minimal (env‑driven)
+- Persist to DuckDB (provider‑agnostic)
 
 ```bash
 VF_PROVIDER=yfinance VF_TICKERS=AAPL,MSFT \
-uv run python packages/vertex-forager/examples/minimal_inmemory.py
+VF_DUCKDB_PATH=./forager.duckdb \
+uv run python packages/vertex-forager/examples/advanced_duckdb_metrics.py
 ```
 
-- Sharadar (requires SHARADAR_API_KEY)
+- Sharadar (requires SHARADAR_API_KEY; DuckDB persist)
 
 ```bash
 export SHARADAR_API_KEY=...   # your key
 VF_PROVIDER=sharadar VF_TICKERS=AAPL,MSFT \
-uv run python packages/vertex-forager/examples/minimal_inmemory.py
+VF_DUCKDB_PATH=./forager.duckdb \
+uv run python packages/vertex-forager/examples/advanced_duckdb_metrics.py
 ```
 
 ## CLI Quick Commands
