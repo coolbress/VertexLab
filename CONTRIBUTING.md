@@ -20,9 +20,11 @@ Thank you for contributing to Vertex Forager!
 - API reference uses mkdocstrings. Please add minimal Google-style docstrings for public APIs.
 
 ## Commit/PR guidelines
-- Use conventional prefixes: `docs:`, `fix:`, `feat:`, `refactor:`, `ci:`, `chore:`.
+- Use conventional prefixes (guard‑approved): `feat:`, `fix:`, `docs:`, `refactor:`, `perf:`, `test:`, `chore:`.
 - Add tests for user-visible changes when applicable.
 - Keep provider-specific logic in provider modules; avoid bleeding into core.
+- Follow the PR template: include Summary, Linked Issue, Changes, Verification, Security, Risk & Rollback, and mark Breaking Change? if applicable.
+- Ensure public API changes include docstrings; place tests under `packages/vertex-forager/tests/`.
 
 ## Security
 - Never commit secrets. Use environment variables or secret managers.
