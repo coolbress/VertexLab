@@ -35,6 +35,8 @@ plugins:
   - mkdocstrings:
       handlers:
         python:
+          paths:
+            - packages/vertex-forager/src
           options:
             docstring_style: google
             show_source: false

@@ -5,6 +5,13 @@ Follow this hands‑on tutorial to fetch data and persist it to DuckDB.
 ## Prerequisites
 
 - Python 3.10+
+- If you want to run the repository example scripts below, first clone the repo and change into it:
+
+```bash
+git clone https://github.com/coolbress/vertex-lab.git
+cd vertex-lab
+```
+
 - Install package (from GitHub, until PyPI release):
 
 ```bash
@@ -28,9 +35,14 @@ if provider == "sharadar":
 client = create_client(provider=provider, **kwargs)
 tickers = [t.strip() for t in (os.getenv("VF_TICKERS") or "AAPL,MSFT").split(",")]
 
-# jupyter_safe wrapper lets you call this like a normal (sync) function
-df = client.get_price_data(tickers=tickers, show_progress=False)
-print(df)
+# Persist to DuckDB by providing connect_db; returns a RunResult summary
+db_path = os.getenv("VF_DUCKDB_PATH", "./forager.duckdb")
+res = client.get_price_data(
+    tickers=tickers,
+    connect_db=f"duckdb://{db_path}",
+    show_progress=False,
+)
+print(res)  # RunResult
 ```
 
 ## Run Examples (DuckDB persist)

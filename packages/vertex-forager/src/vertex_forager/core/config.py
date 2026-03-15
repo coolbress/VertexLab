@@ -187,11 +187,11 @@ class EngineConfig(BaseModel):
     Consolidates all tuning parameters into a single configuration object.
     Automatically calculates optimal concurrency based on RPM if not provided.
 
-    Args:
-        requests_per_minute: Maximum allowed requests per minute (must be positive).
-        concurrency: Explicit concurrency limit (optional).
-        retry: Retry configuration settings (default: RetryConfig()).
-        flush_threshold_rows: Number of rows to buffer before flushing (default: 500,000).
+    Attributes:
+        requests_per_minute (int): Maximum allowed requests per minute (must be positive).
+        concurrency (int | None): Explicit concurrency limit (optional).
+        retry (RetryConfig): Retry configuration settings (default: RetryConfig()).
+        flush_threshold_rows (int): Number of rows to buffer before flushing (default: 500_000).
 
     Raises:
         ValueError: If requests_per_minute is not positive.
