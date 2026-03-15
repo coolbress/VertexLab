@@ -5,6 +5,8 @@ Thank you for contributing to Vertex Forager!
 ## Development quickstart
 - Install uv and set up the workspace:
   - `uv sync -g dev`
+- Install and enable Git hooks:
+  - `pre-commit install`
 - Run quality gates locally:
   - `uv run ruff check packages/`
   - `uv run mypy packages/vertex-forager/src --strict`
@@ -18,7 +20,7 @@ Thank you for contributing to Vertex Forager!
 - API reference uses mkdocstrings. Please add minimal Google-style docstrings for public APIs.
 
 ## Commit/PR guidelines
-- Use conventional prefixes: `[docs]`, `[fix]`, `[feat]`, `[refactor]`, `[ci]`, `[chore]`.
+- Use conventional prefixes: `docs:`, `fix:`, `feat:`, `refactor:`, `ci:`, `chore:`.
 - Add tests for user-visible changes when applicable.
 - Keep provider-specific logic in provider modules; avoid bleeding into core.
 

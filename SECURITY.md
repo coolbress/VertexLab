@@ -2,9 +2,8 @@
 
 ## Reporting a Vulnerability
 
-If you believe you have found a security vulnerability, please report it to the maintainers:
-- Open a private security advisory in GitHub or
-- Email: 81678322+coolbress@users.noreply.github.com
+If you believe you have found a security vulnerability, please report it via the GitHub Security tab:
+- Open a private security advisory in GitHub (preferred and monitored).
 
 Please include:
 - A description of the vulnerability and affected components

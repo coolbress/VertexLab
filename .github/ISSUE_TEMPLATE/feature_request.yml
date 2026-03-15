@@ -33,6 +33,8 @@ body:
     id: alternatives
     attributes:
       label: Alternatives considered
+    validations:
+      required: true
   - type: textarea
     id: context
     attributes:

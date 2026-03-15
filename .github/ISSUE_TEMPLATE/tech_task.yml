@@ -26,7 +26,7 @@ body:
         - label: Verify auto‑labeler and PR guard alignment
         - label: Update CODEOWNERS for docs/mkdocs.yml
         - label: Configure pre‑commit hooks (ruff/format, mypy, lychee)
-        - label: [optional] Add detect‑secrets with a baseline
+        - label: "[optional] Add detect‑secrets with a baseline"
         - label: Ensure Docs CI (mkdocs --strict, link checker, actionlint) passes
   - type: textarea
     id: validation

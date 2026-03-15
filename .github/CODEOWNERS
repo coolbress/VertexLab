@@ -1,2 +1,2 @@
-packages/vertex-forager/docs/* @coolbress
+packages/vertex-forager/docs/** @coolbress
 mkdocs.yml @coolbress
