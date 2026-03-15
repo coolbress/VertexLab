@@ -14,11 +14,11 @@ reviews:
       - "!**/*.log"
       - "!**/*.egg-info/**"
       - "!**/build/**"
+      - "!**/site/**"
       - "!**/.coverage"
       - "!**/htmlcov/**"
       - "!**/.mypy_cache/**"
       - "!**/.pytest_cache/**"
-      - "!**/examples/**"
       - "!**/.ipynb_checkpoints/**"
       - "!**/dist/**"
    auto_review:
