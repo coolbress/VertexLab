@@ -1,0 +1,51 @@
+name: docs-ci
+
+on:
+  pull_request:
+    paths:
+      - "mkdocs.yml"
+      - "packages/vertex-forager/docs/**"
+      - ".github/workflows/docs.yml"
+      - "packages/vertex-forager/pyproject.toml"
+      - "packages/vertex-forager/src/**"
+  push:
+    branches: ["main"]
+    paths:
+      - "mkdocs.yml"
+      - "packages/vertex-forager/docs/**"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v4 pinned
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v5 pinned
+        with:
+          python-version: "3.10"
+      - uses: astral-sh/setup-uv@e06108dd0aef18192324c70427afc47652e63a82  # v5 pinned
+        if: ${{ hashFiles('mkdocs.yml') != '' }}
+      - name: Set up Python virtual environment
+        run: uv venv
+        if: ${{ hashFiles('mkdocs.yml') != '' }}
+      - name: Install docs deps
+        run: |
+          uv pip install -q 'mkdocs>=1.6.0' 'mkdocs-material>=9.5.0' 'mkdocstrings[python]>=0.25.0' 'pymdown-extensions>=10.8'
+        if: ${{ hashFiles('mkdocs.yml') != '' }}
+      - name: Build docs (strict)
+        run: uv run mkdocs build --strict
+        if: ${{ hashFiles('mkdocs.yml') != '' }}
+  link-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v4 pinned
+      - name: Link Checker
+        uses: lycheeverse/lychee-action@2b973e86fc7b1f6b36a93795fe2c9c6ae1118621  # v1 pinned
+        with:
+          args: --verbose --no-progress --max-concurrency 8 --exclude '^\\s*$' 'packages/vertex-forager/docs/**/*.md' 'README.md'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        if: ${{ hashFiles('mkdocs.yml') != '' }}

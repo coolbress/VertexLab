@@ -1,6 +1,6 @@
 name: "Technical Task"
 description: "Refactor, tests, build/CI and other non‑feature work"
-title: "[chore]: "
+title: "chore: <short summary>"
 labels: ["task", "needs-triage"]
 assignees: []
 body:
@@ -16,18 +16,25 @@ body:
     attributes:
       label: Scope / Out of Scope
       placeholder: Clearly list included and excluded items
-  - type: textarea
-    id: plan
+  - type: checkboxes
+    id: checklist
     attributes:
-      label: Approach / Checklist
-      placeholder: |
-        - [ ] …
-        - [ ] …
+      label: Checklist
+      options:
+        - label: Tests added or updated
+        - label: Docs updated (if applicable)
+        - label: CI gates pass locally
+        - label: Rollback plan documented in Risk & Rollback
   - type: textarea
     id: validation
     attributes:
       label: Validation
       placeholder: Tests/benchmarks/CI gates, acceptance checks
+  - type: textarea
+    id: risk
+    attributes:
+      label: Risk & Rollback
+      placeholder: Identify risks and how to revert safely
   - type: dropdown
     id: priority
     attributes:

@@ -1,48 +1,9 @@
-name: "Feature Request"
-description: "Propose a new feature or enhancement"
-title: "[feat]: "
-labels: ["enhancement", "needs-triage"]
-assignees: []
+name: Feature request
+description: Suggest an idea for this project
+title: "feat: <short summary>"
+labels:
+  - enhancement
 body:
-  - type: textarea
-    id: background
-    attributes:
-      label: Problem Statement
-      placeholder: What problem does this feature solve and for whom?
-    validations:
-      required: true
-  - type: textarea
-    id: proposal
-    attributes:
-      label: Proposed Solution
-      placeholder: High‑level design and intended behavior
-    validations:
-      required: true
-  - type: textarea
-    id: acceptance
-    attributes:
-      label: Acceptance Criteria (AC)
-      description: List verifiable criteria to close this request
-      placeholder: |
-        - [ ] …
-        - [ ] …
-    validations:
-      required: true
-  - type: textarea
-    id: scope
-    attributes:
-      label: Scope / Out of Scope
-      placeholder: Be explicit about included and excluded items
-  - type: textarea
-    id: dependencies
-    attributes:
-      label: Dependencies / Impact
-      placeholder: Migrations, performance, security considerations, rollout/rollback
-  - type: textarea
-    id: alternatives
-    attributes:
-      label: Alternatives Considered
-      placeholder: Other approaches and trade‑offs
   - type: dropdown
     id: priority
     attributes:
@@ -54,3 +15,40 @@ body:
         - P4
     validations:
       required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: What is the problem or limitation?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: Describe the solution and scope.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Define completion conditions and measurable outcomes
+      placeholder: e.g., New API returns schema X; docs updated; tests passing
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out of scope
+      description: Clarify explicitly excluded items to avoid scope creep

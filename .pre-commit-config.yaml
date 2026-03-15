@@ -1,9 +1,22 @@
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.9
+    rev: v0.15.6
     hooks:
-      - id: ruff
+      - id: ruff-check
         args: ["packages/", "--exclude", "legacy_code"]
+      - id: ruff-format
+  - repo: https://github.com/lycheeverse/lychee
+    rev: v0.15.1
+    hooks:
+      - id: lychee
+        name: Markdown link checker
+        args: ["--verbose", "--no-progress", "--max-concurrency", "8", "packages/vertex-forager/docs/**/*.md", "README.md"]
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        name: Detect secrets
+        args: ["--baseline", ".secrets.baseline"]
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.10.0
     hooks:
