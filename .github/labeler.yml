@@ -15,7 +15,7 @@ area:clients:
       - any-glob-to-any-file: ["packages/vertex-forager/src/vertex_forager/providers/**"]
 area:docs:
   - changed-files:
-      - any-glob-to-any-file: ["docs/**", "README.md"]
+      - any-glob-to-any-file: ["docs/**", "README.md", "packages/vertex-forager/docs/**"]
 area:ci:
   - changed-files:
       - any-glob-to-any-file: [".github/workflows/**", ".github/**"]

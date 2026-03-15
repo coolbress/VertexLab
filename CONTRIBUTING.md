@@ -4,7 +4,7 @@ Thank you for contributing to Vertex Forager!
 
 ## Development quickstart
 - Install uv and set up the workspace:
-  - `uv sync -g dev`
+  - `uv sync`
 - Install and enable Git hooks:
   - `pre-commit install`
 - Run quality gates locally:

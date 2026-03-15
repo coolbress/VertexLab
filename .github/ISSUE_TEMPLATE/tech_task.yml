@@ -1,6 +1,6 @@
 name: "Technical Task"
 description: "Refactor, tests, build/CI and other non‑feature work"
-title: "[chore]: "
+title: "chore: <short summary>"
 labels: ["task", "needs-triage"]
 assignees: []
 body:
@@ -21,13 +21,10 @@ body:
     attributes:
       label: Checklist
       options:
-        - label: Update Issue Forms (bug/feature/docs) with Priority/Severity and clearer prompts
-        - label: Update PR template (title convention + sections + checklist)
-        - label: Verify auto‑labeler and PR guard alignment
-        - label: Update CODEOWNERS for docs/mkdocs.yml
-        - label: Configure pre‑commit hooks (ruff/format, mypy, lychee)
-        - label: "[optional] Add detect‑secrets with a baseline"
-        - label: Ensure Docs CI (mkdocs --strict, link checker, actionlint) passes
+        - label: Tests added or updated
+        - label: Docs updated (if applicable)
+        - label: CI gates pass locally
+        - label: Rollback plan documented in Risk & Rollback
   - type: textarea
     id: validation
     attributes:
