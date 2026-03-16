@@ -221,9 +221,11 @@ print(res)  # RunResult
 - Scripts (uv):
   - Minimal in‑memory (single ticker):
     - `VF_TICKERS=AAPL uv run python packages/vertex-forager/examples/minimal_inmemory.py`
+      - `VF_TICKERS`: required (comma‑separated tickers; single ticker shown)
   - Advanced (multi‑ticker, DuckDB, metrics, chunked flush):
-    - `uv run python packages/vertex-forager/examples/advanced_duckdb_metrics.py`
-      - env: `VF_TICKERS="AAPL,MSFT"`, `VF_DUCKDB_PATH=./forager.duckdb`
+    - `VF_TICKERS="AAPL,MSFT" VF_DUCKDB_PATH=./forager.duckdb uv run python packages/vertex-forager/examples/advanced_duckdb_metrics.py`
+      - `VF_TICKERS`: required (multi‑ticker demo)
+      - `VF_DUCKDB_PATH`: optional (defaults to `./forager.duckdb`)
 - CLI equivalents:
   - See [CLI Equivalents](docs/how-to/cli-equivalents.md)
 - Notebooks (optional):
