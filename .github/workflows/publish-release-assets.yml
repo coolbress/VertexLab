@@ -10,6 +10,9 @@ permissions:
 jobs:
   build-and-upload:
     runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
@@ -22,19 +25,15 @@ jobs:
           uv build -C packages/vertex-forager
 
       - name: Upload assets to GitHub Release
-        uses: softprops/action-gh-release@v2.6.1
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe
         with:
             files: packages/vertex-forager/dist/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload to PyPI (optional)
-        if: ${{ env.PYPI_TOKEN != '' }}
+        if: ${{ env.PYPI_TOKEN != '' && vars.PUBLISH_TO_PYPI == 'true' }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
           TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+          TWINE_PASSWORD: ${{ env.PYPI_TOKEN }}
         run: |
           uv pip install -q twine
           twine upload packages/vertex-forager/dist/*
