@@ -1,0 +1,14 @@
+{
+  "include-v-in-tag": true,
+  "packages": {
+    "packages/vertex-forager": {
+      "release-type": "python",
+      "package-name": "vertex-forager",
+      "component": "vertex-forager",
+      "version-file": "packages/vertex-forager/src/vertex_forager/__init__.py",
+      "extra-files": [
+        "packages/vertex-forager/pyproject.toml"
+      ]
+    }
+  }
+}

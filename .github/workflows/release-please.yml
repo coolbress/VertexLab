@@ -1,0 +1,59 @@
+name: release-please
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: google-github-actions/release-please-action@e4dc86ba9405554aeba3c6bb2d169500e7d3b4ee
+        id: release
+        with:
+          config-file: .release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  publish:
+    needs: release
+    if: needs.release.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.10"
+      - uses: astral-sh/setup-uv@e06108dd0aef18192324c70427afc47652e63a82
+
+      - name: Clean dist
+        run: rm -rf packages/vertex-forager/dist/
+
+      - name: Build wheel/sdist (vertex-forager)
+        run: |
+          uv build packages/vertex-forager
+
+      - name: Upload assets to GitHub Release
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe
+        with:
+          files: packages/vertex-forager/dist/*
+          tag_name: ${{ needs.release.outputs.tag_name }}
+
+      - name: Upload to PyPI (optional)
+        if: ${{ env.PYPI_TOKEN != '' && vars.PUBLISH_TO_PYPI == 'true' }}
+        env:
+          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          uv pip install --system -q "twine==6.*"
+          twine upload --skip-existing packages/vertex-forager/dist/*
