@@ -1,0 +1,43 @@
+name: Attach Release Assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Existing release tag to attach assets to"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Setup Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.10"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@e06108dd0aef18192324c70427afc47652e63a82
+
+      - name: Clean dist
+        run: rm -rf packages/vertex-forager/dist/
+
+      - name: Build wheel/sdist (vertex-forager)
+        run: |
+          uv build packages/vertex-forager
+
+      - name: Upload assets to GitHub Release
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ inputs.tag_name }}
+          files: packages/vertex-forager/dist/*
+          fail_on_unmatched_files: true
