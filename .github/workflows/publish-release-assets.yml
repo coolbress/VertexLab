@@ -1,0 +1,36 @@
+name: publish-release-assets
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.10"
+      - uses: astral-sh/setup-uv@e06108dd0aef18192324c70427afc47652e63a82
+
+      - name: Build wheel/sdist (vertex-forager)
+        run: |
+          uv build -C packages/vertex-forager
+
+      - name: Upload assets to GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+            files: packages/vertex-forager/dist/*
+
+      - name: Upload to PyPI (optional)
+        if: ${{ vars.PUBLISH_TO_PYPI == 'true' }}
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          uv pip install -q twine
+          twine upload packages/vertex-forager/dist/*
