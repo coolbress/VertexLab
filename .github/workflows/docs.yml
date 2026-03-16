@@ -35,6 +35,9 @@ jobs:
         run: |
           uv pip install -q 'mkdocs>=1.6.0' 'mkdocs-material>=9.5.0' 'mkdocstrings[python]>=0.25.0' 'pymdown-extensions>=10.8'
         if: ${{ hashFiles('mkdocs.yml') != '' }}
+      - name: Install vertex-forager (for mkdocstrings import)
+        run: uv pip install -e packages/vertex-forager
+        if: ${{ hashFiles('mkdocs.yml') != '' }}
       - name: Build docs (strict)
         run: uv run mkdocs build --strict
         if: ${{ hashFiles('mkdocs.yml') != '' }}

@@ -1,0 +1,81 @@
+site_name: Vertex Forager Docs
+site_url: https://coolbress.github.io/vertex-lab/
+repo_url: https://github.com/coolbress/vertex-lab
+edit_uri: edit/main/packages/vertex-forager/docs/
+
+docs_dir: packages/vertex-forager/docs
+site_dir: site
+
+theme:
+  name: material
+  language: en
+  font: false
+  features:
+    - content.code.copy
+    - navigation.tabs
+    - navigation.top
+    - search.highlight
+    - search.suggest
+  palette:
+    - scheme: default
+      primary: blue
+      accent: amber
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      primary: blue
+      accent: amber
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths:
+            - packages/vertex-forager/src
+          options:
+            docstring_style: google
+            show_source: false
+            merge_init_into_class: true
+
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - tables
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+nav:
+  - Overview: index.md
+  - Tutorials:
+      - Quickstart: tutorials/quickstart.md
+  - How-to:
+      - Operate with DLQ disabled: how-to/dlq-disabled.md
+      - Tune chunked flush thresholds: how-to/chunked-flush.md
+      - Performance tuning: how-to/performance-tuning.md
+      - Troubleshooting: how-to/troubleshooting.md
+      - CLI equivalents: how-to/cli-equivalents.md
+      - Provider extension: how-to/provider-extension.md
+      - Provider plugin: how-to/provider-plugin.md
+  - Reference:
+      - EngineConfig: reference/config.md
+      - Metrics: reference/metrics.md
+      - Constants: reference/constants.md
+      - Schema: reference/schema.md
+      - API: reference/api.md
+  - Explanation:
+      - Pipeline architecture: explanation/architecture.md
+      - Router & Client: explanation/router-client.md
+      - Data storage flow & DLQ: explanation/data-storage-flow.md
+      - Writer security: explanation/writer-security.md
+      - Writer fan-out roadmap: explanation/writer-fanout-roadmap.md
+      - Writer upsert behavior: explanation/writer-upsert-behavior.md

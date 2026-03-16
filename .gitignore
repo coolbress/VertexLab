@@ -24,6 +24,7 @@ Thumbs.db
 # Build artifacts
 dist/
 build/
+site/
 *.egg-info/
 
 # Coverage

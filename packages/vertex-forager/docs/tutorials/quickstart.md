@@ -1,0 +1,86 @@
+# Quickstart
+
+Follow this hands‑on tutorial to fetch data and persist it to DuckDB.
+
+## Prerequisites
+
+- Python 3.10+
+- If you want to run the repository example scripts below, first clone the repo and change into it:
+
+```bash
+git clone https://github.com/coolbress/vertex-lab.git
+cd vertex-lab
+```
+
+- Install package (from GitHub, until PyPI release):
+
+```bash
+# Latest main (pin to a tag/commit for reproducibility)
+uv pip install "git+https://github.com/coolbress/vertex-lab@main#subdirectory=packages/vertex-forager"
+
+# Example: pin to a version tag
+uv pip install "git+https://github.com/coolbress/vertex-lab@v0.1.0#subdirectory=packages/vertex-forager"
+```
+
+## Provider‑agnostic: Fetch and Persist (sync‑friendly)
+
+```python
+import os
+from vertex_forager import create_client
+
+provider = os.getenv("VF_PROVIDER", "yfinance").strip()
+kwargs = {}
+if provider == "sharadar":
+    kwargs["api_key"] = os.environ["SHARADAR_API_KEY"]
+client = create_client(provider=provider, **kwargs)
+tickers = [t.strip() for t in (os.getenv("VF_TICKERS") or "AAPL,MSFT").split(",")]
+
+# Persist to DuckDB by providing connect_db; returns a RunResult summary
+db_path = os.getenv("VF_DUCKDB_PATH", "./forager.duckdb")
+res = client.get_price_data(
+    tickers=tickers,
+    connect_db=f"duckdb://{db_path}",
+    show_progress=False,
+)
+print(res)  # RunResult
+```
+
+## Run Examples (DuckDB persist)
+
+- Persist to DuckDB (provider‑agnostic)
+
+```bash
+VF_PROVIDER=yfinance VF_TICKERS=AAPL,MSFT \
+VF_DUCKDB_PATH=./forager.duckdb \
+uv run python packages/vertex-forager/examples/advanced_duckdb_metrics.py
+```
+
+- Sharadar (requires SHARADAR_API_KEY; DuckDB persist)
+
+```bash
+export SHARADAR_API_KEY=...   # your key
+VF_PROVIDER=sharadar VF_TICKERS=AAPL,MSFT \
+VF_DUCKDB_PATH=./forager.duckdb \
+uv run python packages/vertex-forager/examples/advanced_duckdb_metrics.py
+```
+
+## CLI Quick Commands
+
+- Status
+
+```bash
+uv run vertex-forager status
+```
+
+- Collect (Sharadar)
+
+```bash
+export SHARADAR_API_KEY=...
+uv run vertex-forager collect -s AAPL -s MSFT --source sharadar
+```
+
+## Next Steps
+
+- Configure concurrency and retries: see [EngineConfig](../reference/config.md)
+- Operate without DLQ spooling: see [DLQ disabled](../how-to/dlq-disabled.md)
+- Tune chunked flush: see [Chunked flush tuning](../how-to/chunked-flush.md)

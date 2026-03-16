@@ -1,6 +1,11 @@
 # vertex-forager
 
-Provider-agnostic data collection for financial markets. Centralized transport, scheme-based library fetchers, and structured normalization with Polars.
+Provider-agnostic data collection for financial markets. Centralized transport, schema‑aware normalization with Polars, and resilient writing with DLQ controls.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](../../LICENSE)
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
+[![CI](https://github.com/coolbress/vertex-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/coolbress/vertex-lab/actions)
+[![Docs](https://img.shields.io/badge/docs-MkDocs%20Material-blueviolet)](https://coolbress.github.io/vertex-lab/)
 
 Status: Alpha • Python 3.10+ • License: MIT
 
@@ -11,7 +16,10 @@ Status: Alpha • Python 3.10+ • License: MIT
 - Quick Start
 - Providers
 - Configuration
+- Observability
 - Usage Patterns
+- Documentation
+- Versioning & Changelog
 - Examples
 - FAQ
 - Contributing
@@ -19,11 +27,19 @@ Status: Alpha • Python 3.10+ • License: MIT
 
 ## Features
 
-- Provider-agnostic core with centralized HTTP transport and retry
-- Scheme-based library fetchers (e.g., `yfinance://`) with safe invocation rules
-- Structured logs and error accumulation with `RunResult`
-- Polars-based normalization with schema registry and PK-aware writing
-- Writer support: DuckDB (upsert/index), in-memory buffer
+- Transport and flow control
+  - Central HTTP executor with retry (Full Jitter), GCRA pacing, gradient concurrency control
+  - Adaptive RPM downshift/recovery with floor/threshold guards
+- Schema‑aware pipeline
+  - Polars normalization with central schema registry and PK validation
+  - Flexible schema opt‑in for evolving library providers
+- Resilient writing
+  - Chunked flush to bound memory peak; per‑chunk accounting
+  - DLQ spool with fsync and atomic replace; `dlq_enabled` toggle to disable spooling when required
+  - RunResult summaries and per‑table DLQ counts regardless of metrics settings
+- Writers
+  - DuckDB (unique index if PK known)
+  - In‑memory buffer
 
 ## Installation
 
@@ -38,7 +54,27 @@ uv pip install vertex-forager
 
 ## Quick Start
 
-Use provider-specific clients directly (no manual router/writer setup).
+Use provider‑specific clients directly (no manual router/writer setup).
+
+### Architecture (high‑level)
+
+```mermaid
+flowchart TD
+  A[Router Jobs] --> B[Throttle (GCRA) + Concurrency (Gradient)]
+  B --> C[HTTP / Library Fetch with Retry]
+  C --> D[Parse -> FramePackets]
+  D --> E[Normalize (Schemas, PK)]
+  E --> F{Flush threshold reached?}
+  F -- No --> E
+  F -- Yes --> G[Merge Frames, PK Checks]
+  G --> H{Write Chunk}
+  H -- Success --> I[Update RunResult & Metrics]
+  H -- Failure --> J[Per-packet Rescue]
+  J -- Partial Success --> K[DLQ Spool Failed Packets]
+  J -- All Fail --> K
+  K --> L[Operator Recovery CLI]
+  L --> H
+```
 
 ### YFinance (library provider)
 
@@ -122,6 +158,9 @@ print(res)  # RunResult
   - `requests_per_minute`: positive integer (required)
   - `concurrency`: optional positive integer
   - `retry`: `{max_attempts, base_backoff_s, max_backoff_s}`
+  - `flush_threshold_rows`: buffer flush threshold (rows)
+  - `writer_chunk_rows`: per‑chunk rows for streaming write (>= 10_000 when set)
+  - `dlq_enabled`: enable/disable DLQ spooling (default True)
 - Flow control
   - Global rate limiting via `FlowController` (automatic in BaseClient)
 - Writers
@@ -156,14 +195,47 @@ print(res)  # RunResult
   - Writer validation errors surfaced (PK missing/nulls)
   - Retry exhaustion categorized as fetch-specific error
 
+## Documentation
+
+- Tutorials
+  - [Quickstart](docs/tutorials/quickstart.md)
+- How‑to Guides
+  - [Operate with DLQ disabled](docs/how-to/dlq-disabled.md)
+  - [Tune chunked flush thresholds](docs/how-to/chunked-flush.md)
+  - [Troubleshooting](docs/how-to/troubleshooting.md)
+  - [CLI equivalents](docs/how-to/cli-equivalents.md)
+- Reference
+  - [EngineConfig](docs/reference/config.md)
+  - [Metrics](docs/reference/metrics.md)
+  - [Constants](docs/reference/constants.md)
+  - [API Reference](docs/reference/api.md)
+- Explanation
+  - [Pipeline architecture and design](docs/explanation/architecture.md)
+  - [Router & Client](docs/explanation/router-client.md)
+  - [Data storage & DLQ](docs/explanation/data-storage-flow.md)
+  - [Writer security](docs/explanation/writer-security.md)
+  - [Writer fan‑out roadmap](docs/explanation/writer-fanout-roadmap.md)
+
 ## Examples
 
-- Notebooks:
+- Scripts (uv):
+  - Minimal in‑memory (single ticker):
+    - `VF_TICKERS=AAPL uv run python packages/vertex-forager/examples/minimal_inmemory.py`
+      - `VF_TICKERS`: required (comma‑separated tickers; single ticker shown)
+  - Advanced (multi‑ticker, DuckDB, metrics, chunked flush):
+    - `VF_TICKERS="AAPL,MSFT" VF_DUCKDB_PATH=./forager.duckdb uv run python packages/vertex-forager/examples/advanced_duckdb_metrics.py`
+      - `VF_TICKERS`: required (multi‑ticker demo)
+      - `VF_DUCKDB_PATH`: optional (defaults to `./forager.duckdb`)
+- CLI equivalents:
+  - See [CLI Equivalents](docs/how-to/cli-equivalents.md)
+- Notebooks (optional):
   - packages/vertex-forager/examples/sharadar.ipynb
   - packages/vertex-forager/examples/yfinance_examples.ipynb
-- Verification scripts:
-  - tests/verification/verify_duckdb_upsert.py
-  - tests/verification/verify_pipeline_perf.py
+
+## Versioning & Changelog
+
+- Follows [Semantic Versioning 2.0.0](https://semver.org/) for public API.
+- Changelog follows the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) convention.
 
 ## FAQ
 
