@@ -4,7 +4,11 @@
     "packages/vertex-forager": {
       "release-type": "python",
       "package-name": "vertex-forager",
-      "version-file": "packages/vertex-forager/src/vertex_forager/__init__.py"
+      "component": "vertex-forager",
+      "version-file": "packages/vertex-forager/src/vertex_forager/__init__.py",
+      "extra-files": [
+        "packages/vertex-forager/pyproject.toml"
+      ]
     }
   }
 }

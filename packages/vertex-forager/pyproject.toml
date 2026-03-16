@@ -1,6 +1,6 @@
 [project]
 name = "vertex-forager"
-version = "0.1.0"
+version = "0.1.0" # x-release-please-version
 description = "High-performance asynchronous financial data scraping engine using Polars and DuckDB."
 readme = "README.md"
 authors = [
