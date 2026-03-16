@@ -7,7 +7,6 @@ on:
         description: "Existing release tag to attach assets to"
         required: true
         type: string
-        default: "vertex-forager-v0.2.0"
 
 permissions:
   contents: write
