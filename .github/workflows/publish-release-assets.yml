@@ -36,4 +36,4 @@ jobs:
           TWINE_PASSWORD: ${{ env.PYPI_TOKEN }}
         run: |
           uv pip install -q twine
-          twine upload packages/vertex-forager/dist/*
+          twine upload --skip-existing packages/vertex-forager/dist/*
