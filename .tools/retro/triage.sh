@@ -3,11 +3,13 @@ set -euo pipefail
 MODE="dry-run"
 SEARCH=""
 LIMIT="200"
+PARALLEL="8"
 while [ $# -gt 0 ]; do
   case "$1" in
     --mode) MODE="$2"; shift 2;;
     --search) SEARCH="$2"; shift 2;;
     --limit) LIMIT="$2"; shift 2;;
+    --parallel) PARALLEL="$2"; shift 2;;
     *) shift;;
   esac
 done
@@ -28,7 +30,18 @@ if [ -n "$SEARCH" ]; then
   query+=(--search "$SEARCH")
 fi
 prs_json="$("${query[@]}")"
-echo "$prs_json" | jq -r '.[] | "\(.number)\t\(.title)"' | while IFS=$'\t' read -r num title; do
+tmpdir="$(mktemp -d)"
+trap 'rm -rf "$tmpdir"' EXIT
+echo "$prs_json" | jq -r '.[] | "\(.number)\t\(.title)"' > "$tmpdir/pr_list.tsv"
+# prefetch files in parallel to reduce API round-trip latency
+export repo tmpdir
+cut -f1 "$tmpdir/pr_list.tsv" | xargs -I{} -P "$PARALLEL" sh -c '
+  set -e
+  num="$1"
+  gh pr view "$num" --repo "$repo" --json files --jq ".files[].path" > "$tmpdir/$num.files" 2>/dev/null || true
+' _ {}
+# iterate and label
+while IFS=$'\t' read -r num title; do
   t="$(echo "$title" | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
   typ=""
   if echo "$t" | grep -Eq '^(feat)(\(|!|:)' ; then
@@ -46,7 +59,7 @@ echo "$prs_json" | jq -r '.[] | "\(.number)\t\(.title)"' | while IFS=$'\t' read 
   elif echo "$t" | grep -Eq '^(test)(\(|!|:)' ; then
     typ="type:test"
   fi
-  files="$(gh pr view "$num" --repo "$repo" --json files --jq '.files[].path')"
+  files="$(cat "$tmpdir/$num.files" 2>/dev/null || true)"
   scopes=()
   if echo "$files" | grep -Eq '(^|/)docs/|^README\.md$' ; then scopes+=("scope:docs"); fi
   if echo "$files" | grep -Eq 'packages/vertex-forager/src/vertex_forager/core/|packages/vertex-forager/src/vertex_forager/routers/' ; then scopes+=("scope:pipeline"); fi
@@ -74,4 +87,4 @@ echo "$prs_json" | jq -r '.[] | "\(.number)\t\(.title)"' | while IFS=$'\t' read 
   else
     echo "PR #$num: would apply labels: ${uniq_labels[*]}"
   fi
-done
+done < "$tmpdir/pr_list.tsv"
