@@ -20,10 +20,16 @@ while [ $# -gt 0 ]; do
       if [ $# -lt 2 ] || [ -z "${2-}" ] || [[ "$2" == -* ]]; then
         echo "Missing or invalid value for --limit" >&2; exit 1
       fi
+      if ! printf '%s' "$2" | grep -Eq '^[1-9][0-9]*$'; then
+        echo "Invalid value for --limit: must be a positive integer" >&2; exit 1
+      fi
       LIMIT="$2"; shift 2;;
     --parallel)
       if [ $# -lt 2 ] || [ -z "${2-}" ] || [[ "$2" == -* ]]; then
         echo "Missing or invalid value for --parallel" >&2; exit 1
+      fi
+      if ! printf '%s' "$2" | grep -Eq '^[1-9][0-9]*$'; then
+        echo "Invalid value for --parallel: must be a positive integer" >&2; exit 1
       fi
       PARALLEL="$2"; shift 2;;
     *)
