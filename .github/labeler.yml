@@ -12,7 +12,7 @@ area:routers:
       - any-glob-to-any-file: ["packages/vertex-forager/src/vertex_forager/routers/**"]
 area:clients:
   - changed-files:
-      - any-glob-to-any-file: ["packages/vertex-forager/src/vertex_forager/providers/**"]
+      - any-glob-to-any-file: []
 area:providers:
   - changed-files:
       - any-glob-to-any-file: ["packages/vertex-forager/src/vertex_forager/providers/**"]

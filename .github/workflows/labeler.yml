@@ -104,12 +104,13 @@ jobs:
             for (const f of files) {
               const p = f.filename || '';
               if (p.startsWith('docs/') || p === 'README.md') labels.add('scope:docs');
+              if (p.startsWith('packages/vertex-forager/docs/')) labels.add('scope:docs');
               if (p.startsWith('packages/vertex-forager/src/vertex_forager/core/')) labels.add('scope:pipeline');
               if (p.startsWith('packages/vertex-forager/src/vertex_forager/writers/')) labels.add('scope:writer');
               if (p.startsWith('packages/vertex-forager/src/vertex_forager/routers/')) labels.add('scope:pipeline');
               if (p.startsWith('packages/vertex-forager/src/vertex_forager/providers/yfinance/')) labels.add('scope:provider:yfinance');
               if (p.startsWith('packages/vertex-forager/src/vertex_forager/providers/sharadar/')) labels.add('scope:provider:sharadar');
-              if (p.startsWith('packages/vertex-forager/src/vertex_forager/providers/') && !p.includes('/yfinance/') && !p.includes('/sharadar/')) labels.add('area:providers');
+              if (p.startsWith('packages/vertex-forager/src/vertex_forager/providers/')) labels.add('area:providers');
               if (p.startsWith('.github/')) labels.add('scope:ci');
             }
             if (labels.size === 0) {

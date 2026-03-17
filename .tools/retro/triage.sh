@@ -41,7 +41,7 @@ echo "$prs_json" | jq -r '.[] | "\(.number)\t\(.title)"' | while IFS=$'\t' read 
   if echo "$files" | grep -Eq 'packages/vertex-forager/src/vertex_forager/writers/' ; then scopes+=("scope:writer"); fi
   if echo "$files" | grep -Eq 'packages/vertex-forager/src/vertex_forager/providers/yfinance/' ; then scopes+=("scope:provider:yfinance"); fi
   if echo "$files" | grep -Eq 'packages/vertex-forager/src/vertex_forager/providers/sharadar/' ; then scopes+=("scope:provider:sharadar"); fi
-  if echo "$files" | grep -Eq 'packages/vertex-forager/src/vertex_forager/providers/' && ! echo "$files" | grep -Eq 'yfinance/|sharadar/' ; then scopes+=("area:providers"); fi
+  if echo "$files" | grep -Eq 'packages/vertex-forager/src/vertex_forager/providers/' ; then scopes+=("area:providers"); fi
   if echo "$files" | grep -Eq '(^|/)\.github/' ; then scopes+=("scope:ci"); fi
   uniq_labels=()
   for l in "$typ" "${scopes[@]}"; do
