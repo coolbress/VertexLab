@@ -15,6 +15,10 @@ if ! command -v gh >/dev/null 2>&1; then
   echo "gh not found" >&2
   exit 1
 fi
+if ! command -v jq >/dev/null 2>&1; then
+  echo "jq not found" >&2
+  exit 1
+fi
 repo="${GH_REPO:-}"
 if [ -z "$repo" ]; then
   repo="$(gh repo view --json nameWithOwner -q .nameWithOwner)"
@@ -27,13 +31,21 @@ prs_json="$("${query[@]}")"
 echo "$prs_json" | jq -r '.[] | "\(.number)\t\(.title)"' | while IFS=$'\t' read -r num title; do
   t="$(echo "$title" | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
   typ=""
-  if echo "$t" | grep -Eq '^(feat)(\(|!|:)' ; then typ="type:feature"; fi
-  if echo "$t" | grep -Eq '^(fix)(\(|!|:)' ; then typ="type:fix"; fi
-  if echo "$t" | grep -Eq '^(docs)(\(|!|:)' ; then typ="type:docs"; fi
-  if echo "$t" | grep -Eq '^(chore)(\(|!|:)' ; then typ="type:chore"; fi
-  if echo "$t" | grep -Eq '^(refactor)(\(|!|:)' ; then typ="type:refactor"; fi
-  if echo "$t" | grep -Eq '^(perf)(\(|!|:)' ; then typ="type:perf"; fi
-  if echo "$t" | grep -Eq '^(test)(\(|!|:)' ; then typ="type:test"; fi
+  if echo "$t" | grep -Eq '^(feat)(\(|!|:)' ; then
+    typ="type:feature"
+  elif echo "$t" | grep -Eq '^(fix)(\(|!|:)' ; then
+    typ="type:fix"
+  elif echo "$t" | grep -Eq '^(docs)(\(|!|:)' ; then
+    typ="type:docs"
+  elif echo "$t" | grep -Eq '^(chore)(\(|!|:)' ; then
+    typ="type:chore"
+  elif echo "$t" | grep -Eq '^(refactor)(\(|!|:)' ; then
+    typ="type:refactor"
+  elif echo "$t" | grep -Eq '^(perf)(\(|!|:)' ; then
+    typ="type:perf"
+  elif echo "$t" | grep -Eq '^(test)(\(|!|:)' ; then
+    typ="type:test"
+  fi
   files="$(gh pr view "$num" --repo "$repo" --json files --jq '.files[].path')"
   scopes=()
   if echo "$files" | grep -Eq '(^|/)docs/|^README\.md$' ; then scopes+=("scope:docs"); fi

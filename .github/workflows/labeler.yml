@@ -30,17 +30,16 @@ jobs:
             const pr = context.payload.pull_request;
             if (!pr) return;
             const title = (pr.title || '').toLowerCase().trim();
+            const map = { feat: 'feature', fix: 'fix', chore: 'chore', docs: 'docs', refactor: 'refactor', perf: 'perf', test: 'test' };
             const m = title.match(/^(feat|fix|chore|docs|refactor|perf|test)(\([^)]+\))?(!)?:\s/);
             let chosen = null;
             if (m && m[1]) {
-              const map = { feat: 'feature', fix: 'fix', chore: 'chore', docs: 'docs', refactor: 'refactor', perf: 'perf', test: 'test' };
               const t = map[m[1]] || m[1];
               chosen = `type:${t}`;
             } else {
               const types = ['feat','fix','chore','docs','refactor','perf','test'];
               for (const t of types) {
                 if (title.startsWith(`${t}!:`) || title.startsWith(`${t}:`)) {
-                  const map = { feat: 'feature', fix: 'fix', chore: 'chore', docs: 'docs', refactor: 'refactor', perf: 'perf', test: 'test' };
                   const tt = map[t] || t;
                   chosen = `type:${tt}`;
                   break;
