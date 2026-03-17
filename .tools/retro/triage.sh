@@ -57,7 +57,7 @@ cut -f1 "$tmpdir/pr_list.tsv" | xargs -I{} -P "$PARALLEL" sh -c '
   num="$1"
   # capture output; do not create file on failure/empty
   errf="$tmpdir/$num.gh.err"
-  out="$(gh pr view "$num" --repo "$repo" --json files --jq ".files[].path" 2>\"$errf\" || true)"
+  out="$(gh pr view "$num" --repo "$repo" --json files --jq ".files[].path" 2>"$errf" || true)"
   if [ -n "$out" ]; then
     printf "%s\n" "$out" > "$tmpdir/$num.files"
   else
