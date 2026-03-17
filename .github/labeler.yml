@@ -12,6 +12,9 @@ area:routers:
       - any-glob-to-any-file: ["packages/vertex-forager/src/vertex_forager/routers/**"]
 area:clients:
   - changed-files:
+      - any-glob-to-any-file: []
+area:providers:
+  - changed-files:
       - any-glob-to-any-file: ["packages/vertex-forager/src/vertex_forager/providers/**"]
 area:docs:
   - changed-files:
@@ -19,3 +22,21 @@ area:docs:
 area:ci:
   - changed-files:
       - any-glob-to-any-file: [".github/workflows/**", ".github/**"]
+scope:pipeline:
+  - changed-files:
+      - any-glob-to-any-file: ["packages/vertex-forager/src/vertex_forager/core/**", "packages/vertex-forager/src/vertex_forager/routers/**"]
+scope:writer:
+  - changed-files:
+      - any-glob-to-any-file: ["packages/vertex-forager/src/vertex_forager/writers/**"]
+scope:provider:yfinance:
+  - changed-files:
+      - any-glob-to-any-file: ["packages/vertex-forager/src/vertex_forager/providers/yfinance/**"]
+scope:provider:sharadar:
+  - changed-files:
+      - any-glob-to-any-file: ["packages/vertex-forager/src/vertex_forager/providers/sharadar/**"]
+scope:docs:
+  - changed-files:
+      - any-glob-to-any-file: ["docs/**", "README.md", "packages/vertex-forager/docs/**"]
+scope:ci:
+  - changed-files:
+      - any-glob-to-any-file: [".github/**"]

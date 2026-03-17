@@ -30,14 +30,20 @@ jobs:
             const pr = context.payload.pull_request;
             if (!pr) return;
             const title = (pr.title || '').toLowerCase().trim();
+            const map = { feat: 'feature', fix: 'fix', chore: 'chore', docs: 'docs', refactor: 'refactor', perf: 'perf', test: 'test' };
             const m = title.match(/^(feat|fix|chore|docs|refactor|perf|test)(\([^)]+\))?(!)?:\s/);
             let chosen = null;
             if (m && m[1]) {
-              chosen = `type:${m[1]}`;
+              const t = map[m[1]] || m[1];
+              chosen = `type:${t}`;
             } else {
               const types = ['feat','fix','chore','docs','refactor','perf','test'];
               for (const t of types) {
-                if (title.startsWith(`${t}!:`) || title.startsWith(`${t}:`)) { chosen = `type:${t}`; break; }
+                if (title.startsWith(`${t}!:`) || title.startsWith(`${t}:`)) {
+                  const tt = map[t] || t;
+                  chosen = `type:${tt}`;
+                  break;
+                }
               }
             }
             if (!chosen) {
@@ -96,14 +102,15 @@ jobs:
             const labels = new Set();
             for (const f of files) {
               const p = f.filename || '';
-              if (p.startsWith('docs/') || p === 'README.md') labels.add('area:docs');
-              if (p.startsWith('packages/vertex-forager/src/vertex_forager/core/')) labels.add('area:core');
-              if (p.startsWith('packages/vertex-forager/src/vertex_forager/writers/')) labels.add('area:writers');
-              if (p.startsWith('packages/vertex-forager/src/vertex_forager/routers/')) labels.add('area:routers');
-              if (p.startsWith('packages/vertex-forager/src/vertex_forager/providers/')) labels.add('area:clients');
-              if (p.startsWith('.github/')) labels.add('area:ci');
-              if (p.includes('/tests/') || p.startsWith('tests/')) labels.add('area:tests');
-              if (p.startsWith('scripts/')) labels.add('area:scripts');
+              if (p.startsWith('docs/') || p === 'README.md') labels.add('scope:docs');
+              if (p.startsWith('packages/vertex-forager/docs/')) labels.add('scope:docs');
+              if (p.startsWith('packages/vertex-forager/src/vertex_forager/core/')) labels.add('scope:pipeline');
+              if (p.startsWith('packages/vertex-forager/src/vertex_forager/writers/')) labels.add('scope:writer');
+              if (p.startsWith('packages/vertex-forager/src/vertex_forager/routers/')) labels.add('scope:pipeline');
+              if (p.startsWith('packages/vertex-forager/src/vertex_forager/providers/yfinance/')) labels.add('scope:provider:yfinance');
+              if (p.startsWith('packages/vertex-forager/src/vertex_forager/providers/sharadar/')) labels.add('scope:provider:sharadar');
+              if (p.startsWith('packages/vertex-forager/src/vertex_forager/providers/')) labels.add('area:providers');
+              if (p.startsWith('.github/')) labels.add('scope:ci');
             }
             if (labels.size === 0) {
               core.info('No matching paths for fallback labels');
