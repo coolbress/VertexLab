@@ -17,7 +17,7 @@ jobs:
       vertex_release_created: ${{ steps.release.outputs['packages/vertex-forager--release_created'] }}
       vertex_tag_name: ${{ steps.release.outputs['packages/vertex-forager--tag_name'] }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
       - uses: googleapis/release-please-action@16a9c90856f42705d54a6fda1823352bdc62cf38
         id: release
         with:
@@ -29,24 +29,29 @@ jobs:
     if: needs.release.outputs.vertex_release_created == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.10"
       - uses: astral-sh/setup-uv@e06108dd0aef18192324c70427afc47652e63a82
 
       - name: Clean dist
-        run: rm -rf packages/vertex-forager/dist/
+        run: rm -rf dist/vertex-forager/
 
       - name: Build wheel/sdist (vertex-forager)
         run: |
-          uv build packages/vertex-forager
+          OUT="${GITHUB_WORKSPACE}/dist/vertex-forager"
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+          uv build packages/vertex-forager --out-dir "$OUT"
+          ls -l "$OUT"
 
       - name: Upload assets to GitHub Release
         uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe
         with:
-          files: packages/vertex-forager/dist/*
+          files: dist/vertex-forager/*
           tag_name: ${{ needs.release.outputs.vertex_tag_name }}
+          fail_on_unmatched_files: true
 
       - name: Upload to PyPI (optional)
         if: ${{ env.PYPI_TOKEN != '' && vars.PUBLISH_TO_PYPI == 'true' }}
@@ -56,4 +61,4 @@ jobs:
           TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
         run: |
           uv pip install --system -q "twine==6.*"
-          twine upload --skip-existing packages/vertex-forager/dist/*
+          twine upload --skip-existing dist/vertex-forager/*

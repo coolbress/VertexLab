@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
 
       - name: Setup Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
@@ -27,11 +27,15 @@ jobs:
         uses: astral-sh/setup-uv@e06108dd0aef18192324c70427afc47652e63a82
 
       - name: Clean dist
-        run: rm -rf packages/vertex-forager/dist/
+        run: rm -rf dist/vertex-forager/
 
       - name: Build wheel/sdist (vertex-forager)
         run: |
-          uv build packages/vertex-forager
+          OUT="${GITHUB_WORKSPACE}/dist/vertex-forager"
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+          uv build packages/vertex-forager --out-dir "$OUT"
+          ls -l "$OUT"
 
       - name: Upload assets to GitHub Release
         uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe
@@ -39,5 +43,5 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ inputs.tag_name }}
-          files: packages/vertex-forager/dist/*
+          files: dist/vertex-forager/*
           fail_on_unmatched_files: true
