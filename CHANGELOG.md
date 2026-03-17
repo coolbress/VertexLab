@@ -46,7 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Replace pickle serialization in library fetch with Arrow/Polars IPC; JSON fallback  (#49)
 - Validate EngineConfig at construction; remove DuckDBWriter globals; unify pipeline orchestration  (#48)
 - Dead code cleanup, exception consistency, concurrency validation  (#42)
-- types(mypy): strict baseline for vertex-forager; minimal fixes  (#38)
+- Strict mypy baseline for vertex-forager; minimal fixes  (#38)
 - Add Tuning CLI and Optimize Hotspots (#29)
 - Apply DIP, add library fetcher registry, extend yfinance, strengthen CI/docs (#23)
 - Refactor: Strengthen type safety and introduce generics across routers/clients (#20)
