@@ -8,8 +8,6 @@ on:
       - "packages/**/mkdocs.yml"
       - "packages/vertex-forager/docs/**"
       - ".github/workflows/docs.yml"
-      - "packages/vertex-forager/pyproject.toml"
-      - "packages/vertex-forager/src/**"
   push:
     branches: ["main"]
     paths:
