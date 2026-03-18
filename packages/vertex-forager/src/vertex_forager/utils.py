@@ -343,12 +343,7 @@ class Spinner:
         self._message_lock = threading.Lock()
 
         self._is_tty = sys.stderr.isatty()
-        ip = None
-        try:
-            ip = _safe_get_ipython()
-        except Exception as e:
-            logger.error("Unexpected error during notebook detection: %s", e)
-            ip = None
+        ip = _safe_get_ipython()
         self._is_notebook = bool(ip and ip.__class__.__name__ == "ZMQInteractiveShell")
         self._widget_label: Any | None = None
 

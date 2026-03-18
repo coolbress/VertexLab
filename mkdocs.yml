@@ -63,4 +63,3 @@ nav:
       - CI Node Runtime Policy: explanation/ci-node-policy.md
   - Components:
       - vertex-forager: '!include packages/vertex-forager/mkdocs.yml'
-      - CI Node Runtime Policy: explanation/ci-node-policy.md
