@@ -7,9 +7,9 @@
 
 ## Vulnerability Scans (Trivy)
 
-- Single run produces SARIF and enforces gate:
-  - SARIF upload: on `main` pushes, runs with severities `MEDIUM,HIGH,CRITICAL` and uploads to the Security tab.
-  - Gate: the same run enforces `HIGH,CRITICAL` via exit code; CI failure is triggered by the gate step if Trivy detects these severities.
+- Two-step flow:
+  - SARIF step: runs with severities `MEDIUM,HIGH,CRITICAL`, produces `trivy-results.sarif`, and does not fail the build so the Security tab captures all severities.
+  - Gate step: runs with `HIGH,CRITICAL` only and fails the job to enforce the CI gate; reuses Trivy setup/cache.
 - Remediation hints are printed on failure; see severity thresholds and SLA below.
 
 ## Severity Policy and SLA
