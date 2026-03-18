@@ -13,7 +13,7 @@ from vertex_forager.exceptions import (
 )
 from vertex_forager.core import EngineConfig, RunResult
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 
 __all__ = [
     "BaseClient",

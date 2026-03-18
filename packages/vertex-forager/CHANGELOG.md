@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.2.1...vertex-forager-v0.2.2) (2026-03-18)
+
+
+### Documentation
+
+* monorepo docs; API reference expansion; Node runtime policy; utils typecheck fix ([#125](https://github.com/coolbress/VertexLab/issues/125)) ([3d6daef](https://github.com/coolbress/VertexLab/commit/3d6daef75cf8068287772f12f918a21d6d4c2ab5))
+
 ## [0.2.1](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.2.0...vertex-forager-v0.2.1) (2026-03-18)
 
 
