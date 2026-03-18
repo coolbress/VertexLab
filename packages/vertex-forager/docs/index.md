@@ -31,10 +31,10 @@ Industry‑grade ingestion for financial data: transport decoupling, schema‑aw
 ## Repository Docs (root)
 
 - CI & Security
-  - [CI Security](https://github.com/coolbress/vertex-lab/blob/main/docs/ci-security.md)
+  - [CI Security](https://github.com/coolbress/VertexLab/blob/main/docs/ci-security.md)
 
 ## Links
 
-- [README](https://github.com/coolbress/vertex-lab/blob/main/README.md)
-- [Changelog (Keep a Changelog)](https://github.com/coolbress/vertex-lab/blob/main/CHANGELOG.md)
+- [README](https://github.com/coolbress/VertexLab/blob/main/README.md)
+- [Changelog (Keep a Changelog)](https://github.com/coolbress/VertexLab/blob/main/CHANGELOG.md)
 - [Semantic Versioning](https://semver.org/)

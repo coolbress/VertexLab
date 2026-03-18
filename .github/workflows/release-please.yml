@@ -6,13 +6,12 @@ on:
       - main
   workflow_dispatch:
 
-permissions:
-  contents: write
-  pull-requests: write
-
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     outputs:
       vertex_release_created: ${{ steps.release.outputs['packages/vertex-forager--release_created'] }}
       vertex_tag_name: ${{ steps.release.outputs['packages/vertex-forager--tag_name'] }}
@@ -28,6 +27,8 @@ jobs:
     needs: release
     if: needs.release.outputs.vertex_release_created == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405

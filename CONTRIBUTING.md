@@ -33,3 +33,7 @@ Thank you for contributing to Vertex Forager!
 ## Security
 - Never commit secrets. Use environment variables or secret managers.
 - Report vulnerabilities via `SECURITY.md`.
+
+## CI Policy (Actions Pinning)
+- Pin GitHub Actions by SHA; include a comment noting the upstream major (e.g., checkout v5 SHA).
+- Use Node 24‑compatible action versions; avoid floating tags for reproducibility and supply‑chain safety.

@@ -1,6 +1,6 @@
 site_name: Vertex Forager Docs
-site_url: https://coolbress.github.io/vertex-lab/
-repo_url: https://github.com/coolbress/vertex-lab
+site_url: https://coolbress.github.io/VertexLab/
+repo_url: https://github.com/coolbress/VertexLab
 edit_uri: edit/main/packages/vertex-forager/docs/
 
 docs_dir: packages/vertex-forager/docs
