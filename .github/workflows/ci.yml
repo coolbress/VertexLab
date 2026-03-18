@@ -84,6 +84,10 @@ jobs:
           sarif_file: trivy-results.sarif
       - name: Enforce Trivy Gate (HIGH/CRITICAL)
         run: |
+          if [ ! -f trivy-results.sarif ]; then
+            echo "::error::trivy-results.sarif not found"
+            exit 1
+          fi
           if command -v jq >/dev/null 2>&1; then
             ERRORS=$(jq '[.runs[].results[] | select(.level=="error")] | length' trivy-results.sarif)
           else
