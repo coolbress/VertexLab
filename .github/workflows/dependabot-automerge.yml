@@ -11,6 +11,10 @@ on:
   pull_request:
     types: [opened, synchronize, labeled, unlabeled, ready_for_review]
 
+concurrency:
+  group: automerge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   automerge:
     if: |
@@ -22,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5 pinned
         with:
           fetch-depth: 0
       - name: Restrict to workflow changes only
