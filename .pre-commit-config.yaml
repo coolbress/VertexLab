@@ -22,7 +22,7 @@ repos:
     hooks:
       - id: mypy
         additional_dependencies: ["types-requests"]
-        args: ["packages/vertex-forager"]
+        args: ["--strict", "packages/vertex-forager/src"]
   - repo: local
     hooks:
       - id: hotspot-diff-check
