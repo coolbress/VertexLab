@@ -55,9 +55,8 @@ jobs:
           fail_on_unmatched_files: true
 
       - name: Upload to PyPI (optional)
-        if: ${{ env.PYPI_TOKEN != '' && vars.PUBLISH_TO_PYPI == 'true' }}
+        if: ${{ secrets.PYPI_TOKEN != '' && vars.PUBLISH_TO_PYPI == 'true' }}
         env:
-          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
         run: |
