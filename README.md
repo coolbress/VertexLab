@@ -1,6 +1,6 @@
 # Vertex Lab - Data Science Platform
 
-[![Docs](https://img.shields.io/badge/docs-online-blue)](https://coolbress.github.io/vertex-lab/)
+[![Docs](https://img.shields.io/badge/docs-online-blue)](https://coolbress.github.io/VertexLab/)
 
 Modern Python monorepo for financial data collection, analysis, and visualization.
 
@@ -97,6 +97,10 @@ uv run ruff format packages/
 uv run mypy packages/
 ```
 
+## 🔐 CI Policy (Actions Pinning)
+- Pin GitHub Actions by SHA; annotate the upstream major in the inline comment (e.g., checkout v5 SHA).
+- Prefer Node 24‑compatible action versions; avoid floating tags.
+
 ## 📁 Project Structure
 
 Each package follows the modern Python `src` layout:
@@ -122,7 +126,7 @@ packages/vertex-forager/
 3. Include issue number in commit messages
 4. Keep PRs focused and well-documented
 5. Documentation:
-   - Site: https://coolbress.github.io/vertex-lab/
+   - Site: https://coolbress.github.io/VertexLab/
    - Repo index: [packages/vertex-forager/docs/index.md](packages/vertex-forager/docs/index.md)
 
 ## 📄 License
