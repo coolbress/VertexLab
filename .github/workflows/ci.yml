@@ -62,30 +62,37 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-trivy-db-${{ steps.cache_window.outputs.week }}
             ${{ runner.os }}-trivy-db
-      - name: Trivy FS Scan (SARIF + Gate)
+      - name: Trivy FS Scan (SARIF)
         id: trivy
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # 0.16.1 pinned
         with:
           scan-type: fs
           trivyignores: .trivyignore
           scanners: secret,misconfig
-          severity: HIGH,CRITICAL
+          severity: MEDIUM,HIGH,CRITICAL
           format: sarif
           output: trivy-results.sarif
-          exit-code: 1
+          exit-code: 0
           skip-dirs: ".hypothesis,.ruff_cache,data,output,packages/vertex-forager/legacy_code,.venv,.tox,.cache,build,dist,node_modules"
         env:
           TRIVY_SKIP_VERSION_CHECK: "true"
           TRIVY_CACHE_DIR: ~/.cache/trivy
-        continue-on-error: true
       - name: Upload Trivy SARIF to Security tab
         if: ${{ always() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         uses: github/codeql-action/upload-sarif@b1bff81932f5cdfc8695c7752dcee935dcd061c8  # v4 pinned
         with:
           sarif_file: trivy-results.sarif
       - name: Enforce Trivy Gate (HIGH/CRITICAL)
-        if: ${{ steps.trivy.outcome == 'failure' }}
-        run: exit 1
+        run: |
+          if command -v jq >/dev/null 2>&1; then
+            ERRORS=$(jq '[.runs[].results[] | select(.level=="error")] | length' trivy-results.sarif)
+          else
+            ERRORS=$(grep -o '"level":"error"' trivy-results.sarif | wc -l | tr -d ' ')
+          fi
+          echo "Trivy HIGH/CRITICAL findings: $ERRORS"
+          if [ "$ERRORS" -gt 0 ]; then
+            exit 1
+          fi
       - name: Remediation Hints (On Failure)
         if: ${{ failure() }}
         run: |
