@@ -91,7 +91,11 @@ jobs:
           if command -v jq >/dev/null 2>&1; then
             ERRORS=$(jq '[.runs[].results[] | select(.level=="error")] | length' trivy-results.sarif)
           else
-            ERRORS=$(grep -oP '"level"\s*:\s*"error"' trivy-results.sarif | wc -l | tr -d ' ')
+            ERRORS=$(
+              (
+                grep -oP '"level"\s*:\s*"error"' trivy-results.sarif || true
+              ) | wc -l | tr -d ' '
+            )
           fi
           echo "Trivy HIGH/CRITICAL findings: $ERRORS"
           if [ "$ERRORS" -gt 0 ]; then
