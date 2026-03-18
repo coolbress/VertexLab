@@ -1,9 +1,9 @@
-site_name: Vertex Forager Docs
+site_name: VertexLab Docs
 site_url: https://coolbress.github.io/VertexLab/
 repo_url: https://github.com/coolbress/VertexLab
-edit_uri: edit/main/packages/vertex-forager/docs/
+edit_uri: edit/main/docs/
 
-docs_dir: packages/vertex-forager/docs
+docs_dir: docs
 site_dir: site
 
 theme:
@@ -32,6 +32,7 @@ theme:
 
 plugins:
   - search
+  - monorepo
   - mkdocstrings:
       handlers:
         python:
@@ -41,6 +42,7 @@ plugins:
             docstring_style: google
             show_source: false
             merge_init_into_class: true
+            warn_unresolved: false
 
 markdown_extensions:
   - admonition
@@ -56,26 +58,8 @@ markdown_extensions:
 
 nav:
   - Overview: index.md
-  - Tutorials:
-      - Quickstart: tutorials/quickstart.md
-  - How-to:
-      - Operate with DLQ disabled: how-to/dlq-disabled.md
-      - Tune chunked flush thresholds: how-to/chunked-flush.md
-      - Performance tuning: how-to/performance-tuning.md
-      - Troubleshooting: how-to/troubleshooting.md
-      - CLI equivalents: how-to/cli-equivalents.md
-      - Provider extension: how-to/provider-extension.md
-      - Provider plugin: how-to/provider-plugin.md
-  - Reference:
-      - EngineConfig: reference/config.md
-      - Metrics: reference/metrics.md
-      - Constants: reference/constants.md
-      - Schema: reference/schema.md
-      - API: reference/api.md
-  - Explanation:
-      - Pipeline architecture: explanation/architecture.md
-      - Router & Client: explanation/router-client.md
-      - Data storage flow & DLQ: explanation/data-storage-flow.md
-      - Writer security: explanation/writer-security.md
-      - Writer fan-out roadmap: explanation/writer-fanout-roadmap.md
-      - Writer upsert behavior: explanation/writer-upsert-behavior.md
+  - Policies:
+      - CI Security: ci-security.md
+      - CI Node Runtime Policy: explanation/ci-node-policy.md
+  - Components:
+      - vertex-forager: '!include packages/vertex-forager/mkdocs.yml'

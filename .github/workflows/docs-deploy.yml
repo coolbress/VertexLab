@@ -5,6 +5,7 @@ on:
     branches: ["main"]
     paths:
       - "mkdocs.yml"
+      - "docs/**"
       - "packages/vertex-forager/docs/**"
       - "packages/vertex-forager/src/**"
       - "packages/vertex-forager/pyproject.toml"
@@ -35,9 +36,9 @@ jobs:
         run: uv venv
       - name: Install docs deps
         run: |
-          uv pip install -q 'mkdocs>=1.6.0' 'mkdocs-material>=9.5.0' 'mkdocstrings[python]>=0.25.0' 'pymdown-extensions>=10.8'
+          uv pip install -q 'mkdocs>=1.6.0' 'mkdocs-material>=9.5.0' 'mkdocstrings[python]>=0.25.0' 'pymdown-extensions>=10.8' 'mkdocs-monorepo-plugin>=0.6.0'
       - name: Build site
-        run: uv run mkdocs build --strict --site-dir ./_site
+        run: NO_MKDOCS_2_WARNING=1 uv run mkdocs build --strict --site-dir ./_site
       - name: Upload artifact
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b  # v3 pinned
         with:
