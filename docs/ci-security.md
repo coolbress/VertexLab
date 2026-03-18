@@ -8,8 +8,8 @@
 ## Vulnerability Scans (Trivy)
 
  - Single-run flow:
-   - One Trivy execution runs with severities `MEDIUM,HIGH,CRITICAL`, produces `trivy-results.sarif`, and uses `continue-on-error` so the Security tab captures all severities.
-   - In the same job run, the gate is enforced by failing the workflow only when Trivy reports `HIGH,CRITICAL` (based on the step outcome), reusing setup/cache during that single execution.
+   - One Trivy execution runs with severities `MEDIUM,HIGH,CRITICAL`, produces `trivy-results.sarif`, and uses `exit-code: 0` so the Security tab captures all severities.
+   - In the same job run, a SARIF-parsing gate enforces failure only when `HIGH` or `CRITICAL` findings are present (based on parsing the `trivy-results.sarif`), reusing setup/cache within that single execution.
 - Remediation hints are printed on failure; see severity thresholds and SLA below.
 
 ## Severity Policy and SLA
