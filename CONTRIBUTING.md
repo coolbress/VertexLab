@@ -7,6 +7,8 @@ Thank you for contributing to Vertex Forager!
   - `uv sync`
 - Install and enable Git hooks:
   - `pre-commit install`
+- Keep dev tools fresh:
+  - Run `pre-commit autoupdate` monthly (or open a “dev‑tools refresh” PR) to bump hook versions like ruff, yamllint, lychee. Review diffs and pin to stable tags.
 - Run quality gates locally:
   - `uv run ruff check packages/`
   - `uv run mypy packages/vertex-forager/src --strict`

@@ -15,6 +15,10 @@ vertex-forager = { workspace = true }
 [tool.ruff]
 # 전체 프로젝트에 적용될 린터 설정
 line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "S", "TCH", "SIM", "PT"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
