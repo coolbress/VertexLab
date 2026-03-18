@@ -3,12 +3,13 @@
 ## Code Scanning
 
 - CodeQL analyzes Python code on pushes and PRs.
-- Upload on PRs is controlled by repository variable `ENABLE_CODEQL_ON_PR` (`true` to enable).
+- Upload on PRs is enabled when either repository variable `ENABLE_CODEQL_ON_PR == true` is set or the PR has label `security-critical`. Pushes to `main` always upload.
 
 ## Vulnerability Scans (Trivy)
 
-- SARIF upload: runs on main pushes; severities: `MEDIUM,HIGH,CRITICAL`; uploads to Security tab.
-- Gate (table): fails CI only on `HIGH,CRITICAL`; ignores unfixed issues and common caches.
+ - Single-run flow:
+   - One Trivy execution runs with severities `MEDIUM,HIGH,CRITICAL`, produces `trivy-results.sarif`, and uses `exit-code: 0` so the Security tab captures all severities.
+   - In the same job run, a SARIF-parsing gate enforces failure only when `HIGH` or `CRITICAL` findings are present (based on parsing the `trivy-results.sarif`), reusing setup/cache within that single execution.
 - Remediation hints are printed on failure; see severity thresholds and SLA below.
 
 ## Severity Policy and SLA
