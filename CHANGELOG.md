@@ -26,6 +26,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Issue Forms (bug report, feature request, docs improvement) and PR template aligned with guard/labeler workflows
 - `pyproject.toml` metadata: `project.urls`, `license`, `classifiers`; `docs` extras
 
+## [≤ 0.2.0 Retrospective]
+
+### Features
+
+- Library fetcher registry and YFinance provider integration (#6, #23)
+- Server‑side HTTP status retries with configurable backoff (defaults: 429, 503) (#51)
+- DLQ spooling and per‑packet rescue on writer flush failure (#59)
+- Public API surface at root with factory helpers (`create_client`, `create_router`) (#47)
+
+### Fixes
+
+- Deduplicate flush error reporting while preserving DLQ operations (#73)
+- Import stability for logging package; add tests (#35)
+
+### Breaking Changes
+
+- Monorepo migration and modularization of Router/Client surface (#2, #19, #20)
+
+### Docs
+
+- Writer fan‑out roadmap; central documentation index (#71)
+- Standardize Google‑style docstrings across public APIs; examples and behavior notes (#22)
+
 ## [Pre-0.2.0] - Historical
 
 ### Added

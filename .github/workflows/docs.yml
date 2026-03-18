@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "mkdocs.yml"
+      - "docs/**"
       - "packages/vertex-forager/docs/**"
       - ".github/workflows/docs.yml"
       - "packages/vertex-forager/pyproject.toml"
@@ -12,6 +13,7 @@ on:
     branches: ["main"]
     paths:
       - "mkdocs.yml"
+      - "docs/**"
       - "packages/vertex-forager/docs/**"
 
 permissions:
@@ -33,13 +35,13 @@ jobs:
         if: ${{ hashFiles('mkdocs.yml') != '' }}
       - name: Install docs deps
         run: |
-          uv pip install -q 'mkdocs>=1.6.0' 'mkdocs-material>=9.5.0' 'mkdocstrings[python]>=0.25.0' 'pymdown-extensions>=10.8'
+          uv pip install -q 'mkdocs>=1.6.0' 'mkdocs-material>=9.5.0' 'mkdocstrings[python]>=0.25.0' 'pymdown-extensions>=10.8' 'mkdocs-monorepo-plugin>=0.6.0'
         if: ${{ hashFiles('mkdocs.yml') != '' }}
       - name: Install vertex-forager (for mkdocstrings import)
         run: uv pip install -e packages/vertex-forager
         if: ${{ hashFiles('mkdocs.yml') != '' }}
       - name: Build docs (strict)
-        run: uv run mkdocs build --strict
+        run: NO_MKDOCS_2_WARNING=1 uv run mkdocs build --strict
         if: ${{ hashFiles('mkdocs.yml') != '' }}
   link-check:
     runs-on: ubuntu-latest
@@ -48,7 +50,7 @@ jobs:
       - name: Link Checker
         uses: lycheeverse/lychee-action@8646ba30535128ac92d33dfc9133794bfdd9b411  # v1 pinned
         with:
-          args: --verbose --no-progress --max-concurrency 8 --exclude '^\s*$' --exclude '^(yfinance://|mailto:)' 'packages/vertex-forager/docs/**/*.md' 'README.md'
+          args: --verbose --no-progress --max-concurrency 8 --exclude '^\s*$' --exclude '^(yfinance://|mailto:)' 'docs/**/*.md' 'packages/vertex-forager/docs/**/*.md' 'README.md'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         if: ${{ hashFiles('mkdocs.yml') != '' }}

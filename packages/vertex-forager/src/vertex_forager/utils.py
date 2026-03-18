@@ -17,9 +17,30 @@ import nest_asyncio
 from tqdm.auto import tqdm
 import psutil
 
-from dotenv import load_dotenv
 from vertex_forager.exceptions import InputError
+from dotenv import load_dotenv
 logger = logging.getLogger(__name__)
+
+def _safe_get_ipython() -> Any:
+    try:
+        import importlib
+        mod = importlib.import_module("IPython")
+        func = getattr(mod, "get_ipython", None)
+        if callable(func):
+            return func()
+        return None
+    except Exception:
+        return None
+
+def _ipython_display(value: Any) -> None:
+    try:
+        import importlib
+        mod = importlib.import_module("IPython.display")
+        func = getattr(mod, "display", None)
+        if callable(func):
+            func(value)
+    except Exception:
+        pass
 
 
 def as_dict(obj: Any) -> dict[str, Any]:
@@ -324,10 +345,7 @@ class Spinner:
         self._is_tty = sys.stderr.isatty()
         ip = None
         try:
-            from IPython import get_ipython
-            ip = get_ipython()
-        except (ImportError, ModuleNotFoundError, AttributeError):
-            ip = None
+            ip = _safe_get_ipython()
         except Exception as e:
             logger.error("Unexpected error during notebook detection: %s", e)
             ip = None
@@ -374,9 +392,8 @@ class Spinner:
         if self._is_notebook:
             try:
                 from ipywidgets import HTML
-                from IPython.display import display
                 self._widget_label = HTML(value=f"⏳ {self.message}")
-                display(self._widget_label)
+                _ipython_display(self._widget_label)
                 t = threading.Thread(target=self._notebook_task, daemon=True)
                 self.update_thread = t
                 t.start()
