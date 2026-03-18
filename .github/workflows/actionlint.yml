@@ -14,6 +14,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5 pinned
       - name: Run actionlint
         uses: devops-actions/actionlint@469810fd82c015d3c43815cd2b0e4d02eecc4819
