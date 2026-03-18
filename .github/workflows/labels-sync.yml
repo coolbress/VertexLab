@@ -64,7 +64,7 @@ jobs:
             "scope:provider:sharadar|1f6feb|Sharadar provider",
             "scope:ci|6f42c1|CI/CD and workflows",
             "scope:docs|0b7dda|Documentation and site",
-            "area:providers|ededed|Provider related changes",
+            "package:vertex-forager|c5def5|Vertex Forager package",
             "impact:user|fbca04|User-facing impact",
             "impact:internal|ededed|Internal only change",
             "no-changelog|d1d4f2|Exclude from changelog aggregation"

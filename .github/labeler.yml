@@ -1,27 +1,6 @@
 package:vertex-forager:
   - changed-files:
       - any-glob-to-any-file: ["packages/vertex-forager/**"]
-area:core:
-  - changed-files:
-      - any-glob-to-any-file: ["packages/vertex-forager/src/vertex_forager/core/**"]
-area:writers:
-  - changed-files:
-      - any-glob-to-any-file: ["packages/vertex-forager/src/vertex_forager/writers/**"]
-area:routers:
-  - changed-files:
-      - any-glob-to-any-file: ["packages/vertex-forager/src/vertex_forager/routers/**"]
-area:clients:
-  - changed-files:
-      - any-glob-to-any-file: []
-area:providers:
-  - changed-files:
-      - any-glob-to-any-file: ["packages/vertex-forager/src/vertex_forager/providers/**"]
-area:docs:
-  - changed-files:
-      - any-glob-to-any-file: ["docs/**", "README.md", "packages/vertex-forager/docs/**"]
-area:ci:
-  - changed-files:
-      - any-glob-to-any-file: [".github/workflows/**", ".github/**"]
 scope:pipeline:
   - changed-files:
       - any-glob-to-any-file: ["packages/vertex-forager/src/vertex_forager/core/**", "packages/vertex-forager/src/vertex_forager/routers/**"]

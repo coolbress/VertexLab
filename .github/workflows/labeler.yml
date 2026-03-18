@@ -109,7 +109,6 @@ jobs:
               if (p.startsWith('packages/vertex-forager/src/vertex_forager/routers/')) labels.add('scope:pipeline');
               if (p.startsWith('packages/vertex-forager/src/vertex_forager/providers/yfinance/')) labels.add('scope:provider:yfinance');
               if (p.startsWith('packages/vertex-forager/src/vertex_forager/providers/sharadar/')) labels.add('scope:provider:sharadar');
-              if (p.startsWith('packages/vertex-forager/src/vertex_forager/providers/')) labels.add('area:providers');
               if (p.startsWith('.github/')) labels.add('scope:ci');
             }
             if (labels.size === 0) {
