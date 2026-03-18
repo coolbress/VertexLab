@@ -11,6 +11,7 @@ Thank you for contributing to Vertex Forager!
   - `uv run ruff check packages/`
   - `uv run mypy packages/vertex-forager/src --strict`
   - `uv run pytest packages/ -q`
+  - Note: pre-commit runs mypy against the same target (`packages/vertex-forager/src`) with `--strict` to ensure local and CI type errors match. Install hooks via `pre-commit install`.
 
 ## Documentation
 - Docs live under `packages/vertex-forager/docs` (MkDocs + Material, Diátaxis).

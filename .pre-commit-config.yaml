@@ -22,7 +22,8 @@ repos:
     hooks:
       - id: mypy
         additional_dependencies: ["types-requests"]
-        args: ["packages/vertex-forager"]
+        args: ["--strict", "packages/vertex-forager/src"]
+        pass_filenames: false
   - repo: local
     hooks:
       - id: hotspot-diff-check
@@ -30,3 +31,4 @@ repos:
         entry: python3 scripts/precommit_hotspot_check.py
         language: system
         pass_filenames: false
+
