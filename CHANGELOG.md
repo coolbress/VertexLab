@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `pyproject.toml` metadata: `project.urls`, `license`, `classifiers`; `docs` extras
 
 ## [≤ 0.2.0 Retrospective]
-> Curated summary of key changes grouped by type (Features, Fixes, Breaking, Docs). For the chronological record with full entries, see [Pre-0.2.0 - Historical](#pre-0-2-0---historical).
+> Curated summary of key changes grouped by type (Features, Fixes, Breaking, Docs). For the chronological record with full entries, see [Pre-0.2.0 - Historical](#pre-020---historical).
 
 ### Features
 
