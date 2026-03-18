@@ -35,10 +35,12 @@ Thank you for contributing to Vertex Forager!
 - Report vulnerabilities via `SECURITY.md`.
 
 ## CI Policy (Actions Pinning)
+
 - Pin GitHub Actions by SHA; include a comment noting the upstream major (e.g., checkout v5 SHA).
 - Use Node 24‑compatible action versions; avoid floating tags for reproducibility and supply‑chain safety.
 
 ## Lockfile Policy (uv.lock)
+
 - Do not include uv.lock changes in non‑dependency PRs; keep lockfile updates to deps/ci maintenance.
 - When updating dependencies, include uv.lock changes produced by `uv sync` to maintain reproducibility.
 - Prefer small, focused lockfile diffs; avoid mixing code changes with large dependency churn.
