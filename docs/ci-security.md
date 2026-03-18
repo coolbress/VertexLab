@@ -1,5 +1,4 @@
 # CI Security Policy
-
 ## Code Scanning
 - CodeQL analyzes Python code on pushes and PRs.
 - Upload on PRs is controlled by repository variable `ENABLE_CODEQL_ON_PR` (`true` to enable).
@@ -20,7 +19,7 @@
 
 ## Runtime
 - Workflows use Node 24‑compatible action versions; Python 3.10 runners.
- 
+
 ## Rollback
 - Toggle CodeQL PR uploads via `ENABLE_CODEQL_ON_PR`.
 - Disable Trivy gate temporarily by removing the gate step or adjusting severity.
