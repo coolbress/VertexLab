@@ -24,6 +24,12 @@ repos:
         additional_dependencies: ["types-requests"]
         args: ["--strict", "packages/vertex-forager/src"]
         pass_filenames: false
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+        files: "\\.(yml|yaml)$"
+        args: ["-s"]
   - repo: local
     hooks:
       - id: hotspot-diff-check
@@ -31,4 +37,3 @@ repos:
         entry: python3 scripts/precommit_hotspot_check.py
         language: system
         pass_filenames: false
-
