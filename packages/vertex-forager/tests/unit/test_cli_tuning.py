@@ -1,6 +1,7 @@
-from vertex_forager.cli import _build_sweep_combinations, _score_and_rank_results
 import click
 import pytest
+from vertex_forager.cli import _build_sweep_combinations, _score_and_rank_results
+
 
 def test_build_sweep_combinations():
     # Test with default sampling (50)
@@ -72,17 +73,29 @@ def test_score_and_rank_results_invalid_duration():
             {
                 "env": {"VF_CONCURRENCY": 10},
                 "measurements": {
-                    "yfinance_price": {"duration_s": "invalid", "metrics": {"errors": []}},
-                    "yfinance_financials": {"duration_s": None, "metrics": {"errors": []}},
-                }
+                    "yfinance_price": {
+                        "duration_s": "invalid",
+                        "metrics": {"errors": []},
+                    },
+                    "yfinance_financials": {
+                        "duration_s": None,
+                        "metrics": {"errors": []},
+                    },
+                },
             },
             {
                 "env": {"VF_CONCURRENCY": 20},
                 "measurements": {
-                    "yfinance_price": {"duration_s": 10.0, "metrics": {"errors": []}},
-                    "yfinance_financials": {"duration_s": 10.0, "metrics": {"errors": []}},
-                }
-            }
+                    "yfinance_price": {
+                        "duration_s": 10.0,
+                        "metrics": {"errors": []},
+                    },
+                    "yfinance_financials": {
+                        "duration_s": 10.0,
+                        "metrics": {"errors": []},
+                    },
+                },
+            },
         ]
     }
 
@@ -92,11 +105,11 @@ def test_score_and_rank_results_invalid_duration():
         rank_alpha=0.0,
         rank_error_penalty=5.0
     )
-    
+
     # Invalid duration should result in float("inf"), so valid run (20) should win
     best_price = ranked["best"]["yfinance_price"]
     assert best_price["env"]["VF_CONCURRENCY"] == 20
-    
+
     best_fin = ranked["best"]["yfinance_financials"]
     assert best_fin["env"]["VF_CONCURRENCY"] == 20
 
@@ -106,24 +119,42 @@ def test_score_and_rank_results():
             {
                 "env": {"VF_CONCURRENCY": 10},
                 "measurements": {
-                    "yfinance_price": {"duration_s": 10.0, "metrics": {"errors": []}},
-                    "yfinance_financials": {"duration_s": 5.0, "metrics": {"errors": []}},
-                }
+                    "yfinance_price": {
+                        "duration_s": 10.0,
+                        "metrics": {"errors": []},
+                    },
+                    "yfinance_financials": {
+                        "duration_s": 5.0,
+                        "metrics": {"errors": []},
+                    },
+                },
             },
             {
                 "env": {"VF_CONCURRENCY": 20},
                 "measurements": {
-                    "yfinance_price": {"duration_s": 20.0, "metrics": {"errors": []}},
-                    "yfinance_financials": {"duration_s": 8.0, "metrics": {"errors": []}},
-                }
+                    "yfinance_price": {
+                        "duration_s": 20.0,
+                        "metrics": {"errors": []},
+                    },
+                    "yfinance_financials": {
+                        "duration_s": 8.0,
+                        "metrics": {"errors": []},
+                    },
+                },
             },
             {
                 "env": {"VF_CONCURRENCY": 30},
                 "measurements": {
-                    "yfinance_price": {"duration_s": 5.0, "metrics": {"errors": ["e1"]}}, # Error penalty
-                    "yfinance_financials": {"duration_s": 5.0, "metrics": {"errors": []}},
-                }
-            }
+                    "yfinance_price": {
+                        "duration_s": 5.0,
+                        "metrics": {"errors": ["e1"]},
+                    },  # Error penalty
+                    "yfinance_financials": {
+                        "duration_s": 5.0,
+                        "metrics": {"errors": []},
+                    },
+                },
+            },
         ]
     }
 
@@ -134,7 +165,7 @@ def test_score_and_rank_results():
         rank_alpha=0.0,
         rank_error_penalty=100.0
     )
-    
+
     # Best Price Run
     # Run 1: 10.0s
     # Run 2: 20.0s

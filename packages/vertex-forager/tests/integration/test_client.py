@@ -10,13 +10,12 @@ Integration tests for vertex-forager client functionality.
 
 from __future__ import annotations
 
+import json
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import polars as pl
 import pytest
-import json
-import httpx
-from unittest.mock import patch, MagicMock, AsyncMock
-
 from vertex_forager.core.config import RunResult
 
 
@@ -85,7 +84,8 @@ class TestClientVisualization:
             # Verify tqdm was initialized
             MockTqdm.assert_called()
             # We expect at least one call related to price data
-            # Metadata fetching might trigger another one, so we check if ANY call has correct total
+            # Metadata fetching might trigger another one
+            # Check if any call has the correct total
             # Note: total is now number of TICKERS (2), not batches (1).
             calls = MockTqdm.call_args_list
             price_call_found = False
@@ -97,7 +97,8 @@ class TestClientVisualization:
             assert price_call_found
 
             # Verify tqdm was used
-            # Refactored implementation does not use context manager, but try/finally with close()
+            # Refactored implementation does not use context manager
+            # It uses try/finally with close()
             # mock_tqdm_instance.__enter__.assert_called()
             mock_tqdm_instance.close.assert_called()
 
@@ -234,7 +235,9 @@ class TestClientErrorHandling:
     ) -> None:
         """Test that client handles empty API responses gracefully."""
         # Arrange
-        mock_response_obj: dict[str, object] = {"datatable": {"data": [], "columns": []}}
+        mock_response_obj: dict[str, object] = {
+            "datatable": {"data": [], "columns": []}
+        }
         mock_http_executor.fetch.return_value = json.dumps(mock_response_obj).encode()
 
         # Act
@@ -298,5 +301,5 @@ class TestClientErrorHandling:
         assert isinstance(result1, pl.DataFrame)
         assert isinstance(result2, pl.DataFrame)
         # Check that http executor was called multiple times
-        # Note: Depending on batching logic, it might be called once or twice per request
+        # Note: Depending on batching, it might be called once or twice per request
         assert mock_http_executor.fetch.call_count >= 2

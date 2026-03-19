@@ -1,16 +1,20 @@
+import os
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from tqdm import tqdm
-
-from vertex_forager.utils import clear_app_cache, create_pbar_updater, cleanup_dlq_tmp, get_cache_dir
-import time
-import os
+from vertex_forager.utils import (
+    cleanup_dlq_tmp,
+    clear_app_cache,
+    create_pbar_updater,
+    get_cache_dir,
+)
 
 
 class TestPbarUpdater:
     def test_update_pbar_counts_symbols_correctly(self):
-        """Test that update_pbar correctly counts symbols in a comma-separated string."""
+        """update_pbar counts symbols in a comma-separated string."""
         mock_pbar = MagicMock(spec=tqdm)
         updater = create_pbar_updater(mock_pbar)
 
@@ -60,36 +64,36 @@ class TestCacheUtils:
     @patch("vertex_forager.utils.get_cache_dir")
     @patch("shutil.rmtree")
     def test_clear_app_cache_safety_check_pass(
-        self, mock_rmtree, mock_get_cache, mock_get_root
+        self, mock_rmtree, mock_get_cache, mock_get_root, tmp_path: Path
     ):
         """Test that clear_app_cache proceeds when cache is inside app root."""
         # Setup paths
         # Use resolve() to handle symlinks (e.g. /tmp -> /private/tmp on macOS)
-        root_path = Path("/tmp/vertex_root").resolve()
+        root_path = (tmp_path / "vertex_root").resolve()
         cache_path = (root_path / "cache").resolve()
 
         mock_get_root.return_value = root_path
         mock_get_cache.return_value = cache_path
 
         # Mock existence and is_dir
-        with patch.object(Path, "exists", return_value=True):
-            with patch.object(Path, "is_dir", return_value=True):
-                with patch.object(Path, "mkdir") as mock_mkdir:
-                    clear_app_cache()
+        with patch.object(Path, "exists", return_value=True), \
+            patch.object(Path, "is_dir", return_value=True), \
+            patch.object(Path, "mkdir") as mock_mkdir:
+            clear_app_cache()
 
-                    # Should verify relative_to and call rmtree
-                    mock_rmtree.assert_called_once_with(cache_path)
-                    mock_mkdir.assert_called_once()
+            # Should verify relative_to and call rmtree
+            mock_rmtree.assert_called_once_with(cache_path)
+            mock_mkdir.assert_called_once()
 
     @patch("vertex_forager.utils.get_app_root")
     @patch("vertex_forager.utils.get_cache_dir")
     @patch("shutil.rmtree")
     def test_clear_app_cache_safety_check_fail(
-        self, mock_rmtree, mock_get_cache, mock_get_root
+        self, mock_rmtree, mock_get_cache, mock_get_root, tmp_path: Path
     ):
         """Test that clear_app_cache aborts when cache is outside app root."""
         # Setup paths that are disjoint
-        root_path = Path("/tmp/vertex_root").resolve()
+        root_path = (tmp_path / "vertex_root").resolve()
         cache_path = Path("/etc/passwd").resolve()  # Dangerous path!
 
         mock_get_root.return_value = root_path
@@ -97,7 +101,7 @@ class TestCacheUtils:
 
         # Mock existence and is_dir to pass initial checks
         with patch.object(Path, "exists", return_value=True), \
-             patch.object(Path, "is_dir", return_value=True):
+            patch.object(Path, "is_dir", return_value=True):
             clear_app_cache()
 
         # Should NOT call rmtree

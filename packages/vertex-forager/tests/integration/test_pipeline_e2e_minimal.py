@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator, Sequence
 from datetime import datetime, timezone
-from typing import AsyncIterator
-from collections.abc import Sequence
 
 import duckdb
 import polars as pl
-
-from vertex_forager.core.pipeline import VertexForager
-from vertex_forager.core.config import EngineConfig, FetchJob, FramePacket, RequestSpec, ParseResult
+from vertex_forager.core.config import (
+    EngineConfig,
+    FetchJob,
+    FramePacket,
+    ParseResult,
+    RequestSpec,
+)
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor
+from vertex_forager.core.pipeline import VertexForager
 from vertex_forager.schema.mapper import SchemaMapper
 from vertex_forager.writers.duckdb import DuckDBWriter
 
@@ -21,12 +25,28 @@ class _Router:
     def provider(self) -> str:
         return "e2e"
 
-    async def generate_jobs(self, *, dataset: str, symbols: Sequence[str] | None, **_kwargs: object) -> AsyncIterator[FetchJob]:
-        yield FetchJob(provider="e2e", dataset=dataset, symbol=None, spec=RequestSpec(url="http://example.local/test"))
+    async def generate_jobs(
+        self,
+        *,
+        dataset: str,
+        symbols: Sequence[str] | None,
+        **_kwargs: object,
+    ) -> AsyncIterator[FetchJob]:
+        yield FetchJob(
+            provider="e2e",
+            dataset=dataset,
+            symbol=None,
+            spec=RequestSpec(url="http://example.local/test"),
+        )
 
     def parse(self, *, job: FetchJob, payload: bytes) -> ParseResult:
         df = pl.DataFrame({"provider": ["e2e"], "value": [1]})
-        pkt = FramePacket(provider="e2e", table="e2e_table", frame=df, observed_at=datetime.now(timezone.utc))
+        pkt = FramePacket(
+            provider="e2e",
+            table="e2e_table",
+            frame=df,
+            observed_at=datetime.now(timezone.utc),
+        )
         return ParseResult(packets=[pkt], next_jobs=[])
 
 
@@ -54,11 +74,13 @@ class _FakeHttpClient:
         json: dict | None = None,
         content: bytes | None = None,
         timeout: float | None = None,
-    ) -> "_FakeHttpClient._Resp":
-        # Return a simple JSON-ish body; router.parse ignores payload content in this test
-        # Validate that before_http_request injection propagated into headers
+    ) -> _FakeHttpClient._Resp:
+        # Return a simple JSON-ish body
+        # Validate header injection propagated into HttpExecutor
         if headers is None or headers.get("X-Test-Hook") != "1":
-            raise AssertionError("before_http_request header not propagated to HttpExecutor._fetch_http")
+            raise AssertionError(
+                "before_http_request header not propagated to HttpExecutor._fetch_http"
+            )
         return _FakeHttpClient._Resp(b"{}")
 
 

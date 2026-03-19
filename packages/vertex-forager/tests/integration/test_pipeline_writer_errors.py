@@ -1,18 +1,25 @@
 from __future__ import annotations
 
-import pytest
-import polars as pl
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from collections.abc import Sequence, AsyncIterator
-from typing import Any, cast
 from pathlib import Path
+from typing import Any, cast
 
-from vertex_forager.core.config import EngineConfig, RunResult, FetchJob, RequestSpec, ParseResult, FramePacket
-from vertex_forager.core.contracts import IRouter, IMapper
-from vertex_forager.writers.duckdb import DuckDBWriter
-from vertex_forager.core.pipeline import VertexForager
+import polars as pl
+import pytest
+from vertex_forager.core.config import (
+    EngineConfig,
+    FetchJob,
+    FramePacket,
+    ParseResult,
+    RequestSpec,
+    RunResult,
+)
+from vertex_forager.core.contracts import IMapper, IRouter
 from vertex_forager.core.http import HttpExecutor
+from vertex_forager.core.pipeline import VertexForager
+from vertex_forager.writers.duckdb import DuckDBWriter
 
 
 class _Resp:
@@ -44,12 +51,35 @@ class StubRouter(IRouter[str]):
     @property
     def provider(self) -> str:
         return "yfinance"
-    async def generate_jobs(self, *, dataset: str, symbols: Sequence[str] | None, **kwargs: object) -> AsyncIterator[FetchJob]:
-        job = FetchJob(provider="yfinance", dataset=dataset, symbol="AAPL", spec=RequestSpec(url="http://example.com"))
+    async def generate_jobs(
+        self,
+        *,
+        dataset: str,
+        symbols: Sequence[str] | None,
+        **kwargs: object,
+    ) -> AsyncIterator[FetchJob]:
+        job = FetchJob(
+            provider="yfinance",
+            dataset=dataset,
+            symbol="AAPL",
+            spec=RequestSpec(url="http://example.com"),
+        )
         yield job
     def parse(self, *, job: FetchJob, payload: bytes) -> ParseResult:
-        df = pl.DataFrame({"provider": ["yfinance"], "ticker": ["AAPL"], "close": [1.0], "fetched_at": [datetime.now(timezone.utc)]})
-        pkt = FramePacket(provider="yfinance", table="yfinance_price", frame=df, observed_at=datetime.now(timezone.utc))
+        df = pl.DataFrame(
+            {
+                "provider": ["yfinance"],
+                "ticker": ["AAPL"],
+                "close": [1.0],
+                "fetched_at": [datetime.now(timezone.utc)],
+            }
+        )
+        pkt = FramePacket(
+            provider="yfinance",
+            table="yfinance_price",
+            frame=df,
+            observed_at=datetime.now(timezone.utc),
+        )
         return ParseResult(packets=[pkt], next_jobs=[])
 
 class StubMapper(IMapper):
@@ -58,13 +88,22 @@ class StubMapper(IMapper):
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_pipeline_records_writer_validation_errors(tmp_path: Path, monkeypatch) -> None:
+async def test_pipeline_records_writer_validation_errors(
+    tmp_path: Path, monkeypatch
+) -> None:
     monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "app"))
     client = StubClient()
     router = StubRouter()
     writer = DuckDBWriter(str(tmp_path / "err.duckdb"))
     http = HttpExecutor(client=client)
-    pipeline = VertexForager(router=router, http=http, writer=writer, mapper=StubMapper(), config=client._config, controller=client.controller)
+    pipeline = VertexForager(
+        router=router,
+        http=http,
+        writer=writer,
+        mapper=StubMapper(),
+        config=client._config,
+        controller=client.controller,
+    )
     try:
         res = await pipeline.run(dataset="price", symbols=None)
         assert isinstance(res, RunResult)

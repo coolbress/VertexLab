@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
-from collections import deque
 
 import polars as pl
 import pytest
-
 from vertex_forager.core.config import EngineConfig, FramePacket, RunResult
 from vertex_forager.core.pipeline import VertexForager
-from vertex_forager.writers.base import BaseWriter, WriteResult
 from vertex_forager.exceptions import VertexForagerError
+from vertex_forager.writers.base import BaseWriter, WriteResult
 
 
 @pytest.mark.asyncio
@@ -29,7 +28,9 @@ async def test_chunked_flush_writes_multiple_chunks() -> None:
     mock_mapper = MagicMock()
     mock_controller = MagicMock()
 
-    cfg = EngineConfig(requests_per_minute=100, writer_chunk_rows=10_000, metrics_enabled=True)
+    cfg = EngineConfig(
+        requests_per_minute=100, writer_chunk_rows=10_000, metrics_enabled=True
+    )
     forager = VertexForager(
         router=mock_router,
         http=mock_http,
@@ -71,8 +72,8 @@ async def test_chunked_flush_writes_multiple_chunks() -> None:
     assert first_rows == 10000
     assert second_rows == 1
     assert result.tables.get("chunk_table", 0) == 10001
-    # Verify per-chunk contract with current schema: metrics histogram records per-chunk rows in order
-    hist = list(getattr(forager, "_hists").get("writer_rows.chunk_table", []))  # type: ignore[attr-defined]
+    # Verify per-chunk contract: metrics histogram records per-chunk rows in order
+    hist = list(forager._hists.get("writer_rows.chunk_table", []))  # type: ignore[attr-defined]
     assert len(hist) == 2
     assert int(hist[0]) == first_rows
     assert int(hist[1]) == second_rows
@@ -124,7 +125,7 @@ async def test_chunked_flush_partial_error(tmp_path, monkeypatch) -> None:
     result = RunResult(provider="test")
     result_lock = asyncio.Lock()
 
-    # First chunk exact 10000 rows, then remaining 2 rows to trigger failure on second write
+    # First chunk 10000 rows, then remaining 2 rows to trigger failure on second write
     frames = [
         pl.DataFrame({"id": list(range(10000))}),
         pl.DataFrame({"id": [10000]}),
@@ -143,10 +144,10 @@ async def test_chunked_flush_partial_error(tmp_path, monkeypatch) -> None:
 
     await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
 
-    # Exactly one error should be recorded; rows from the first successful chunk counted
+    # Exactly one error recorded; rows from the first successful chunk counted
     assert len(result.errors) == 1
     assert result.tables.get("chunk_table", 0) == 10000
-    # Verify DLQ spooled file has the two failed rows and error summary records remaining=2
+    # DLQ spooled file has two failed rows; error summary records remaining=2
     dlq_dir = tmp_path / "app" / "cache" / "dlq" / "chunk_table"
     assert dlq_dir.exists()
     files = sorted(dlq_dir.glob("batch_*.ipc"))
@@ -159,7 +160,7 @@ async def test_chunked_flush_partial_error(tmp_path, monkeypatch) -> None:
 
 def test_engine_config_writer_chunk_rows_lower_bound() -> None:
     cfg = EngineConfig(requests_per_minute=60, writer_chunk_rows=9_999)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=r".*"):
         cfg.assert_valid()
 
 
@@ -171,7 +172,12 @@ def test_compute_summary_percentiles_and_counters() -> None:
     mock_controller = MagicMock()
     cfg = EngineConfig(requests_per_minute=60)
     vf = VertexForager(
-        router=mock_router, http=mock_http, writer=mock_writer, mapper=mock_mapper, config=cfg, controller=mock_controller
+        router=mock_router,
+        http=mock_http,
+        writer=mock_writer,
+        mapper=mock_mapper,
+        config=cfg,
+        controller=mock_controller,
     )
     # Enable metrics and populate histograms/counters
     vf._metrics_enabled = True  # type: ignore[attr-defined]

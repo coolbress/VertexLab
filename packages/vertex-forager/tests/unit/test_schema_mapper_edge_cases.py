@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+
 import polars as pl
 from vertex_forager.core.config import FramePacket
 from vertex_forager.schema.mapper import SchemaMapper
@@ -11,7 +12,7 @@ def test_schema_mapper_casts_and_preserves_extra_columns() -> None:
         {
             "provider": ["sharadar"],
             "ticker": ["AAPL"],
-            # Intentionally provide an invalid date to trigger null on cast(strict=False)
+            # Invalid date to trigger null on cast(strict=False)
             "date": ["not-a-date"],
             "open": [100.0],
             "extra_col": ["keep-me"],
