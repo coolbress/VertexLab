@@ -26,7 +26,10 @@ class TestClientFactory:
 
     def test_create_client_with_env_var(self):
         """Test creating client using environment variable for API key."""
-        with patch.dict(os.environ, {"SHARADAR_API_KEY": "env_key_123"}):  # pragma: allowlist secret (test)
+        with patch.dict(
+            os.environ,
+            {"SHARADAR_API_KEY": "env_key_123"},  # pragma: allowlist secret (test)
+        ):
             client = create_client(provider="sharadar", rate_limit=100)
             assert client.__class__.__name__ == "SharadarClient"
 
@@ -42,4 +45,8 @@ class TestClientFactory:
     def test_create_client_invalid_provider(self):
         """Test error when provider is invalid."""
         with pytest.raises(KeyError, match="Unsupported client: invalid_provider"):
-            create_client(provider="invalid_provider", api_key="key", rate_limit=100)  # pragma: allowlist secret (test)
+            create_client(
+                provider="invalid_provider",
+                api_key="key",  # pragma: allowlist secret (test)
+                rate_limit=100,
+            )

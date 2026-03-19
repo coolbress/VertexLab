@@ -57,7 +57,11 @@ class TestHttpExecutor:
 
         # Mock raise_for_status to raise HTTPStatusError for error responses
         def raise_for_status() -> None:
-            raise httpx.HTTPStatusError("Server error", request=MagicMock(), response=response)
+            raise httpx.HTTPStatusError(
+                "Server error",
+                request=MagicMock(),
+                response=response,
+            )
 
         response.raise_for_status = raise_for_status
 
@@ -178,7 +182,10 @@ class TestHttpExecutor:
     ) -> None:
         """Test that network errors are properly handled."""
         # Arrange
-        mock_async_client.run_async.side_effect = httpx.RequestError("Network error", request=MagicMock())
+        mock_async_client.run_async.side_effect = httpx.RequestError(
+            "Network error",
+            request=MagicMock(),
+        )
 
         # Act & Assert
         with pytest.raises(httpx.RequestError):
@@ -197,7 +204,11 @@ class TestHttpExecutor:
         mock_async_client.run_async.return_value = success_response
 
         # Create spec with custom timeout
-        spec_with_timeout = RequestSpec(method=HttpMethod.GET, url="https://api.example.com/data", timeout_s=10.0)
+        spec_with_timeout = RequestSpec(
+            method=HttpMethod.GET,
+            url="https://api.example.com/data",
+            timeout_s=10.0,
+        )
 
         # Act
         await http_executor.fetch(spec_with_timeout)
@@ -345,7 +356,10 @@ class TestHttpExecutorConcurrency:
     """Tests for HTTP executor concurrency behavior."""
 
     @pytest.mark.asyncio
-    async def test_executor_handles_concurrent_requests(self, mock_async_client: AsyncMock) -> None:
+    async def test_executor_handles_concurrent_requests(
+        self,
+        mock_async_client: AsyncMock,
+    ) -> None:
         """Test that executor can handle concurrent requests."""
         # Arrange
         executor = HttpExecutor(client=mock_async_client)

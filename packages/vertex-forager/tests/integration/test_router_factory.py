@@ -19,7 +19,12 @@ class TestRouterFactory:
         config = EngineConfig(requests_per_minute=100)
         api_key = "test_api_key"  # pragma: allowlist secret (test)
 
-        router = create_router(provider="sharadar", api_key=api_key, config=config, start_date="2024-01-01")
+        router = create_router(
+            provider="sharadar",
+            api_key=api_key,  # pragma: allowlist secret (test)
+            config=config,
+            start_date="2024-01-01",
+        )
 
         assert isinstance(router, SharadarRouter)
         # Verify internal attributes via public interface
@@ -31,7 +36,11 @@ class TestRouterFactory:
         config = EngineConfig(requests_per_minute=100)
 
         with pytest.raises(KeyError, match="Unsupported router: invalid_provider"):
-            create_router(provider="invalid_provider", api_key="key", config=config)  # pragma: allowlist secret (test)
+            create_router(
+                provider="invalid_provider",
+                api_key="key",  # pragma: allowlist secret (test)
+                config=config,
+            )
 
     def test_create_yfinance_router_success(self) -> None:
         """Verify create_router returns a YFinanceRouter with default rate limit."""

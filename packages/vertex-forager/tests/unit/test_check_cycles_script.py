@@ -81,6 +81,9 @@ def test_build_graph_resolves_relative_imports(
     # Verify the else-branch import was recorded
     typing_mod = "vertex_forager.pkg_a.typing_branch"
     assert typing_mod in graph, "typing_branch module should be in graph"
-    assert any(dep == "vertex_forager.pkg_a.mod2" or dep.endswith(".mod2") for dep in graph.get(typing_mod, set())), (
-        "typing_branch should have mod2 dependency from else branch"
+    deps = graph.get(typing_mod, set())
+    has_mod2 = any(
+        dep == "vertex_forager.pkg_a.mod2" or dep.endswith(".mod2")
+        for dep in deps
     )
+    assert has_mod2, "typing_branch should have mod2 dependency from else branch"

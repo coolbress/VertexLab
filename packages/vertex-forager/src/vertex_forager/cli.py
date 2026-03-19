@@ -1,3 +1,4 @@
+from __future__ import annotations
 import asyncio
 import hashlib
 import itertools
@@ -20,6 +21,7 @@ from .utils import cleanup_dlq_tmp, clear_app_cache, get_app_root, get_cache_dir
 
 if TYPE_CHECKING:
     from vertex_forager.providers.sharadar.client import SharadarClient
+    from vertex_forager.core.config import RunResult
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +82,7 @@ def collect(symbol: tuple[str, ...], source: str) -> None:
             if not api_key:
                 raise click.ClickException(f"Environment variable {api_key_env} is not set.")
 
-        async def _run_collect() -> Any | None:
+        async def _run_collect() -> pl.DataFrame | RunResult | None:
             async with create_client(provider=source, api_key=api_key) as client:
                 if source == "sharadar":
                     # For Sharadar, we use the specialized client method

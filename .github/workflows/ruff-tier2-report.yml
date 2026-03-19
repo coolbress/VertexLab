@@ -26,10 +26,10 @@ jobs:
         run: |
           set -euo pipefail
           OUT="$RUNNER_TEMP/ruff-tier2.txt"
-          uv run ruff check packages/ \
+          (uv run ruff check packages/ \
             --exclude "legacy_code" \
             --select C4,PT,TCH,SIM,TC \
-            --statistics || true | tee "$OUT"
+            --statistics || true) | tee "$OUT"
           {
             echo "# Ruff Tier-2 Report (C4/PT/TCH/SIM/TC)"
             echo

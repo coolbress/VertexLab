@@ -67,7 +67,12 @@ class TestDuckDBWriter:
                 FramePacket(
                     provider="test",
                     table="concurrent_test",
-                    frame=pl.DataFrame({"id": range(i * 10, (i + 1) * 10), "val": [i] * 10}),
+                    frame=pl.DataFrame(
+                        {
+                            "id": range(i * 10, (i + 1) * 10),
+                            "val": [i] * 10,
+                        }
+                    ),
                     observed_at=datetime.now(),
                 )
                 for i in range(100)
