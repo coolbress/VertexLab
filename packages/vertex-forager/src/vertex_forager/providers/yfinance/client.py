@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import polars as pl
 
@@ -211,10 +211,9 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         if kind == "earnings" and period == "quarterly":
             raise InputError("quarterly_earnings is deprecated in yfinance; use income_stmt with period='quarterly'.")
         dataset = f"quarterly_{target_kind}" if period == "quarterly" else target_kind
-        from typing import cast
 
         return await self._dispatch_fetch(
-            dataset=cast("YFinanceDataset", dataset),
+            dataset=cast(YFinanceDataset, dataset),
             tickers=tickers,
             connect_db=connect_db,
             desc=f"Fetching YFinance {dataset}",
@@ -300,10 +299,9 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             WriterError: If persistence fails.
         """
         dataset = f"{kind}_holders"
-        from typing import cast
 
         return await self._dispatch_fetch(
-            dataset=cast("YFinanceDataset", dataset),
+            dataset=cast(YFinanceDataset, dataset),
             tickers=tickers,
             connect_db=connect_db,
             desc=f"Fetching YFinance {dataset}",

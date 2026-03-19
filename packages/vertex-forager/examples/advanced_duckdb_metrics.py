@@ -1,5 +1,5 @@
-import os
 from collections.abc import Sequence
+import os
 from pathlib import Path
 
 from vertex_forager import create_client

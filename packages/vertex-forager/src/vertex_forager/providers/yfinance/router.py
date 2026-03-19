@@ -298,8 +298,23 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
                     except (json.JSONDecodeError, UnicodeDecodeError) as je:
                         json_err = je
                         if self._allow_pickle_compat:
-                            _p = importlib.import_module("pickle")
-                            data_obj = _p.loads(payload)
+                            gate = os.getenv("VF_ALLOW_PICKLE_COMPAT", "0")
+                            test_gate = os.getenv("PYTEST_CURRENT_TEST")
+                            allowed = _parse_bool(gate) or bool(test_gate)
+                            if allowed:
+                                logger.warning(
+                                    "YFinance pickle fallback used: dataset=%s symbol=%s",
+                                    job.dataset,
+                                    sanitize_field(job.context.get("symbol")),
+                                )
+                                _p = importlib.import_module("pickle")
+                                data_obj = _p.loads(payload)
+                            else:
+                                msg = (
+                                    f"IPC decode failed: {read_ipc_err}; JSON decode failed: {json_err}; "
+                                    "pickle fallback disallowed or untrusted context"
+                                )
+                                raise ValueError(msg) from None
                         else:
                             msg = f"IPC decode failed: {read_ipc_err}; JSON decode failed: {json_err}"
                             raise ValueError(msg) from None

@@ -235,7 +235,7 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         # - sp500: paginated only when symbols not provided
         trace_id = uuid.uuid4().hex
         req_id = 0
-        if (dataset == "tickers" and not symbols) or (dataset == "sp500" and not symbols):
+        if (dataset == "tickers" and symbols is None) or (dataset == "sp500" and symbols is None):
             # Sharadar API limit: maximum 10,000 rows per response
             per_page_obj = kwargs.get("per_page", MAX_ROWS_PER_REQUEST)
             try:

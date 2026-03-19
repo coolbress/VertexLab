@@ -21,6 +21,7 @@ from concurrent.futures import ThreadPoolExecutor
 import contextlib
 import functools
 import logging
+from string import Template
 import time
 from typing import TYPE_CHECKING
 
@@ -445,7 +446,6 @@ class DuckDBWriter(BaseWriter):
             try:
                 # Create the table structure
                 q_table = self._quote_identifier(table_name)
-                from string import Template
 
                 _tmpl = Template("CREATE TABLE ${t} AS SELECT * FROM temp_df_view WHERE 1=0")
                 _q = _tmpl.substitute(t=q_table)
@@ -547,8 +547,6 @@ class DuckDBWriter(BaseWriter):
                         table=table_name,
                     )
                 )
-                from string import Template
-
                 _tmpl = Template("ALTER TABLE ${t} ADD COLUMN ${c} ${ty}")
                 _q = _tmpl.substitute(t=q_table, c=q_col, ty=sql_type)
                 conn.execute(_q)
@@ -640,14 +638,12 @@ class DuckDBWriter(BaseWriter):
         try:
             # If no PK, simple append
             if not pk_cols:
-                # Use explicit column names to handle schema evolution (new columns in table but not in this batch)
                 cols_str = ", ".join(self._quote_identifier(c) for c in df.columns)
-                from string import Template
-
                 _tmpl = Template("INSERT INTO ${t} (${cols}) SELECT ${cols} FROM temp_batch_view")
                 _q = _tmpl.substitute(t=q_table, cols=cols_str)
                 conn.execute(_q)
                 return len(df)
+
 
             # If PK exists, perform Upsert
             # DuckDB's INSERT OR REPLACE / ON CONFLICT logic
@@ -668,8 +664,6 @@ class DuckDBWriter(BaseWriter):
 
             # If there are no columns to update (only PK columns), we do NOTHING
             if all(col in pk_cols for col in cols):
-                from string import Template
-
                 _tmpl = Template(
                     "INSERT INTO ${t} (${cols}) SELECT ${cols} FROM temp_batch_view ON CONFLICT (${pk}) DO NOTHING"
                 )
@@ -682,8 +676,6 @@ class DuckDBWriter(BaseWriter):
                         if col not in pk_cols
                     ]
                 )
-                from string import Template
-
                 _tmpl = Template(
                     "INSERT INTO ${t} (${cols}) "
                     "SELECT ${cols} FROM temp_batch_view "

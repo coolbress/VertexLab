@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import re
 import shlex
+import tempfile
 import time
 from typing import TYPE_CHECKING, Any, cast
 
@@ -30,15 +31,34 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+def _atomic_write_bytes(path: Path, data: bytes) -> None:
+    dir_path = path.parent
+    dir_path.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(prefix=f"{path.name}.", suffix=".tmp", dir=str(dir_path))
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        tmp_path.replace(path)
+        with contextlib.suppress(Exception):
+            dir_fd = os.open(str(dir_path), os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+    except Exception:
+        with contextlib.suppress(Exception):
+            if tmp_path.exists():
+                tmp_path.unlink(missing_ok=True)
+        raise
+
 def _atomic_write_json(path: Path, payload: object) -> None:
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    tmp.replace(path)
+    _atomic_write_bytes(path, json.dumps(payload, indent=2, ensure_ascii=False).encode("utf-8"))
 
 def _atomic_write_text(path: Path, content: str) -> None:
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(content, encoding="utf-8")
-    tmp.replace(path)
+    _atomic_write_bytes(path, content.encode("utf-8"))
 
 
 @click.group()
