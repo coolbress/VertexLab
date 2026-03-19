@@ -14,7 +14,7 @@ Thank you for contributing to Vertex Forager!
   - `uv run mypy packages/vertex-forager/src --strict`
   - `uv run pytest packages/ -q`
   - Note: pre-commit runs mypy against the same target (`packages/vertex-forager/src`) with `--strict` to ensure local and CI type errors match. Install hooks via `pre-commit install`.
-  - Note (tests): keep tests/** exceptions S101 and TC002/TC003/TC006 for pytest assert ergonomics and type-checking imports.
+  - Note (tests): keep packages/vertex-forager/tests/** exceptions S101 and TC002/TC003/TC006 for pytest assert ergonomics and type-checking imports.
 
 ## Documentation
 - Docs live under `packages/vertex-forager/docs` (MkDocs + Material, Diátaxis).
