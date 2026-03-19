@@ -507,13 +507,16 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
     def _normalize_multiindex(self, data: pd.DataFrame, is_batch: bool) -> pd.DataFrame:
         if isinstance(data.columns, pd.MultiIndex):
             if is_batch:
-                stacked = data
+                stacked: pd.DataFrame | pd.Series[Any] = data
                 if data.columns.nlevels >= 2:
                     try:
                         stacked = data.stack(level=0, future_stack=True)
                     except TypeError:
                         stacked = data.stack(level=0)
-                data = stacked.to_frame() if isinstance(stacked, pd.Series) else stacked
+                if isinstance(stacked, pd.Series):
+                    data = stacked.to_frame()
+                else:
+                    data = stacked
             else:
                 if data.columns.nlevels >= 2:
                     data.columns = data.columns.droplevel(0)

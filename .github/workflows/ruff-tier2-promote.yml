@@ -51,7 +51,7 @@ jobs:
           with open(path, "r", encoding="utf-8") as f:
             txt = f.read()
           # Find the [tool.ruff.lint] select block
-          m = re.search(r"(?ms)^\\[tool\\.ruff\\.lint\\]\\s*select\\s*=\\s*\\[(.*?)\\]", txt)
+          m = re.search(r"(?ms)^\[tool\.ruff\.lint\]\s*select\s*=\s*\[(.*?)\]", txt)
           if not m:
             print("::error ::[tool.ruff.lint] select not found", file=sys.stderr)
             sys.exit(1)
@@ -68,7 +68,7 @@ jobs:
           # Rebuild block, one-per-line, trailing comma style
           new_block = "[tool.ruff.lint]\nselect = [\n" + "".join(f'    "{c}",\n' for c in existing) + "]"
           # Replace only the select array within [tool.ruff.lint]
-          txt2 = re.sub(r"(?ms)^\\[tool\\.ruff\\.lint\\]\\s*select\\s*=\\s*\\[(.*?)\\]", new_block, txt)
+          txt2 = re.sub(r"(?ms)^\[tool\.ruff\.lint\]\s*select\s*=\s*\[(.*?)\]", new_block, txt)
           if txt2 == txt:
             print("No change to pyproject.toml needed.")
             sys.exit(0)

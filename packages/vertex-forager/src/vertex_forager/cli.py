@@ -14,14 +14,13 @@ import click
 import httpx
 import polars as pl
 
-from vertex_forager.core.config import FramePacket
+from vertex_forager.core.config import FramePacket, RunResult
 from vertex_forager.writers.duckdb import DuckDBWriter
 
 from .utils import cleanup_dlq_tmp, clear_app_cache, get_app_root, get_cache_dir
 
 if TYPE_CHECKING:
     from vertex_forager.providers.sharadar.client import SharadarClient
-    from vertex_forager.core.config import RunResult
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +87,7 @@ def collect(symbol: tuple[str, ...], source: str) -> None:
                     # For Sharadar, we use the specialized client method
                     # In the future, this can be generalized via a CollectorCore interface
                     sc = cast("SharadarClient", client)
-                    result = await sc.get_price_data(tickers=list(symbol))
+                    result = cast(pl.DataFrame | RunResult | None, await sc.get_price_data(tickers=list(symbol)))
                     return result
                 else:
                     raise click.ClickException(f"`{source}` is not supported by `collect` yet.")

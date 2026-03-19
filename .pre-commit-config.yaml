@@ -1,80 +1,80 @@
+---
 repos:
-- repo: local
-  hooks:
-  - id: ruff-format
-    name: ruff-format
-    entry: uv run ruff format
-    language: system
-    types: [python]
-    require_serial: true
-  - id: ruff-lint
-    name: ruff-lint
-    entry: uv run ruff check --fix
-    language: system
-    types: [python]
-    require_serial: true
-  - id: mypy
-    name: mypy
-    entry: uv run mypy packages/vertex-forager/src --strict
-    language: system
-    types: [python]
-    pass_filenames: false
-    require_serial: true
-  - id: yamllint
-    name: yamllint
-    entry: uv run yamllint -c .yamllint
-    language: system
-    types: [yaml]
-    files: ^(packages/|\.github/|docs/).+\.ya?ml$
-    stages: [manual]
-  - id: detect-secrets
-    name: detect-secrets
-    entry: uv run detect-secrets-hook --baseline .secrets.baseline
-    language: system
-    pass_filenames: true
-    require_serial: true
-  - id: hotspot-diff-check
-    name: hotspot-diff-check
-    entry: uv run python scripts/precommit_hotspot_check.py
-    language: system
-    types: [python]
-    pass_filenames: false
-    require_serial: true
-    always_run: true
-- repo: https://github.com/lycheeverse/lychee
-  rev: v0.15.1
-  hooks:
-  - id: lychee
-    args: ["--verbose", "--max-concurrency", "10", "--retry-wait-time", "2"]
-    files: |-
-      ^(README\.md|packages/.+\.md|docs/.+\.md|packages/vertex-forager/mkdocs\.yml)
-    stages: [manual]
-- repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v4.6.0
-  hooks:
-  - id: end-of-file-fixer
-    files: |-
-      ^(packages/|scripts/|docs/|\.github/|README\.md|CONTRIBUTING\.md|pyproject\.toml|\.pre-commit-config\.yaml)
-  - id: trailing-whitespace
-    files: |-
-      ^(packages/|scripts/|docs/|\.github/|README\.md|CONTRIBUTING\.md|pyproject\.toml|\.pre-commit-config\.yaml)
-  - id: mixed-line-ending
-    args: ["--fix=lf"]
-    files: |-
-      ^(packages/|scripts/|docs/|\.github/|README\.md|CONTRIBUTING\.md|pyproject\.toml|\.pre-commit-config\.yaml)
--
-  repo: https://github.com/executablebooks/mdformat
-  rev: 0.7.17
-  hooks:
-  - id: mdformat
-    additional_dependencies: ["mdformat-gfm"]
-    files: |-
-      ^(README\.md|docs/.+\.md|packages/vertex-forager/docs/.+\.md)$
-    stages: [manual]
-- repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
-  rev: v2.12.0
-  hooks:
-  - id: pretty-format-yaml
-    args: ["--autofix", "--indent=2"]
-    files: "\\.(ya?ml)$"
-    stages: [manual]
+  - repo: local
+    hooks:
+      - id: ruff-format
+        name: ruff-format
+        entry: uv run ruff format
+        language: system
+        types: [python]
+        require_serial: true
+      - id: ruff-lint
+        name: ruff-lint
+        entry: uv run ruff check --fix
+        language: system
+        types: [python]
+        require_serial: true
+      - id: mypy
+        name: mypy
+        entry: uv run mypy packages/vertex-forager/src --strict
+        language: system
+        types: [python]
+        pass_filenames: false
+        require_serial: true
+      - id: yamllint
+        name: yamllint
+        entry: uv run yamllint -c .yamllint
+        language: system
+        types: [yaml]
+        files: ^(packages/|\.github/|docs/).+\.ya?ml$
+        stages: [manual]
+      - id: detect-secrets
+        name: detect-secrets
+        entry: uv run detect-secrets-hook --baseline .secrets.baseline
+        language: system
+        pass_filenames: true
+        require_serial: true
+      - id: hotspot-diff-check
+        name: hotspot-diff-check
+        entry: uv run python scripts/precommit_hotspot_check.py
+        language: system
+        types: [python]
+        pass_filenames: false
+        require_serial: true
+        always_run: true
+  - repo: https://github.com/lycheeverse/lychee
+    rev: v0.15.1
+    hooks:
+      - id: lychee
+        args: ["--verbose", "--max-concurrency", "10", "--retry-wait-time", "2"]
+        files: |-
+          ^(README\.md|packages/.+\.md|docs/.+\.md|packages/vertex-forager/mkdocs\.yml)
+        stages: [manual]
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: end-of-file-fixer
+        files: |-
+          ^(packages/|scripts/|docs/|\.github/|README\.md|CONTRIBUTING\.md|pyproject\.toml|\.pre-commit-config\.yaml)
+      - id: trailing-whitespace
+        files: |-
+          ^(packages/|scripts/|docs/|\.github/|README\.md|CONTRIBUTING\.md|pyproject\.toml|\.pre-commit-config\.yaml)
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+        files: |-
+          ^(packages/|scripts/|docs/|\.github/|README\.md|CONTRIBUTING\.md|pyproject\.toml|\.pre-commit-config\.yaml)
+  - repo: https://github.com/executablebooks/mdformat
+    rev: 0.7.17
+    hooks:
+      - id: mdformat
+        additional_dependencies: ["mdformat-gfm"]
+        files: |-
+          ^(README\.md|docs/.+\.md|packages/vertex-forager/docs/.+\.md)$
+        stages: [manual]
+  - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
+    rev: v2.12.0
+    hooks:
+      - id: pretty-format-yaml
+        args: ["--autofix", "--indent=2"]
+        files: "\\.(ya?ml)$"
+        stages: [manual]
