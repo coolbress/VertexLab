@@ -1,23 +1,23 @@
 import asyncio
+from collections.abc import Callable
 import contextlib
 import functools
 import itertools
 import logging
 import math
 import os
+from pathlib import Path
 import re
 import shutil
 import sys
 import threading
 import time
-import warnings
-from collections.abc import Callable
-from pathlib import Path
 from typing import Any, Literal
+import warnings
 
+from dotenv import load_dotenv
 import nest_asyncio
 import psutil
-from dotenv import load_dotenv
 from tqdm.auto import tqdm
 
 from vertex_forager.exceptions import InputError

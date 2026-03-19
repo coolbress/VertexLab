@@ -4,6 +4,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Literal
 
 import polars as pl
+
 from vertex_forager.clients.base import BaseClient
 from vertex_forager.constants import (
     DEFAULT_RATE_LIMIT,

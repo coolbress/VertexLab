@@ -8,6 +8,7 @@ from typing import Any, cast
 
 import polars as pl
 import pytest
+
 from vertex_forager.core.config import (
     EngineConfig,
     FetchJob,

@@ -2,6 +2,7 @@ from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
 from vertex_forager.clients import base as base_module
 from vertex_forager.core.config import RunResult
 from vertex_forager.core.types import SharadarDataset

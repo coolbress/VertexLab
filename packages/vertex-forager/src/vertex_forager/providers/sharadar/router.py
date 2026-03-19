@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+from datetime import date, datetime, timezone
 import io
 import json
 import logging
-import uuid
-from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, Any, ClassVar, Final, cast
+import uuid
 
 import polars as pl
+
 from vertex_forager.constants import TRADING_DAYS_PER_YEAR
 from vertex_forager.core.types import JSONValue, SharadarDataset
 from vertex_forager.providers.sharadar.constants import (
@@ -28,6 +29,7 @@ if TYPE_CHECKING:
     from vertex_forager.core.types import PerSymbolJobContext
 
 from polars.exceptions import PolarsError
+
 from vertex_forager.core.config import FramePacket, ParseResult, RequestAuth
 from vertex_forager.logging.constants import (
     LOG_BATCH_ADD,

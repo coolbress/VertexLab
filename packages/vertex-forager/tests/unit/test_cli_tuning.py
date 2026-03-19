@@ -1,5 +1,6 @@
 import click
 import pytest
+
 from vertex_forager.cli import _build_sweep_combinations, _score_and_rank_results
 
 

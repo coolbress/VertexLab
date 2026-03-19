@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import asyncio
-import logging
-import time
 from abc import ABC
+import asyncio
 from contextlib import AsyncExitStack, asynccontextmanager, nullcontext
 from functools import partial
+import logging
+import time
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from tqdm.auto import tqdm

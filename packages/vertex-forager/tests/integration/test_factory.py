@@ -8,6 +8,7 @@ import os
 from unittest.mock import patch
 
 import pytest
+
 from vertex_forager.api import create_client
 
 

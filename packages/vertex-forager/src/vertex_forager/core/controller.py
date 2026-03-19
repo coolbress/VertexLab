@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+from collections import deque
+from contextlib import asynccontextmanager
 import logging
 import math
 import time
-from collections import deque
-from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
 from vertex_forager.constants import GRADIENT_WINDOW_S

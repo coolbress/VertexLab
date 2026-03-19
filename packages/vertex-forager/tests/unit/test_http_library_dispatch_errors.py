@@ -1,4 +1,5 @@
 import pytest
+
 from vertex_forager.core.config import RequestSpec
 from vertex_forager.core.http import HttpExecutor
 

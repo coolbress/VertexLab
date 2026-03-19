@@ -1,18 +1,19 @@
 from __future__ import annotations
 
+from datetime import date, datetime, timezone
 import importlib
 import io
 import json
 import logging
 import os
 import time
-import uuid
-from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, Any, Final
+import uuid
 
 import pandas as pd
 import polars as pl
 from polars.exceptions import ComputeError, PolarsError
+
 from vertex_forager.constants import DEFAULT_TIME_ZONE, ISO8601_Z_SUFFIX
 from vertex_forager.core.config import FramePacket
 from vertex_forager.core.types import JSONValue, YFinanceDataset
@@ -53,6 +54,7 @@ logger = logging.getLogger("vertex_forager.providers.yfinance.router")
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Sequence
+
     from vertex_forager.core.config import FetchJob, ParseResult
 else:
     from vertex_forager.core.config import FetchJob, ParseResult
@@ -512,10 +514,7 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
                         stacked = data.stack(level=0, future_stack=True)
                     except TypeError:
                         stacked = data.stack(level=0)
-                if isinstance(stacked, pd.Series):
-                    data = stacked.to_frame()
-                else:
-                    data = stacked
+                data = stacked.to_frame() if isinstance(stacked, pd.Series) else stacked
             else:
                 if data.columns.nlevels >= 2:
                     data.columns = data.columns.droplevel(0)

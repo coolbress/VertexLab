@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Final
 
 import polars as pl
+
 from vertex_forager.constants import DEFAULT_TIME_ZONE
 from vertex_forager.providers.sharadar.constants import (
     DATASET_ENDPOINT,

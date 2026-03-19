@@ -17,11 +17,11 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import contextlib
 import functools
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING
 
 import duckdb

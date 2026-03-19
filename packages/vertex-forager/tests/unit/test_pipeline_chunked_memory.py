@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 import multiprocessing as mp
+from multiprocessing.connection import Connection
 import os
 import threading
 import time
-from datetime import datetime
-from multiprocessing.connection import Connection
 from unittest.mock import MagicMock
 
 import polars as pl
 import psutil
 import pytest
+
 from vertex_forager.core.config import EngineConfig, FramePacket, RunResult
 from vertex_forager.core.pipeline import VertexForager
 from vertex_forager.writers.base import WriteResult

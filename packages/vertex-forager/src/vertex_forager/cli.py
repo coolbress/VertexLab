@@ -1,22 +1,25 @@
 from __future__ import annotations
+
 import asyncio
-import hashlib
+from collections.abc import Mapping
 import contextlib
-import re
-import shlex
+from datetime import datetime
+import hashlib
 import itertools
 import json
 import logging
 import os
-import time
-from datetime import datetime
 from pathlib import Path
+import re
+import shlex
+import time
 from typing import TYPE_CHECKING, Any, cast
 
 import click
 import httpx
 import polars as pl
 
+from vertex_forager.clients import create_client
 from vertex_forager.core.config import FramePacket, RunResult
 from vertex_forager.writers.duckdb import DuckDBWriter
 
@@ -78,13 +81,7 @@ def collect(symbol: tuple[str, ...], source: str) -> None:
     click.echo(f"🚀 Starting collection for {symbol} using {source}...")
 
     try:
-        import asyncio
-        import os
-        from collections.abc import Mapping
-
-        import polars as pl
-
-        from vertex_forager.clients import create_client
+        # imports moved to module level to satisfy import ordering rules
 
         # API Key lookup
         api_key = None
@@ -100,7 +97,7 @@ def collect(symbol: tuple[str, ...], source: str) -> None:
                     # For Sharadar, we use the specialized client method
                     # In the future, this can be generalized via a CollectorCore interface
                     sc = cast("SharadarClient", client)
-                    result = cast(pl.DataFrame | RunResult | None, await sc.get_price_data(tickers=list(symbol)))
+                    result = cast("pl.DataFrame | RunResult | None", await sc.get_price_data(tickers=list(symbol)))
                     return result
                 else:
                     raise click.ClickException(f"`{source}` is not supported by `collect` yet.")

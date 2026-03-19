@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import re
 from datetime import date, datetime, timedelta, timezone
+import re
 
-import polars as pl
-import pytest
 from hypothesis import given
 from hypothesis import strategies as st
+import polars as pl
+import pytest
+
 from vertex_forager.routers.transforms import normalize_columns, parse_date_range
 
 

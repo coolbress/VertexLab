@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import polars as pl
 import pytest
+
 from vertex_forager.core.config import EngineConfig, FramePacket, RunResult
 from vertex_forager.core.pipeline import VertexForager
 from vertex_forager.exceptions import VertexForagerError

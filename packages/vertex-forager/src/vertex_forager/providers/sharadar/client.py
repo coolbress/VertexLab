@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 import asyncio
-import logging
-import re
 from contextlib import nullcontext
 from dataclasses import dataclass, field
+import logging
+import re
 from typing import TYPE_CHECKING, Any, cast
 
 import duckdb
 import httpx
 import polars as pl
+
 from vertex_forager.clients.base import BaseClient
 from vertex_forager.constants import PAGES_UNIT, RESERVED_PIPELINE_KEYS, TICKERS_UNIT
 from vertex_forager.core.types import JSONValue, SharadarDataset

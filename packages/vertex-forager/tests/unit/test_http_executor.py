@@ -14,8 +14,9 @@ import json
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
-import pytest
 from httpx import Response
+import pytest
+
 from vertex_forager.core.config import HttpMethod, RequestAuth, RequestSpec
 from vertex_forager.core.http import HttpExecutor
 

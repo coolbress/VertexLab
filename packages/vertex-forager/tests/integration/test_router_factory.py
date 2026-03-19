@@ -5,6 +5,7 @@ Integration tests for router factory functionality.
 from __future__ import annotations
 
 import pytest
+
 from vertex_forager.core.config import EngineConfig
 from vertex_forager.providers.sharadar.router import SharadarRouter
 from vertex_forager.providers.yfinance.router import YFinanceRouter

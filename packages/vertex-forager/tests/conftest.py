@@ -10,17 +10,18 @@ Test fixtures and utilities for vertex-forager tests.
 
 from __future__ import annotations
 
-import importlib
-import json
 from collections.abc import Generator
 from datetime import datetime, timezone
+import importlib
+import json
 from typing import Any
 from unittest.mock import AsyncMock
 
+from httpx import AsyncClient
 import pandas as pd
 import polars as pl
 import pytest
-from httpx import AsyncClient
+
 from vertex_forager.core.config import FetchJob, FramePacket, RequestSpec
 from vertex_forager.core.http import HttpExecutor
 from vertex_forager.providers.sharadar.client import SharadarClient

@@ -2,6 +2,7 @@ import asyncio
 import time
 
 import pytest
+
 from vertex_forager.core.controller import (
     FlowController,
     GCRARateLimiter,

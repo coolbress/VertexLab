@@ -1,9 +1,10 @@
 import json
 from pathlib import Path
 
+from click.testing import CliRunner
 import polars as pl
 import pytest
-from click.testing import CliRunner
+
 from vertex_forager.cli import main
 from vertex_forager.utils import get_cache_dir
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import warnings
 from typing import TYPE_CHECKING, Any, TypeVar, cast
+import warnings
 
 from vertex_forager.core.http import HttpExecutor as DefaultHttpExecutor
 from vertex_forager.core.pipeline import VertexForager as DefaultVertexForager

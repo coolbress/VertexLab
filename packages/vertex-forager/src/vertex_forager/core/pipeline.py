@@ -22,15 +22,15 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+from collections import defaultdict, deque
+from collections.abc import Callable, Iterator, Sequence
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager, suppress
 import inspect
 import itertools
 import logging
 import os
 import time
-from collections import defaultdict, deque
-from collections.abc import Callable, Iterator, Sequence
-from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager, suppress
 from typing import TYPE_CHECKING, Any, cast
 
 import httpx
@@ -1066,7 +1066,7 @@ class VertexForager:
                 buffer_rows[table] = 0
                 logger.exception(f"WRITER: Spool failed after {prefix} for {table}: {spool_exc}")
                 with suppress(Exception):
-                    setattr(spool_exc, "_already_reported", True)
+                    spool_exc._already_reported = True
                 raise
             summary = _build_writer_error_summary(status=status, table=table, prefix=prefix, exc=exc)
             async with result_lock:
