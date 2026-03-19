@@ -1,23 +1,26 @@
 from __future__ import annotations
 
 import threading
+from typing import TYPE_CHECKING
 
 import polars as pl
 
-from vertex_forager.core.config import FramePacket
 from vertex_forager.writers.base import BaseWriter, WriteResult
+
+if TYPE_CHECKING:
+    from vertex_forager.core.config import FramePacket
 
 
 class InMemoryBufferWriter(BaseWriter):
     """In-memory writer for buffering results.
-    
+
     Used when the user wants to get a DataFrame back directly without writing to disk.
     Accumulates all incoming packets in a dictionary of lists.
-    
+
     Notes:
         - Not suitable for massive datasets that exceed memory.
         - Best used for small workloads or unit testing scenarios.
-    
+
     Example:
         Collect and sort buffered frames for a table:
             writer = InMemoryBufferWriter()
@@ -42,9 +45,7 @@ class InMemoryBufferWriter(BaseWriter):
 
         return WriteResult(table=packet.table, rows=packet.frame.height, partitions={})
 
-    def collect_table(
-        self, table: str, sort_cols: list[str] | None = None
-    ) -> pl.DataFrame:
+    def collect_table(self, table: str, sort_cols: list[str] | None = None) -> pl.DataFrame:
         """Concatenate all buffered parts for a table into a single DataFrame.
 
         Args:
@@ -53,7 +54,7 @@ class InMemoryBufferWriter(BaseWriter):
 
         Returns:
             pl.DataFrame: Combined data.
-        
+
         Example:
             df = writer.collect_table("price", sort_cols=["ticker", "date"])
             # df contains all buffered parts for 'price', optionally sorted
@@ -63,10 +64,7 @@ class InMemoryBufferWriter(BaseWriter):
             if not parts:
                 return pl.DataFrame()
 
-            if len(parts) == 1:
-                df = parts[0]
-            else:
-                df = pl.concat(parts, how="vertical", rechunk=False)
+            df = parts[0] if len(parts) == 1 else pl.concat(parts, how="vertical", rechunk=False)
 
             if sort_cols:
                 # Only sort by columns that actually exist in the DataFrame

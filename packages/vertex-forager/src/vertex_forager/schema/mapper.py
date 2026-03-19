@@ -72,9 +72,7 @@ class SchemaMapper:
 
         return packet.model_copy(update={"frame": frame})
 
-    def _cast_to_schema(
-        self, frame: pl.DataFrame, schema: dict[str, pl.DataType | type[pl.DataType]]
-    ) -> pl.DataFrame:
+    def _cast_to_schema(self, frame: pl.DataFrame, schema: dict[str, pl.DataType | type[pl.DataType]]) -> pl.DataFrame:
         """
         Internal helper to align a DataFrame with the target schema.
 
@@ -105,9 +103,7 @@ class SchemaMapper:
         ordered_cols = list(schema.keys()) + [c for c in out.columns if c not in schema]
         return out.select(ordered_cols)
 
-    def _reorder_columns(
-        self, frame: pl.DataFrame, unique_key: tuple[str, ...]
-    ) -> pl.DataFrame:
+    def _reorder_columns(self, frame: pl.DataFrame, unique_key: tuple[str, ...]) -> pl.DataFrame:
         """
         Reorder columns to prioritize unique keys (PK) at the beginning.
 

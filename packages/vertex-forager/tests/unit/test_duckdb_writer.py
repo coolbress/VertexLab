@@ -67,9 +67,7 @@ class TestDuckDBWriter:
                 FramePacket(
                     provider="test",
                     table="concurrent_test",
-                    frame=pl.DataFrame(
-                        {"id": range(i * 10, (i + 1) * 10), "val": [i] * 10}
-                    ),
+                    frame=pl.DataFrame({"id": range(i * 10, (i + 1) * 10), "val": [i] * 10}),
                     observed_at=datetime.now(),
                 )
                 for i in range(100)
@@ -182,6 +180,7 @@ def test_compact_sync_checkpoint_warning_on_error(
     class _FakeConn:
         def __init__(self) -> None:
             self.calls = 0
+
         def execute(self, sql: str) -> Any:
             self.calls += 1
             if self.calls == 2:
@@ -207,6 +206,7 @@ def test_compact_sync_checkpoint_ok(
     class _FakeConnOK:
         def __init__(self) -> None:
             self.calls = 0
+
         def execute(self, sql: str) -> Any:
             self.calls += 1
             return None

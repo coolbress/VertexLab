@@ -55,6 +55,7 @@ def test_build_graph_resolves_relative_imports(
 
     # Import module and patch ROOT/SYS_PATH
     from scripts import check_cycles as cc
+
     monkeypatch.setattr(cc, "ROOT", src)
     monkeypatch.setattr(cc, "SYS_PATH", [str(src), *sys.path])
 
@@ -80,7 +81,6 @@ def test_build_graph_resolves_relative_imports(
     # Verify the else-branch import was recorded
     typing_mod = "vertex_forager.pkg_a.typing_branch"
     assert typing_mod in graph, "typing_branch module should be in graph"
-    assert any(
-        dep == "vertex_forager.pkg_a.mod2" or dep.endswith(".mod2")
-        for dep in graph.get(typing_mod, set())
-    ), "typing_branch should have mod2 dependency from else branch"
+    assert any(dep == "vertex_forager.pkg_a.mod2" or dep.endswith(".mod2") for dep in graph.get(typing_mod, set())), (
+        "typing_branch should have mod2 dependency from else branch"
+    )

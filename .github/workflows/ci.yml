@@ -1,3 +1,4 @@
+---
 name: Vertex CI
 #
 # Policy: Actions are SHA-pinned; the inline comment reflects the upstream major version.
@@ -6,9 +7,9 @@ name: Vertex CI
 # 언제 로봇이 깨어날까요?
 on:
   push:
-    branches: [ main ]  # main 브랜치에 코드가 올라올 때
+    branches: [main]  # main 브랜치에 코드가 올라올 때
   pull_request:
-    branches: [ main ]  # 누군가(혹은 내가) merge 요청을 보낼 때
+    branches: [main]  # 누군가(혹은 내가) merge 요청을 보낼 때
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -110,13 +111,25 @@ jobs:
           echo " - Secrets/config: move to env/CI secrets, rotate, remove from history"
           echo " - Dependencies: upgrade vulnerable packages"
           echo "::endgroup::"
-      
+
       - name: Check Import Cycles
         run: python3 scripts/check_cycles.py
 
       - name: Lint Code (Ruff)
         # packages 폴더 안에 있는 모든 코드를 검사 (legacy_code 제외)
         run: uv run ruff check packages/ --exclude "legacy_code"
+
+      - name: Lint (Ruff Tier-2 Warnings)
+        continue-on-error: true
+        run: |
+          uv run ruff check packages/ \
+            --exclude "legacy_code" \
+            --select C4,PT,TCH,SIM,TC
+
+      - name: YAML Lint
+        run: |
+          uv run yamllint -c .yamllint .github/workflows/ \
+            && uv run yamllint -c .yamllint packages/vertex-forager/mkdocs.yml
 
       - name: Run Tests (Pytest with Coverage Gate)
         run: uv run pytest packages/ --tb=short --cov=packages/vertex-forager/src/vertex_forager/core --cov=packages/vertex-forager/src/vertex_forager/clients --cov=packages/vertex-forager/src/vertex_forager/writers --cov=packages/vertex-forager/src/vertex_forager/routers --cov-report=term --cov-fail-under=80

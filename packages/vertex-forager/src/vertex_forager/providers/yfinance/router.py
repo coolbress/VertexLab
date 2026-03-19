@@ -1,58 +1,63 @@
 from __future__ import annotations
 
+import importlib
+import io
+import json
 import logging
 import os
 import time
-import io
-import json
-import pickle
-from collections.abc import AsyncIterator, Sequence
 import uuid
 from datetime import date, datetime, timezone
-from typing import Any, Final
-from vertex_forager.utils import sanitize_field
-from vertex_forager.providers.yfinance.constants import PRICE_BATCH_SIZE, THREADS_THRESHOLD, PRICE_BATCH_MAX, DATASET_ENDPOINT
-from vertex_forager.providers.yfinance.constants import (
-    INTERVAL_KEY,
-    START_KEY,
-    END_KEY,
-    PERIOD_KEY,
-    AUTO_ADJUST_KEY,
-    PREPOST_KEY,
-    DEFAULT_INTERVAL,
-    DEFAULT_PRICE_PERIOD,
-    DEFAULT_AUTO_ADJUST,
-    DEFAULT_PREPOST,
-)
-from vertex_forager.constants import ISO8601_Z_SUFFIX, DEFAULT_TIME_ZONE
+from typing import TYPE_CHECKING, Any, Final
+
+import pandas as pd
+import polars as pl
+from polars.exceptions import ComputeError, PolarsError
+from vertex_forager.constants import DEFAULT_TIME_ZONE, ISO8601_Z_SUFFIX
+from vertex_forager.core.config import FramePacket
+from vertex_forager.core.types import JSONValue, YFinanceDataset
 from vertex_forager.logging.constants import (
-    ROUTER_LOG_PREFIX,
-    LOG_PRICE_BATCH_PARSE_FAIL,
+    LOG_BUILD_JOB,
     LOG_INVALID_RATE_LIMIT,
     LOG_PARSE_FAILED_JOB,
     LOG_PARSE_UNEXPECTED_ERROR,
     LOG_POLARS_CONVERT_FAIL,
     LOG_POLARS_CONVERT_UNEXPECTED,
-    LOG_BUILD_JOB,
+    LOG_PRICE_BATCH_PARSE_FAIL,
     LOG_PRICE_PARAMS,
+    ROUTER_LOG_PREFIX,
 )
-
-import pandas as pd
-import polars as pl
-from polars.exceptions import ComputeError, PolarsError
-from vertex_forager.core.config import (
-    FetchJob,
-    FramePacket,
-    ParseResult,
+from vertex_forager.providers.yfinance.constants import (
+    AUTO_ADJUST_KEY,
+    DATASET_ENDPOINT,
+    DEFAULT_AUTO_ADJUST,
+    DEFAULT_INTERVAL,
+    DEFAULT_PREPOST,
+    DEFAULT_PRICE_PERIOD,
+    END_KEY,
+    INTERVAL_KEY,
+    PERIOD_KEY,
+    PREPOST_KEY,
+    PRICE_BATCH_MAX,
+    PRICE_BATCH_SIZE,
+    START_KEY,
+    THREADS_THRESHOLD,
 )
-from vertex_forager.routers.base import BaseRouter
 from vertex_forager.providers.yfinance.schema import DATASET_TABLE
-from vertex_forager.core.types import JSONValue
-from vertex_forager.core.types import YFinanceDataset
-from vertex_forager.routers.jobs import single_symbol_job, build_symbol_context
+from vertex_forager.routers.base import BaseRouter
 from vertex_forager.routers.errors import raise_yfinance_parse_error
+from vertex_forager.routers.jobs import build_symbol_context, single_symbol_job
+from vertex_forager.utils import sanitize_field
 
 logger = logging.getLogger("vertex_forager.providers.yfinance.router")
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator, Sequence
+
+    from vertex_forager.core.config import FetchJob, ParseResult
+else:
+    from vertex_forager.core.config import FetchJob, ParseResult
+
 
 def _parse_bool(value: Any) -> bool:
     if isinstance(value, bool):
@@ -72,37 +77,40 @@ def _parse_bool(value: Any) -> bool:
         except (ValueError, TypeError):
             return False
     return False
+
+
 class YFinanceRouter(BaseRouter[YFinanceDataset]):
     """Router for Yahoo Finance datasets (via yfinance).
-    
+
     Summary:
         - Processes all datasets per-symbol (no bulk price batching).
         - Applies conservative rate limiting to avoid IP bans.
         - Converts pickle/pandas outputs to Polars, flattens MultiIndex,
           and normalizes wide→long structures where needed.
         - Executes via YFinanceHttpExecutor for thread-safe calls.
-    
+
     Args:
         api_key: Optional, unused (free API).
         rate_limit: Requests per minute (default 60).
         start_date: Optional start date (YYYY-MM-DD) for price dataset.
         end_date: Optional end date (YYYY-MM-DD) for price dataset.
         **kwargs: Additional configuration (e.g., price_batch_size).
-    
+
     Attributes:
         PRICE_BATCH_SIZE: Default suggested batch size for internal heuristics.
         THREADS_THRESHOLD: Concurrency threshold for execution strategy.
-    
+
     Implementation Notes:
         - generate_jobs yields one job per symbol across datasets.
         - Request params for price include interval/group_by and optional date filters.
         - Non-price datasets use Ticker properties; date filters are not applied.
     """
+
     flexible_schema: bool = True
 
     PRICE_BATCH_SIZE: Final[int] = PRICE_BATCH_SIZE
     THREADS_THRESHOLD: Final[int] = THREADS_THRESHOLD
-    
+
     def __init__(
         self,
         *,
@@ -125,7 +133,13 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         if isinstance(rate_limit, int) and rate_limit > 0:
             self._rate_limit = rate_limit
         else:
-            logger.warning(LOG_INVALID_RATE_LIMIT.format(prefix=ROUTER_LOG_PREFIX, value=rate_limit, fallback=60))
+            logger.warning(
+                LOG_INVALID_RATE_LIMIT.format(
+                    prefix=ROUTER_LOG_PREFIX,
+                    value=rate_limit,
+                    fallback=60,
+                )
+            )
             self._rate_limit = 60
         self._start_date = start_date
         self._end_date = end_date
@@ -133,7 +147,13 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         try:
             bs_int = int(raw_bs)
         except (ValueError, TypeError):
-            logger.debug(LOG_PRICE_BATCH_PARSE_FAIL.format(prefix=ROUTER_LOG_PREFIX, value=raw_bs, default=self.PRICE_BATCH_SIZE))
+            logger.debug(
+                LOG_PRICE_BATCH_PARSE_FAIL.format(
+                    prefix=ROUTER_LOG_PREFIX,
+                    value=raw_bs,
+                    default=self.PRICE_BATCH_SIZE,
+                )
+            )
             bs_int = self.PRICE_BATCH_SIZE
         self._price_batch_size = max(1, min(PRICE_BATCH_MAX, bs_int))
         structured_logs_arg = kwargs.get("structured_logs")
@@ -159,45 +179,43 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
     @property
     def provider(self) -> str:
         """Return provider name.
-        
+
         Returns:
             str: Provider name ('yfinance').
         """
         return "yfinance"
-    
+
     @property
     def rate_limit(self) -> int:
         """Return rate limit.
-        
+
         Returns:
             int: Requests per minute.
         """
         return self._rate_limit
-    
+
     async def generate_jobs(
         self, *, dataset: YFinanceDataset, symbols: Sequence[str] | None, **kwargs: object
     ) -> AsyncIterator[FetchJob]:
         """Generate fetch jobs.
-        
+
         Args:
             dataset: Target dataset name (e.g., 'price', 'financials').
             symbols: Sequence of ticker symbols, or None for unsupported bulk operations.
             **kwargs: Additional parameters forwarded to request construction.
-        
+
         Returns:
             AsyncIterator[FetchJob]: Stream of jobs constructed per symbol.
-        
+
         Raises:
             NotImplementedError: If bulk ticker listing is requested.
             ValueError: If required 'symbols' are missing for a dataset.
         """
         # -------- Validate Symbols --------
-        
+
         # YFinance requires symbols for almost all datasets
         if not symbols:
-            raise ValueError(
-            f"YFinance provider requires 'symbols' list for dataset '{dataset}'."
-            )
+            raise ValueError(f"YFinance provider requires 'symbols' list for dataset '{dataset}'.")
 
         # -------- Validate Dataset --------
         if dataset not in DATASET_ENDPOINT:
@@ -205,7 +223,7 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         typed_dataset: YFinanceDataset = dataset
 
         # -------- Build Batch Jobs --------
-        
+
         # We intentionally avoid yfinance's multi-ticker bulk download because:
         # 1) It uses shared internal dictionaries with threaded updates that can raise
         #    RuntimeError/KeyError under concurrency (e.g., "dictionary changed size").
@@ -213,9 +231,9 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         #    jobs provide predictable backpressure and error isolation.
         # 3) Stability across notebook and CI environments is better with single-ticker
         #    calls; batching brings little benefit when RPM is enforced globally.
-        
+
         # -------- Build Per-Symbol Jobs --------
-        
+
         # Normalize symbols first, then validate
         cleaned: list[str] = []
         for symbol in symbols:
@@ -233,21 +251,24 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
                 seen.add(s)
                 unique_cleaned.append(s)
         trace_id = uuid.uuid4().hex
-        req_id = 0
-        for clean in unique_cleaned:
-            yield self._build_single_symbol_job(symbol=clean, dataset=typed_dataset, trace_id=trace_id, request_id=req_id)
-            req_id += 1
+        for req_id, clean in enumerate(unique_cleaned):
+            yield self._build_single_symbol_job(
+                symbol=clean,
+                dataset=typed_dataset,
+                trace_id=trace_id,
+                request_id=req_id,
+            )
 
     def parse(self, *, job: FetchJob, payload: bytes) -> ParseResult:
         """Parse raw pickled payload into structured packets.
-        
+
         Args:
             job: Fetch job that produced this payload.
             payload: Raw response bytes (pickle-serialized).
-        
+
         Returns:
             ParseResult: Normalized packets and any next jobs.
-        
+
         Raises:
             Exception: Unexpected errors are re-raised after logging.
         """
@@ -276,12 +297,13 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
                     except (json.JSONDecodeError, UnicodeDecodeError) as je:
                         json_err = je
                         if self._allow_pickle_compat:
-                            data_obj = pickle.loads(payload)
+                            _p = importlib.import_module("pickle")
+                            data_obj = _p.loads(payload)
                         else:
                             msg = f"IPC decode failed: {read_ipc_err}; JSON decode failed: {json_err}"
-                            raise ValueError(msg)
+                            raise ValueError(msg) from None
             # -------- Convert to Polars --------
-            
+
             is_batch = bool(job.context.get("is_batch", False))
             if df_pl is None:
                 df_pl = self._convert_to_polars(data_obj, is_batch=is_batch)
@@ -292,12 +314,12 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
                 return empty_result
 
             # -------- Normalize Columns --------
-            
+
             # Standardize column names using BaseRouter helper
             df_pl = self._normalize_columns(df_pl)
 
             # -------- Transform Dataset Structure --------
-            
+
             # Apply dataset-specific transformations
             dataset = job.dataset
             observed_at = datetime.now(timezone.utc)
@@ -309,7 +331,12 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
                 except (TypeError, ValueError):
                     logger.debug("bad attempt value: %s", job.context.get("attempt", 0))
                     att0 = 0
-                msg0 = f"OBS provider={sanitize_field(self.provider)} dataset={sanitize_field(dataset)} symbol={sanitize_field(sym0)} stage=router_parse_enter attempt={att0} duration=0.000s"
+                msg0 = (
+                    f"OBS provider={sanitize_field(self.provider)} "
+                    f"dataset={sanitize_field(dataset)} "
+                    f"symbol={sanitize_field(sym0)} "
+                    f"stage=router_parse_enter attempt={att0} duration=0.000s"
+                )
                 if self._log_verbose:
                     logger.info(msg0)
                 else:
@@ -317,7 +344,17 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             t0 = time.monotonic()
             if dataset == "price":
                 df_pl = self._transform_price(df_pl)
-            elif dataset in ("financials", "quarterly_financials", "balance_sheet", "quarterly_balance_sheet", "cashflow", "quarterly_cashflow", "income_stmt", "earnings", "quarterly_earnings"):
+            elif dataset in (
+                "financials",
+                "quarterly_financials",
+                "balance_sheet",
+                "quarterly_balance_sheet",
+                "cashflow",
+                "quarterly_cashflow",
+                "income_stmt",
+                "earnings",
+                "quarterly_earnings",
+            ):
                 df_pl = self._transform_financials(df_pl, dataset)
             elif dataset == "major_holders":
                 df_pl = self._transform_major_holders(df_pl)
@@ -338,12 +375,12 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
                     df_pl = df_pl.drop(["index"])
 
             # -------- Inject Metadata --------
-            
+
             # Inject essential columns (ticker)
             symbol = job.context.get("symbol")
             if symbol and "ticker" not in df_pl.columns:
                 df_pl = df_pl.with_columns(pl.lit(symbol).alias("ticker"))
-            
+
             # Add provider metadata
             df_pl = self._add_provider_metadata(frame=df_pl, observed_at=observed_at)
 
@@ -351,7 +388,7 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
                 return ParseResult(packets=[], next_jobs=[])
 
             # -------- Build Frame Packet --------
-            
+
             packet: FramePacket = FramePacket(
                 provider=self.provider,
                 table=DATASET_TABLE.get(job.dataset, f"yfinance_{job.dataset}"),
@@ -369,15 +406,21 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
                     logger.debug("bad attempt value: %s", job.context.get("attempt", 0))
                     att1 = 0
                 dur1 = time.monotonic() - t0
-                msg1 = f"OBS provider={sanitize_field(self.provider)} dataset={sanitize_field(job.dataset)} symbol={sanitize_field(sym1)} stage=router_parse_exit attempt={att1} duration={dur1:.3f}s packets=1 rows={len(df_pl)}"
+                msg1 = (
+                    f"OBS provider={sanitize_field(self.provider)} "
+                    f"dataset={sanitize_field(job.dataset)} "
+                    f"symbol={sanitize_field(sym1)} "
+                    f"stage=router_parse_exit attempt={att1} "
+                    f"duration={dur1:.3f}s packets=1 rows={len(df_pl)}"
+                )
                 if self._log_verbose:
                     logger.info(msg1)
                 else:
                     logger.debug(msg1)
 
             return ParseResult(packets=[packet], next_jobs=[])
-        
-        except (pickle.UnpicklingError, ValueError, TypeError) as e:
+
+        except (ValueError, TypeError) as e:
             job_id = f"{job.provider}:{job.dataset}:{job.symbol or ''}"
             logger.exception(LOG_PARSE_FAILED_JOB.format(prefix=ROUTER_LOG_PREFIX, job_id=job_id))
             raise_yfinance_parse_error(e, dataset=job.dataset)
@@ -385,15 +428,15 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             job_id = f"{job.provider}:{job.dataset}:{job.symbol or ''}"
             logger.exception(LOG_PARSE_UNEXPECTED_ERROR.format(prefix=ROUTER_LOG_PREFIX, job_id=job_id))
             raise_yfinance_parse_error(e, dataset=job.dataset)
-        
+
     # --------------------------------------
     # Generate Jobs Helpers
     # --------------------------------------
     # sanitize_field from utils is used for key=value logging normalization
-    
+
     def _build_request_params(self, *, dataset: YFinanceDataset) -> dict[str, JSONValue]:
         """Unified parameter builder for yfinance library calls.
-        
+
         Returns a dict that includes a 'lib' key describing the exact library
         call the HttpExecutor should perform. This keeps HttpExecutor generic.
         """
@@ -411,18 +454,33 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
                 kwargs[END_KEY] = self._end_date
             if not self._start_date:
                 kwargs[PERIOD_KEY] = DEFAULT_PRICE_PERIOD
-            logger.debug(LOG_PRICE_PARAMS.format(prefix=ROUTER_LOG_PREFIX, interval=kwargs.get(INTERVAL_KEY), start=kwargs.get(START_KEY), end=kwargs.get(END_KEY), period=kwargs.get(PERIOD_KEY)))
+            logger.debug(
+                LOG_PRICE_PARAMS.format(
+                    prefix=ROUTER_LOG_PREFIX,
+                    interval=kwargs.get(INTERVAL_KEY),
+                    start=kwargs.get(START_KEY),
+                    end=kwargs.get(END_KEY),
+                    period=kwargs.get(PERIOD_KEY),
+                )
+            )
             # Single-ticker history call is preferred over download for stability
             params["lib"] = {"type": "ticker_attr", "attr": mapped, "kwargs": kwargs}
             return params
         # Default: property access on Ticker (non-price).
         params["lib"] = {"type": "ticker_attr", "attr": mapped, "kwargs": {}}
         return params
-    
+
     # (Batch job removed: we no longer perform bulk downloads for price.)
-    
+
     # ------ Build per-symbol job: construct URL and spec for single ticker ------
-    def _build_single_symbol_job(self, *, symbol: str, dataset: YFinanceDataset, trace_id: str | None = None, request_id: int | None = None) -> FetchJob:
+    def _build_single_symbol_job(
+        self,
+        *,
+        symbol: str,
+        dataset: YFinanceDataset,
+        trace_id: str | None = None,
+        request_id: int | None = None,
+    ) -> FetchJob:
         """Build a per-symbol job, applying dataset-specific options."""
         url = f"yfinance://{symbol}"
         params = self._build_request_params(dataset=dataset)
@@ -443,9 +501,9 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         )
 
     # --------------------------------------
-    # Parse Helpers 
+    # Parse Helpers
     # --------------------------------------
-    
+
     def _normalize_multiindex(self, data: pd.DataFrame, is_batch: bool) -> pd.DataFrame:
         if isinstance(data.columns, pd.MultiIndex):
             if is_batch:
@@ -454,16 +512,13 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
                         stacked = data.stack(level=0, future_stack=True)
                     except TypeError:
                         stacked = data.stack(level=0)
-                    
-                    if isinstance(stacked, pd.Series):
-                        data = stacked.to_frame()
-                    else:
-                        data = stacked
+
+                data = stacked.to_frame() if isinstance(stacked, pd.Series) else stacked
             else:
                 if data.columns.nlevels >= 2:
                     data.columns = data.columns.droplevel(0)
                 else:
-                    data.columns = ['_'.join(map(str, col)).strip() for col in data.columns.values]
+                    data.columns = ["_".join(map(str, col)).strip() for col in data.columns.values]
         return data
 
     def _from_pandas(self, data: pd.DataFrame | pd.Series, is_batch: bool) -> pl.DataFrame:
@@ -508,7 +563,7 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         except Exception:
             logger.exception(LOG_POLARS_CONVERT_UNEXPECTED.format(prefix=ROUTER_LOG_PREFIX))
             raise
-    
+
     def _transform_price(self, frame: pl.DataFrame) -> pl.DataFrame:
         if "date" not in frame.columns:
             if "index" in frame.columns:
@@ -516,7 +571,7 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             elif "level_0" in frame.columns:
                 frame = frame.rename({"level_0": "date"})
         return frame
-    
+
     def _transform_financials(self, frame: pl.DataFrame, dataset: str) -> pl.DataFrame:
         if "index" in frame.columns:
             frame = frame.rename({"index": "metric"})
@@ -530,7 +585,10 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             frame = frame.unpivot(index=id_vars, on=value_vars, variable_name="date", value_name="value")
             if "date" in frame.columns:
                 frame = frame.with_columns(
-                    pl.col("date").cast(pl.Utf8, strict=False).str.replace(r"[T\s_].*$", "", literal=False).alias("date_tmp")
+                    pl.col("date")
+                    .cast(pl.Utf8, strict=False)
+                    .str.replace(r"[T\s_].*$", "", literal=False)
+                    .alias("date_tmp")
                 )
                 frame = frame.with_columns(
                     pl.when(pl.col("date_tmp").str.contains(r"^\d{4}$", literal=False))
@@ -545,7 +603,7 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         if "period" not in frame.columns:
             frame = frame.with_columns(pl.lit(period).alias("period"))
         return frame
-    
+
     def _transform_major_holders(self, frame: pl.DataFrame) -> pl.DataFrame:
         if "index" in frame.columns:
             frame = frame.rename({"index": "metric"})
@@ -571,19 +629,19 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
                     df = df.rename(present)
                 return df
         return frame
-    
+
     def _transform_holders_detailed(self, frame: pl.DataFrame) -> pl.DataFrame:
         if "percentage_of_shares_out" in frame.columns and "percentage_out" not in frame.columns:
             frame = frame.rename({"percentage_of_shares_out": "percentage_out"})
         if "index" in frame.columns:
             frame = frame.drop(["index"])
         return frame
-    
+
     def _transform_insider_roster(self, frame: pl.DataFrame) -> pl.DataFrame:
         if "index" in frame.columns:
             frame = frame.drop(["index"])
         return frame
-    
+
     def _transform_insider_purchases(self, frame: pl.DataFrame) -> pl.DataFrame:
         drops = []
         if "index" in frame.columns:
@@ -610,7 +668,9 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             frame = frame.rename(present)
         # Ensure PK fields exist and are non-null; if core field missing, drop rows
         if "insider_purchases_last_6m" in frame.columns:
-            frame = frame.with_columns(pl.col("insider_purchases_last_6m").cast(pl.Utf8, strict=False).alias("insider_purchases_last_6m"))
+            frame = frame.with_columns(
+                pl.col("insider_purchases_last_6m").cast(pl.Utf8, strict=False).alias("insider_purchases_last_6m")
+            )
             frame = frame.filter(pl.col("insider_purchases_last_6m").is_not_null())
         else:
             # No meaningful data -> empty
@@ -621,7 +681,7 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         else:
             frame = frame.with_columns(pl.lit("").alias("holder"))
         return frame
-    
+
     def _transform_calendar(self, frame: pl.DataFrame) -> pl.DataFrame:
         if "earnings_date" in frame.columns:
             dt = frame.schema.get("earnings_date")
@@ -637,24 +697,24 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         content_dtype = frame.schema["content"]
         if not isinstance(content_dtype, pl.Struct):
             return frame
-        
+
         # Build lookup for top-level fields
         top_fields = {f.name: f.dtype for f in content_dtype.fields}
 
-        def get_expr(candidates: list[list[str]], dtype: pl.DataType = pl.String()) -> pl.Expr:
+        def get_expr(candidates: list[list[str]], dtype: pl.DataType | None = None) -> pl.Expr:
             exprs = []
             for path in candidates:
                 if not path:
                     continue
-                
+
                 col_name = path[0]
                 if col_name not in top_fields:
                     continue
-                
+
                 # Level 1 access
                 curr_expr = pl.col("content").struct.field(col_name)
                 curr_dtype = top_fields[col_name]
-                
+
                 valid_path = True
                 # Handle nested fields (Level 2+)
                 for part in path[1:]:
@@ -670,13 +730,13 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
                     else:
                         valid_path = False
                         break
-                
+
                 if valid_path:
                     exprs.append(curr_expr)
-            
+
             if not exprs:
-                return pl.lit(None, dtype=dtype)
-            
+                return pl.lit(None, dtype=dtype or pl.String())
+
             return pl.coalesce(exprs)
 
         # Time parsing helper
@@ -685,11 +745,7 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             expr = get_expr([["pubDate"]])
             # Replace Z with +00:00 and parse. Note: yfinance news dates are naive but UTC
             # Explicitly strip Z and use strict=False to handle various formats
-            return (
-                expr
-                .str.replace("Z", ISO8601_Z_SUFFIX)
-                .str.to_datetime(strict=False, time_zone=DEFAULT_TIME_ZONE)
-            )
+            return expr.str.replace("Z", ISO8601_Z_SUFFIX).str.to_datetime(strict=False, time_zone=DEFAULT_TIME_ZONE)
 
         cols = [
             get_expr([["title"]]).alias("title"),
@@ -700,7 +756,7 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         ]
 
         frame = frame.with_columns(cols)
-        
+
         keep = [c for c in ["id", "title", "publisher", "type", "link", "published_at"] if c in frame.columns]
-        others = [c for c in frame.columns if c not in keep + ["content"]]
-        return frame.select(others + keep)
+        others = [c for c in frame.columns if c not in [*keep, "content"]]
+        return frame.select([*others, *keep])

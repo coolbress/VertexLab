@@ -1,4 +1,3 @@
 # Trivy ignore list (initially empty)
 # Add specific IDs (CVE-YYYY-XXXX, AVD-*, SECRET-*) only when verified as acceptable or false positive.
 # Keep entries minimal and include rationale in commit messages.
-

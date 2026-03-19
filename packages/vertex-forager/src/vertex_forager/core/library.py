@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from typing import Any, Protocol
-from vertex_forager.core.config import RequestSpec
-from vertex_forager.core.types import JSONValue
+from typing import TYPE_CHECKING, Any, Protocol
+
+if TYPE_CHECKING:
+    from vertex_forager.core.config import RequestSpec
+    from vertex_forager.core.types import JSONValue
 
 
 class LibraryFetcher(Protocol):
     """Protocol for provider-specific library fetchers."""
+
     scheme: str
 
     def fetch(self, spec: RequestSpec) -> Any: ...
@@ -14,6 +17,7 @@ class LibraryFetcher(Protocol):
 
 class BaseLibraryFetcher:
     """Base class providing common parsing helpers for library fetchers."""
+
     scheme: str = ""
 
     def parse_spec(self, spec: RequestSpec) -> tuple[str, str, dict[str, JSONValue]]:
@@ -33,11 +37,13 @@ class BaseLibraryFetcher:
 
 _REGISTRY: dict[str, LibraryFetcher] = {}
 
+
 def register_library_fetcher(fetcher: LibraryFetcher) -> None:
     """Register a provider-specific library fetcher instance."""
     if fetcher.scheme in _REGISTRY:
         raise ValueError(f"Library fetcher for scheme '{fetcher.scheme}' already registered")
     _REGISTRY[fetcher.scheme] = fetcher
+
 
 def get_library_fetcher(scheme: str) -> LibraryFetcher | None:
     """Retrieve the registered library fetcher for a scheme."""

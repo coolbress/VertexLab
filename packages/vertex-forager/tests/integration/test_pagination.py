@@ -25,9 +25,7 @@ def mock_client() -> SharadarClient:
 async def test_fetch_pagination_show_progress_true(mock_client):
     with (
         patch.object(base_module, "tqdm") as mock_tqdm,
-        patch.object(
-            base_module, "create_writer"
-        ) as mock_create_writer,
+        patch.object(base_module, "create_writer") as mock_create_writer,
         patch("vertex_forager.providers.sharadar.client.create_router"),
     ):
         # Setup mocks
@@ -61,9 +59,7 @@ async def test_fetch_pagination_show_progress_true(mock_client):
 async def test_fetch_pagination_show_progress_false(mock_client):
     with (
         patch.object(base_module, "tqdm") as mock_tqdm,
-        patch.object(
-            base_module, "create_writer"
-        ) as mock_create_writer,
+        patch.object(base_module, "create_writer") as mock_create_writer,
         patch("vertex_forager.providers.sharadar.client.create_router"),
     ):
         # Setup mocks

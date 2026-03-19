@@ -14,15 +14,18 @@ Usage:
     @routers.register("sharadar")
     def create_sharadar_router(...): ...
 """
+
 from __future__ import annotations
 
-from typing import Any, Protocol, TYPE_CHECKING, Generic, TypeVar, Callable, overload
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar, overload
 
 if TYPE_CHECKING:
-    from vertex_forager.writers.base import BaseWriter
-    from vertex_forager.routers.base import BaseRouter
+    from collections.abc import Callable
+
     from vertex_forager.clients.base import BaseClient
+    from vertex_forager.routers.base import BaseRouter
+    from vertex_forager.writers.base import BaseWriter
 
 
 T = TypeVar("T")
@@ -119,7 +122,7 @@ class Registry(Generic[T]):
 class WriterFactory(Protocol):
     """Protocol for writer factory functions."""
 
-    def __call__(self, uri: str) -> "BaseWriter":
+    def __call__(self, uri: str) -> BaseWriter:
         """Create a writer instance.
 
         Args:
@@ -152,7 +155,7 @@ class RouterFactory(Protocol):
         start_date: str | None = None,
         end_date: str | None = None,
         **kwargs: Any,
-    ) -> "BaseRouter":
+    ) -> BaseRouter:
         """Create a router instance.
 
         Args:
@@ -192,9 +195,7 @@ routers = Registry[RouterRegistration]("router")
 class ClientFactory(Protocol):
     """Protocol for client factory functions or classes."""
 
-    def __call__(
-        self, *, api_key: str | None = None, rate_limit: int, **kwargs: Any
-    ) -> "BaseClient":
+    def __call__(self, *, api_key: str | None = None, rate_limit: int, **kwargs: Any) -> BaseClient:
         """Create a client instance.
 
         Args:

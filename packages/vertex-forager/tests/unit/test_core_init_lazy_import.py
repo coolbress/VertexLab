@@ -6,8 +6,10 @@ import pytest
 
 class TestCoreInitLazyImport:
     """Tests for vertex_forager.core lazy-import behavior."""
+
     def test_from_import_vertexforager_resolves_class(self) -> None:
         from vertex_forager.core import VertexForager
+
         assert isinstance(VertexForager, type)
         pipeline_module = importlib.import_module("vertex_forager.core.pipeline")
         assert VertexForager is pipeline_module.VertexForager

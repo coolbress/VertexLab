@@ -1,0 +1,105 @@
+---
+name: ruff-tier2-promote
+
+on:
+  schedule:
+    - cron: "0 9 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5 pinned
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v5 pinned
+        with:
+          python-version: "3.10"
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78  # v5 pinned
+      - name: Install deps
+        run: uv sync
+      - name: Determine promotable categories (C4/PT/TCH/SIM/TC)
+        id: probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          CODES=(C4 PT TCH SIM TC)
+          PROMOTE=()
+          for code in "${CODES[@]}"; do
+            if uv run ruff check packages/ --exclude "legacy_code" --select "$code" --quiet; then
+              PROMOTE+=("$code")
+            fi
+          done
+          printf 'promote=%s\n' "$(IFS=, ; echo "${PROMOTE[*]-}")" >> "$GITHUB_OUTPUT"
+          echo "Promotable: ${PROMOTE[*]-<none>}"
+      - name: Exit if nothing to promote
+        if: ${{ steps.probe.outputs.promote == '' }}
+        run: echo "No Tier-2 categories qualify for promotion." && exit 0
+      - name: Update pyproject.toml (append promoted categories to Tier-1 select)
+        env:
+          PROMOTE: ${{ steps.probe.outputs.promote }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os, re, sys
+          path = "pyproject.toml"
+          with open(path, "r", encoding="utf-8") as f:
+            txt = f.read()
+          # Find the [tool.ruff.lint] select block
+          m = re.search(r"(?ms)^\\[tool\\.ruff\\.lint\\]\\s*select\\s*=\\s*\\[(.*?)\\]", txt)
+          if not m:
+            print("::error ::[tool.ruff.lint] select not found", file=sys.stderr)
+            sys.exit(1)
+          body = m.group(1)
+          existing = []
+          for s in re.findall(r'"([^"]+)"', body):
+            if s not in existing:
+              existing.append(s)
+          promote = os.environ.get("PROMOTE","").split(",") if os.environ.get("PROMOTE") else []
+          # Append categories not already present
+          for code in promote:
+            if code and code not in existing:
+              existing.append(code)
+          # Rebuild block, one-per-line, trailing comma style
+          new_block = "[tool.ruff.lint]\nselect = [\n" + "".join(f'    "{c}",\n' for c in existing) + "]"
+          # Replace only the select array within [tool.ruff.lint]
+          txt2 = re.sub(r"(?ms)^\\[tool\\.ruff\\.lint\\]\\s*select\\s*=\\s*\\[(.*?)\\]", new_block, txt)
+          if txt2 == txt:
+            print("No change to pyproject.toml needed.")
+            sys.exit(0)
+          with open(path, "w", encoding="utf-8") as f:
+            f.write(txt2)
+          print("pyproject.toml updated.")
+          PY
+      - name: Create PR with updated Tier-1 rules
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PROMOTE: ${{ steps.probe.outputs.promote }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          BRANCH="chore/ruff-promote-$(date +%Y%m)"
+          git checkout -b "$BRANCH"
+          if git diff --quiet -- pyproject.toml; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git add pyproject.toml
+          TITLE="chore(ruff): promote Tier-1 rules: ${PROMOTE//,/ }"
+          BODY_FILE="$RUNNER_TEMP/promo.md"
+          {
+            echo "This PR promotes zero-violation Tier-2 Ruff categories to Tier-1 select in pyproject.toml."
+            echo
+            echo "- Categories: ${PROMOTE}"
+            echo "- Policy: two-tier (local Tier-1 blocking, CI Tier-2 warn-only)"
+            echo "- Effect: new rules become blocking locally/CI after merge"
+          } > "$BODY_FILE"
+          git commit -m "$TITLE"
+          git push -u origin "$BRANCH"
+          gh pr create --title "$TITLE" --body-file "$BODY_FILE" --label "type:chore" || true

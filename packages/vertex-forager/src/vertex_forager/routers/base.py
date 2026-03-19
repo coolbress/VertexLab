@@ -1,21 +1,25 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Sequence
-from datetime import datetime
-from typing import TypeVar, Generic
+from typing import TYPE_CHECKING, Generic, TypeVar
 
-import polars as pl
-
-from vertex_forager.core.config import FetchJob, ParseResult
 from vertex_forager.routers.transforms import (
     add_provider_metadata,
     check_empty_response,
-    parse_date_range,
     normalize_columns,
+    parse_date_range,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator, Sequence
+    from datetime import datetime
+
+    import polars as pl
+
+    from vertex_forager.core.config import FetchJob, ParseResult
+
 T = TypeVar("T", bound=str)
+
 
 class BaseRouter(ABC, Generic[T]):
     """
@@ -49,40 +53,38 @@ class BaseRouter(ABC, Generic[T]):
     """
 
     flexible_schema: bool = False
-    
+
     @property
     @abstractmethod
     def provider(self) -> str:
         """Unique identifier for the data provider.
-        
+
         Returns:
             str: Provider identifier (e.g., 'sharadar', 'yfinance').
         """
         raise NotImplementedError
 
     @abstractmethod
-    def generate_jobs(
-        self, *, dataset: T, symbols: Sequence[str] | None, **kwargs: object
-    ) -> AsyncIterator[FetchJob]:
+    def generate_jobs(self, *, dataset: T, symbols: Sequence[str] | None, **kwargs: object) -> AsyncIterator[FetchJob]:
         """Generate provider-specific HTTP fetch jobs.
-        
+
         Converts high-level requests (dataset, symbols, date filters) into concrete
         HTTP request specifications. Provider implementations own batching, URL
         construction, auth, and pagination context.
-        
+
         Args:
             dataset: Dataset type (e.g., 'price', 'financials', 'actions').
             symbols: List of ticker symbols, or None for market-wide data.
             **kwargs: Provider-specific options (e.g., dimension, bulk_size).
-            
+
         Yields:
             FetchJob: HTTP request spec and context for the executor.
-            
+
         Raises:
             NotImplementedError: Must be implemented by provider routers.
             FetchError: Network/API failures from provider execution.
             TransformError: Payload parsing/normalization failures.
-        
+
         Responsibilities:
             - Symbol handling: single/multiple/None depending on dataset
             - Batching: choose batch size under API/URL limits
@@ -90,7 +92,7 @@ class BaseRouter(ABC, Generic[T]):
             - Date filters: apply start/end via _parse_date_range when needed
             - Pagination: include cursor/keys in context if supported
             - Auth: attach provider tokens/headers
-        
+
         Examples:
             Yielding a pagination job:
                 - dataset="tickers", symbols=None
@@ -101,23 +103,23 @@ class BaseRouter(ABC, Generic[T]):
     @abstractmethod
     def parse(self, *, job: FetchJob, payload: bytes) -> ParseResult:
         """Normalize provider response into FramePacket(s).
-        
+
         Decodes raw bytes, converts to Polars, performs provider-specific structural
         normalization in this method (no separate normalize_frame), injects provider
         metadata, and prepares follow-up pagination jobs when applicable.
-        
+
         Args:
             job: The fetch job that produced this payload.
             payload: Raw HTTP response bytes.
-            
+
         Returns:
             ParseResult: Normalized packets and optional next jobs.
-            
+
         Raises:
             NotImplementedError: Must be implemented by provider routers.
             FetchError: Provider-reported API errors mapped to standard exceptions.
             TransformError: Data conversion/structural normalization failures.
-        
+
         Responsibilities:
             - Format handling: JSON/CSV/binary/pickle
             - Error handling: detect API errors and malformed payloads
@@ -127,11 +129,11 @@ class BaseRouter(ABC, Generic[T]):
             - Metadata injection: use _add_provider_metadata
             - Empty handling: use _check_empty_response
             - Pagination: derive next jobs from response metadata/context
-        
+
         Notes:
             - Structure transformation happens here; strict type casting is delegated to SchemaMapper.
             - Use _parse_date_range for date derivations when needed.
-        
+
         Examples:
             Creating follow-up pagination job:
                 - Read "next_cursor_id" from response meta
@@ -142,29 +144,34 @@ class BaseRouter(ABC, Generic[T]):
     # -----------------------------------------
     # Common Methods
     # -----------------------------------------
-    
+
     def _add_provider_metadata(self, *, frame: pl.DataFrame, observed_at: datetime) -> pl.DataFrame:
         """Add provider metadata columns to DataFrame.
-        
+
         This is a common operation across all routers to inject standard metadata
         like provider name and fetch timestamp.
-        
+
         Args:
             frame: Input DataFrame to add metadata to.
             observed_at: Timestamp when the data was fetched.
-            
+
         Returns:
             pl.DataFrame: DataFrame with added provider and fetched_at columns.
         """
         return add_provider_metadata(self.provider, frame=frame, observed_at=observed_at)
 
-    def _check_empty_response(self, *, payload: bytes | None = None, frame: pl.DataFrame | None = None) -> ParseResult | None:
+    def _check_empty_response(
+        self,
+        *,
+        payload: bytes | None = None,
+        frame: pl.DataFrame | None = None,
+    ) -> ParseResult | None:
         """Unified empty response handler for both payload and DataFrame.
-        
+
         Args:
             payload: Raw response payload to check.
             frame: DataFrame to check.
-            
+
         Returns:
             ParseResult: Empty result if either payload or frame is empty.
             None: If both are valid/non-empty.
@@ -173,15 +180,15 @@ class BaseRouter(ABC, Generic[T]):
 
     def _parse_date_range(self, start_date: str | None, end_date: str | None) -> tuple[datetime, datetime] | None:
         """Parse and validate date range strings.
-        
+
         Args:
             start_date: Start date in YYYY-MM-DD format.
             end_date: End date in YYYY-MM-DD format.
-            
+
         Returns:
             tuple: (start_datetime, end_datetime) if valid.
             None: when start_date is None (no range requested).
-        
+
         Raises:
             ValueError: If date format is invalid or end < start.
         """
@@ -189,10 +196,10 @@ class BaseRouter(ABC, Generic[T]):
 
     def _normalize_columns(self, frame: pl.DataFrame) -> pl.DataFrame:
         """Standardize column names to lowercase snake_case.
-        
+
         Args:
             frame: Input DataFrame.
-            
+
         Returns:
             pl.DataFrame: DataFrame with standardized column names.
         """

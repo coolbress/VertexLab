@@ -1,73 +1,67 @@
 from __future__ import annotations
 
-import logging
-from typing import Final
-import uuid
-import json
 import io
-from collections.abc import AsyncIterator, Iterator, Sequence
-from typing import Mapping
+import json
+import logging
+import uuid
 from datetime import date, datetime, timezone
+from typing import TYPE_CHECKING, Any, ClassVar, Final, cast
 
 import polars as pl
-
-from typing import Any, cast, TYPE_CHECKING
-from vertex_forager.core.types import SharadarDataset, JSONValue
-from vertex_forager.providers.sharadar.constants import (
-    MAX_ROWS_PER_REQUEST,
-    DEFAULT_BATCH_SIZE,
-    MIN_BATCH_SIZE,
-    TRADING_DAYS_RATIO,
-    QUARTERLY_DAYS_RATIO,
-    PAGINATION_META_KEY,
-    PAGINATION_CURSOR_PARAM,
-    MAX_PAGES,
-)
 from vertex_forager.constants import TRADING_DAYS_PER_YEAR
+from vertex_forager.core.types import JSONValue, SharadarDataset
+from vertex_forager.providers.sharadar.constants import (
+    DEFAULT_BATCH_SIZE,
+    MAX_PAGES,
+    MAX_ROWS_PER_REQUEST,
+    MIN_BATCH_SIZE,
+    PAGINATION_CURSOR_PARAM,
+    PAGINATION_META_KEY,
+    QUARTERLY_DAYS_RATIO,
+    TRADING_DAYS_RATIO,
+)
+
 if TYPE_CHECKING:
+    from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
+
+    from vertex_forager.core.config import FetchJob
     from vertex_forager.core.types import PerSymbolJobContext
 
-from vertex_forager.core.config import (
-    FetchJob,
-    FramePacket,
-    RequestAuth,
-    ParseResult,
-)
-from vertex_forager.routers.base import BaseRouter
-from vertex_forager.routers.errors import raise_quandl_error
-from vertex_forager.routers.jobs import (
-    pagination_job,
-    single_symbol_job,
-    make_pagination_context,
-    build_symbol_context,
-)
 from polars.exceptions import PolarsError
+from vertex_forager.core.config import FramePacket, ParseResult, RequestAuth
+from vertex_forager.logging.constants import (
+    LOG_BATCH_ADD,
+    LOG_BATCH_FLUSH,
+    LOG_BATCH_FORCE_SINGLE,
+    LOG_BUILD_JOB,
+    LOG_HEURISTIC_BATCH_SIZE,
+    LOG_META_MISSING_COLS,
+    LOG_META_PROCESS_FAIL,
+    LOG_META_PROCESSED,
+    LOG_PAGINATION_START,
+    LOG_UNSUPPORTED_DATASET,
+    ROUTER_LOG_PREFIX,
+)
+from vertex_forager.providers.sharadar.constants import (
+    API_KEY_QUERY_PARAM,
+    DATASET_ENDPOINT,
+    DATE_FILTER_COL,
+    INTERNAL_COLS,
+    QOPTS_COLUMNS,
+    QOPTS_PER_PAGE,
+)
 from vertex_forager.providers.sharadar.schema import (
     DATASET_SCHEMA,
     DATASET_TABLE,
 )
-from vertex_forager.providers.sharadar.constants import (
-    DATASET_ENDPOINT,
-    DATE_FILTER_COL,
-    INTERNAL_COLS,
-    API_KEY_QUERY_PARAM,
-    QOPTS_PER_PAGE,
-    QOPTS_COLUMNS,
+from vertex_forager.routers.base import BaseRouter
+from vertex_forager.routers.errors import raise_quandl_error
+from vertex_forager.routers.jobs import (
+    build_symbol_context,
+    make_pagination_context,
+    pagination_job,
+    single_symbol_job,
 )
-from vertex_forager.logging.constants import (
-    ROUTER_LOG_PREFIX,
-    LOG_META_MISSING_COLS,
-    LOG_META_PROCESSED,
-    LOG_META_PROCESS_FAIL,
-    LOG_UNSUPPORTED_DATASET,
-    LOG_PAGINATION_START,
-    LOG_BATCH_FORCE_SINGLE,
-    LOG_BATCH_FLUSH,
-    LOG_BATCH_ADD,
-    LOG_HEURISTIC_BATCH_SIZE,
-    LOG_BUILD_JOB,
-)
-
 
 logger = logging.getLogger("vertex_forager.providers.sharadar.router")
 
@@ -76,18 +70,19 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
     """Data Router implementation for Sharadar (Nasdaq Data Link).
 
     **Request Characteristics:**
-    
-    1. **Smart Batching**: Uses ticker metadata cache (first/last trading dates) to efficiently pack multiple tickers within 10,000-row API limit
+
+    1. **Smart Batching**: Uses ticker metadata cache (first/last trading
+       dates) to efficiently pack multiple tickers within 10,000-row API limit
     2. **Cursor-based Pagination**: Uses `next_cursor_id` for complete large dataset collection
-    
+
     **Response Characteristics:**
-    
+
     1. **JSON Format**: Standard Nasdaq Data Link API responses
     2. **Row-based Data**: Ticker-specific time series data
     3. **Efficient Conversion**: Polars native JSON parsing with GIL release
-    
+
     **Implementation Status:**
-    
+
     - ✅ Smart batching with metadata cache utilization
     - ✅ Polars native JSON parsing applied
     - ✅ Cursor-based pagination auto-handling
@@ -96,7 +91,7 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
 
     _BASE_URL: Final[str] = "https://data.nasdaq.com/api/v3/datatables/SHARADAR"
 
-    _BULK_DATASETS = {
+    _BULK_DATASETS: ClassVar[set[str]] = {
         "price",
         "fundamental",
         "daily",
@@ -107,7 +102,7 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         "sp500",
     }
 
-    _PAGINATION_CONTEXT = {
+    _PAGINATION_CONTEXT: ClassVar[dict[str, object]] = {
         "pagination": {
             "cursor_param": PAGINATION_CURSOR_PARAM,
             "meta_key": PAGINATION_META_KEY,
@@ -149,7 +144,7 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         self._rate_limit = rate_limit
         self._start_date = start_date
         self._end_date = end_date
-        
+
         # Process metadata into efficient lookup if available
         self._ticker_ranges: dict[str, tuple[date, date]] | None = None
         if ticker_metadata is not None and not ticker_metadata.is_empty():
@@ -167,35 +162,26 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
             # Normalize date types for reliable comparison
             normalized = df.with_columns(
                 [
-                    pl.col("firstpricedate")
-                    .cast(pl.Utf8)
-                    .str.strptime(pl.Date, strict=False)
-                    .alias("firstpricedate"),
-                    pl.col("lastpricedate")
-                    .cast(pl.Utf8)
-                    .str.strptime(pl.Date, strict=False)
-                    .alias("lastpricedate"),
+                    pl.col("firstpricedate").cast(pl.Utf8).str.strptime(pl.Date, strict=False).alias("firstpricedate"),
+                    pl.col("lastpricedate").cast(pl.Utf8).str.strptime(pl.Date, strict=False).alias("lastpricedate"),
                 ]
             )
 
             # Filter only valid dates and build lookup
-            valid_df = normalized.filter(
-                pl.col("firstpricedate").is_not_null() & 
-                pl.col("lastpricedate").is_not_null()
-            )
-            
+            valid_df = normalized.filter(pl.col("firstpricedate").is_not_null() & pl.col("lastpricedate").is_not_null())
+
             tickers = valid_df.get_column("ticker").to_list()
             starts = valid_df.get_column("firstpricedate").to_list()
             ends = valid_df.get_column("lastpricedate").to_list()
-            self._ticker_ranges = {t: (s, e) for t, s, e in zip(tickers, starts, ends)}
+            self._ticker_ranges = {t: (s, e) for t, s, e in zip(tickers, starts, ends, strict=False)}
             logger.debug(LOG_META_PROCESSED.format(prefix=ROUTER_LOG_PREFIX, count=len(self._ticker_ranges)))
-            
+
         except (KeyError, TypeError, ValueError, PolarsError) as e:
             logger.warning(LOG_META_PROCESS_FAIL.format(prefix=ROUTER_LOG_PREFIX, error=e))
             self._ticker_ranges = None
 
     # --------------------------------------------------------------------------
-    # Properties 
+    # Properties
     # --------------------------------------------------------------------------
 
     @property
@@ -241,15 +227,13 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
             FetchJob: A job object containing the request specification.
         """
         # -------- Build Pagination Jobs --------
-        
+
         # Unified pagination handling:
         # - tickers: paginated only when symbols not provided
         # - sp500: paginated only when symbols not provided
         trace_id = uuid.uuid4().hex
         req_id = 0
-        if (dataset == "tickers" and not symbols) or (
-            dataset == "sp500" and not symbols
-        ):
+        if (dataset == "tickers" and not symbols) or (dataset == "sp500" and not symbols):
             # Sharadar API limit: maximum 10,000 rows per response
             per_page_obj = kwargs.get("per_page", MAX_ROWS_PER_REQUEST)
             try:
@@ -257,7 +241,13 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
             except (TypeError, ValueError):
                 per_page = MAX_ROWS_PER_REQUEST
             per_page = max(1, min(MAX_ROWS_PER_REQUEST, per_page))
-            logger.debug(LOG_PAGINATION_START.format(prefix=ROUTER_LOG_PREFIX, dataset=dataset, per_page=per_page))
+            logger.debug(
+                LOG_PAGINATION_START.format(
+                    prefix=ROUTER_LOG_PREFIX,
+                    dataset=dataset,
+                    per_page=per_page,
+                )
+            )
             page_ctx = make_pagination_context(
                 dataset=dataset,
                 meta_key=PAGINATION_META_KEY,
@@ -281,16 +271,13 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
             return
 
         # -------- Build Per-Symbol Jobs --------
-        
+
         symbol_list = [s.strip() for s in symbols if isinstance(s, str) and s.strip()]
         if not symbol_list:
             raise ValueError(f"SharadarRouter: no valid symbols provided from input={symbols!r}")
 
         raw_dimension = kwargs.get("dimension")
-        if not raw_dimension or str(raw_dimension).strip() == "":
-            dimension = "MRT"
-        else:
-            dimension = str(raw_dimension)
+        dimension = "MRT" if not raw_dimension or str(raw_dimension).strip() == "" else str(raw_dimension)
 
         # Refactored Strategy: Router-driven Batching with Dynamic Sizing
         # Two modes:
@@ -299,56 +286,114 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
 
         if self._ticker_ranges:
             # -------- Smart Batching Mode --------
-            
+
             # Smart Batching Mode
             current_batch: list[str] = []
             current_rows = 0
             max_rows = MAX_ROWS_PER_REQUEST
             max_batch_size = DEFAULT_BATCH_SIZE  # API URL length safety
-            
+
             for symbol in symbol_list:
                 est_rows = self._estimate_ticker_rows(symbol, dataset)
-                
+
                 if est_rows > max_rows:
-                    logger.debug(LOG_BATCH_FORCE_SINGLE.format(prefix=ROUTER_LOG_PREFIX, symbol=symbol, est_rows=est_rows, max_rows=max_rows))
-                    yield self._build_per_symbol_job(dataset=dataset, symbol=symbol, dimension=dimension, extra_context={"trace_id": trace_id, "request_id": req_id})
+                    logger.debug(
+                        LOG_BATCH_FORCE_SINGLE.format(
+                            prefix=ROUTER_LOG_PREFIX,
+                            symbol=symbol,
+                            est_rows=est_rows,
+                            max_rows=max_rows,
+                        )
+                    )
+                    yield self._build_per_symbol_job(
+                        dataset=dataset,
+                        symbol=symbol,
+                        dimension=dimension,
+                        extra_context={"trace_id": trace_id, "request_id": req_id},
+                    )
                     req_id += 1
                     continue
-                
+
                 if (current_rows + est_rows > max_rows) or (len(current_batch) >= max_batch_size):
                     if current_batch:
-                        logger.debug(LOG_BATCH_FLUSH.format(prefix=ROUTER_LOG_PREFIX, size=len(current_batch), rows=current_rows))
+                        logger.debug(
+                            LOG_BATCH_FLUSH.format(
+                                prefix=ROUTER_LOG_PREFIX,
+                                size=len(current_batch),
+                                rows=current_rows,
+                            )
+                        )
                         sym = ",".join(current_batch)
-                        yield self._build_per_symbol_job(dataset=dataset, symbol=sym, dimension=dimension, extra_context={"trace_id": trace_id, "request_id": req_id})
+                        yield self._build_per_symbol_job(
+                            dataset=dataset,
+                            symbol=sym,
+                            dimension=dimension,
+                            extra_context={"trace_id": trace_id, "request_id": req_id},
+                        )
                         req_id += 1
                     current_batch = []
                     current_rows = 0
-                
+
                 current_batch.append(symbol)
                 current_rows += est_rows
-                logger.debug(LOG_BATCH_ADD.format(prefix=ROUTER_LOG_PREFIX, symbol=symbol, est_rows=est_rows, current_rows=current_rows))
-                
+                logger.debug(
+                    LOG_BATCH_ADD.format(
+                        prefix=ROUTER_LOG_PREFIX,
+                        symbol=symbol,
+                        est_rows=est_rows,
+                        current_rows=current_rows,
+                    )
+                )
+
             # Flush remaining
             if current_batch:
-                logger.debug(LOG_BATCH_FLUSH.format(prefix=ROUTER_LOG_PREFIX, size=len(current_batch), rows=current_rows))
+                logger.debug(
+                    LOG_BATCH_FLUSH.format(
+                        prefix=ROUTER_LOG_PREFIX,
+                        size=len(current_batch),
+                        rows=current_rows,
+                    )
+                )
                 sym = ",".join(current_batch)
-                yield self._build_per_symbol_job(dataset=dataset, symbol=sym, dimension=dimension, extra_context={"trace_id": trace_id, "request_id": req_id})
+                yield self._build_per_symbol_job(
+                    dataset=dataset,
+                    symbol=sym,
+                    dimension=dimension,
+                    extra_context={"trace_id": trace_id, "request_id": req_id},
+                )
                 req_id += 1
-                
+
         else:
             # -------- Heuristic Batching Mode --------
-            
+
             # Heuristic Batching Mode (Original Refactor)
             batch_size = self._calculate_batch_size(dataset)
-            logger.debug(LOG_HEURISTIC_BATCH_SIZE.format(prefix=ROUTER_LOG_PREFIX, dataset=dataset, batch_size=batch_size))
-            
+            logger.debug(
+                LOG_HEURISTIC_BATCH_SIZE.format(
+                    prefix=ROUTER_LOG_PREFIX,
+                    dataset=dataset,
+                    batch_size=batch_size,
+                )
+            )
+
             for chunk in self._iter_symbol_batches(symbol_list, batch_size):
                 if not chunk:
                     continue
                 batch_symbol_str = ",".join(chunk)
-                
-                logger.debug(LOG_BUILD_JOB.format(prefix=ROUTER_LOG_PREFIX, dataset=dataset, symbols=batch_symbol_str))
-                yield self._build_per_symbol_job(dataset=dataset, symbol=batch_symbol_str, dimension=dimension, extra_context={"trace_id": trace_id, "request_id": req_id})
+
+                logger.debug(
+                    LOG_BUILD_JOB.format(
+                        prefix=ROUTER_LOG_PREFIX,
+                        dataset=dataset,
+                        symbols=batch_symbol_str,
+                    )
+                )
+                yield self._build_per_symbol_job(
+                    dataset=dataset,
+                    symbol=batch_symbol_str,
+                    dimension=dimension,
+                    extra_context={"trace_id": trace_id, "request_id": req_id},
+                )
                 req_id += 1
 
     def parse(self, *, job: FetchJob, payload: bytes) -> ParseResult:
@@ -365,7 +410,7 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
             ParseResult: Result containing data packets and any subsequent jobs.
         """
         # -------- Parse Response Payload --------
-        
+
         # OPTIMIZATION: Try Polars native JSON parsing first (Release GIL, Zero-Copy)
         frame = pl.DataFrame()
         meta: dict[str, object] = {}
@@ -375,14 +420,14 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
             json_df = pl.read_json(io.BytesIO(payload))
 
             # -------- Handle API Errors --------
-            
+
             if "quandl_error" in json_df.columns:
                 err = json_df.select(pl.col("quandl_error")).item(0)
                 if err:
                     raise_quandl_error(self.provider, err)
 
             # -------- Extract & Transform Data --------
-            
+
             # Extract Metadata
             if "meta" in json_df.columns and not json_df.is_empty():
                 meta_col = json_df.select(pl.col("meta"))
@@ -400,10 +445,7 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
             if dt_col.is_null().all():
                 raise ValueError("Missing datatable in Sharadar response")
             cols_val = json_df.select(pl.col("datatable").struct.field("columns")).item(0, 0)
-            if isinstance(cols_val, pl.Series):
-                cols_list = cols_val.to_list()
-            else:
-                cols_list = cols_val
+            cols_list = cols_val.to_list() if isinstance(cols_val, pl.Series) else cols_val
             cols_list = cols_list or []
 
             col_names = []
@@ -431,7 +473,7 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
             meta = decoded.get("meta") or {}
 
         # -------- Validate & Standardize Frame --------
-        
+
         # Validate non-empty frame
         empty_result = self._check_empty_response(frame=frame)
         if empty_result:
@@ -442,10 +484,10 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         table = DATASET_TABLE.get(job.dataset)
         if table is None:
             raise NotImplementedError(f"Unsupported dataset: {job.dataset}")
-        
+
         # Add provider metadata
         frame = self._add_provider_metadata(frame=frame, observed_at=observed_at)
-        
+
         pkt_ctx: dict[str, object] = {"dataset": job.dataset}
         if isinstance(job.context, dict):
             for k in ("symbol", "trace_id", "request_id"):
@@ -462,10 +504,10 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         ]
 
         # -------- Handle Pagination --------
-        
+
         next_jobs = []
         if meta and isinstance(meta, dict):
-            pagination = cast(dict[str, object] | None, job.context.get("pagination"))
+            pagination = cast("dict[str, object] | None", job.context.get("pagination"))
             if pagination:
                 meta_key_obj = pagination.get("meta_key")
                 cursor_param_obj = pagination.get("cursor_param")
@@ -473,29 +515,29 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
                 cursor_param = None if cursor_param_obj is None else str(cursor_param_obj)
                 next_cursor = meta.get(meta_key) if meta_key is not None else None
 
-                if (
-                    next_cursor is not None
-                    and cursor_param
-                    and next_cursor != job.spec.params.get(cursor_param)
-                ):
+                if next_cursor is not None and cursor_param and next_cursor != job.spec.params.get(cursor_param):
                     new_job = job.model_copy(deep=True)
                     if isinstance(cursor_param, str):
-                        new_job.spec.params[cursor_param] = cast(JSONValue, next_cursor)
+                        new_job.spec.params[cursor_param] = cast("JSONValue", next_cursor)
                         # Update per-request correlation id for pagination follow-ups (use int consistently)
                         try:
-                            ctx_dict = dict(cast(dict[str, JSONValue], new_job.context))
+                            ctx_dict = dict(cast("dict[str, JSONValue]", new_job.context))
                             old_req = ctx_dict.get("request_id")
                             new_req: int
-                            if isinstance(old_req, int):
-                                new_req = old_req + 1
-                            else:
-                                new_req = 1
+                            new_req = old_req + 1 if isinstance(old_req, int) else 1
                             ctx_dict["request_id"] = new_req
                             new_job.context = ctx_dict
                         except (TypeError, ValueError, AttributeError) as exc:
-                            logger.warning("%s: Failed to update request_id in pagination follow-up: %s", ROUTER_LOG_PREFIX, exc)
+                            logger.warning(
+                                "%s: Failed to update request_id in pagination follow-up: %s",
+                                ROUTER_LOG_PREFIX,
+                                exc,
+                            )
                         except Exception:
-                            logger.exception("%s: Unexpected error updating request_id in pagination follow-up", ROUTER_LOG_PREFIX)
+                            logger.exception(
+                                "%s: Unexpected error updating request_id in pagination follow-up",
+                                ROUTER_LOG_PREFIX,
+                            )
                             raise
                         next_jobs.append(new_job)
 
@@ -504,7 +546,7 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
     # --------------------------------------
     # Generate Jobs Helpers
     # --------------------------------------
-    
+
     # ------ Authentication: add API key as query parameter ------
     def _auth(self) -> RequestAuth:
         """Generate authentication details for the request.
@@ -551,7 +593,7 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         if not schema:
             return ""
 
-        cols = [col for col in schema.schema.keys() if col not in INTERNAL_COLS]
+        cols = [col for col in schema.schema if col not in INTERNAL_COLS]
         return ",".join(cols)
 
     # ------ Build pagination job: apply per_page/columns/date filters ------
@@ -576,7 +618,6 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
                 params[f"{date_col}.gte"] = self._start_date
             if self._end_date:
                 params[f"{date_col}.lte"] = self._end_date
-        
 
         context = make_pagination_context(
             dataset=dataset,
@@ -595,7 +636,12 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
 
     # ------ Build per-symbol job: validate ticker and set dataset params ------
     def _build_per_symbol_job(
-        self, *, dataset: SharadarDataset, symbol: str, dimension: str = "MRT", extra_context: dict[str, JSONValue] | None = None
+        self,
+        *,
+        dataset: SharadarDataset,
+        symbol: str,
+        dimension: str = "MRT",
+        extra_context: dict[str, JSONValue] | None = None,
     ) -> FetchJob:
         """Build a fetch job for a specific symbol (or batch of symbols).
 
@@ -641,14 +687,14 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
             cursor_param=PAGINATION_CURSOR_PARAM,
             max_pages=MAX_PAGES,
         )
-        
+
         per_symbol_ctx = build_symbol_context(dataset=dataset, symbol=clean_symbol)
         final_ctx: dict[str, object] = {**per_symbol_ctx}
         if "pagination" in page_ctx:
             final_ctx["pagination"] = page_ctx["pagination"]
         if extra_context:
             final_ctx.update(extra_context)
-            
+
         return single_symbol_job(
             provider=self.provider,
             dataset=dataset,
@@ -658,7 +704,7 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
             auth=self._auth(),
             context=cast("PerSymbolJobContext", final_ctx),
         )
-        
+
     # ------ Rows per ticker: convert days→rows by dataset characteristics ------
     def _calculate_rows_per_ticker(self, days: int, dataset: str) -> int:
         """Calculate estimated rows per ticker based on dataset type and days."""
@@ -672,13 +718,13 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
     # ------ Batch size: optimize to respect 10,000-row API limit ------
     def _calculate_batch_size(self, dataset: str) -> int:
         """Calculate optimal batch size based on date range and dataset.
-        
+
         Estimates the number of rows per ticker to keep the total response size
         under the 10,000 row limit per request (Sharadar API limit).
-        
+
         Args:
             dataset: The dataset name (e.g., 'price', 'fundamental').
-            
+
         Returns:
             int: The calculated batch size (number of tickers per request).
         """
@@ -692,7 +738,7 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
             clamped = max(MIN_BATCH_SIZE, min(DEFAULT_BATCH_SIZE, batch_size))
             # Extremely large histories may still warrant MIN_BATCH_SIZE; keep conservative bound.
             return clamped
-            
+
         # Use BaseRouter helper to parse date range
         try:
             date_range = self._parse_date_range(self._start_date, self._end_date)
@@ -701,18 +747,18 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         if date_range is None:
             # Default to conservative minimal batch when range parsing fails.
             return MIN_BATCH_SIZE
-            
+
         start, end = date_range
         days = (end - start).days
         days = max(1, days)  # Ensure at least 1 day
-            
+
         # Use common calculation method
         rows_per_ticker = self._calculate_rows_per_ticker(days, dataset)
-        
+
         # Calculate batch size
         # Example: 1 year daily data = ~250 rows. 10000 / 250 = 40 tickers.
         batch_size = MAX_ROWS_PER_REQUEST // rows_per_ticker
-        
+
         # Apply bounds (1 <= batch_size <= 100)
         # Sharadar recommends max 100 tickers per request for URL length safety
         return max(MIN_BATCH_SIZE, min(DEFAULT_BATCH_SIZE, batch_size))
@@ -724,7 +770,7 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         if not self._ticker_ranges or ticker not in self._ticker_ranges:
             if not self._start_date:
                 return MAX_ROWS_PER_REQUEST  # Assume full history is huge -> forces single batch
-                
+
             # Use BaseRouter helper to parse date range
             try:
                 date_range = self._parse_date_range(self._start_date, self._end_date)
@@ -732,16 +778,16 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
                 date_range = None
             if date_range is None:
                 return MAX_ROWS_PER_REQUEST
-                
+
             start, end = date_range
             days = (end - start).days
             days = max(1, days)  # Ensure at least 1 day
-            
+
             return self._calculate_rows_per_ticker(days, dataset)
 
         # Smart Calculation using metadata
         ticker_start, ticker_end = self._ticker_ranges[ticker]
-        
+
         # Ensure ticker dates are date objects (handle datetime)
         if isinstance(ticker_start, datetime):
             ticker_start = ticker_start.date()
@@ -761,23 +807,21 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
                 req_start = req_start.date()
             if isinstance(req_end, datetime):
                 req_end = req_end.date()
-        
+
         # Calculate overlap
         overlap_start = max(req_start, ticker_start)
         overlap_end = min(req_end, ticker_end)
-        
+
         if overlap_start > overlap_end:
             return 0  # No data in range
-            
+
         days = (overlap_end - overlap_start).days
         days = max(1, days)  # Ensure at least 1 day for inclusive calculation
-        
+
         return self._calculate_rows_per_ticker(days, dataset)
 
     # ------ Batch splitting: split symbol sequence into fixed-size chunks ------
-    def _iter_symbol_batches(
-        self, symbols: Sequence[str], batch_size: int
-    ) -> Iterator[list[str]]:
+    def _iter_symbol_batches(self, symbols: Sequence[str], batch_size: int) -> Iterator[list[str]]:
         """Yield batches of symbols from the sequence.
 
         Args:
@@ -791,7 +835,7 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
             yield list(symbols[idx : idx + batch_size])
 
     # --------------------------------------
-    # Parse Helpers 
+    # Parse Helpers
     # --------------------------------------
 
     # ------ Payload decode: JSON→dict and API error checks ------
@@ -809,8 +853,10 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         """
         decoded_any = json.loads(payload.decode("utf-8"))
         if not isinstance(decoded_any, dict):
-            raise ValueError(f"Invalid response type for provider={self.provider}: expected object, got {type(decoded_any).__name__}")
-        decoded = cast(dict[str, Any], decoded_any)
+            raise ValueError(
+                f"Invalid response type for provider={self.provider}: expected object, got {type(decoded_any).__name__}"
+            )
+        decoded = cast("dict[str, Any]", decoded_any)
         if "quandl_error" in decoded:
             raw_err = decoded.get("quandl_error")
             if isinstance(raw_err, dict):
@@ -836,7 +882,7 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         datatable_any = decoded.get("datatable")
         if not isinstance(datatable_any, dict):
             raise ValueError(f"Invalid datatable for provider={self.provider} dataset={dataset}: expected object")
-        datatable = cast(dict[str, Any], datatable_any)
+        datatable = cast("dict[str, Any]", datatable_any)
         records_any = datatable.get("data")
         columns_any = datatable.get("columns")
         # Validate records/columns presence and types
@@ -848,13 +894,18 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         if len(records) == 0:
             return pl.DataFrame()
         if columns_any is None or not isinstance(columns_any, list):
-            raise ValueError(f"Invalid or missing datatable.columns for provider={self.provider} dataset={dataset} (records present)")
+            raise ValueError(
+                f"Invalid or missing datatable.columns for provider={self.provider} dataset={dataset} (records present)"
+            )
         columns: list[Any] = columns_any
 
         col_names: list[str] = []
         for i, c in enumerate(columns):
             if not isinstance(c, dict):
-                raise ValueError(f"Invalid column structure at index {i} for provider={self.provider} dataset={dataset}: expected object")
+                raise ValueError(
+                    f"Invalid column structure at index {i} for "
+                    f"provider={self.provider} dataset={dataset}: expected object"
+                )
             name = c.get("name")
             col_names.append(name if isinstance(name, str) and name else f"column_{i}")
 
@@ -862,13 +913,8 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         # If target schema is known, load everything as Utf8 first to prevent inference errors
         # (e.g., empty strings in numeric columns). If unknown, rely on Polars inference.
         target_schema = DATASET_SCHEMA.get(dataset)
-        schema_arg = (
-            {name: pl.Utf8 for name in col_names} if target_schema else col_names
-        )
+        schema_arg = dict.fromkeys(col_names, pl.Utf8) if target_schema else col_names
 
         frame = pl.DataFrame(records, schema=schema_arg, orient="row")
 
         return frame
-    
-    
-    

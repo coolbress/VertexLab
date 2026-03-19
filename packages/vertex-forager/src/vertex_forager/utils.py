@@ -1,29 +1,34 @@
 import asyncio
+import contextlib
 import functools
-import os
-import shutil
-from pathlib import Path
+import itertools
 import logging
+import math
+import os
+import re
+import shutil
+import sys
 import threading
 import time
-import itertools
-import sys
 import warnings
-from typing import Any, Callable, Literal
-import re
-import math
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any, Literal
 
 import nest_asyncio
-from tqdm.auto import tqdm
 import psutil
+from dotenv import load_dotenv
+from tqdm.auto import tqdm
 
 from vertex_forager.exceptions import InputError
-from dotenv import load_dotenv
+
 logger = logging.getLogger(__name__)
+
 
 def _safe_get_ipython() -> Any:
     try:
         import importlib
+
         mod = importlib.import_module("IPython")
         func = getattr(mod, "get_ipython", None)
         if callable(func):
@@ -32,20 +37,20 @@ def _safe_get_ipython() -> Any:
     except Exception:
         return None
 
+
 def _ipython_display(value: Any) -> None:
-    try:
-        import importlib
+    import importlib
+
+    with contextlib.suppress(Exception):
         mod = importlib.import_module("IPython.display")
         func = getattr(mod, "display", None)
         if callable(func):
             func(value)
-    except Exception:
-        pass
 
 
 def as_dict(obj: Any) -> dict[str, Any]:
     """Convert a pipeline result object to a serializable dictionary.
-    
+
     Handles cases where the object is None or has different metric structures.
     """
     if obj is None:
@@ -58,9 +63,10 @@ def as_dict(obj: Any) -> dict[str, Any]:
         "errors": getattr(obj, "errors", []),
     }
 
+
 def set_env(cfg: dict[str, Any]) -> None:
     """Apply a configuration dictionary to environment variables.
-    
+
     If a value is None, the environment variable is removed.
     Otherwise, it is set to the string representation of the value.
     """
@@ -70,13 +76,14 @@ def set_env(cfg: dict[str, Any]) -> None:
         else:
             os.environ[k] = str(v)
 
+
 def load_tickers_env(name: str, default: list[str]) -> list[str]:
     """Load a list of tickers from an environment variable.
-    
+
     Args:
         name: Environment variable name.
         default: Default list to return if variable is missing or empty.
-        
+
     Returns:
         List of uppercase, stripped ticker symbols.
     """
@@ -85,6 +92,7 @@ def load_tickers_env(name: str, default: list[str]) -> list[str]:
         return list(default)
     toks = [t.strip().upper() for t in v.split(",") if t.strip()]
     return toks if toks else list(default)
+
 
 def process_symbols(tickers: list[str] | None) -> list[str] | None:
     """Convert tickers to normalized symbols.
@@ -99,12 +107,13 @@ def process_symbols(tickers: list[str] | None) -> list[str] | None:
         return [t.strip().upper() for t in tickers if t and t.strip()]
     return None
 
+
 def validate_tickers(symbols: list[str] | tuple[str, ...]) -> None:
     """Validate a list of ticker symbols.
-    
+
     Args:
         symbols: Ticker symbols container (list or tuple of strings).
-    
+
     Raises:
         InputError: If symbols is not a list/tuple, empty, contains non-string items,
                     or any item is empty or has leading/trailing whitespace.
@@ -188,7 +197,7 @@ def validate_memory_usage(
     bytes_per_item: int = 1 * 1024 * 1024,
 ) -> None:
     """Validate memory safety for per-ticker jobs.
-    
+
     Args:
         symbols: List of ticker symbols for the per-ticker job.
         connect_db: Database connection path or None for in-memory.
@@ -222,23 +231,19 @@ def check_memory_safety(
         threshold_ratio: Ratio of available memory to trigger warning.
         threshold_absolute: Absolute size in bytes to trigger warning.
     """
-    try:
+    with contextlib.suppress(TypeError, ValueError):
         env_ratio = float(os.getenv("VF_MEM_THRESHOLD_RATIO", "").strip() or threshold_ratio)
         if 0 < env_ratio <= 1:
             threshold_ratio = env_ratio
         else:
             logger.debug(f"Ignoring invalid VF_MEM_THRESHOLD_RATIO={env_ratio} (must be 0 < x <= 1)")
-    except (TypeError, ValueError):
-        pass
-    try:
+    with contextlib.suppress(TypeError, ValueError, OverflowError):
         _abs_str = os.getenv("VF_MEM_THRESHOLD_ABS_MB", "").strip()
         env_abs_mb = float(_abs_str or (threshold_absolute / 1024 / 1024))
         if env_abs_mb > 0 and math.isfinite(env_abs_mb):
             threshold_absolute = int(env_abs_mb * 1024 * 1024)
         else:
             logger.debug(f"Ignoring invalid VF_MEM_THRESHOLD_ABS_MB={_abs_str}")
-    except (TypeError, ValueError, OverflowError):
-        pass
     if estimated_size > available_memory * threshold_ratio:
         warnings.warn(
             f"High memory usage warning: Requesting data for {num_tickers} symbols "
@@ -334,7 +339,12 @@ class ListHandler(logging.Handler):
 
 
 class Spinner:
-    def __init__(self, message: str = "Processing...", delay: float = 0.1, persist: bool = False) -> None:
+    def __init__(
+        self,
+        message: str = "Processing...",
+        delay: float = 0.1,
+        persist: bool = False,
+    ) -> None:
         self.message = message
         self.delay = delay
         self.persist = persist
@@ -347,9 +357,7 @@ class Spinner:
         self._is_notebook = bool(ip and ip.__class__.__name__ == "ZMQInteractiveShell")
         self._widget_label: Any | None = None
 
-        self.spinner_chars = itertools.cycle(
-            ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-        )
+        self.spinner_chars = itertools.cycle(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
 
     def update_message(self, new_message: str) -> None:
         """Update the message displayed next to the spinner."""
@@ -387,6 +395,7 @@ class Spinner:
         if self._is_notebook:
             try:
                 from ipywidgets import HTML
+
                 self._widget_label = HTML(value=f"⏳ {self.message}")
                 _ipython_display(self._widget_label)
                 t = threading.Thread(target=self._notebook_task, daemon=True)
@@ -416,26 +425,20 @@ class Spinner:
 
         if self._is_notebook:
             if self.update_thread:
-                try:
-                    timeout = min(max(self.delay + 0.1, 0.1), 2.0)
+                timeout = min(max(self.delay + 0.1, 0.1), 2.0)
+                with contextlib.suppress(Exception):
                     self.update_thread.join(timeout=timeout)
-                except Exception:
-                    pass
             if self._widget_label:
                 if self.persist:
                     self._widget_label.value = f"✅ {self.message}"
                 elif clear:
-                    try:
+                    with contextlib.suppress(Exception):
                         self._widget_label.layout.display = "none"
-                    except Exception:
-                        pass
         elif self._is_tty:
             if self.update_thread:
-                try:
-                    timeout = min(max(self.delay + 0.1, 0.1), 2.0)
+                timeout = min(max(self.delay + 0.1, 0.1), 2.0)
+                with contextlib.suppress(Exception):
                     self.update_thread.join(timeout=timeout)
-                except Exception:
-                    pass
             if self.persist:
                 self._clear_line()
                 sys.stderr.write(f"✅ {self.message}\n")
@@ -496,14 +499,11 @@ class Spinner:
             self.stop(clear=True)
 
         # Restore logging handlers
-        try:
+        with contextlib.suppress(Exception):
             self.root_logger.handlers = self.original_handlers
-            # Do not replay logs on interrupt to keep output clean
             if exc_type is not KeyboardInterrupt:
                 for record in self.buffer_handler.records:
                     self.root_logger.handle(record)
-        except Exception:
-            pass
 
         if exc_type is KeyboardInterrupt:
             return False
@@ -525,7 +525,10 @@ class Spinner:
                     self.busy = False
                     break
             except Exception as e:
-                logging.getLogger(__name__).exception("Unexpected notebook widget update error: %s", e)
+                logging.getLogger(__name__).exception(
+                    "Unexpected notebook widget update error: %s",
+                    e,
+                )
                 self.busy = False
                 break
             time.sleep(self.delay)
@@ -549,6 +552,7 @@ def get_app_root() -> Path:
     path = Path(app_root) if app_root else Path.home() / ".vertex_forager"
     path.mkdir(parents=True, exist_ok=True)
     return path
+
 
 def sanitize_field(v: object) -> str:
     """Normalize arbitrary input to a safe, single-token string.
@@ -617,16 +621,12 @@ def clear_app_cache() -> None:
     try:
         cache_dir.relative_to(app_root)
     except ValueError:
-        logging.error(
-            f"Safety check failed: Cache dir {cache_dir} is not inside app root {app_root}"
-        )
+        logging.error(f"Safety check failed: Cache dir {cache_dir} is not inside app root {app_root}")
         return
 
     # 3. Safety check: prevent deleting root or home
     if cache_dir == Path("/").resolve() or cache_dir == Path.home().resolve():
-        logging.error(
-            f"Safety check failed: Attempting to delete root or home directory: {cache_dir}"
-        )
+        logging.error(f"Safety check failed: Attempting to delete root or home directory: {cache_dir}")
         return
 
     # Safe to delete
@@ -664,15 +664,12 @@ def cleanup_dlq_tmp(base: Path | None, retention_s: int) -> int:
                     try:
                         f.unlink()
                         deleted += 1
-                        # Best-effort directory fsync
-                        try:
+                        with contextlib.suppress(Exception):
                             dir_fd = os.open(str(f.parent), os.O_RDONLY)
                             try:
                                 os.fsync(dir_fd)
                             finally:
                                 os.close(dir_fd)
-                        except Exception:
-                            pass
                     except Exception as e_del:
                         logger.warning("DLQ cleanup failed for %s: %s", f, e_del)
             except FileNotFoundError:
@@ -680,6 +677,7 @@ def cleanup_dlq_tmp(base: Path | None, retention_s: int) -> int:
     except Exception as e:
         logger.error("DLQ cleanup scan failed: %s", e)
     return deleted
+
 
 def load_env_file(env_file: Path | None = None) -> None:
     """Load environment variables from a .env file.
@@ -712,14 +710,10 @@ def jupyter_safe(async_func: Callable[..., Any]) -> Callable[..., Any]:
         try:
             return loop.run_until_complete(task)
         except KeyboardInterrupt:
-            # Ensure the background task is cancelled when user interrupts
             if not task.done():
                 task.cancel()
-                try:
-                    # Wait for cancellation to complete
+                with contextlib.suppress(asyncio.CancelledError):
                     loop.run_until_complete(task)
-                except asyncio.CancelledError:
-                    pass
             raise
 
     return wrapper

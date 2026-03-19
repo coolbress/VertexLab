@@ -3,10 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 from urllib.parse import urlparse
 
+from vertex_forager.core.registries import writers as writer_registry
 from vertex_forager.writers.base import BaseWriter
 from vertex_forager.writers.duckdb import DuckDBWriter
 from vertex_forager.writers.memory import InMemoryBufferWriter
-from vertex_forager.core.registries import writers as writer_registry
 
 
 def _duckdb_factory(uri: str) -> BaseWriter:
@@ -56,9 +56,7 @@ def create_writer(connect_db: str | Path | None) -> BaseWriter:
                 factory = writer_registry.get(parsed.scheme)
                 return factory(connect_db)
             except NotImplementedError:
-                raise NotImplementedError(
-                    f"Writer for scheme '{parsed.scheme}' is not implemented"
-                )
+                raise NotImplementedError(f"Writer for scheme '{parsed.scheme}' is not implemented") from None
 
     # 2. Plain String Path (No Scheme) -> Assume DuckDB
     # Previously mapped to HiveParquetWriter, now defaulting to DuckDB for simplicity

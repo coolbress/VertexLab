@@ -1,3 +1,4 @@
+---
 name: PR Body Guard
 on:
   pull_request_target:

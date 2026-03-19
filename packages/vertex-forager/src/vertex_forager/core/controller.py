@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 import math
+import time
 from collections import deque
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+from typing import TYPE_CHECKING
+
 from vertex_forager.constants import GRADIENT_WINDOW_S
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 logger = logging.getLogger("vertex_forager.flow")
 
@@ -17,7 +21,8 @@ class GradientConcurrencyLimiter:
 
     [What it limits]
     Limits the number of **Concurrent In-flight Requests** (Concurrency).
-    It dynamically adjusts the `limit` (max concurrent requests) to find the system's optimal throughput without overloading it.
+    It dynamically adjusts the `limit` (max concurrent requests) to find the
+    system's optimal throughput without overloading it.
 
     [Theoretical Background]
     Based on **Little's Law** (L = λW) and **Netflix's Gradient Algorithm**.
@@ -81,17 +86,12 @@ class GradientConcurrencyLimiter:
         if self.rtt_ema == 0:
             self.rtt_ema = rtt
         else:
-            self.rtt_ema = (self.rtt_ema * (1 - self.smoothing)) + (
-                rtt * self.smoothing
-            )
+            self.rtt_ema = (self.rtt_ema * (1 - self.smoothing)) + (rtt * self.smoothing)
 
         # Calculate Gradient
         # If RTT increases, gradient < 1 -> limit decreases
         # If RTT is close to min_rtt, gradient ~ 1 -> limit increases (via queue_size)
-        if self.rtt_ema > 0:
-            gradient = self.min_rtt / self.rtt_ema
-        else:
-            gradient = 1.0
+        gradient = self.min_rtt / self.rtt_ema if self.rtt_ema > 0 else 1.0
 
         # New Limit
         new_limit = self.limit * gradient + self.queue_size
@@ -115,9 +115,7 @@ class GCRARateLimiter:
     - Allows short **Bursts** up to a defined limit, but strictly enforces the long-term average rate.
     """
 
-    def __init__(
-        self, requests_per_minute: int, burst_limit: int | None = None
-    ) -> None:
+    def __init__(self, requests_per_minute: int, burst_limit: int | None = None) -> None:
         if requests_per_minute <= 0:
             raise ValueError("requests_per_minute must be positive")
 
@@ -189,7 +187,7 @@ class FlowController:
         healthy_window_s: int = 60,
     ) -> None:
         """Initialize the unified Flow Controller.
-        
+
         Args:
             requests_per_minute: int — Allowed requests per minute (RPM).
             concurrency_limit: int | None — Optional max concurrent requests; if None, auto-computed.
@@ -199,7 +197,7 @@ class FlowController:
             rpm_floor: int — Minimum RPM allowed during downshift.
             recovery_step: int — RPM increment applied during each healthy recovery step.
             healthy_window_s: int — Duration (seconds) of healthy period required to upshift.
-        
+
         Raises:
             ValueError: If requests_per_minute <= 0.
         """
@@ -208,11 +206,18 @@ class FlowController:
             # L = λ * W
             # λ (Throughput) = RPM / 60
             # W (Avg Latency)
-            from vertex_forager.constants import DEFAULT_AVG_LATENCY_S, CONCURRENCY_MIN, CONCURRENCY_MAX
+            from vertex_forager.constants import (
+                CONCURRENCY_MAX,
+                CONCURRENCY_MIN,
+                DEFAULT_AVG_LATENCY_S,
+            )
+
             estimated = int((requests_per_minute / 60.0) * DEFAULT_AVG_LATENCY_S)
             concurrency_limit = max(CONCURRENCY_MIN, min(CONCURRENCY_MAX, estimated))
             logger.info(
-                f"Auto-configured concurrency: {concurrency_limit} (based on {requests_per_minute} RPM)"
+                "Auto-configured concurrency: %d (based on %d RPM)",
+                concurrency_limit,
+                requests_per_minute,
             )
         else:
             concurrency_limit = max(1, int(concurrency_limit))
@@ -221,7 +226,11 @@ class FlowController:
             requests_per_minute=requests_per_minute,
             burst_limit=concurrency_limit,
         )
-        from vertex_forager.constants import GRADIENT_QUEUE_SIZE_DEFAULT, GRADIENT_SMOOTHING_DEFAULT
+        from vertex_forager.constants import (
+            GRADIENT_QUEUE_SIZE_DEFAULT,
+            GRADIENT_SMOOTHING_DEFAULT,
+        )
+
         self._concurrency_limiter = GradientConcurrencyLimiter(
             initial_limit=concurrency_limit,
             max_limit=concurrency_limit,
@@ -260,7 +269,7 @@ class FlowController:
         self._last_downshift_ts = 0.0
         self._last_upshift_ts = 0.0
         self._error_count = 0
-    
+
     async def _safe_set_rpm(self, rpm: int) -> bool:
         try:
             await self._rate_limiter.set_rpm_async(rpm)
@@ -268,7 +277,7 @@ class FlowController:
         except RuntimeError:
             logger.exception("FLOW_EVENT rpm_update_failed rpm=%d", rpm)
             return False
-    
+
     async def _apply_downshift(self, *, prev: int, new: int, ratio: float) -> None:
         ok = await self._safe_set_rpm(new)
         if ok:
@@ -289,7 +298,7 @@ class FlowController:
             # Allow immediate retry by clearing reservation
             self._last_downshift_ts = 0.0
             logger.warning("FLOW_EVENT rpm_downshift_rollback to=%d (apply failed)", prev)
-    
+
     async def _apply_upshift(self, *, prev: int, new: int) -> None:
         ok = await self._safe_set_rpm(new)
         if ok:
@@ -307,12 +316,12 @@ class FlowController:
     @asynccontextmanager
     async def throttle(self) -> AsyncGenerator[None, None]:
         """Context manager to acquire both rate limit and concurrency slot.
-        
+
         Behavior:
             - Acquires GCRA rate limiter permission (may sleep).
             - Acquires GradientConcurrencyLimiter slot (may wait).
             - Releases slot with RTT feedback on exit to adapt limits.
-        
+
         Raises:
             asyncio.CancelledError: If the enclosing task is cancelled while waiting.
         """
@@ -345,12 +354,9 @@ class FlowController:
             if was_err:
                 self._error_count = max(0, self._error_count - 1)
         total = len(self._events)
-        max_samples = max(1, int(math.ceil(self._effective_rpm * self._window_s / 60.0)))
+        max_samples = max(1, math.ceil(self._effective_rpm * self._window_s / 60.0))
         effective_min = min(self._min_sample_size, max_samples)
-        if total < effective_min:
-            ratio = 0.0
-        else:
-            ratio = (self._error_count / total) if total > 0 else 0.0
+        ratio = 0.0 if total < effective_min else self._error_count / total if total > 0 else 0.0
         if is_error:
             self._last_error_ts = now
         if (
@@ -368,20 +374,22 @@ class FlowController:
                     loop = asyncio.get_running_loop()
                     # Optimistic update only after ensuring loop is available
                     self._effective_rpm = new_rpm
-                    loop.create_task(self._apply_downshift(prev=prev_eff, new=new_rpm, ratio=ratio))
+                    self._last_task = loop.create_task(self._apply_downshift(prev=prev_eff, new=new_rpm, ratio=ratio))
                 except Exception:
                     self._last_downshift_ts = prev_guard
                     self._effective_rpm = prev_eff
                     logger.exception("FLOW_EVENT rpm_downshift_schedule_failed new_rpm=%d prev=%d", new_rpm, prev_eff)
             return
-        if (now - max(self._last_error_ts, self._last_adjust_ts, self._last_upshift_ts) >= self._healthy_window_s) and self._effective_rpm < self._rpm_ceiling:
+        if (
+            now - max(self._last_error_ts, self._last_adjust_ts, self._last_upshift_ts) >= self._healthy_window_s
+        ) and self._effective_rpm < self._rpm_ceiling:
             new_rpm = min(self._rpm_ceiling, self._effective_rpm + self._recovery_step)
             if new_rpm != self._effective_rpm:
                 prev_up_guard = self._last_upshift_ts
                 self._last_upshift_ts = now
                 try:
                     loop = asyncio.get_running_loop()
-                    loop.create_task(self._apply_upshift(prev=self._effective_rpm, new=new_rpm))
+                    self._last_task = loop.create_task(self._apply_upshift(prev=self._effective_rpm, new=new_rpm))
                 except Exception:
                     self._last_upshift_ts = prev_up_guard
                     logger.exception("FLOW_EVENT rpm_upshift_schedule_failed new_rpm=%d", new_rpm)

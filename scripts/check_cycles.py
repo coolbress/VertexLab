@@ -4,18 +4,20 @@ Simple import cycle checker for the vertex_forager package.
 
 Builds a directed import graph using AST-based import extraction and detects cycles via DFS.
 """
+
 from __future__ import annotations
 
-import sys
 import ast
+import sys
 from collections import defaultdict
-from pathlib import Path
-from fnmatch import fnmatch
 from collections.abc import Iterator
+from fnmatch import fnmatch
+from pathlib import Path
 
 PKG = "vertex_forager"
 ROOT = Path(__file__).resolve().parent.parent / "packages" / "vertex-forager" / "src"
 SYS_PATH = [str(ROOT)] + sys.path
+
 
 def build_graph() -> tuple[dict[str, set[str]], list[tuple[str, str]]]:
     """Build dependency graph for the package.
@@ -59,7 +61,9 @@ def build_graph() -> tuple[dict[str, set[str]], list[tuple[str, str]]]:
             return ".".join(parts[:-1])
         return ".".join(parts[:-1] + [parts[-1].removesuffix(".py")])
 
-    def resolve_from(base: str, is_pkg: bool, module: str | None, level: int, names: list[ast.alias]) -> tuple[str, list[str]]:
+    def resolve_from(
+        base: str, is_pkg: bool, module: str | None, level: int, names: list[ast.alias]
+    ) -> tuple[str, list[str]]:
         base_parts = base.split(".")
         pkg_parts = base_parts if is_pkg else base_parts[:-1]
         if level > 0:
@@ -92,6 +96,7 @@ def build_graph() -> tuple[dict[str, set[str]], list[tuple[str, str]]]:
         except (UnicodeDecodeError, SyntaxError) as e:
             failures.append((str(path), repr(e)))
             continue
+
         def walk_no_type_checking(n: ast.AST) -> Iterator[ast.AST]:
             yield n
             if isinstance(n, ast.If):
@@ -99,7 +104,12 @@ def build_graph() -> tuple[dict[str, set[str]], list[tuple[str, str]]]:
                 is_tc = False
                 if isinstance(test, ast.Name) and test.id == "TYPE_CHECKING":
                     is_tc = True
-                elif isinstance(test, ast.Attribute) and isinstance(test.value, ast.Name) and test.value.id == "typing" and test.attr == "TYPE_CHECKING":
+                elif (
+                    isinstance(test, ast.Attribute)
+                    and isinstance(test.value, ast.Name)
+                    and test.value.id == "typing"
+                    and test.attr == "TYPE_CHECKING"
+                ):
                     is_tc = True
                 if is_tc:
                     for orelse_node in n.orelse:
@@ -122,7 +132,9 @@ def build_graph() -> tuple[dict[str, set[str]], list[tuple[str, str]]]:
                 if node.level > 0 and node.level > len(pkg_parts):
                     failures.append((str(path), "RelativeImportTooDeep"))
                     continue
-                target_base, targets = resolve_from(modname, modname in packages_set, node.module, node.level, node.names)
+                target_base, targets = resolve_from(
+                    modname, modname in packages_set, node.module, node.level, node.names
+                )
                 if target_base and target_base.startswith(PKG):
                     if target_base != modname:
                         graph[modname].add(target_base)
@@ -137,6 +149,7 @@ def build_graph() -> tuple[dict[str, set[str]], list[tuple[str, str]]]:
                         if dep.startswith(PKG) and dep not in modules_set:
                             failures.append((str(path), f"MissingModule:{dep}"))
     return graph, failures
+
 
 def find_cycles(graph: dict[str, set[str]]) -> list[list[str]]:
     """Detect import cycles in the provided graph.
@@ -176,6 +189,7 @@ def find_cycles(graph: dict[str, set[str]]) -> list[list[str]]:
             dfs(node)
     return cycles
 
+
 def main() -> int:
     """Entry point: build graph, find cycles, print summary, return exit code.
 
@@ -211,6 +225,7 @@ def main() -> int:
         return 1
     print("No import cycles detected.")
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

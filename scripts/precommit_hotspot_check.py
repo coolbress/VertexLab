@@ -6,6 +6,7 @@ import sys
 
 HOTSPOTS: set[str] | None = None  # None => check all staged files
 
+
 def run(cmd: list[str]) -> str:
     """Run a shell command and capture stdout.
 
@@ -20,6 +21,7 @@ def run(cmd: list[str]) -> str:
     """
     proc = subprocess.run(cmd, text=True, capture_output=True, check=True)
     return proc.stdout.strip()
+
 
 def main() -> int:
     """Pre-commit hotspot diff check against origin/main.
@@ -44,7 +46,13 @@ def main() -> int:
             for f in sorted(conflicts):
                 print(f" - {f}", file=sys.stderr)
             print("Run: git fetch origin && git diff origin/main -- <파일경로>", file=sys.stderr)
-            print("Or rehearsal: git fetch origin && git merge --no-commit --no-ff origin/main && git diff --name-only --diff-filter=U && git merge --abort", file=sys.stderr)
+            print(
+                (
+                    "Or rehearsal: git fetch origin && git merge --no-commit --no-ff origin/main "
+                    "&& git diff --name-only --diff-filter=U && git merge --abort"
+                ),
+                file=sys.stderr,
+            )
             return 1
         return 0
     except subprocess.CalledProcessError as e:
@@ -54,6 +62,7 @@ def main() -> int:
         if e.stderr:
             print(e.stderr, file=sys.stderr)
         return 1
+
 
 if __name__ == "__main__":
     sys.exit(main())

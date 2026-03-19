@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 class VertexForagerError(Exception):
     """Base exception for all Vertex Forager errors.
 
@@ -7,11 +8,13 @@ class VertexForagerError(Exception):
     that does not fit a more specific category.
     """
 
+
 class InputError(VertexForagerError):
     """Invalid user or configuration input.
 
     Raised when parameters, identifiers, or configuration values are invalid.
     """
+
 
 class FetchError(VertexForagerError):
     """Network or external provider fetch failures.
@@ -19,11 +22,13 @@ class FetchError(VertexForagerError):
     Raised when HTTP/library calls return errors or unreachable resources.
     """
 
+
 class TransformError(VertexForagerError):
     """Data transformation/normalization failures.
 
     Raised during parsing or schema normalization when data cannot be shaped.
     """
+
 
 class WriterError(VertexForagerError):
     """Persistence/write failures.
@@ -31,11 +36,14 @@ class WriterError(VertexForagerError):
     Raised by writers when storage operations fail.
     """
 
+
 class ComputeError(VertexForagerError):
     """Computation failures during data processing."""
 
+
 class ValidationError(VertexForagerError):
     """Schema or data validation failures."""
+
 
 class PrimaryKeyMissingError(ValidationError):
     """Primary key column missing from data.
@@ -56,6 +64,7 @@ class PrimaryKeyMissingError(ValidationError):
         self.table = table
         self.column = column
         super().__init__(f"Missing PK column '{column}' in table '{table}'")
+
 
 class PrimaryKeyNullError(ValidationError):
     """Primary key contains null values.
@@ -80,6 +89,7 @@ class PrimaryKeyNullError(ValidationError):
         self.null_count = null_count
         super().__init__(f"PK column '{column}' in table '{table}' has {null_count} nulls")
 
+
 class DLQSpoolError(VertexForagerError):
     """Dead Letter Queue (DLQ) spooling failure.
 
@@ -94,6 +104,7 @@ class DLQSpoolError(VertexForagerError):
     Example:
         raise DLQSpoolError(rescued=1, remaining=3, original=exc)
     """
+
     def __init__(self, *, rescued: int, remaining: int, original: Exception | None = None) -> None:
         self.rescued = rescued
         self.remaining = remaining
@@ -103,15 +114,16 @@ class DLQSpoolError(VertexForagerError):
             msg = f"{msg}: {original}"
         super().__init__(msg)
 
+
 __all__ = [
-    "VertexForagerError",
-    "InputError",
-    "FetchError",
-    "TransformError",
-    "WriterError",
     "ComputeError",
-    "ValidationError",
+    "DLQSpoolError",
+    "FetchError",
+    "InputError",
     "PrimaryKeyMissingError",
     "PrimaryKeyNullError",
-    "DLQSpoolError",
+    "TransformError",
+    "ValidationError",
+    "VertexForagerError",
+    "WriterError",
 ]

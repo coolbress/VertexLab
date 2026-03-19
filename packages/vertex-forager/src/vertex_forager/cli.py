@@ -1,19 +1,25 @@
+import asyncio
+import hashlib
+import itertools
+import json
+import logging
+import os
+import time
+from datetime import datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, cast
+
 import click
 import httpx
-import logging
-from typing import Any, Optional, cast
-from pathlib import Path
-import os
-import json
-import time
-from .utils import get_app_root, get_cache_dir, clear_app_cache, cleanup_dlq_tmp
-import itertools
-import random
-import asyncio
-from datetime import datetime
 import polars as pl
+
 from vertex_forager.core.config import FramePacket
 from vertex_forager.writers.duckdb import DuckDBWriter
+
+from .utils import cleanup_dlq_tmp, clear_app_cache, get_app_root, get_cache_dir
+
+if TYPE_CHECKING:
+    from vertex_forager.providers.sharadar.client import SharadarClient
 
 logger = logging.getLogger(__name__)
 
@@ -37,9 +43,7 @@ def main() -> None:
 
 @main.command()
 @click.option("--symbol", "-s", multiple=True, help="Symbols to collect (e.g., AAPL)")
-@click.option(
-    "--source", type=click.Choice(["yfinance", "sharadar"]), default="sharadar"
-)
+@click.option("--source", type=click.Choice(["yfinance", "sharadar"]), default="sharadar")
 def collect(symbol: tuple[str, ...], source: str) -> None:
     """Collect market data from the selected provider.
 
@@ -60,29 +64,28 @@ def collect(symbol: tuple[str, ...], source: str) -> None:
     click.echo(f"🚀 Starting collection for {symbol} using {source}...")
 
     try:
-        from vertex_forager.clients import create_client
         import asyncio
         import os
-        import polars as pl
         from collections.abc import Mapping
+
+        import polars as pl
+
+        from vertex_forager.clients import create_client
 
         # API Key lookup
         api_key = None
         if source == "sharadar":
-            api_key_env = "SHARADAR_API_KEY"
+            api_key_env = "SHARADAR_API_KEY"  # pragma: allowlist secret (env var name only)
             api_key = os.getenv(api_key_env)
             if not api_key:
                 raise click.ClickException(f"Environment variable {api_key_env} is not set.")
 
-        async def _run_collect() -> Optional[Any]:
-            async with create_client(
-                provider=source, api_key=api_key
-            ) as client:
+        async def _run_collect() -> Any | None:
+            async with create_client(provider=source, api_key=api_key) as client:
                 if source == "sharadar":
-                    from vertex_forager.providers.sharadar.client import SharadarClient
                     # For Sharadar, we use the specialized client method
                     # In the future, this can be generalized via a CollectorCore interface
-                    sc = cast(SharadarClient, client)
+                    sc = cast("SharadarClient", client)
                     result = await sc.get_price_data(tickers=list(symbol))
                     return result
                 else:
@@ -105,10 +108,10 @@ def collect(symbol: tuple[str, ...], source: str) -> None:
         raise
     except (ValueError, KeyError) as e:
         logger.error("Collection failed: %s", e)
-        raise click.ClickException(f"Collection error: {e}")
+        raise click.ClickException(f"Collection error: {e}") from None
     except httpx.RequestError as e:
         logger.warning("Collection request failed: %s", type(e).__name__)
-        raise click.ClickException("Collection error: network request failed.")
+        raise click.ClickException("Collection error: network request failed.") from None
     except Exception:
         click.echo("❌ Unexpected error during collection.")
         logger.exception("Unexpected error during collection")
@@ -171,15 +174,16 @@ def constants(section: str, output_format: str, env_only: bool) -> None:
     """
     import json
     import os
+
     from vertex_forager import constants as global_constants
-    from vertex_forager.providers.yfinance import constants as yf_constants
     from vertex_forager.providers.sharadar import constants as sh_constants
-    
+    from vertex_forager.providers.yfinance import constants as yf_constants
+
     preview: dict[str, dict[str, object]] = {}
-    
+
     def add(name: str, values: dict[str, object]) -> None:
         preview[name] = values
-    
+
     def _global_constants() -> dict[str, object]:
         return {
             "HTTP_TIMEOUT_S": global_constants.HTTP_TIMEOUT_S,
@@ -196,7 +200,7 @@ def constants(section: str, output_format: str, env_only: bool) -> None:
             "PROGRESS_LOG_CHUNK_ROWS": global_constants.PROGRESS_LOG_CHUNK_ROWS,
             "DEFAULT_TIME_ZONE": global_constants.DEFAULT_TIME_ZONE,
         }
-    
+
     def _flow_constants() -> dict[str, object]:
         return {
             "DEFAULT_AVG_LATENCY_S": global_constants.DEFAULT_AVG_LATENCY_S,
@@ -206,7 +210,7 @@ def constants(section: str, output_format: str, env_only: bool) -> None:
             "GRADIENT_SMOOTHING_DEFAULT": global_constants.GRADIENT_SMOOTHING_DEFAULT,
             "GRADIENT_WINDOW_S": global_constants.GRADIENT_WINDOW_S,
         }
-    
+
     def _queue_constants() -> dict[str, object]:
         return {
             "QUEUE_TARGET_RAM_RATIO": global_constants.QUEUE_TARGET_RAM_RATIO,
@@ -215,14 +219,14 @@ def constants(section: str, output_format: str, env_only: bool) -> None:
             "QUEUE_MAX": global_constants.QUEUE_MAX,
             "QUEUE_DEFAULT": global_constants.QUEUE_DEFAULT,
         }
-    
+
     if section in ("global", "all"):
         add("global", _global_constants())
     if section in ("flow", "all"):
         add("flow", _flow_constants())
     if section in ("queue", "all"):
         add("queue", _queue_constants())
-    
+
     if section in ("yfinance", "all"):
         add(
             "yfinance",
@@ -235,7 +239,7 @@ def constants(section: str, output_format: str, env_only: bool) -> None:
                 "DEFAULT_PRICE_PERIOD": yf_constants.DEFAULT_PRICE_PERIOD,
             },
         )
-    
+
     if section in ("sharadar", "all"):
         add(
             "sharadar",
@@ -250,7 +254,7 @@ def constants(section: str, output_format: str, env_only: bool) -> None:
                 "MAX_PAGES": sh_constants.MAX_PAGES,
             },
         )
-    
+
     if section in ("writers", "all"):
         add(
             "writers",
@@ -259,7 +263,7 @@ def constants(section: str, output_format: str, env_only: bool) -> None:
                 "WAL_AUTOCHECKPOINT_LIMIT": global_constants.WAL_AUTOCHECKPOINT_LIMIT,
             },
         )
-    
+
     ENV_VAR_MAPPING: dict[str, tuple[str, str]] = {
         "VF_HTTP_TIMEOUT_S": ("global", "HTTP_TIMEOUT_S"),
         "VF_HTTP_MAX_CONNECTIONS": ("global", "HTTP_MAX_CONNECTIONS"),
@@ -269,7 +273,7 @@ def constants(section: str, output_format: str, env_only: bool) -> None:
     }
     env_vals = {
         "SHARADAR_API_KEY": os.getenv("SHARADAR_API_KEY"),
-        **{k: os.getenv(k) for k in ENV_VAR_MAPPING.keys()},
+        **{k: os.getenv(k) for k in ENV_VAR_MAPPING},
         "VF_METRICS_ENABLED": os.getenv("VF_METRICS_ENABLED"),
         "VF_MEM_THRESHOLD_RATIO": os.getenv("VF_MEM_THRESHOLD_RATIO"),
         "VF_MEM_THRESHOLD_ABS_MB": os.getenv("VF_MEM_THRESHOLD_ABS_MB"),
@@ -279,11 +283,11 @@ def constants(section: str, output_format: str, env_only: bool) -> None:
         env_overrides_obj["SHARADAR_API_KEY"] = "<redacted>"
     if env_overrides_obj:
         preview["env_overrides"] = env_overrides_obj
-    
+
     if output_format == "json":
         click.echo(json.dumps(preview, indent=2, ensure_ascii=False))
         return
-    
+
     # table format
     override_flags: dict[str, set[str]] = {
         "global": set(),
@@ -311,6 +315,7 @@ def constants(section: str, output_format: str, env_only: bool) -> None:
                 suffix = " (env)"
             click.echo(f"{k.ljust(max_key)}{suffix}  :  {v}")
 
+
 @main.command()
 def clear() -> None:
     """Clear all temporary cache data.
@@ -325,6 +330,7 @@ def clear() -> None:
         clear_app_cache()
         click.echo("🧹 Cache cleared.")
 
+
 @main.group()
 def tune() -> None:
     """Tuning and profiling commands.
@@ -337,13 +343,20 @@ def tune() -> None:
     """
     pass
 
+
 @tune.command("profile")
-@click.option("--kind", type=click.Choice(["price","financials"]), default="price")
+@click.option("--kind", type=click.Choice(["price", "financials"]), default="price")
 @click.option("--output-dir", type=click.Path(path_type=Path), default=None)
 @click.option("--tickers", type=str, default=None)
 @click.option("--start-date", type=str, default=None)
 @click.option("--end-date", type=str, default=None)
-def tune_profile(kind: str, output_dir: Path | None, tickers: str | None, start_date: str | None, end_date: str | None) -> None:
+def tune_profile(
+    kind: str,
+    output_dir: Path | None,
+    tickers: str | None,
+    start_date: str | None,
+    end_date: str | None,
+) -> None:
     """Run a single profiling run for price or financials data.
 
     Args:
@@ -361,13 +374,22 @@ def tune_profile(kind: str, output_dir: Path | None, tickers: str | None, start_
     if kind == "price":
         from vertex_forager.providers.yfinance.client import YFinanceClient
         from vertex_forager.utils import as_dict
+
         db_path = out_dir / "profile_run.duckdb"
         if db_path.exists():
             db_path.unlink()
         os.environ.setdefault("VF_METRICS_ENABLED", "1")
         client = YFinanceClient(rate_limit=60, metrics_enabled=True, structured_logs=False)
         _tickers = [t.strip().upper() for t in (tickers or "AAPL,MSFT,NVDA,GOOGL,AMZN").split(",")]
-        run = asyncio.run(client.get_price_data(tickers=_tickers, connect_db=db_path, show_progress=False, start_date=start_date, end_date=end_date))
+        run = asyncio.run(
+            client.get_price_data(
+                tickers=_tickers,
+                connect_db=db_path,
+                show_progress=False,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        )
         data = as_dict(run)
         metrics_path = out_dir / "profile_metrics.json"
         metrics_path.write_text(json.dumps(data, indent=2))
@@ -375,22 +397,46 @@ def tune_profile(kind: str, output_dir: Path | None, tickers: str | None, start_
         if db_path.exists():
             db_path.unlink()
     else:
-        from vertex_forager.providers.yfinance.client import YFinanceClient
         from vertex_forager.providers.sharadar.client import SharadarClient
+        from vertex_forager.providers.yfinance.client import YFinanceClient
         from vertex_forager.utils import as_dict
+
         db_path = out_dir / "profile_financials.duckdb"
         if db_path.exists():
             db_path.unlink()
         os.environ.setdefault("VF_METRICS_ENABLED", "1")
-        yf_tickers = [t.strip().upper() for t in (tickers or os.getenv("YF_TICKERS") or "AAPL,MSFT,NVDA,GOOGL,AMZN,META,TSLA,NFLX,ADBE,CSCO").split(",")]
+        yf_tickers = [
+            t.strip().upper()
+            for t in (tickers or os.getenv("YF_TICKERS") or "AAPL,MSFT,NVDA,GOOGL,AMZN,META,TSLA,NFLX,ADBE,CSCO").split(
+                ","
+            )
+        ]
         yfc = YFinanceClient(rate_limit=60, structured_logs=False)
-        yf_run = asyncio.run(yfc.get_financials(kind="income_stmt", period="annual", tickers=yf_tickers, connect_db=db_path, show_progress=False))
+        yf_run = asyncio.run(
+            yfc.get_financials(
+                kind="income_stmt",
+                period="annual",
+                tickers=yf_tickers,
+                connect_db=db_path,
+                show_progress=False,
+            )
+        )
         sh_key = os.getenv("SHARADAR_API_KEY")
         sh_run = None
         if sh_key:
             try:
-                shc = SharadarClient(api_key=sh_key, rate_limit=60, structured_logs=False)
-                sh_run = asyncio.run(shc.get_fundamental_data(tickers=yf_tickers[:5], connect_db=db_path, dimension="MRT"))
+                shc = SharadarClient(
+                    api_key=sh_key,
+                    rate_limit=60,
+                    structured_logs=False,
+                )
+                sh_run = asyncio.run(
+                    shc.get_fundamental_data(
+                        tickers=yf_tickers[:5],
+                        connect_db=db_path,
+                        dimension="MRT",
+                    )
+                )
             except Exception as e:
                 logger.warning(f"Sharadar verification skipped due to error: {e}")
                 sh_run = None
@@ -404,6 +450,7 @@ def tune_profile(kind: str, output_dir: Path | None, tickers: str | None, start_
         click.echo(str(metrics_path))
         if db_path.exists():
             db_path.unlink()
+
 
 def _build_sweep_combinations(
     concurrency_list: str | None,
@@ -428,6 +475,7 @@ def _build_sweep_combinations(
     Returns:
         List of environment configuration dictionaries.
     """
+
     def _parse_list(s: str | None, default: list[int]) -> list[int]:
         if not s:
             return default
@@ -435,14 +483,14 @@ def _build_sweep_combinations(
         for tok in s.split(","):
             tok = tok.strip()
             if not tok:
-                raise click.BadParameter(f"Invalid empty value in list '{s}'.")
+                raise click.BadParameter(f"Invalid empty value in list '{s}'.") from None
             try:
                 x = int(tok)
                 if x <= 0:
                     raise ValueError("Must be positive")
                 vals.append(x)
             except ValueError:
-                raise click.BadParameter(f"Invalid value '{tok}' in list '{s}'. Must be positive integers.")
+                raise click.BadParameter(f"Invalid value '{tok}' in list '{s}'. Must be positive integers.") from None
         return vals
 
     concs = _parse_list(concurrency_list, [8, 12, 16, 20, 24])
@@ -453,26 +501,35 @@ def _build_sweep_combinations(
 
     combos: list[dict[str, Any]] = []
     for c, f, k, m, t in itertools.product(concs, flushes, keepalives, connections, timeouts):
-        combos.append({
-            "VF_CONCURRENCY": c,
-            "VF_FLUSH_THRESHOLD_ROWS": f,
-            "VF_HTTP_MAX_KEEPALIVE": k,
-            "VF_HTTP_MAX_CONNECTIONS": m,
-            "VF_HTTP_TIMEOUT_S": t,
-        })
-    
+        combos.append(
+            {
+                "VF_CONCURRENCY": c,
+                "VF_FLUSH_THRESHOLD_ROWS": f,
+                "VF_HTTP_MAX_KEEPALIVE": k,
+                "VF_HTTP_MAX_CONNECTIONS": m,
+                "VF_HTTP_TIMEOUT_S": t,
+            }
+        )
+
     total = len(combos)
     if sample_count is None:
         sample_count = 50  # Default sane limit
 
     if sample_count > 0 and sample_count < total:
         click.echo(f"Sampling {sample_count} combinations from {total} total (seed={sample_seed}).")
-        rnd = random.Random(sample_seed)
-        combos = rnd.sample(combos, sample_count)
+
+        def _score_idx(i: int) -> int:
+            h = hashlib.sha256(f"{sample_seed}:{i}".encode()).digest()
+            return int.from_bytes(h[:8], "big", signed=False)
+
+        ranked = sorted(range(len(combos)), key=_score_idx)
+        sel_idx = ranked[:sample_count]
+        combos = [combos[i] for i in sel_idx]
     else:
         click.echo(f"Running all {total} combinations.")
-        
+
     return combos
+
 
 def _run_sweep_measurements(
     combos: list[dict[str, Any]],
@@ -489,10 +546,10 @@ def _run_sweep_measurements(
     Returns:
         Dictionary containing run results.
     """
-    from vertex_forager.providers.yfinance.client import YFinanceClient
     from vertex_forager.providers.sharadar.client import SharadarClient
-    from vertex_forager.utils import set_env, load_tickers_env
-    
+    from vertex_forager.providers.yfinance.client import YFinanceClient
+    from vertex_forager.utils import load_tickers_env, set_env
+
     # Use output_dir for DB paths
     out_dir = output_dir
 
@@ -511,16 +568,24 @@ def _run_sweep_measurements(
             combo_db_path = out_dir / f"profile_sweep_{idx}.duckdb"
             if combo_db_path.exists():
                 combo_db_path.unlink()
-            
+
             try:
                 set_env(cfg)
                 entry: dict[str, Any] = {"env": dict(cfg), "measurements": {}}
-                
+
                 # YFinance Price
                 try:
                     yfc = YFinanceClient(rate_limit=60, structured_logs=False)
                     t0 = time.monotonic()
-                    yf_price = asyncio.run(yfc.get_price_data(tickers=yf_tickers_price, connect_db=combo_db_path, show_progress=False, start_date=yf_start, end_date=yf_end))
+                    yf_price = asyncio.run(
+                        yfc.get_price_data(
+                            tickers=yf_tickers_price,
+                            connect_db=combo_db_path,
+                            show_progress=False,
+                            start_date=yf_start,
+                            end_date=yf_end,
+                        )
+                    )
                     t1 = time.monotonic()
                     entry["measurements"]["yfinance_price"] = {
                         "duration_s": round(t1 - t0, 3),
@@ -538,7 +603,15 @@ def _run_sweep_measurements(
                 try:
                     yfc2 = YFinanceClient(rate_limit=60, structured_logs=False)
                     t2 = time.monotonic()
-                    yf_fin = asyncio.run(yfc2.get_financials(kind="income_stmt", period="annual", tickers=yf_tickers_fin, connect_db=combo_db_path, show_progress=False))
+                    yf_fin = asyncio.run(
+                        yfc2.get_financials(
+                            kind="income_stmt",
+                            period="annual",
+                            tickers=yf_tickers_fin,
+                            connect_db=combo_db_path,
+                            show_progress=False,
+                        )
+                    )
                     t3 = time.monotonic()
                     entry["measurements"]["yfinance_financials"] = {
                         "duration_s": round(t3 - t2, 3),
@@ -557,7 +630,15 @@ def _run_sweep_measurements(
                     try:
                         shc = SharadarClient(api_key=sh_key, rate_limit=60, structured_logs=False)
                         t4 = time.monotonic()
-                        sh_fin = asyncio.run(shc.get_fundamental_data(tickers=sh_tickers, connect_db=combo_db_path, dimension="MRT", start_date=sh_start, end_date=sh_end))
+                        sh_fin = asyncio.run(
+                            shc.get_fundamental_data(
+                                tickers=sh_tickers,
+                                connect_db=combo_db_path,
+                                dimension="MRT",
+                                start_date=sh_start,
+                                end_date=sh_end,
+                            )
+                        )
                         t5 = time.monotonic()
                         entry["measurements"]["sharadar_sf1_mrt"] = {
                             "duration_s": round(t5 - t4, 3),
@@ -570,9 +651,9 @@ def _run_sweep_measurements(
                     except Exception as e:
                         logger.warning(f"Sharadar sweep error: {e}")
                         entry["measurements"]["sharadar_sf1_mrt"] = {"error": str(e)}
-                
+
                 results["runs"].append(entry)
-            
+
             finally:
                 # Cleanup per-combo DB
                 if combo_db_path.exists():
@@ -588,7 +669,7 @@ def _run_sweep_measurements(
                     os.environ.pop(k, None)
                 for k, v in original_env.items():
                     os.environ[k] = v
-                
+
                 # Re-apply metrics enabled as it's required for all runs
                 os.environ.setdefault("VF_METRICS_ENABLED", "1")
 
@@ -600,8 +681,9 @@ def _run_sweep_measurements(
             os.environ.pop(k, None)
         for k, v in original_env.items():
             os.environ[k] = v
-            
+
     return results
+
 
 def _score_and_rank_results(
     results: dict[str, Any],
@@ -620,18 +702,19 @@ def _score_and_rank_results(
     Returns:
         Updated results dictionary with 'best' entry added.
     """
+
     def _score(r: dict[str, Any], run_key: str) -> float:
         m = r["measurements"].get(run_key, {})
         duration = m.get("duration_s", float("inf"))
         metrics = m.get("metrics", {})
         errors = metrics.get("errors", [])
         err_cnt = len(errors) if isinstance(errors, list) else 0
-        
+
         try:
             score = float(duration)
         except (ValueError, TypeError):
             score = float("inf")
-        
+
         if rank_by == "duration_p95":
             summary = metrics.get("summary", {})
             p95 = summary.get("http_duration_s_p95", duration)
@@ -639,54 +722,95 @@ def _score_and_rank_results(
                 score += float(rank_alpha) * float(p95)
             except (ValueError, TypeError) as e:
                 logger.warning(f"Error computing p95 score: {e}, inputs: alpha={rank_alpha}, p95={p95}")
-        
+
         if err_cnt > 0:
             try:
                 score += float(err_cnt) * float(rank_error_penalty)
             except (ValueError, TypeError) as e:
-                logger.warning(f"Error computing penalty score: {e}, inputs: err_cnt={err_cnt}, penalty={rank_error_penalty}")
-                score += float(err_cnt) * 5.0 # Fallback penalty
+                logger.warning(
+                    f"Error computing penalty score: {e}, inputs: err_cnt={err_cnt}, penalty={rank_error_penalty}"
+                )
+                score += float(err_cnt) * 5.0  # Fallback penalty
 
         return score
 
     def _best(run_key: str) -> dict[str, Any]:
-        runs = cast(list[dict[str, Any]], results.get("runs", []))
+        runs = cast("list[dict[str, Any]]", results.get("runs", []))
         if not runs:
             return {}
-        
+
         # Filter runs that actually have measurements for the given key and no explicit error
         valid_runs = []
         for r in runs:
             m = r.get("measurements", {}).get(run_key)
             if m and not m.get("error"):
                 valid_runs.append(r)
-        
+
         if not valid_runs:
             return {}
 
         ranked: list[dict[str, Any]] = sorted(valid_runs, key=lambda r: _score(r, run_key))
         return ranked[0]
-        
+
     results["best"] = {
         "yfinance_price": _best("yfinance_price"),
         "yfinance_financials": _best("yfinance_financials"),
     }
     return results
 
+
 @tune.command("sweep")
 @click.option("--output-dir", type=click.Path(path_type=Path), default=None)
 @click.option("--include-sharadar", is_flag=True, default=False)
-@click.option("--concurrency-list", type=str, default=None, help="Comma-separated list of concurrency values")
-@click.option("--flush-rows-list", type=str, default=None, help="Comma-separated list of flush threshold rows")
-@click.option("--keepalive-list", type=str, default=None, help="Comma-separated list of HTTP keepalive counts")
-@click.option("--connections-list", type=str, default=None, help="Comma-separated list of HTTP max connections")
-@click.option("--timeout-list", type=str, default=None, help="Comma-separated list of HTTP timeouts (seconds)")
-@click.option("--rank-by", type=click.Choice(["duration","duration_p95"]), default="duration")
+@click.option(
+    "--concurrency-list",
+    type=str,
+    default=None,
+    help="Comma-separated list of concurrency values",
+)
+@click.option(
+    "--flush-rows-list",
+    type=str,
+    default=None,
+    help="Comma-separated list of flush threshold rows",
+)
+@click.option(
+    "--keepalive-list",
+    type=str,
+    default=None,
+    help="Comma-separated list of HTTP keepalive counts",
+)
+@click.option(
+    "--connections-list",
+    type=str,
+    default=None,
+    help="Comma-separated list of HTTP max connections",
+)
+@click.option(
+    "--timeout-list",
+    type=str,
+    default=None,
+    help="Comma-separated list of HTTP timeouts (seconds)",
+)
+@click.option("--rank-by", type=click.Choice(["duration", "duration_p95"]), default="duration")
 @click.option("--rank-alpha", type=float, default=0.4)
 @click.option("--sample-count", type=int, default=None)
 @click.option("--sample-seed", type=int, default=42)
 @click.option("--rank-error-penalty", type=float, default=5.0)
-def tune_sweep(output_dir: Path | None, include_sharadar: bool, concurrency_list: str | None, flush_rows_list: str | None, keepalive_list: str | None, connections_list: str | None, timeout_list: str | None, rank_by: str, rank_alpha: float, sample_count: int | None, sample_seed: int, rank_error_penalty: float) -> None:
+def tune_sweep(
+    output_dir: Path | None,
+    include_sharadar: bool,
+    concurrency_list: str | None,
+    flush_rows_list: str | None,
+    keepalive_list: str | None,
+    connections_list: str | None,
+    timeout_list: str | None,
+    rank_by: str,
+    rank_alpha: float,
+    sample_count: int | None,
+    sample_seed: int,
+    rank_error_penalty: float,
+) -> None:
     """Run a parameter sweep to find optimal settings.
 
     Args:
@@ -712,22 +836,22 @@ def tune_sweep(output_dir: Path | None, include_sharadar: bool, concurrency_list
     best_path = out_dir / "profile_tuning_best.json"
 
     os.environ.setdefault("VF_METRICS_ENABLED", "1")
-    
+
     # 1. Build combinations
     combos = _build_sweep_combinations(
-        concurrency_list, flush_rows_list, keepalive_list, connections_list, timeout_list,
-        sample_count, sample_seed
+        concurrency_list, flush_rows_list, keepalive_list, connections_list, timeout_list, sample_count, sample_seed
     )
-    
+
     # 2. Measure
     results = _run_sweep_measurements(combos, out_dir, include_sharadar)
-    
+
     # 3. Score and Rank
     results = _score_and_rank_results(results, rank_by, rank_alpha, rank_error_penalty)
-    
+
     report_path.write_text(json.dumps(results, indent=2))
     best_path.write_text(json.dumps(results["best"], indent=2))
     click.echo(str(report_path))
+
 
 @tune.command("export-best")
 @click.option("--output-dir", type=click.Path(path_type=Path), default=None)
@@ -748,6 +872,7 @@ def tune_export_best(output_dir: Path | None, write_file: Path | None) -> None:
         raise click.ClickException(f"Best file not found: {best_path}")
     data = json.loads(best_path.read_text())
     lines: list[str] = []
+
     def _collect(label: str) -> None:
         entry = data.get(label) or {}
         env = entry.get("env") or {}
@@ -755,6 +880,7 @@ def tune_export_best(output_dir: Path | None, write_file: Path | None) -> None:
         for k, v in env.items():
             lines.append(f"export {k}={v}")
         lines.append("")
+
     _collect("yfinance_price")
     _collect("yfinance_financials")
     content = "\n".join(lines)
@@ -764,10 +890,23 @@ def tune_export_best(output_dir: Path | None, write_file: Path | None) -> None:
     else:
         click.echo(content)
 
+
 @main.command("recover")
-@click.option("--dir", "dlq_dir", type=click.Path(path_type=Path), default=None, help="DLQ root directory (default: $ROOT/cache/dlq)")
+@click.option(
+    "--dir",
+    "dlq_dir",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="DLQ root directory (default: $ROOT/cache/dlq)",
+)
 @click.option("--table", "tables", multiple=True, help="Limit recovery to specific table(s)")
-@click.option("--db", "db_path", type=click.Path(path_type=Path), default=None, help="Target DuckDB file path (or set VF_RECOVER_DB)")
+@click.option(
+    "--db",
+    "db_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Target DuckDB file path (or set VF_RECOVER_DB)",
+)
 @click.option("--dry-run", is_flag=True, default=False, help="Scan and report without writing")
 @click.option("--delete-on-success", is_flag=True, default=False, help="Delete IPC files after successful reinjection")
 @click.option("--clean-tmp", is_flag=True, default=False, help="Remove stale .ipc.tmp files before recovery")
@@ -775,19 +914,40 @@ def tune_export_best(output_dir: Path | None, write_file: Path | None) -> None:
 @click.option("--report", type=click.Path(path_type=Path), default=None, help="Write JSON report to this path")
 @click.option("--progress", is_flag=True, default=False, help="Show per-file progress during recovery")
 @click.option("--verbose", is_flag=True, default=False, help="Print per-file details without requiring --report")
-@click.option("--strict", is_flag=True, default=False, help="Exit non-zero if any failures occur (RecoverFail/CloseFail/DeleteFail)")
-def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None, dry_run: bool, delete_on_success: bool, clean_tmp: bool, retention_s: int, report: Path | None, progress: bool, verbose: bool, strict: bool) -> None:
+@click.option(
+    "--strict",
+    is_flag=True,
+    default=False,
+    help="Exit non-zero if any failures occur (RecoverFail/CloseFail/DeleteFail)",
+)
+def recover(
+    dlq_dir: Path | None,
+    tables: tuple[str, ...],
+    db_path: Path | None,
+    dry_run: bool,
+    delete_on_success: bool,
+    clean_tmp: bool,
+    retention_s: int,
+    report: Path | None,
+    progress: bool,
+    verbose: bool,
+    strict: bool,
+) -> None:
     """Recover failed DLQ batches into the target DuckDB database.
-    
+
     Usage:
-        vertex-forager recover --dir "$VERTEXFORAGER_ROOT/cache/dlq" --dry-run --report /tmp/dlq_report.json
-        vertex-forager recover --table sharadar_sf1 --dir "$VERTEXFORAGER_ROOT/cache/dlq" --db /path/to/target.duckdb --delete-on-success
-        vertex-forager recover --dir "$VERTEXFORAGER_ROOT/cache/dlq" --dry-run --strict --progress
-    
+        vertex-forager recover --dir "$VERTEXFORAGER_ROOT/cache/dlq" \\
+            --dry-run --report /tmp/dlq_report.json
+        vertex-forager recover --table sharadar_sf1 \\
+            --dir "$VERTEXFORAGER_ROOT/cache/dlq" --db /path/to/target.duckdb \\
+            --delete-on-success
+        vertex-forager recover --dir "$VERTEXFORAGER_ROOT/cache/dlq" \\
+            --dry-run --strict --progress
+
     Caution:
         Deletion occurs only after a successful writer close.
         Prefer --dry-run first to preview counts and affected files.
-    
+
     Args:
         dlq_dir: Base DLQ directory containing per-table subdirectories.
         tables: Specific table(s) to recover; if empty, recover all.
@@ -810,7 +970,7 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
                 deleted = cleanup_dlq_tmp(base, retention_s)
                 click.echo(f"🧹 Cleaned {deleted} stale .ipc.tmp files")
             except ValueError as e:
-                raise click.ClickException(str(e))
+                raise click.ClickException(str(e)) from None
         env_db = os.getenv("VF_RECOVER_DB")
         target_db = db_path or (Path(env_db) if env_db and env_db.strip() else None)
         if not dry_run and target_db is None:
@@ -830,11 +990,30 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
         if not selected_tables:
             click.echo("No tables selected or found under DLQ.")
             return
-        summary: dict[str, Any] = {"base": str(base), "db": str(target_db) if target_db else None, "dry_run": dry_run, "tables": {}, "errors": [], "error_counts": {}}
+        summary: dict[str, Any] = {
+            "base": str(base),
+            "db": str(target_db) if target_db else None,
+            "dry_run": dry_run,
+            "tables": {},
+            "errors": [],
+            "error_counts": {},
+        }
+
         async def _run() -> None:
             writer: DuckDBWriter | None = None
             delete_candidates: dict[str, list[Path]] = {}
-            async def _scan_table(table: str, base_dir: Path, progress_flag: bool, dry: bool, w: DuckDBWriter | None, deletes: bool, del_cand: dict[str, list[Path]], summ: dict[str, Any], is_explicit: bool) -> dict[str, Any] | None:
+
+            async def _scan_table(
+                table: str,
+                base_dir: Path,
+                progress_flag: bool,
+                dry: bool,
+                w: DuckDBWriter | None,
+                deletes: bool,
+                del_cand: dict[str, list[Path]],
+                summ: dict[str, Any],
+                is_explicit: bool,
+            ) -> dict[str, Any] | None:
                 tbl_dir = base_dir / table
                 if not tbl_dir.exists():
                     if is_explicit:
@@ -855,7 +1034,12 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
                         if dry:
                             file_reports.append({"file": str(f), "rows": df_rows, "status": "scanned"})
                             continue
-                        pkt = FramePacket(provider="dlq", table=table, frame=df, observed_at=datetime.now())
+                        pkt = FramePacket(
+                            provider="dlq",
+                            table=table,
+                            frame=df,
+                            observed_at=datetime.now(),
+                        )
                         if w is None:
                             raise RuntimeError("recover: writer is not initialized")
                         res = await w.write(pkt)
@@ -868,21 +1052,33 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
                     except Exception as e:
                         summ["errors"].append(f"RecoverFail:{table}:{f}:rows={df_rows}:{e}")
                         file_reports.append({"file": str(f), "rows": df_rows, "status": "failed", "error": str(e)})
-                return {"files_scanned": len(ipc_files), "rows_scanned": rows_scanned, "rows_written": rows_written, "details": file_reports}
-            def _process_deletions(del_cand: dict[str, list[Path]], summ: dict[str, Any], deletes: bool, dry: bool, closed_ok_flag: bool) -> None:
+                return {
+                    "files_scanned": len(ipc_files),
+                    "rows_scanned": rows_scanned,
+                    "rows_written": rows_written,
+                    "details": file_reports,
+                }
+
+            def _process_deletions(
+                del_cand: dict[str, list[Path]],
+                summ: dict[str, Any],
+                deletes: bool,
+                dry: bool,
+                closed_ok_flag: bool,
+            ) -> None:
                 if deletes and not dry and closed_ok_flag:
                     for tbl, files in del_cand.items():
                         for f in files:
                             try:
                                 f.unlink()
-                                try:
+                                import contextlib
+
+                                with contextlib.suppress(Exception):
                                     dir_fd = os.open(str(f.parent), os.O_RDONLY)
                                     try:
                                         os.fsync(dir_fd)
                                     finally:
                                         os.close(dir_fd)
-                                except Exception:
-                                    pass
                                 details = summ["tables"].get(tbl, {}).get("details", [])
                                 for entry in details:
                                     if entry.get("file") == str(f) and entry.get("status") == "written":
@@ -900,6 +1096,7 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
                             for entry in details:
                                 if entry.get("file") == str(f) and entry.get("status") == "written":
                                     entry["status"] = "close_failed"
+
             def _aggregate_errors(summ: dict[str, Any]) -> None:
                 counts: dict[str, int] = {"RecoverFail": 0, "CloseFail": 0, "DeleteFail": 0}
                 for msg in summ["errors"]:
@@ -911,6 +1108,7 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
                         elif msg.startswith("DeleteFail:"):
                             counts["DeleteFail"] += 1
                 summ["error_counts"] = counts
+
             try:
                 if not dry_run:
                     if target_db is None:
@@ -922,7 +1120,17 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
                     raw_tables_local = [t.strip() for t in tables if t and t.strip()]
                     explicit_set = set(raw_tables_local)
                 for tbl in selected_tables:
-                    result = await _scan_table(tbl, base, progress, dry_run, writer, delete_on_success, delete_candidates, summary, tbl in explicit_set)
+                    result = await _scan_table(
+                        tbl,
+                        base,
+                        progress,
+                        dry_run,
+                        writer,
+                        delete_on_success,
+                        delete_candidates,
+                        summary,
+                        tbl in explicit_set,
+                    )
                     if result is not None:
                         summary["tables"][tbl] = result
             finally:
@@ -936,6 +1144,7 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
                         logger.warning(f"Recover: writer close failed: {e_close}")
                 _process_deletions(delete_candidates, summary, delete_on_success, dry_run, closed_ok)
             _aggregate_errors(summary)
+
         asyncio.run(_run())
         if report:
             try:
@@ -943,13 +1152,23 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
                 Path(report).write_text(json.dumps(summary, indent=2))
                 click.echo(str(report))
             except Exception as e_rep:
-                raise click.ClickException(f"Failed to write report: {e_rep}")
+                raise click.ClickException(f"Failed to write report: {e_rep}") from None
         total_rows_scanned = sum(int(v.get("rows_scanned", 0) or 0) for v in summary["tables"].values())
         total_rows_written = sum(int(v.get("rows_written", 0) or 0) for v in summary["tables"].values())
         ec = summary.get("error_counts", {})
-        msg = f"✅ Recover summary: tables={len(summary['tables'])} rows_scanned={total_rows_scanned} rows_written={total_rows_written} errors={len(summary['errors'])}"
+        msg = (
+            f"✅ Recover summary: tables={len(summary['tables'])} "
+            f"rows_scanned={total_rows_scanned} "
+            f"rows_written={total_rows_written} "
+            f"errors={len(summary['errors'])}"
+        )
         if ec:
-            msg += f" (RecoverFail={ec.get('RecoverFail', 0)} CloseFail={ec.get('CloseFail', 0)} DeleteFail={ec.get('DeleteFail', 0)})"
+            msg += (
+                " ("
+                f"RecoverFail={ec.get('RecoverFail', 0)} "
+                f"CloseFail={ec.get('CloseFail', 0)} "
+                f"DeleteFail={ec.get('DeleteFail', 0)})"
+            )
         click.echo(msg)
         if verbose:
             for tbl, info in summary["tables"].items():
@@ -962,7 +1181,8 @@ def recover(dlq_dir: Path | None, tables: tuple[str, ...], db_path: Path | None,
         raise
     except Exception as e:
         logger.exception("Unexpected recover error")
-        raise click.ClickException(str(e))
+        raise click.ClickException(str(e)) from None
+
 
 if __name__ == "__main__":
     main()

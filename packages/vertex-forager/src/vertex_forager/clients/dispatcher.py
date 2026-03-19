@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 import warnings
-from typing import Callable, Any, TypeVar, Union, cast, Type, Optional
+from typing import TYPE_CHECKING, Any, TypeVar, cast
+
 from vertex_forager.core.http import HttpExecutor as DefaultHttpExecutor
 from vertex_forager.core.pipeline import VertexForager as DefaultVertexForager
-
-from vertex_forager.core.config import RunResult
-from vertex_forager.core.contracts import IRouter, IWriter, IMapper
 from vertex_forager.core.types import JSONValue, SharadarDataset, YFinanceDataset
 
-T = TypeVar("T", bound=Union[SharadarDataset, YFinanceDataset, str])
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from vertex_forager.core.config import RunResult
+    from vertex_forager.core.contracts import IMapper, IRouter, IWriter
+
+T = TypeVar("T", bound=SharadarDataset | YFinanceDataset | str)
+
 
 async def run_pipeline_for(
     *,
@@ -20,15 +25,15 @@ async def run_pipeline_for(
     writer: IWriter,
     mapper: IMapper,
     on_progress: Callable[..., None] | None = None,
-    http_executor_cls: Optional[Type[Any]] = None,
-    vertex_forager_cls: Optional[Type[Any]] = None,
+    http_executor_cls: type[Any] | None = None,
+    vertex_forager_cls: type[Any] | None = None,
     **kwargs: JSONValue,
 ) -> RunResult:
     """Execute the VertexForager pipeline using the provided client context.
-    
+
     This helper isolates pipeline orchestration from the client class to
     satisfy DIP and improve testability.
-    
+
     Args:
         client: Client instance that owns HTTP/session lifecycle and config.
         router: Provider router for job generation and parsing.
@@ -38,10 +43,10 @@ async def run_pipeline_for(
         mapper: Schema mapper to normalize frames.
         on_progress: Optional callback invoked on job completion.
         **kwargs: Additional pipeline options; reserved keys are filtered.
-    
+
     Returns:
         RunResult: Pipeline execution summary and tables/errors metrics.
-    
+
     Raises:
         httpx.RequestError: Network errors during fetch.
         httpx.HTTPStatusError: Non-2xx HTTP responses.
@@ -50,6 +55,7 @@ async def run_pipeline_for(
         PrimaryKeyNullError: PK columns contain nulls.
     """
     from vertex_forager.constants import RESERVED_PIPELINE_KEYS
+
     async with client._http_client():
         http = (http_executor_cls or DefaultHttpExecutor)(client=client)
         pipeline = (vertex_forager_cls or DefaultVertexForager)(
@@ -61,6 +67,7 @@ async def run_pipeline_for(
             controller=client.controller,
         )
         from vertex_forager.clients.validation import filter_reserved_kwargs
+
         run_kwargs = filter_reserved_kwargs(kwargs, RESERVED_PIPELINE_KEYS)
         with warnings.catch_warnings():
             warnings.filterwarnings(
@@ -76,4 +83,4 @@ async def run_pipeline_for(
             client.last_run = await pipeline.run(
                 dataset=dataset, symbols=symbols, on_progress=on_progress, **run_kwargs
             )
-        return cast(RunResult, client.last_run)
+        return cast("RunResult", client.last_run)

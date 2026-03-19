@@ -16,8 +16,10 @@ from vertex_forager.writers.base import BaseWriter, WriteResult
 async def test_dlq_disabled_skips_spooling(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "app"))
     mock_writer = AsyncMock(spec=BaseWriter)
+
     async def write_side_effect(pkt: FramePacket) -> WriteResult:
         raise Exception("Disk Full")
+
     mock_writer.write.side_effect = write_side_effect
     mock_router = MagicMock()
     mock_http = MagicMock()
@@ -57,8 +59,10 @@ async def test_dlq_disabled_skips_spooling(tmp_path: Path, monkeypatch) -> None:
 async def test_dlq_disabled_flush_by_threshold(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "app"))
     mock_writer = AsyncMock(spec=BaseWriter)
+
     async def write_side_effect(pkt: FramePacket) -> WriteResult:
         raise Exception("Disk Full")
+
     mock_writer.write.side_effect = write_side_effect
     mock_router = MagicMock()
     mock_http = MagicMock()

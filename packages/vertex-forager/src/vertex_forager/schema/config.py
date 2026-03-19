@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-import polars as pl
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    import polars as pl
 
 
 @dataclass(frozen=True, slots=True)
@@ -13,9 +15,12 @@ class TableSchema:
     Attributes:
         table: Canonical table name (e.g., "sharadar_sep").
         schema: Mapping of column names to Polars DataTypes.
-        unique_key: Tuple of column names that form the primary key (for deduplication).
-        analysis_date_col: (str | None) Optional column name used as the analysis/timestamp column for time-based processing. Defaults to None.
-        flexible_schema: (bool) Whether schema is permissive to extra/unknown fields. Defaults to False.
+        unique_key: Tuple of column names that form the primary key
+            (for deduplication).
+        analysis_date_col: Optional timestamp/analysis column used for
+            time-based processing. Defaults to None.
+        flexible_schema: Whether schema is permissive to extra/unknown
+            fields. Defaults to False.
     """
 
     table: str

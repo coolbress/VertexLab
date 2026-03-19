@@ -7,12 +7,13 @@ lookup table. It serves as the source of truth for `SchemaMapper`.
 
 from __future__ import annotations
 
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
-from vertex_forager.schema.config import TableSchema
 from vertex_forager.providers.sharadar.schema import TABLES as SHARADAR_TABLES
 from vertex_forager.providers.yfinance.schema import TABLES as YFINANCE_TABLES
 
+if TYPE_CHECKING:
+    from vertex_forager.schema.config import TableSchema
 
 _sh_keys = set(SHARADAR_TABLES.keys())
 _yf_keys = set(YFINANCE_TABLES.keys())
