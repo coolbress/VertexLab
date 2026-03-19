@@ -1,6 +1,7 @@
 from __future__ import annotations
 import asyncio
 import hashlib
+import contextlib
 import re
 import shlex
 import itertools
@@ -405,7 +406,7 @@ def tune_profile(
         )
         data = as_dict(run)
         metrics_path = out_dir / "profile_metrics.json"
-        metrics_path.write_text(json.dumps(data, indent=2))
+        _atomic_write_json(metrics_path, data)
         click.echo(str(metrics_path))
         if db_path.exists():
             db_path.unlink()
@@ -459,7 +460,7 @@ def tune_profile(
         }
 
         metrics_path = out_dir / "profile_financials_metrics.json"
-        metrics_path.write_text(json.dumps(data, indent=2))
+        _atomic_write_json(metrics_path, data)
         click.echo(str(metrics_path))
         if db_path.exists():
             db_path.unlink()
@@ -1086,8 +1087,6 @@ def recover(
                         for f in files:
                             try:
                                 f.unlink()
-                                import contextlib
-
                                 with contextlib.suppress(Exception):
                                     dir_fd = os.open(str(f.parent), os.O_RDONLY)
                                     try:
@@ -1164,7 +1163,7 @@ def recover(
         if report:
             try:
                 Path(report).parent.mkdir(parents=True, exist_ok=True)
-                Path(report).write_text(json.dumps(summary, indent=2))
+                _atomic_write_json(Path(report), summary)
                 click.echo(str(report))
             except Exception as e_rep:
                 raise click.ClickException(f"Failed to write report: {e_rep}") from None

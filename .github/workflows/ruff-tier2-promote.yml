@@ -31,8 +31,8 @@ jobs:
           CODES=(C4 PT TCH SIM TC)
           PROMOTE=()
           for code in "${CODES[@]}"; do
-            uv run ruff check packages/ --exclude "legacy_code" --select "$code" --quiet
-            rc=$?
+            rc=0
+            uv run ruff check packages/ --exclude "legacy_code" --select "$code" --quiet || rc=$?
             if [ "$rc" -eq 0 ]; then
               PROMOTE+=("$code")
             elif [ "$rc" -eq 1 ]; then
