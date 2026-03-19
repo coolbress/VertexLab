@@ -1,18 +1,17 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
-from unittest.mock import MagicMock
+import multiprocessing as mp
+import os
 import threading
 import time
-import os
-import multiprocessing as mp
+from datetime import datetime
 from multiprocessing.connection import Connection
+from unittest.mock import MagicMock
 
 import polars as pl
 import psutil
 import pytest
-
 from vertex_forager.core.config import EngineConfig, FramePacket, RunResult
 from vertex_forager.core.pipeline import VertexForager
 from vertex_forager.writers.base import WriteResult
@@ -20,6 +19,7 @@ from vertex_forager.writers.base import WriteResult
 
 def _child_run_memory_peak(chunk_rows: int, conn: Connection) -> None:
     import asyncio
+
     from vertex_forager.core.config import FramePacket
     from vertex_forager.writers.base import WriteResult
 
@@ -70,7 +70,9 @@ def _child_run_memory_peak(chunk_rows: int, conn: Connection) -> None:
         result = RunResult(provider="test")
         for frame in frames:
             pkt_q.put_nowait(
-                FramePacket(provider="test", table="t", frame=frame, observed_at=datetime.now())
+                FramePacket(
+                    provider="test", table="t", frame=frame, observed_at=datetime.now()
+                )
             )
         pkt_q.put_nowait(None)
 
@@ -97,7 +99,10 @@ def _child_run_memory_peak(chunk_rows: int, conn: Connection) -> None:
     conn.send(res)
     conn.close()
 
-@pytest.mark.skipif(os.getenv("VF_ENABLE_MEMORY_PEAK_TEST") != "1", reason="memory-peak test disabled by default")
+@pytest.mark.skipif(
+    os.getenv("VF_ENABLE_MEMORY_PEAK_TEST") != "1",
+    reason="memory-peak test disabled by default",
+)
 def test_chunked_flush_lower_memory_peak() -> None:
     ctx = mp.get_context("spawn")
     b_parent, b_child = ctx.Pipe(duplex=False)
@@ -118,8 +123,7 @@ def test_chunked_flush_lower_memory_peak() -> None:
     assert p_chunk.exitcode == 0, f"p_chunk failed with exit code {p_chunk.exitcode}"
     chunked_peak, chunked_calls = c_parent.recv()
     c_parent.close()
-    # Use a dynamic margin derived from baseline to be robust across machines:
-    # require at least a 5% drop or 10 MiB, whichever is larger.
+    # Dynamic margin: require ≥5% drop or 10 MiB, whichever is larger.
     dynamic_margin = max(int(baseline_peak * 0.05), 10 * 1024 * 1024)
     assert chunked_calls > 1
     assert baseline_calls == 1

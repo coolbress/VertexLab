@@ -1,7 +1,8 @@
+import json
+
 import pytest
 from vertex_forager.core.config import RequestSpec
 from vertex_forager.core.http import HttpExecutor
-import json
 
 
 class DummyYF:
@@ -21,7 +22,10 @@ async def test_core_http_dispatch_library(monkeypatch):
     monkeypatch.setattr(http_mod, "yf", DummyYF())
     spec = RequestSpec(
         url="yfinance://AAPL",
-        params={"dataset": "price", "lib": {"type": "ticker_attr", "attr": "info", "kwargs": {}}},
+        params={
+            "dataset": "price",
+            "lib": {"type": "ticker_attr", "attr": "info", "kwargs": {}},
+        },
     )
     class Client:
         async def run_sync(self, fn):

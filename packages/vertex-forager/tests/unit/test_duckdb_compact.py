@@ -30,5 +30,7 @@ def test_duckdb_compact_executes_vacuum_and_checkpoint(tmp_path) -> None:
     writer._compact_sync()
     # Verify commands were attempted
     assert "VACUUM" in fake.executed
-    # CHECKPOINT is attempted but may be guarded; ensure it was called at least once
-    assert any(cmd.startswith("CHECKPOINT") or cmd == "CHECKPOINT" for cmd in fake.executed)
+    # CHECKPOINT attempted (may be guarded); ensure called at least once
+    assert any(
+        cmd.startswith("CHECKPOINT") or cmd == "CHECKPOINT" for cmd in fake.executed
+    )

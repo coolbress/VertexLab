@@ -1,8 +1,9 @@
 from __future__ import annotations
+
 import httpx
 import pytest
-from vertex_forager.core.retry import create_retry_controller
 from vertex_forager.core.config import RetryConfig
+from vertex_forager.core.retry import create_retry_controller
 
 
 def _status_error(code: int) -> httpx.HTTPStatusError:
@@ -13,7 +14,13 @@ def _status_error(code: int) -> httpx.HTTPStatusError:
 
 @pytest.mark.asyncio
 async def test_retry_on_429_enabled():
-    cfg = RetryConfig(max_attempts=3, base_backoff_s=0.01, max_backoff_s=0.02, enable_http_status_retry=True, retry_status_codes=(429, 503))
+    cfg = RetryConfig(
+        max_attempts=3,
+        base_backoff_s=0.01,
+        max_backoff_s=0.02,
+        enable_http_status_retry=True,
+        retry_status_codes=(429, 503),
+    )
     controller = create_retry_controller(cfg)
     attempts = 0
     async for attempt in controller:
@@ -22,12 +29,18 @@ async def test_retry_on_429_enabled():
             if attempts < 2:
                 raise _status_error(429)
             return
-    assert False
+    pytest.fail("Expected early return after successful retry on 429")
 
 
 @pytest.mark.asyncio
 async def test_retry_on_503_enabled():
-    cfg = RetryConfig(max_attempts=3, base_backoff_s=0.01, max_backoff_s=0.02, enable_http_status_retry=True, retry_status_codes=(429, 503))
+    cfg = RetryConfig(
+        max_attempts=3,
+        base_backoff_s=0.01,
+        max_backoff_s=0.02,
+        enable_http_status_retry=True,
+        retry_status_codes=(429, 503),
+    )
     controller = create_retry_controller(cfg)
     attempts = 0
     async for attempt in controller:
@@ -36,32 +49,50 @@ async def test_retry_on_503_enabled():
             if attempts < 2:
                 raise _status_error(503)
             return
-    assert False
+    pytest.fail("Expected early return after successful retry on 503")
 
 
 @pytest.mark.asyncio
 async def test_no_retry_on_400():
-    cfg = RetryConfig(max_attempts=2, base_backoff_s=0.01, max_backoff_s=0.02, enable_http_status_retry=True, retry_status_codes=(429, 503))
+    cfg = RetryConfig(
+        max_attempts=2,
+        base_backoff_s=0.01,
+        max_backoff_s=0.02,
+        enable_http_status_retry=True,
+        retry_status_codes=(429, 503),
+    )
     controller = create_retry_controller(cfg)
     attempts = 0
-    with pytest.raises(httpx.HTTPStatusError):
+    async def _run() -> None:
+        nonlocal attempts
         async for attempt in controller:
             with attempt:
                 attempts += 1
                 raise _status_error(400)
+    with pytest.raises(httpx.HTTPStatusError, match=r".*"):
+        await _run()
     assert attempts == 1
 
 
 @pytest.mark.asyncio
 async def test_disabled_http_status_retry():
-    cfg = RetryConfig(max_attempts=2, base_backoff_s=0.01, max_backoff_s=0.02, enable_http_status_retry=False, retry_status_codes=(429, 503))
+    cfg = RetryConfig(
+        max_attempts=2,
+        base_backoff_s=0.01,
+        max_backoff_s=0.02,
+        enable_http_status_retry=False,
+        retry_status_codes=(429, 503),
+    )
     controller = create_retry_controller(cfg)
     attempts = 0
-    with pytest.raises(httpx.HTTPStatusError):
+    async def _run() -> None:
+        nonlocal attempts
         async for attempt in controller:
             with attempt:
                 attempts += 1
                 raise _status_error(429)
+    with pytest.raises(httpx.HTTPStatusError, match=r".*"):
+        await _run()
     assert attempts == 1
 
 
@@ -77,7 +108,7 @@ async def test_retry_on_transport_error():
                 req = httpx.Request("GET", "http://test")
                 raise httpx.TransportError("connection failed", request=req)
             return
-    assert False
+    pytest.fail("Expected early return after successful retry on transport error")
 
 
 @pytest.mark.asyncio
@@ -101,8 +132,10 @@ async def test_backoff_sequence_exponential():
     d2 = starts[2] - starts[1]
     # With Full Jitter, waits are uniformly drawn up to the exponential cap
     margin = 0.2
-    assert d1 >= 0.0 and d1 <= cfg.base_backoff_s + margin
-    assert d2 >= 0.0 and d2 <= min(cfg.max_backoff_s, cfg.base_backoff_s * 2) + margin
+    assert d1 >= 0.0
+    assert d1 <= cfg.base_backoff_s + margin
+    assert d2 >= 0.0
+    assert d2 <= min(cfg.max_backoff_s, cfg.base_backoff_s * 2) + margin
 
 
 @pytest.mark.asyncio
@@ -110,12 +143,15 @@ async def test_retry_exhaustion_reraises_transport_error():
     cfg = RetryConfig(max_attempts=3, base_backoff_s=0.005, max_backoff_s=0.02)
     controller = create_retry_controller(cfg)
     attempts = 0
-    with pytest.raises(httpx.TransportError):
+    async def _run() -> None:
+        nonlocal attempts
         async for attempt in controller:
             with attempt:
                 attempts += 1
                 req = httpx.Request("GET", "http://test")
                 raise httpx.TransportError("persistent failure", request=req)
+    with pytest.raises(httpx.TransportError, match=r".*"):
+        await _run()
     assert attempts == cfg.max_attempts
 
 

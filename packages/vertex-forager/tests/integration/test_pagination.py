@@ -1,11 +1,11 @@
-import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
 from typing import cast
-from vertex_forager.core.types import SharadarDataset
-from vertex_forager.providers.sharadar.client import SharadarClient, FetchConfig
-from vertex_forager.core.config import RunResult
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from vertex_forager.clients import base as base_module
+from vertex_forager.core.config import RunResult
+from vertex_forager.core.types import SharadarDataset
+from vertex_forager.providers.sharadar.client import FetchConfig, SharadarClient
 
 
 @pytest.fixture

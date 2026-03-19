@@ -1,12 +1,12 @@
+from datetime import date, datetime, timezone
+from pathlib import Path
+
 import duckdb
 import polars as pl
 import pytest
-from datetime import datetime, timezone, date
-from pathlib import Path
-
-from vertex_forager.writers.duckdb import DuckDBWriter
 from vertex_forager.core.config import FramePacket
 from vertex_forager.exceptions import InputError
+from vertex_forager.writers.duckdb import DuckDBWriter
 
 
 @pytest.mark.asyncio
@@ -93,15 +93,21 @@ async def test_upsert_conflict_updates_value(tmp_path: Path) -> None:
         assert result2.rows == 1
 
         with duckdb.connect(str(db_path)) as conn:
+            query_select_close = (
+                'SELECT close FROM "yfinance_price" '
+                "WHERE provider=? AND ticker=? AND date=?"
+            )
             row_val = conn.execute(
-                'SELECT close FROM "yfinance_price" WHERE provider=? AND ticker=? AND date=?',
-                ["yfinance", "AAPL", today],
+                query_select_close, ["yfinance", "AAPL", today]
             ).fetchone()
             assert row_val is not None
             val = row_val[0]
+            query_count = (
+                'SELECT count(*) FROM "yfinance_price" '
+                "WHERE provider=? AND ticker=? AND date=?"
+            )
             row_cnt = conn.execute(
-                'SELECT count(*) FROM "yfinance_price" WHERE provider=? AND ticker=? AND date=?',
-                ["yfinance", "AAPL", today],
+                query_count, ["yfinance", "AAPL", today]
             ).fetchone()
             assert row_cnt is not None
             cnt = row_cnt[0]

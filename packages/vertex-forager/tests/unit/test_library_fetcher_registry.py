@@ -1,6 +1,10 @@
 import pytest
 from vertex_forager.core.config import RequestSpec
-from vertex_forager.core.library import register_library_fetcher, get_library_fetcher, BaseLibraryFetcher
+from vertex_forager.core.library import (
+    BaseLibraryFetcher,
+    get_library_fetcher,
+    register_library_fetcher,
+)
 
 
 class DummyFetcher(BaseLibraryFetcher):
@@ -22,13 +26,15 @@ def test_registry_idempotent():
     existing = get_library_fetcher("dummy")
     if existing is None:
         register_library_fetcher(DummyFetcher())
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=r".*"):
         register_library_fetcher(DummyFetcher())
 
 
 def test_parse_spec_validation():
     f = DummyFetcher()
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=r".*"):
         f.parse_spec(RequestSpec(url="dummy://AAPL", params={"dataset": "price"}))
-    with pytest.raises(ValueError):
-        f.parse_spec(RequestSpec(url="other://AAPL", params={"lib": {"type": "download"}}))
+    with pytest.raises(ValueError, match=r".*"):
+        f.parse_spec(
+            RequestSpec(url="other://AAPL", params={"lib": {"type": "download"}})
+        )

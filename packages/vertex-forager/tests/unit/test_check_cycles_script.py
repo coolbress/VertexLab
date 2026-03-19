@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -29,7 +30,9 @@ def test_find_cycles_detects_and_no_cycle_cases() -> None:
     assert cc.find_cycles(acyclic) == []
 
 
-def test_build_graph_resolves_relative_imports(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_build_graph_resolves_relative_imports(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     # Create temporary package structure under src/vertex_forager
     src = tmp_path / "src"
     pkg = src / "vertex_forager" / "pkg_a"
@@ -53,14 +56,14 @@ def test_build_graph_resolves_relative_imports(tmp_path: Path, monkeypatch: pyte
     # Import module and patch ROOT/SYS_PATH
     from scripts import check_cycles as cc
     monkeypatch.setattr(cc, "ROOT", src)
-    monkeypatch.setattr(cc, "SYS_PATH", [str(src)] + sys.path)
+    monkeypatch.setattr(cc, "SYS_PATH", [str(src), *sys.path])
 
     graph, failures = cc.build_graph()
-    # bad.py should be recorded as a failure (invalid relative import or missing module)
-    assert any("bad.py" in p for p, _ in failures), "Expected failure recorded for bad.py"
+    # bad.py recorded as a failure (invalid relative import or missing module)
+    assert any("bad.py" in p for p, _ in failures), "Expected failure for bad.py"
 
-    # deep_bad.py should trigger RelativeImportTooDeep or MissingModule
-    assert any("deep_bad.py" in p for p, _ in failures), "Expected failure recorded for deep_bad.py"
+    # deep_bad.py triggers RelativeImportTooDeep or MissingModule
+    assert any("deep_bad.py" in p for p, _ in failures), "Expected failure"
 
     # Graph should contain at least one dependency edge
     # Expect at least one package-local dependency edge

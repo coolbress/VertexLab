@@ -12,12 +12,11 @@ Notes:
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 
 import polars as pl
 import pytest
-
 from vertex_forager.core.config import FetchJob, ParseResult, RequestSpec
-from collections.abc import Mapping
 from vertex_forager.core.types import JSONValue
 from vertex_forager.providers.sharadar.constants import MAX_ROWS_PER_REQUEST
 from vertex_forager.providers.sharadar.router import SharadarRouter
@@ -46,7 +45,7 @@ class TestSharadarRouterUnit:
     async def test_generate_jobs_creates_correct_fetch_jobs_for_price_dataset(
         self, router: SharadarRouter
     ) -> None:
-        """Test that generate_jobs creates proper FetchJob instances for price dataset."""
+        """Creates proper FetchJob instances for price dataset."""
         # Default behavior is 1 job per symbol (no implicit batching)
         jobs = [
             job
@@ -56,7 +55,7 @@ class TestSharadarRouterUnit:
         ]
 
         assert len(jobs) == 2
-        
+
         # Verify job properties for all jobs
         for job in jobs:
             assert job.provider == "sharadar"
@@ -71,7 +70,7 @@ class TestSharadarRouterUnit:
     async def test_generate_jobs_handles_empty_symbols_list(
         self, router: SharadarRouter
     ) -> None:
-        """Test that generate_jobs handles empty symbols list gracefully."""
+        """Handles empty symbols list gracefully."""
         # Act
         jobs = [job async for job in router.generate_jobs(dataset="price", symbols=[])]
 
@@ -82,7 +81,7 @@ class TestSharadarRouterUnit:
     async def test_generate_jobs_handles_none_symbols(
         self, router: SharadarRouter
     ) -> None:
-        """Test that generate_jobs handles None symbols gracefully."""
+        """Handles None symbols gracefully."""
         # Act
         jobs = [
             job async for job in router.generate_jobs(dataset="price", symbols=None)
@@ -95,7 +94,7 @@ class TestSharadarRouterUnit:
     async def test_generate_jobs_respects_per_page_with_max_cap_for_tickers_dataset(
         self, router: SharadarRouter
     ) -> None:
-        """Test that generate_jobs respects caller per_page but caps at API limit."""
+        """Respects caller per_page but caps at API limit."""
         jobs = [
             job
             async for job in router.generate_jobs(
@@ -124,7 +123,7 @@ class TestSharadarRouterUnit:
     async def test_generate_jobs_passes_kwargs_for_fundamental_dataset(
         self, router: SharadarRouter
     ) -> None:
-        """Test that generate_jobs passes kwargs correctly for fundamental dataset."""
+        """Passes kwargs correctly for fundamental dataset."""
         jobs = [
             job
             async for job in router.generate_jobs(
@@ -141,7 +140,7 @@ class TestSharadarRouterUnit:
     async def test_generate_jobs_does_not_batch_by_default(
         self, router: SharadarRouter
     ) -> None:
-        """Test that generate_jobs does not batch symbols by default (safety first)."""
+        """Does not batch symbols by default (safety first)."""
         jobs = [
             job
             async for job in router.generate_jobs(
@@ -156,7 +155,7 @@ class TestSharadarRouterUnit:
     async def test_generate_jobs_ignores_bulk_size(
         self, router: SharadarRouter
     ) -> None:
-        """Test that generate_jobs ignores bulk_size and maintains 1-to-1 mapping."""
+        """Ignores bulk_size and maintains 1-to-1 mapping."""
         jobs = [
             job
             async for job in router.generate_jobs(
@@ -171,7 +170,7 @@ class TestSharadarRouterUnit:
     async def test_generate_jobs_handles_pre_batched_strings(
         self, router: SharadarRouter
     ) -> None:
-        """Test that generate_jobs handles comma-separated strings as single jobs."""
+        """Handles comma-separated strings as single jobs."""
         jobs = [
             job
             async for job in router.generate_jobs(
@@ -187,7 +186,7 @@ class TestSharadarRouterUnit:
     async def test_generate_jobs_creates_correct_fetch_jobs_for_actions_dataset(
         self, router: SharadarRouter
     ) -> None:
-        """Test that generate_jobs creates proper FetchJob instances for actions dataset."""
+        """Creates proper FetchJob instances for actions dataset."""
         jobs = [
             job
             async for job in router.generate_jobs(
@@ -206,7 +205,7 @@ class TestSharadarRouterUnit:
     async def test_generate_jobs_creates_correct_fetch_jobs_for_daily_dataset(
         self, router: SharadarRouter
     ) -> None:
-        """Test that generate_jobs creates proper FetchJob instances for daily dataset."""
+        """Creates proper FetchJob instances for daily dataset."""
         jobs = [
             job
             async for job in router.generate_jobs(
@@ -225,7 +224,7 @@ class TestSharadarRouterUnit:
     async def test_generate_jobs_creates_correct_fetch_jobs_for_sp500_dataset(
         self, router: SharadarRouter
     ) -> None:
-        """Test that generate_jobs creates proper FetchJob instances for sp500 dataset."""
+        """Creates proper FetchJob instances for sp500 dataset."""
         # SP500 dataset might be fetched for specific tickers or all
         jobs = [
             job
@@ -319,7 +318,7 @@ class TestSharadarRouterUnit:
     def test_parse_creates_next_jobs_when_pagination_context_exists(
         self, router: SharadarRouter
     ) -> None:
-        """Test that parse method creates next_jobs when pagination context exists and next_cursor is returned."""
+        """Creates next_jobs when pagination exists and next_cursor is returned."""
         # Arrange
         context: Mapping[str, JSONValue] = {
             "pagination": {
@@ -386,6 +385,7 @@ class TestRouterEdgeCases:
         """Test that router handles unknown dataset names gracefully."""
         # Act & Assert
         from typing import cast
+
         from vertex_forager.core.types import SharadarDataset
         with pytest.raises(NotImplementedError, match="Unsupported dataset"):
             async for _ in router.generate_jobs(

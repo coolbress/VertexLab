@@ -1,15 +1,14 @@
 import asyncio
 from datetime import datetime
 from pathlib import Path
+from typing import Any, cast
 
 import duckdb
 import polars as pl
 import pytest
-from typing import cast, Any
-
 from vertex_forager.core.config import FramePacket
-from vertex_forager.writers.duckdb import DuckDBWriter
 from vertex_forager.writers import create_writer
+from vertex_forager.writers.duckdb import DuckDBWriter
 
 
 class TestDuckDBWriter:
@@ -17,7 +16,7 @@ class TestDuckDBWriter:
 
     @pytest.mark.asyncio
     async def test_writer_initialization_and_creation(self, tmp_path: Path) -> None:
-        """Test that create_writer returns a DuckDBWriter for duckdb:// scheme."""
+        """create_writer returns a DuckDBWriter for duckdb:// scheme."""
         db_path = tmp_path / "test.duckdb"
         uri = f"duckdb://{db_path}"
 
@@ -60,7 +59,7 @@ class TestDuckDBWriter:
 
     @pytest.mark.asyncio
     async def test_concurrent_writes(self, tmp_path: Path) -> None:
-        """Test concurrent writes to ensure locking works correctly."""
+        """Concurrent writes ensure locking works correctly."""
         db_path = tmp_path / "concurrent.duckdb"
         async with DuckDBWriter(db_path) as writer:
             # Create 100 packets with 10 rows each
@@ -77,8 +76,8 @@ class TestDuckDBWriter:
             ]
 
             # Run writes concurrently
-            # Although DuckDBWriter uses a lock, asyncio.gather will schedule them
-            # and we want to ensure no "database locked" errors occur.
+            # DuckDBWriter uses a lock; asyncio.gather schedules them
+            # Ensure no "database locked" errors occur.
             await asyncio.gather(*(writer.write(p) for p in packets))
 
         # Verify total rows
@@ -94,8 +93,8 @@ class TestDuckDBWriter:
         """Test that data is UPSERTED (deduplicated) when PK is known."""
         db_path = tmp_path / "upsert.duckdb"
         async with DuckDBWriter(db_path) as writer:
-            # Use "sharadar_sep" table which has known PK in schema registry: [provider, ticker, date]
-            # Note: Schema definition requires provider column for PK
+            # "sharadar_sep" has known PK: [provider, ticker, date]
+            # Note: provider column required for PK
             df1 = pl.DataFrame(
                 {
                     "provider": ["sharadar"],
@@ -175,7 +174,9 @@ class TestDuckDBWriter:
         conn.close()
 
 
-def test_compact_sync_checkpoint_warning_on_error(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+def test_compact_sync_checkpoint_warning_on_error(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     import logging
 
     class _FakeConn:
@@ -193,10 +194,14 @@ def test_compact_sync_checkpoint_warning_on_error(tmp_path: Path, caplog: pytest
     writer._conn = cast(duckdb.DuckDBPyConnection, fake)
     writer._compact_sync()
     assert fake.calls == 2
-    assert any("CHECKPOINT failed or unsupported" in rec.message for rec in caplog.records)
+    assert any(
+        "CHECKPOINT failed or unsupported" in rec.message for rec in caplog.records
+    )
 
 
-def test_compact_sync_checkpoint_ok(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+def test_compact_sync_checkpoint_ok(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     import logging
 
     class _FakeConnOK:
@@ -212,4 +217,6 @@ def test_compact_sync_checkpoint_ok(tmp_path: Path, caplog: pytest.LogCaptureFix
     caplog.set_level(logging.WARNING)
     writer._compact_sync()
     assert fake.calls == 2
-    assert not any("CHECKPOINT failed or unsupported" in rec.message for rec in caplog.records)
+    assert not any(
+        "CHECKPOINT failed or unsupported" in rec.message for rec in caplog.records
+    )

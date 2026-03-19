@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+
 import polars as pl
 import pytest
 from click.testing import CliRunner
@@ -17,7 +18,9 @@ def _make_ipc(dir_path: Path, rows: int) -> Path:
 
 
 @pytest.mark.integration
-def test_recover_integration_dry_run_and_write_delete(tmp_path, monkeypatch: pytest.MonkeyPatch):
+def test_recover_integration_dry_run_and_write_delete(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+):
     base = tmp_path / "app"
     monkeypatch.setenv("VERTEXFORAGER_ROOT", str(base))
     dlq_root = get_cache_dir() / "dlq"
@@ -49,10 +52,12 @@ def test_recover_integration_dry_run_and_write_delete(tmp_path, monkeypatch: pyt
     )
     assert res_dry.exit_code == 0
     data_dry = json.loads(report_dry.read_text())
-    assert "tables" in data_dry and "error_counts" in data_dry
+    assert "tables" in data_dry
+    assert "error_counts" in data_dry
     t_ok = data_dry["tables"]["t_ok"]
     t_err = data_dry["tables"]["t_err"]
-    assert t_ok["files_scanned"] == 1 and t_ok["rows_scanned"] == 3
+    assert t_ok["files_scanned"] == 1
+    assert t_ok["rows_scanned"] == 3
     assert any(d.get("status") == "scanned" for d in t_ok["details"])
     assert t_err["files_scanned"] == 1
     assert data_dry["error_counts"].get("RecoverFail", 0) >= 1

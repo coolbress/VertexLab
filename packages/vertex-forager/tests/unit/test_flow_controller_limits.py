@@ -1,8 +1,12 @@
-import time
 import asyncio
-import pytest
+import time
 
-from vertex_forager.core.controller import GCRARateLimiter, GradientConcurrencyLimiter, FlowController
+import pytest
+from vertex_forager.core.controller import (
+    FlowController,
+    GCRARateLimiter,
+    GradientConcurrencyLimiter,
+)
 
 
 @pytest.mark.asyncio
@@ -10,7 +14,7 @@ async def test_gcra_enforces_rate_with_burst() -> None:
     # 60 RPM -> emission interval 1.0s; burst limit 2 allows 2 immediate acquires
     gcra = GCRARateLimiter(requests_per_minute=60, burst_limit=2)
     t0 = time.monotonic()
-    # 4 acquires; first 2 immediate, next 2 should be spaced ~1s each (allow small jitter)
+    # 4 acquires; first 2 immediate, next 2 spaced ~1s each (allow small jitter)
     for _ in range(4):
         await gcra.acquire()
     elapsed = time.monotonic() - t0
@@ -20,7 +24,9 @@ async def test_gcra_enforces_rate_with_burst() -> None:
 
 @pytest.mark.asyncio
 async def test_gradient_limiter_bounds() -> None:
-    limiter = GradientConcurrencyLimiter(initial_limit=3, min_limit=1, max_limit=5, queue_size=2, smoothing=0.2)
+    limiter = GradientConcurrencyLimiter(
+        initial_limit=3, min_limit=1, max_limit=5, queue_size=2, smoothing=0.2
+    )
     await limiter.acquire()
     # Provide a baseline RTT then a larger RTT; ensure limit stays within bounds
     await limiter.release(0.1)
@@ -28,7 +34,8 @@ async def test_gradient_limiter_bounds() -> None:
     await limiter.release(0.8)
     assert 1.0 <= limiter.limit <= 5.0
     # Ensure limit is a float and non-zero
-    assert isinstance(limiter.limit, float) and limiter.limit > 0.0
+    assert isinstance(limiter.limit, float)
+    assert limiter.limit > 0.0
 
 
 def test_flow_controller_concurrency_property() -> None:

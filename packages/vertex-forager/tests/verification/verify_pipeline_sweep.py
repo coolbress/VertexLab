@@ -1,17 +1,19 @@
+import json
 import os
 import time
-import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
-from vertex_forager.providers.yfinance.client import YFinanceClient
 from vertex_forager.providers.sharadar.client import SharadarClient
-from vertex_forager.utils import set_env, load_tickers_env
+from vertex_forager.providers.yfinance.client import YFinanceClient
+from vertex_forager.utils import load_tickers_env, set_env
 
 
-def run_sweep() -> Dict[str, Any]:
+def run_sweep() -> dict[str, Any]:
     out_dir_env = os.getenv("VF_PROFILE_OUTPUT_DIR")
-    out_dir = Path(out_dir_env) if out_dir_env else (Path.cwd() / "output" / "forager-profiles")
+    out_dir = Path(out_dir_env) if out_dir_env else (
+        Path.cwd() / "output" / "forager-profiles"
+    )
     out_dir.mkdir(parents=True, exist_ok=True)
     db_path = out_dir / "profile_sweep.duckdb"
     report_path = out_dir / "profile_sweep_results.json"
@@ -20,15 +22,47 @@ def run_sweep() -> Dict[str, Any]:
     os.environ.setdefault("VF_METRICS_ENABLED", "1")
 
     # Config combos (kept minimal to avoid long runs)
-    combos: List[Dict[str, Any]] = [
-        {"VF_CONCURRENCY": 8, "VF_FLUSH_THRESHOLD_ROWS": 100000, "VF_HTTP_MAX_KEEPALIVE": 100, "VF_HTTP_MAX_CONNECTIONS": 200, "VF_HTTP_TIMEOUT_S": 30},
-        {"VF_CONCURRENCY": 12, "VF_FLUSH_THRESHOLD_ROWS": 150000, "VF_HTTP_MAX_KEEPALIVE": 150, "VF_HTTP_MAX_CONNECTIONS": 300, "VF_HTTP_TIMEOUT_S": 30},
-        {"VF_CONCURRENCY": 16, "VF_FLUSH_THRESHOLD_ROWS": 200000, "VF_HTTP_MAX_KEEPALIVE": 200, "VF_HTTP_MAX_CONNECTIONS": 400, "VF_HTTP_TIMEOUT_S": 45},
-        {"VF_CONCURRENCY": 20, "VF_FLUSH_THRESHOLD_ROWS": 250000, "VF_HTTP_MAX_KEEPALIVE": 200, "VF_HTTP_MAX_CONNECTIONS": 400, "VF_HTTP_TIMEOUT_S": 45},
-        {"VF_CONCURRENCY": 24, "VF_FLUSH_THRESHOLD_ROWS": 300000, "VF_HTTP_MAX_KEEPALIVE": 250, "VF_HTTP_MAX_CONNECTIONS": 500, "VF_HTTP_TIMEOUT_S": 45},
+    combos: list[dict[str, Any]] = [
+        {
+            "VF_CONCURRENCY": 8,
+            "VF_FLUSH_THRESHOLD_ROWS": 100_000,
+            "VF_HTTP_MAX_KEEPALIVE": 100,
+            "VF_HTTP_MAX_CONNECTIONS": 200,
+            "VF_HTTP_TIMEOUT_S": 30,
+        },
+        {
+            "VF_CONCURRENCY": 12,
+            "VF_FLUSH_THRESHOLD_ROWS": 150_000,
+            "VF_HTTP_MAX_KEEPALIVE": 150,
+            "VF_HTTP_MAX_CONNECTIONS": 300,
+            "VF_HTTP_TIMEOUT_S": 30,
+        },
+        {
+            "VF_CONCURRENCY": 16,
+            "VF_FLUSH_THRESHOLD_ROWS": 200_000,
+            "VF_HTTP_MAX_KEEPALIVE": 200,
+            "VF_HTTP_MAX_CONNECTIONS": 400,
+            "VF_HTTP_TIMEOUT_S": 45,
+        },
+        {
+            "VF_CONCURRENCY": 20,
+            "VF_FLUSH_THRESHOLD_ROWS": 250_000,
+            "VF_HTTP_MAX_KEEPALIVE": 200,
+            "VF_HTTP_MAX_CONNECTIONS": 400,
+            "VF_HTTP_TIMEOUT_S": 45,
+        },
+        {
+            "VF_CONCURRENCY": 24,
+            "VF_FLUSH_THRESHOLD_ROWS": 300_000,
+            "VF_HTTP_MAX_KEEPALIVE": 250,
+            "VF_HTTP_MAX_CONNECTIONS": 500,
+            "VF_HTTP_TIMEOUT_S": 45,
+        },
     ]
 
-    yf_tickers_price = load_tickers_env("YF_TICKERS_PRICE", ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN"])
+    yf_tickers_price = load_tickers_env(
+        "YF_TICKERS_PRICE", ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN"]
+    )
     yf_tickers_fin = load_tickers_env("YF_TICKERS_FIN", ["AAPL", "MSFT", "NVDA"])
     yf_start = os.getenv("YF_PRICE_START_DATE")
     yf_end = os.getenv("YF_PRICE_END_DATE")
@@ -37,18 +71,24 @@ def run_sweep() -> Dict[str, Any]:
     sh_start = os.getenv("SH_START_DATE")
     sh_end = os.getenv("SH_END_DATE")
 
-    results: Dict[str, Any] = {"runs": []}
+    results: dict[str, Any] = {"runs": []}
 
     original_env = os.environ.copy()
-    for i, cfg in enumerate(combos):
+    for _i, cfg in enumerate(combos):
         try:
             set_env(cfg)
-            run_entry: Dict[str, Any] = {"env": dict(cfg), "measurements": {}}
+            run_entry: dict[str, Any] = {"env": dict(cfg), "measurements": {}}
 
             # YFinance price
             yfc = YFinanceClient(rate_limit=60, structured_logs=False)
             t0 = time.monotonic()
-            yf_price = yfc.get_price_data(tickers=yf_tickers_price, connect_db=db_path, show_progress=False, start_date=yf_start, end_date=yf_end)
+            yf_price = yfc.get_price_data(
+                tickers=yf_tickers_price,
+                connect_db=db_path,
+                show_progress=False,
+                start_date=yf_start,
+                end_date=yf_end,
+            )
             t1 = time.monotonic()
             run_entry["measurements"]["yfinance_price"] = {
                 "duration_s": round(t1 - t0, 3),
@@ -61,7 +101,13 @@ def run_sweep() -> Dict[str, Any]:
             # YFinance financials (annual income_stmt)
             yfc2 = YFinanceClient(rate_limit=60, structured_logs=False)
             t2 = time.monotonic()
-            yf_fin = yfc2.get_financials(kind="income_stmt", period="annual", tickers=yf_tickers_fin, connect_db=db_path, show_progress=False)
+            yf_fin = yfc2.get_financials(
+                kind="income_stmt",
+                period="annual",
+                tickers=yf_tickers_fin,
+                connect_db=db_path,
+                show_progress=False,
+            )
             t3 = time.monotonic()
             run_entry["measurements"]["yfinance_financials"] = {
                 "duration_s": round(t3 - t2, 3),
@@ -74,9 +120,17 @@ def run_sweep() -> Dict[str, Any]:
             # Optional: Sharadar fundamental MRT if key present
             if sh_key:
                 try:
-                    shc = SharadarClient(api_key=sh_key, rate_limit=60, structured_logs=False)
+                    shc = SharadarClient(
+                        api_key=sh_key, rate_limit=60, structured_logs=False
+                    )
                     t4 = time.monotonic()
-                    sh_fin = shc.get_fundamental_data(tickers=sh_tickers, connect_db=db_path, dimension="MRT", start_date=sh_start, end_date=sh_end)
+                    sh_fin = shc.get_fundamental_data(
+                        tickers=sh_tickers,
+                        connect_db=db_path,
+                        dimension="MRT",
+                        start_date=sh_start,
+                        end_date=sh_end,
+                    )
                     t5 = time.monotonic()
                     run_entry["measurements"]["sharadar_sf1_mrt"] = {
                         "duration_s": round(t5 - t4, 3),
@@ -95,8 +149,13 @@ def run_sweep() -> Dict[str, Any]:
             os.environ.update(original_env)
 
     # Write report with simple best selection by shortest durations
-    def _best(run_key: str) -> Dict[str, Any]:
-        ranked = sorted(results["runs"], key=lambda r: r["measurements"].get(run_key, {}).get("duration_s", float("inf")))
+    def _best(run_key: str) -> dict[str, Any]:
+        ranked = sorted(
+            results["runs"],
+            key=lambda r: r["measurements"].get(run_key, {}).get(
+                "duration_s", float("inf")
+            ),
+        )
         return ranked[0] if ranked else {}
     results["best"] = {
         "yfinance_price": _best("yfinance_price"),

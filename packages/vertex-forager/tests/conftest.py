@@ -10,28 +10,28 @@ Test fixtures and utilities for vertex-forager tests.
 
 from __future__ import annotations
 
-import json
 import importlib
+import json
+from collections.abc import Generator
 from datetime import datetime, timezone
-from typing import Any, Generator
+from typing import Any
 from unittest.mock import AsyncMock
 
+import pandas as pd
 import polars as pl
 import pytest
-import pandas as pd
 from httpx import AsyncClient
-
 from vertex_forager.core.config import FetchJob, FramePacket, RequestSpec
 from vertex_forager.core.http import HttpExecutor
-from vertex_forager.providers.sharadar.router import SharadarRouter
 from vertex_forager.providers.sharadar.client import SharadarClient
+from vertex_forager.providers.sharadar.router import SharadarRouter
 from vertex_forager.providers.yfinance.router import YFinanceRouter
 
 
 @pytest.fixture
 def mock_async_client() -> AsyncMock:
     """Create a mock AsyncClient with run_async.
-    
+
     Returns:
         AsyncMock: AsyncMock configured with spec=AsyncClient. It simulates an
         HTTPX AsyncClient and provides a run_async coroutine used by the HTTP
@@ -86,11 +86,12 @@ def sharadar_client(
         from vertex_forager.providers.sharadar.client import SharadarClient
 
         # Patch HttpExecutor in the base client module (where _run is defined)
-        # This ensures that when the client creates an HttpExecutor, it gets our mock
+        # Ensure that when the client creates an HttpExecutor, it gets our mock
         with patch("vertex_forager.clients.base.HttpExecutor") as MockHttpExecutorClass:
             MockHttpExecutorClass.return_value = mock_http_executor
 
-            # Also patch default_async_client in base client to prevent actual network connections
+            # Also patch default_async_client in base client
+            # to prevent actual network connections
             with patch(
                 "vertex_forager.clients.base.default_async_client"
             ) as mock_default_client:
@@ -209,10 +210,10 @@ def create_test_fetch_job() -> FetchJob:
 @pytest.fixture
 def yfinance_router() -> YFinanceRouter:
     """Create a YFinanceRouter with explicit rate limiting.
-    
+
     The rate_limit argument represents requests per minute. For example,
     rate_limit=500 allows up to 500 requests per minute across jobs.
-    
+
     Returns:
         YFinanceRouter: Router instance configured with rate_limit=500 (requests/min).
     """
@@ -221,7 +222,7 @@ def yfinance_router() -> YFinanceRouter:
 @pytest.fixture
 def yfinance_router_allow_pickle() -> YFinanceRouter:
     """Create a YFinanceRouter with legacy pickle compatibility enabled (unsafe).
-    
+
     This fixture is only for tests that require pickled payloads.
     """
     return YFinanceRouter(rate_limit=500, allow_pickle_compat=True)
@@ -229,7 +230,7 @@ def yfinance_router_allow_pickle() -> YFinanceRouter:
 @pytest.fixture
 def yf_price_df() -> pd.DataFrame:
     """Provide a sample price DataFrame for tests.
-    
+
     Returns:
         pandas.DataFrame: Columns include date, open, high, low, close, volume, ticker.
     """

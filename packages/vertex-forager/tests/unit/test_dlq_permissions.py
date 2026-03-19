@@ -1,12 +1,13 @@
 from __future__ import annotations
-from datetime import datetime, timezone
-import polars as pl
+
 import asyncio
-import pytest
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
-from vertex_forager.core.pipeline import VertexForager, RunResult
-from vertex_forager.core.config import FramePacket, EngineConfig
+import polars as pl
+import pytest
+from vertex_forager.core.config import EngineConfig, FramePacket
+from vertex_forager.core.pipeline import RunResult, VertexForager
 from vertex_forager.writers.base import BaseWriter, WriteResult
 
 
@@ -33,11 +34,18 @@ async def test_dlq_ipc_file_mode_is_0600(tmp_path, monkeypatch) -> None:
         controller=mock_controller,
     )
 
-    pkt_q: "asyncio.Queue[FramePacket | None]" = asyncio.Queue()
+    pkt_q: asyncio.Queue[FramePacket | None] = asyncio.Queue()
     result = RunResult(provider="test")
     result_lock = asyncio.Lock()
 
-    pkt_q.put_nowait(FramePacket(provider="test", table="perm_test", frame=pl.DataFrame({"id": [1]}), observed_at=datetime.now(timezone.utc)))
+    pkt_q.put_nowait(
+        FramePacket(
+            provider="test",
+            table="perm_test",
+            frame=pl.DataFrame({"id": [1]}),
+            observed_at=datetime.now(timezone.utc),
+        )
+    )
     pkt_q.put_nowait(None)
 
     await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)

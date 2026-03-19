@@ -21,7 +21,9 @@ async def main() -> None:
             conn = duckdb.connect(str(db_path))
             try:
                 df = conn.execute(
-                    "SELECT provider, ticker, date, close FROM sharadar_sep ORDER BY date"
+                    "SELECT provider, ticker, date, close "
+                    "FROM sharadar_sep "
+                    "ORDER BY date"
                 ).pl()
                 print(f"\n[{msg}] Table 'sharadar_sep':")
                 if df.is_empty():

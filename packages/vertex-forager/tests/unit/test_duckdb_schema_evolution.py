@@ -1,13 +1,13 @@
 from __future__ import annotations
 
+from datetime import date, datetime, timezone
+from pathlib import Path
+
 import duckdb
 import polars as pl
 import pytest
-from datetime import datetime, timezone, date
-from pathlib import Path
-
-from vertex_forager.writers.duckdb import DuckDBWriter
 from vertex_forager.core.config import FramePacket
+from vertex_forager.writers.duckdb import DuckDBWriter
 
 
 @pytest.mark.asyncio
@@ -16,13 +16,33 @@ async def test_schema_evolution_adds_missing_columns(tmp_path: Path) -> None:
     writer = DuckDBWriter(str(db_path))
     try:
         table = "test_table"
-        df1 = pl.DataFrame({"provider": ["t"], "ticker": ["A"], "date": [date.today()], "val": [1]})
-        p1 = FramePacket(provider="t", table=table, frame=df1, observed_at=datetime.now(timezone.utc))
+        df1 = pl.DataFrame(
+            {"provider": ["t"], "ticker": ["A"], "date": [date.today()], "val": [1]}
+        )
+        p1 = FramePacket(
+            provider="t",
+            table=table,
+            frame=df1,
+            observed_at=datetime.now(timezone.utc),
+        )
         res1 = await writer.write(p1)
         assert res1.rows == 1
 
-        df2 = pl.DataFrame({"provider": ["t"], "ticker": ["A"], "date": [date.today()], "val": [2], "val2": [3]})
-        p2 = FramePacket(provider="t", table=table, frame=df2, observed_at=datetime.now(timezone.utc))
+        df2 = pl.DataFrame(
+            {
+                "provider": ["t"],
+                "ticker": ["A"],
+                "date": [date.today()],
+                "val": [2],
+                "val2": [3],
+            }
+        )
+        p2 = FramePacket(
+            provider="t",
+            table=table,
+            frame=df2,
+            observed_at=datetime.now(timezone.utc),
+        )
         res2 = await writer.write(p2)
         assert res2.rows == 1
 

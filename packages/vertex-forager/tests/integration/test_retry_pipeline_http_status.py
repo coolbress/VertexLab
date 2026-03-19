@@ -1,30 +1,52 @@
 from __future__ import annotations
-import pytest
-import httpx
-from typing import Any
+
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
-from vertex_forager.core.pipeline import VertexForager
-from vertex_forager.core.config import EngineConfig, FetchJob, RequestSpec, ParseResult
+from typing import Any
+
+import httpx
+import pytest
+from vertex_forager.core.config import (
+    EngineConfig,
+    FetchJob,
+    FramePacket,
+    ParseResult,
+    RequestSpec,
+)
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor
-from collections.abc import Sequence, AsyncIterator
+from vertex_forager.core.pipeline import VertexForager
 from vertex_forager.writers.base import WriteResult
-from vertex_forager.core.config import FramePacket
 
 
 class StubRouter:
     @property
     def provider(self) -> str:
         return "stub"
-    async def generate_jobs(self, *, dataset: str, symbols: Sequence[str] | None, **kwargs: object) -> AsyncIterator[FetchJob]:
-        yield FetchJob(provider="stub", dataset=dataset, symbol="AAPL", spec=RequestSpec(url="https://example.com"))
+    async def generate_jobs(
+        self,
+        *,
+        dataset: str,
+        symbols: Sequence[str] | None,
+        **kwargs: object,
+    ) -> AsyncIterator[FetchJob]:
+        yield FetchJob(
+            provider="stub",
+            dataset=dataset,
+            symbol="AAPL",
+            spec=RequestSpec(url="https://example.com"),
+        )
     def parse(self, *, job: FetchJob, payload: bytes) -> ParseResult:
         return ParseResult(packets=[], next_jobs=[])
 
 
 class StubWriter:
     async def write(self, packet: FramePacket) -> WriteResult:
-        return WriteResult(table="t", rows=int(getattr(packet.frame, "height", 0) or 0), partitions={})
+        return WriteResult(
+            table="t",
+            rows=int(getattr(packet.frame, "height", 0) or 0),
+            partitions={},
+        )
     async def flush(self) -> None:
         return None
     async def close(self) -> None:
@@ -64,7 +86,9 @@ class StubClient:
 
 
 @pytest.mark.asyncio
-async def test_fetch_with_retry_logs_and_succeeds_on_429_then_200(caplog: pytest.LogCaptureFixture):
+async def test_fetch_with_retry_logs_and_succeeds_on_429_then_200(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     caplog.set_level("DEBUG")
     stub_client = StubClient()
     http = HttpExecutor(client=stub_client)
@@ -76,10 +100,19 @@ async def test_fetch_with_retry_logs_and_succeeds_on_429_then_200(caplog: pytest
         config=stub_client._config,
         controller=stub_client.controller,
     )
-    job = FetchJob(provider="stub", dataset="price", symbol="AAPL", spec=RequestSpec(url="https://example.com"))
+    job = FetchJob(
+        provider="stub",
+        dataset="price",
+        symbol="AAPL",
+        spec=RequestSpec(url="https://example.com"),
+    )
     payload = await pipeline._fetch_with_retry(job)
     assert payload == b"second"
-    messages = [rec.message for rec in caplog.records if rec.name == "vertex_forager.debug"]
+    messages = [
+        rec.message for rec in caplog.records if rec.name == "vertex_forager.debug"
+    ]
     assert any("stage=http_start" in m for m in messages)
-    assert any("stage=http_retry" in m or "stage=http_retry_reason" in m for m in messages)
+    assert any(
+        "stage=http_retry" in m or "stage=http_retry_reason" in m for m in messages
+    )
     assert any("stage=http_end" in m for m in messages)

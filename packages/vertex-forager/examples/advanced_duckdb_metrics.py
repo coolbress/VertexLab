@@ -1,6 +1,6 @@
 import os
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 from vertex_forager import create_client
 

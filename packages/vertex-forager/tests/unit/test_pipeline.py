@@ -9,18 +9,18 @@ Unit tests for pipeline internal components (Worker, etc).
 
 import asyncio
 from datetime import datetime
-import polars as pl
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from vertex_forager.core.pipeline import VertexForager, RunResult
-from vertex_forager.core.config import FramePacket, EngineConfig
+import polars as pl
+import pytest
+from vertex_forager.core.config import EngineConfig, FramePacket
+from vertex_forager.core.pipeline import RunResult, VertexForager
 from vertex_forager.writers.base import BaseWriter, WriteResult
 
 
 @pytest.mark.asyncio
 async def test_adaptive_batching_worker_drains_queue_correctly() -> None:
-    """Verify that the worker drains the queue and calls writer.write with merged packets."""
+    """Worker drains the queue and calls writer.write with merged packets."""
 
     # 1. Setup Mocks
     mock_writer = AsyncMock(spec=BaseWriter)
@@ -47,7 +47,7 @@ async def test_adaptive_batching_worker_drains_queue_correctly() -> None:
     )
 
     # 2. Setup Data
-    pkt_q: "asyncio.Queue[FramePacket | None]" = asyncio.Queue()
+    pkt_q: asyncio.Queue[FramePacket | None] = asyncio.Queue()
     result = RunResult(provider="test")
     result_lock = asyncio.Lock()
 
@@ -70,9 +70,10 @@ async def test_adaptive_batching_worker_drains_queue_correctly() -> None:
     pkt_q.put_nowait(None)
 
     # 3. Run the worker
-    # _writer_worker is an internal method, but testing it directly allows us
-    # to verify batching logic without running the full pipeline.
-    await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
+    # _writer_worker is an internal method; this directly verifies batching logic
+    await forager._writer_worker(
+        pkt_q=pkt_q, result=result, result_lock=result_lock
+    )
 
     # 4. Assertions
     # With 10 packets in queue, the worker should have drained them all.
@@ -80,12 +81,14 @@ async def test_adaptive_batching_worker_drains_queue_correctly() -> None:
 
     # Verify total rows processed
     # We can inspect the arguments passed to write to ensure no data was lost
-    total_rows = sum(len(call[0][0].frame) for call in mock_writer.write.call_args_list)
+    total_rows = sum(
+        len(call[0][0].frame) for call in mock_writer.write.call_args_list
+    )
 
     assert total_rows == 10
 
     # Verify RunResult was updated
-    # Since we mocked write() to return correct rows, the worker should have updated the result
+    # write() returns correct rows; the worker should have updated the result
     assert "batch_test" in result.tables
     assert result.tables["batch_test"] == 10
 
@@ -113,7 +116,7 @@ async def test_writer_failure_propagates_exception(tmp_path, monkeypatch) -> Non
         controller=mock_controller,
     )
 
-    pkt_q: "asyncio.Queue[FramePacket | None]" = asyncio.Queue()
+    pkt_q: asyncio.Queue[FramePacket | None] = asyncio.Queue()
     result = RunResult(provider="test")
     result_lock = asyncio.Lock()
 
@@ -168,12 +171,26 @@ async def test_dlq_spool_and_per_packet_rescue(tmp_path, monkeypatch) -> None:
         controller=mock_controller,
     )
 
-    pkt_q: "asyncio.Queue[FramePacket | None]" = asyncio.Queue()
+    pkt_q: asyncio.Queue[FramePacket | None] = asyncio.Queue()
     result = RunResult(provider="test")
     result_lock = asyncio.Lock()
 
-    pkt_q.put_nowait(FramePacket(provider="test", table="fail_test", frame=pl.DataFrame({"id": [1]}), observed_at=datetime.now()))
-    pkt_q.put_nowait(FramePacket(provider="test", table="fail_test", frame=pl.DataFrame({"id": [2]}), observed_at=datetime.now()))
+    pkt_q.put_nowait(
+        FramePacket(
+            provider="test",
+            table="fail_test",
+            frame=pl.DataFrame({"id": [1]}),
+            observed_at=datetime.now(),
+        )
+    )
+    pkt_q.put_nowait(
+        FramePacket(
+            provider="test",
+            table="fail_test",
+            frame=pl.DataFrame({"id": [2]}),
+            observed_at=datetime.now(),
+        )
+    )
     pkt_q.put_nowait(None)
 
     await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
@@ -181,7 +198,10 @@ async def test_dlq_spool_and_per_packet_rescue(tmp_path, monkeypatch) -> None:
     # Single summarized error with DLQ status (no per-item DLQ lines)
     assert len(result.errors) == 1
     err0 = result.errors[0]
-    assert "WriterError:fail_test: Disk Full".replace("  ", " ") in err0 or "WriterError:fail_test:Disk Full" in err0
+    assert (
+        "WriterError:fail_test: Disk Full".replace("  ", " ") in err0
+        or "WriterError:fail_test:Disk Full" in err0
+    )
     assert "DLQ=" in err0
     assert result.tables.get("fail_test", 0) == 1
 
@@ -208,12 +228,19 @@ async def test_dlq_summary_after_consecutive_failures(tmp_path, monkeypatch) -> 
         controller=mock_controller,
     )
 
-    pkt_q: "asyncio.Queue[FramePacket | None]" = asyncio.Queue()
+    pkt_q: asyncio.Queue[FramePacket | None] = asyncio.Queue()
     result = RunResult(provider="test")
     result_lock = asyncio.Lock()
 
     for i in range(4):
-        pkt_q.put_nowait(FramePacket(provider="test", table="fail_test", frame=pl.DataFrame({"id": [i]}), observed_at=datetime.now()))
+        pkt_q.put_nowait(
+            FramePacket(
+                provider="test",
+                table="fail_test",
+                frame=pl.DataFrame({"id": [i]}),
+                observed_at=datetime.now(),
+            )
+        )
     pkt_q.put_nowait(None)
 
     await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
@@ -255,12 +282,19 @@ async def test_dlq_tmp_on_error_cleanup(tmp_path, monkeypatch) -> None:
         controller=mock_controller,
     )
 
-    pkt_q: "asyncio.Queue[FramePacket | None]" = asyncio.Queue()
+    pkt_q: asyncio.Queue[FramePacket | None] = asyncio.Queue()
     result = RunResult(provider="test")
     result_lock = asyncio.Lock()
 
     for i in range(2):
-        pkt_q.put_nowait(FramePacket(provider="test", table="fail_test", frame=pl.DataFrame({"id": [i]}), observed_at=datetime.now()))
+        pkt_q.put_nowait(
+            FramePacket(
+                provider="test",
+                table="fail_test",
+                frame=pl.DataFrame({"id": [i]}),
+                observed_at=datetime.now(),
+            )
+        )
     pkt_q.put_nowait(None)
 
     await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
@@ -297,16 +331,25 @@ async def test_dlq_tmp_cleanup_on_spool_failure(tmp_path, monkeypatch) -> None:
         controller=mock_controller,
     )
 
-    pkt_q: "asyncio.Queue[FramePacket | None]" = asyncio.Queue()
+    pkt_q: asyncio.Queue[FramePacket | None] = asyncio.Queue()
     result = RunResult(provider="test")
     result_lock = asyncio.Lock()
 
     for i in range(2):
-        pkt_q.put_nowait(FramePacket(provider="test", table="fail_test", frame=pl.DataFrame({"id": [i]}), observed_at=datetime.now()))
+        pkt_q.put_nowait(
+            FramePacket(
+                provider="test",
+                table="fail_test",
+                frame=pl.DataFrame({"id": [i]}),
+                observed_at=datetime.now(),
+            )
+        )
     pkt_q.put_nowait(None)
 
     with pytest.raises(Exception, match="replace failed"):
-        await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
+        await forager._writer_worker(
+            pkt_q=pkt_q, result=result, result_lock=result_lock
+        )
 
     dlq_dir = tmp_path / "app" / "cache" / "dlq" / "fail_test"
     assert dlq_dir.exists()

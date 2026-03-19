@@ -1,13 +1,14 @@
 from __future__ import annotations
+
 import asyncio
 from datetime import datetime, timezone
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
+
 import polars as pl
 import pytest
-from unittest.mock import AsyncMock, MagicMock
-from pathlib import Path
-
-from vertex_forager.core.pipeline import VertexForager, RunResult
-from vertex_forager.core.config import FramePacket, EngineConfig
+from vertex_forager.core.config import EngineConfig, FramePacket
+from vertex_forager.core.pipeline import RunResult, VertexForager
 from vertex_forager.writers.base import BaseWriter, WriteResult
 
 
@@ -31,10 +32,17 @@ async def test_dlq_disabled_skips_spooling(tmp_path: Path, monkeypatch) -> None:
         config=cfg,
         controller=mock_controller,
     )
-    pkt_q: "asyncio.Queue[FramePacket | None]" = asyncio.Queue()
+    pkt_q: asyncio.Queue[FramePacket | None] = asyncio.Queue()
     result = RunResult(provider="t")
     result_lock = asyncio.Lock()
-    pkt_q.put_nowait(FramePacket(provider="t", table="t_fail", frame=pl.DataFrame({"id": [1]}), observed_at=datetime.now(timezone.utc)))
+    pkt_q.put_nowait(
+        FramePacket(
+            provider="t",
+            table="t_fail",
+            frame=pl.DataFrame({"id": [1]}),
+            observed_at=datetime.now(timezone.utc),
+        )
+    )
     pkt_q.put_nowait(None)
     await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
     dlq_dir = tmp_path / "app" / "cache" / "dlq" / "t_fail"
@@ -57,7 +65,9 @@ async def test_dlq_disabled_flush_by_threshold(tmp_path: Path, monkeypatch) -> N
     mock_mapper = MagicMock()
     mock_controller = MagicMock()
     # Force flush by size: threshold = 1 row
-    cfg = EngineConfig(requests_per_minute=60, dlq_enabled=False, flush_threshold_rows=1)
+    cfg = EngineConfig(
+        requests_per_minute=60, dlq_enabled=False, flush_threshold_rows=1
+    )
     forager = VertexForager(
         router=mock_router,
         http=mock_http,
@@ -66,10 +76,17 @@ async def test_dlq_disabled_flush_by_threshold(tmp_path: Path, monkeypatch) -> N
         config=cfg,
         controller=mock_controller,
     )
-    pkt_q: "asyncio.Queue[FramePacket | None]" = asyncio.Queue()
+    pkt_q: asyncio.Queue[FramePacket | None] = asyncio.Queue()
     result = RunResult(provider="t")
     result_lock = asyncio.Lock()
-    pkt_q.put_nowait(FramePacket(provider="t", table="t_fail", frame=pl.DataFrame({"id": [1]}), observed_at=datetime.now(timezone.utc)))
+    pkt_q.put_nowait(
+        FramePacket(
+            provider="t",
+            table="t_fail",
+            frame=pl.DataFrame({"id": [1]}),
+            observed_at=datetime.now(timezone.utc),
+        )
+    )
     # This enqueue triggers flush by size; send shutdown after
     pkt_q.put_nowait(None)
     await forager._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
