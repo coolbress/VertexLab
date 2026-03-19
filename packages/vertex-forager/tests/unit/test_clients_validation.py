@@ -17,3 +17,4 @@ def test_filter_reserved_kwargs_removes_reserved_keys():
     assert "on_progress" not in out
     assert out["custom"] == 3
     assert out["extra"] == 5
+    assert len(out) == 2

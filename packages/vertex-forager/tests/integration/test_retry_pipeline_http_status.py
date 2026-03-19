@@ -44,7 +44,7 @@ class StubWriter:
     async def write(self, packet: FramePacket) -> WriteResult:
         return WriteResult(
             table="t",
-            rows=int(getattr(packet.frame, "height", 0) or 0),
+            rows=int(packet.frame.height),
             partitions={},
         )
     async def flush(self) -> None:

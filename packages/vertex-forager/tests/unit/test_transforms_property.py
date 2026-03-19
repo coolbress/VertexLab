@@ -44,5 +44,5 @@ def test_parse_date_range_property(start_date: date, delta_days: int) -> None:
 
 
 def test_parse_date_range_invalid_raises() -> None:
-    with pytest.raises(ValueError, match=r".*"):
+    with pytest.raises(ValueError, match=r"End date is earlier than start date"):
         _ = parse_date_range("2024-01-10", "2024-01-01")

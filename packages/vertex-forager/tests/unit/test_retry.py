@@ -69,7 +69,7 @@ async def test_no_retry_on_400():
             with attempt:
                 attempts += 1
                 raise _status_error(400)
-    with pytest.raises(httpx.HTTPStatusError, match=r".*"):
+    with pytest.raises(httpx.HTTPStatusError, match=r"^err$"):
         await _run()
     assert attempts == 1
 
@@ -91,7 +91,7 @@ async def test_disabled_http_status_retry():
             with attempt:
                 attempts += 1
                 raise _status_error(429)
-    with pytest.raises(httpx.HTTPStatusError, match=r".*"):
+    with pytest.raises(httpx.HTTPStatusError, match=r"^err$"):
         await _run()
     assert attempts == 1
 
@@ -150,7 +150,7 @@ async def test_retry_exhaustion_reraises_transport_error():
                 attempts += 1
                 req = httpx.Request("GET", "http://test")
                 raise httpx.TransportError("persistent failure", request=req)
-    with pytest.raises(httpx.TransportError, match=r".*"):
+    with pytest.raises(httpx.TransportError, match=r"^persistent failure$"):
         await _run()
     assert attempts == cfg.max_attempts
 
