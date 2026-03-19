@@ -53,7 +53,6 @@ logger = logging.getLogger("vertex_forager.providers.yfinance.router")
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Sequence
-
     from vertex_forager.core.config import FetchJob, ParseResult
 else:
     from vertex_forager.core.config import FetchJob, ParseResult

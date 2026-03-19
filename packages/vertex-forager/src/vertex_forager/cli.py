@@ -1,6 +1,8 @@
 from __future__ import annotations
 import asyncio
 import hashlib
+import re
+import shlex
 import itertools
 import json
 import logging
@@ -23,6 +25,16 @@ if TYPE_CHECKING:
     from vertex_forager.providers.sharadar.client import SharadarClient
 
 logger = logging.getLogger(__name__)
+
+def _atomic_write_json(path: Path, payload: object) -> None:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    tmp.replace(path)
+
+def _atomic_write_text(path: Path, content: str) -> None:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(content, encoding="utf-8")
+    tmp.replace(path)
 
 
 @click.group()
@@ -849,8 +861,8 @@ def tune_sweep(
     # 3. Score and Rank
     results = _score_and_rank_results(results, rank_by, rank_alpha, rank_error_penalty)
 
-    report_path.write_text(json.dumps(results, indent=2))
-    best_path.write_text(json.dumps(results["best"], indent=2))
+    _atomic_write_json(report_path, results)
+    _atomic_write_json(best_path, results["best"])
     click.echo(str(report_path))
 
 
@@ -879,14 +891,16 @@ def tune_export_best(output_dir: Path | None, write_file: Path | None) -> None:
         env = entry.get("env") or {}
         lines.append(f"# {label} recommended exports")
         for k, v in env.items():
-            lines.append(f"export {k}={v}")
+            if isinstance(k, str) and re.match(r"^[A-Z_][A-Z0-9_]*$", k):
+                sval = shlex.quote(str(v))
+                lines.append(f"export {k}={sval}")
         lines.append("")
 
     _collect("yfinance_price")
     _collect("yfinance_financials")
     content = "\n".join(lines)
     if write_file:
-        write_file.write_text(content)
+        _atomic_write_text(write_file, content)
         click.echo(str(write_file))
     else:
         click.echo(content)
