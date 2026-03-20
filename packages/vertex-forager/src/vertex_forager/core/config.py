@@ -22,8 +22,8 @@ from vertex_forager.constants import (
     QUEUE_MIN,
     QUEUE_TARGET_RAM_RATIO,
 )
-from vertex_forager.core.contracts import TracerProtocol
-from vertex_forager.core.types import JSONValue
+from vertex_forager.core.contracts import TracerProtocol  # Pydantic v2: requires runtime resolution
+from vertex_forager.core.types import JSONValue  # Pydantic v2: used in field types at runtime
 from vertex_forager.exceptions import VertexForagerError
 
 

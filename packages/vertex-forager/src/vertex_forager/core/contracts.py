@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar, runtime_checkable
 
 from vertex_forager.core.types import JSONValue, SharadarDataset, YFinanceDataset
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Callable, Sequence
+    from collections.abc import AsyncIterator, Sequence
     from contextlib import AbstractContextManager
 
     from vertex_forager.core.config import FetchJob, FramePacket, ParseResult, RunResult
@@ -22,7 +23,7 @@ class HttpClientProtocol(Protocol):
     async def run_async(self, method: str, url: str, **kwargs: Any) -> Any:
         ...
 
-    async def run_sync(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+    async def run_sync(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         ...
 
 
