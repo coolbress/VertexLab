@@ -433,7 +433,7 @@ class BaseClient(ABC, Generic[T]):
             leave=True,
             disable=False,
         )
-        pbar_updater = create_pbar_updater(pbar)
+        pbar_updater: Callable[..., None] = create_pbar_updater(pbar)
         return pbar, pbar_updater
 
     async def collect_results(

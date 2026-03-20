@@ -27,6 +27,7 @@ from vertex_forager.core.library import get_library_fetcher
 from vertex_forager.utils import env_float, env_int
 
 if TYPE_CHECKING:
+    from vertex_forager.core.contracts import HttpClientProtocol
     from vertex_forager.core.types import JSONValue
 
 logger = logging.getLogger("vertex_forager.core.http")
@@ -53,7 +54,7 @@ class HttpExecutor:
         - Example: "https://api.example.com?token=SECRET&cursor=123" -> "[redacted]"
     """
 
-    def __init__(self, *, client: Any) -> None:
+    def __init__(self, *, client: HttpClientProtocol) -> None:
         """Initialize with an existing client.
 
         Args:

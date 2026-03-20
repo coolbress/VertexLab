@@ -22,7 +22,8 @@ from vertex_forager.constants import (
     QUEUE_MIN,
     QUEUE_TARGET_RAM_RATIO,
 )
-from vertex_forager.core.types import JSONValue
+from vertex_forager.core.contracts import TracerProtocol  # Pydantic v2: requires runtime resolution
+from vertex_forager.core.types import JSONValue  # Pydantic v2: used in field types at runtime
 from vertex_forager.exceptions import VertexForagerError
 
 
@@ -218,6 +219,20 @@ class EngineConfig(BaseModel):
         recovery_step (int): RPM increment when recovering from downshift.
         healthy_window_s (int): Window (seconds) of healthy operation before stepping up RPM.
 
+        tracer (TracerProtocol | None): Optional tracer used to create spans around
+            engine stages. When None (default), tracing is disabled regardless of
+            otel_enabled. When set, pipeline uses `tracer.start_span(name, attributes=...)`
+            as a context manager for major operations.
+        otel_enabled (bool | None): Toggle for OpenTelemetry instrumentation. When True
+            and a tracer is provided, spans are created; when False or None, spans are
+            not created even if a tracer exists.
+
+    Notes:
+        - `model_config = {"arbitrary_types_allowed": True}` permits using `TracerProtocol`
+          (a Protocol) as a field type on Pydantic v2 models.
+        - If both `tracer is None` and `otel_enabled` is falsy, tracing is a no-op.
+          Providing a tracer and setting `otel_enabled` truthy enables span contexts.
+
     Raises:
         ValueError: If requests_per_minute is not positive.
     """
@@ -247,6 +262,12 @@ class EngineConfig(BaseModel):
     rpm_floor: int = Field(default=1, ge=1)
     recovery_step: int = Field(default=5, ge=1)
     healthy_window_s: int = Field(default=60, ge=1)
+
+    # 5. Optional Tracing
+    tracer: TracerProtocol | None = None
+    otel_enabled: bool | None = None
+
+    model_config = {"arbitrary_types_allowed": True}
 
     @property
     def fetch_concurrency(self) -> int | None:
