@@ -17,7 +17,13 @@ jobs:
         github.actor != 'github-actions[bot]' &&
         github.event.pull_request.user.login != 'dependabot[bot]' &&
         github.event.pull_request.user.login != 'github-actions[bot]' &&
-        !startsWith(github.event.pull_request.head.ref, 'release-please--')
+        !(
+          startsWith(github.event.pull_request.head.ref, 'release-please--') &&
+          (
+            github.actor == 'release-please[bot]' ||
+            github.event.pull_request.user.login == 'release-please[bot]'
+          )
+        )
       }}
     runs-on: ubuntu-latest
     env:
