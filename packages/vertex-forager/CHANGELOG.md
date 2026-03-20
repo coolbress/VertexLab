@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.2.2...vertex-forager-v0.3.0) (2026-03-20)
+
+
+### Features
+
+* opt-in strict schema validation and in-memory dedup/upsert ([#153](https://github.com/coolbress/VertexLab/issues/153)) ([53840ac](https://github.com/coolbress/VertexLab/commit/53840ac2aef93d1e463f011320dd8c8c844c0d09))
+
 ## [0.2.2](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.2.1...vertex-forager-v0.2.2) (2026-03-18)
 
 
