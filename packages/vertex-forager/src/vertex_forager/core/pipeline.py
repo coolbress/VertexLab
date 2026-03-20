@@ -545,15 +545,18 @@ class VertexForager:
             return
 
         logger.debug("PIPELINE: Stopping pipeline...")
-        for task in self._active_tasks:
+        writer_tasks = getattr(self, "_writer_tasks", None)
+        writer_set: set[asyncio.Task[Any]] = (
+            set(cast("list[asyncio.Task[Any]]", writer_tasks)) if isinstance(writer_tasks, list) else set()
+        )
+        other_tasks: list[asyncio.Task[Any]] = [
+            t for t in cast("list[asyncio.Task[Any]]", self._active_tasks) if t not in writer_set
+        ]
+        for task in other_tasks:
             if not task.done():
                 task.cancel()
-
-        # Wait for all tasks to complete (suppressing CancelledError)
-        if self._active_tasks:
-            await asyncio.gather(*self._active_tasks, return_exceptions=True)
-
-        self._active_tasks.clear()
+        if other_tasks:
+            await asyncio.gather(*other_tasks, return_exceptions=True)
         # Best-effort signal queues to unblock waiting workers, without blocking stop()
         try:
             req_q = getattr(self, "_req_q", None)
@@ -570,7 +573,6 @@ class VertexForager:
             logger.debug("PIPELINE: Failed to enqueue request sentinels during stop: %s", e, exc_info=True)
         try:
             pkt_q = getattr(self, "_pkt_q", None)
-            writer_tasks = getattr(self, "_writer_tasks", None)
             writer_n = len(writer_tasks) if isinstance(writer_tasks, list) else 0
             if pkt_q is not None and writer_n > 0:
                 for _ in range(writer_n):
@@ -582,6 +584,9 @@ class VertexForager:
                         break
         except Exception as e:
             logger.debug("PIPELINE: Failed to enqueue packet sentinels during stop: %s", e, exc_info=True)
+        if writer_set:
+            await asyncio.gather(*writer_set, return_exceptions=True)
+        self._active_tasks.clear()
         # Ensure writer flush on shutdown for DLQ guarantees
         try:
             await self._writer.flush()
@@ -711,12 +716,25 @@ class VertexForager:
                         await req_q.put((self.PRIORITY_NEW_JOB, time.monotonic_ns(), job))
                         req_q.task_done()
                         deferred_once = True
-                        # Try to pick a different job immediately; if none available, fall through.
-                        priority, _, job = req_q.get_nowait()
-                        # Reset burst tracking when switching symbol or non-pagination
-                        if priority != self.PRIORITY_PAGINATION or job is None or job.symbol != last_symbol:
-                            last_symbol = job.symbol if job is not None else None
-                            burst_count = 1 if priority == self.PRIORITY_PAGINATION and job is not None else 0
+                        # Drain same-symbol pagination jobs and demote them, pick a different item to proceed
+                        while True:
+                            priority, _, candidate = req_q.get_nowait()
+                            if (
+                                priority == self.PRIORITY_PAGINATION
+                                and candidate is not None
+                                and candidate.symbol == last_symbol
+                            ):
+                                await req_q.put((self.PRIORITY_NEW_JOB, time.monotonic_ns(), candidate))
+                                req_q.task_done()
+                                continue
+                            job = candidate
+                            if priority == self.PRIORITY_PAGINATION and job is not None:
+                                last_symbol = job.symbol
+                                burst_count = 1
+                            else:
+                                last_symbol = job.symbol if job is not None else None
+                                burst_count = 0
+                            break
                     except asyncio.QueueEmpty:
                         # No alternative available; if we deferred, fetch the next available normally
                         if deferred_once:
