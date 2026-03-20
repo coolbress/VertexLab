@@ -8,7 +8,6 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Sequence
     from contextlib import AbstractContextManager
 
-
     from vertex_forager.core.config import FetchJob, FramePacket, ParseResult, RunResult
     from vertex_forager.writers.base import WriteResult
 
