@@ -15,6 +15,7 @@ nav:
       - CLI equivalents: how-to/cli-equivalents.md
       - Provider extension: how-to/provider-extension.md
       - Provider plugin: how-to/provider-plugin.md
+      - Data integrity controls: how-to/data-integrity.md
   - Reference:
       - EngineConfig: reference/config.md
       - Metrics: reference/metrics.md

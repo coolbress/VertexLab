@@ -28,9 +28,21 @@ class InMemoryBufferWriter(BaseWriter):
             df = writer.collect_table("price", sort_cols=["ticker", "date"])
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, unique_key: list[str] | None = None) -> None:
         self._lock = threading.Lock()
         self._tables: dict[str, list[pl.DataFrame]] = {}
+        self._unique_key: list[str] | None = list(unique_key) if unique_key else None
+        self._counters: dict[str, int] = {}
+
+    def set_unique_key(self, unique_key: list[str] | None) -> None:
+        with self._lock:
+            self._unique_key = list(unique_key) if unique_key else None
+
+    def get_counters_and_reset(self) -> dict[str, int]:
+        with self._lock:
+            data = dict(self._counters)
+            self._counters.clear()
+            return data
 
     async def write(self, packet: FramePacket) -> WriteResult:
         """Append packet to the in-memory buffer.
@@ -71,5 +83,18 @@ class InMemoryBufferWriter(BaseWriter):
                 valid_sort_cols = [c for c in sort_cols if c in df.columns]
                 if valid_sort_cols:
                     df = df.sort(valid_sort_cols)
+
+            # Optional in-memory dedup/upsert by unique key
+            if self._unique_key:
+                subset = [c for c in self._unique_key if c in df.columns]
+                if subset:
+                    before = df.height
+                    # Keep last occurrence to approximate simple upsert semantics
+                    df = df.unique(subset=subset, keep="last", maintain_order=True)
+                    dropped = before - df.height
+                    if dropped > 0:
+                        self._counters["inmem_dedup_dropped_rows"] = (
+                            self._counters.get("inmem_dedup_dropped_rows", 0) + dropped
+                        )
 
             return df

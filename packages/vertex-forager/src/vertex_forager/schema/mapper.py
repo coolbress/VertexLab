@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from typing import TYPE_CHECKING
 
 import polars as pl
@@ -31,6 +32,21 @@ class SchemaMapper:
         mapper = SchemaMapper()
         normalized_packet = mapper.normalize(raw_packet)
     """
+
+    def __init__(self, *, strict_validation: bool = False) -> None:
+        self.strict_validation = bool(strict_validation)
+        self._counters_lock = threading.Lock()
+        self._counters: dict[str, int] = {}
+
+    def _inc(self, name: str, value: int) -> None:
+        with self._counters_lock:
+            self._counters[name] = self._counters.get(name, 0) + int(value)
+
+    def get_counters_and_reset(self) -> dict[str, int]:
+        with self._counters_lock:
+            data = dict(self._counters)
+            self._counters.clear()
+            return data
 
     def normalize(self, packet: FramePacket) -> FramePacket:
         """
@@ -70,6 +86,11 @@ class SchemaMapper:
         # Reorder columns to put unique key (PK) first for better readability
         frame = self._reorder_columns(frame, table_schema.unique_key)
 
+        # Track extra columns preserved for observability
+        extra_cols = [c for c in frame.columns if c not in table_schema.schema]
+        if extra_cols:
+            self._inc("schema_extra_cols_preserved_count", len(extra_cols))
+
         return packet.model_copy(update={"frame": frame})
 
     def _cast_to_schema(self, frame: pl.DataFrame, schema: dict[str, pl.DataType | type[pl.DataType]]) -> pl.DataFrame:
@@ -85,13 +106,24 @@ class SchemaMapper:
         exprs: list[pl.Expr] = []
 
         # 1. Handle Schema Columns (Cast or Create)
+        missing: list[str] = []
         for name, dtype in schema.items():
             if name not in cols:
-                # Missing column: Create as null
-                exprs.append(pl.lit(None).cast(dtype).alias(name))
+                missing.append(name)
             else:
-                # Existing column: Cast
-                exprs.append(pl.col(name).cast(dtype, strict=False).alias(name))
+                exprs.append(pl.col(name).cast(dtype, strict=self.strict_validation).alias(name))
+
+        # If strict, missing required columns raise immediately
+        if self.strict_validation and missing:
+            raise ValueError(f"Schema validation failed: missing required columns {missing}")
+
+        # In non-strict mode, create missing with nulls and count fills
+        if not self.strict_validation and missing:
+            for name in missing:
+                dtype = schema[name]
+                exprs.append(pl.lit(None).cast(dtype).alias(name))
+            # Count cells filled as nulls for observability
+            self._inc("schema_missing_cols_filled", len(missing) * frame.height)
 
         # 2. Apply Projections
         # Note: We do NOT filter out extra columns. They are preserved.

@@ -473,5 +473,18 @@ class BaseClient(ABC, Generic[T]):
             schema = get_table_schema(table_name)
             if schema and schema.unique_key:
                 sort_cols = list(schema.unique_key)
+                # If in-memory writer supports dedup/upsert by unique key, pass it along
+                try:
+                    # local import for optionality
+                    from vertex_forager.writers.memory import InMemoryBufferWriter as _IMW
+                    if isinstance(writer, _IMW):
+                        writer.set_unique_key(list(schema.unique_key))
+                except Exception as e:
+                    logger.debug(
+                        "InMemoryBufferWriter unique_key setup failed: writer=%s unique_key=%s error=%s",
+                        writer,
+                        list(schema.unique_key),
+                        e,
+                    )
 
         return writer.collect_table(table_name, sort_cols=sort_cols)

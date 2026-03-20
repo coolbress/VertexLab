@@ -33,13 +33,14 @@ Status: Alpha • Python 3.10+ • License: MIT
 - Schema‑aware pipeline
   - Polars normalization with central schema registry and PK validation
   - Flexible schema opt‑in for evolving library providers
+  - Opt‑in strict validation for fast failure on invalid inputs
 - Resilient writing
   - Chunked flush to bound memory peak; per‑chunk accounting
   - DLQ spool with fsync and atomic replace; `dlq_enabled` toggle to disable spooling when required
   - RunResult summaries and per‑table DLQ counts regardless of metrics settings
 - Writers
   - DuckDB (unique index if PK known)
-  - In‑memory buffer
+  - In‑memory buffer with optional unique_key dedup/upsert
 
 ## Installation
 
@@ -205,6 +206,7 @@ print(res)  # RunResult
 - How‑to Guides
   - [Operate with DLQ disabled](docs/how-to/dlq-disabled.md)
   - [Tune chunked flush thresholds](docs/how-to/chunked-flush.md)
+  - [Data integrity controls](docs/how-to/data-integrity.md)
   - [Troubleshooting](docs/how-to/troubleshooting.md)
   - [CLI equivalents](docs/how-to/cli-equivalents.md)
 - Reference

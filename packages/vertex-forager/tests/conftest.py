@@ -265,3 +265,15 @@ def create_test_frame_packet() -> FramePacket:
         frame=frame,
         observed_at=datetime(2024, 1, 2, tzinfo=timezone.utc),
     )
+
+@pytest.fixture
+def pkt_factory():
+    """Factory fixture to build a FramePacket for a given table and DataFrame."""
+    def _make(table: str, df: pl.DataFrame) -> FramePacket:
+        return FramePacket(
+            provider="test",
+            table=table,
+            frame=df,
+            observed_at=datetime.now(tz=timezone.utc),
+        )
+    return _make

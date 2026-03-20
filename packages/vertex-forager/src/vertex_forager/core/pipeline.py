@@ -487,6 +487,17 @@ class VertexForager:
 
             logger.info(f"PIPELINE: Run completed. Total errors: {len(result.errors)}")
             if self._metrics_enabled:
+                # Merge counters from mapper/writer if they expose them
+                with suppress(Exception):
+                    mapper_counters = getattr(self._mapper, "get_counters_and_reset", None)
+                    if callable(mapper_counters):
+                        for k, v in dict(mapper_counters()).items():
+                            self._inc(k, int(v))
+                with suppress(Exception):
+                    writer_counters = getattr(self._writer, "get_counters_and_reset", None)
+                    if callable(writer_counters):
+                        for k, v in dict(writer_counters()).items():
+                            self._inc(k, int(v))
                 result.metrics_counters = dict(self._counters)
                 result.metrics_histograms = {k: list(v) for k, v in self._hists.items()}
                 self._summary = self._compute_summary()

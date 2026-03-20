@@ -1,6 +1,6 @@
 # Metrics Reference
 
-Enable with `EngineConfig.metrics_enabled=True`.
+Enable with `EngineConfig.metrics_enabled=True`. When disabled, counters and histograms are not collected or merged into `RunResult.metrics_*`.
 
 ## Counters
 - `rows_written_total`
@@ -10,6 +10,9 @@ Enable with `EngineConfig.metrics_enabled=True`.
 - `dlq_rescued_total`
 - `dlq_remaining_total`
 - `dlq_spool_failed_total`
+- `schema_missing_cols_filled` — cells filled as `null` for missing schema columns in non‑strict mode
+- `schema_extra_cols_preserved_count` — number of extra input columns preserved beyond schema
+- `inmem_dedup_dropped_rows` — rows removed by in‑memory unique_key dedup/upsert (keep="last")
 
 ## Histograms
 - Global:
