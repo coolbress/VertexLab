@@ -23,6 +23,15 @@
 - PyPI upload requires `vars.PUBLISH_TO_PYPI == 'true'` and `secrets.PYPI_TOKEN`.
 - No other steps use PyPI credentials.
 
+## Release PR CI Trigger (release-please)
+
+- To ensure CI checks run automatically on Release PRs created by release-please, use a fine‑grained PAT:
+  - Create a bot account or use an automation user with minimal scopes (Repository: Contents (R/W), Pull requests (R/W), Issues (R/W), Metadata (R/O)).
+  - Add the token as repository secret: `RELEASE_PLEASE_TOKEN`.
+  - The workflow uses `secrets.RELEASE_PLEASE_TOKEN` with fallback to `github.token`:
+    - If the secret is present, PRs are authored via PAT and standard `pull_request` triggers fire.
+    - If absent, the workflow falls back to `GITHUB_TOKEN` (PRs may not auto‑trigger CI due to chain restrictions).
+
 ## Runtime
 
 - Workflows use Node 24‑compatible action versions; Python 3.10 runners.
