@@ -12,7 +12,7 @@ import shutil
 import sys
 import threading
 import time
-from typing import Any, Literal
+from typing import Any, Literal, ParamSpec
 import warnings
 
 from dotenv import load_dotenv
@@ -264,7 +264,10 @@ def check_memory_safety(
         )
 
 
-def create_pbar_updater(pbar: tqdm) -> Callable:
+P = ParamSpec("P")
+
+
+def create_pbar_updater(pbar: tqdm) -> Callable[P, None]:
     """Create a progress bar update callback.
 
     Args:
@@ -274,18 +277,15 @@ def create_pbar_updater(pbar: tqdm) -> Callable:
         Callable to update the progress bar.
     """
 
-    def _update_pbar(
-        *,
-        job: object | None = None,
-        parse_result: object | None = None,
-        **_kwargs: object,
-    ) -> None:
+    def _update_pbar(*args: P.args, **kwargs: P.kwargs) -> None:
         """Update progress bar based on fully processed ticker count.
 
         With Smart Batching, we expect most requests to complete in a single fetch.
         However, if pagination occurs (e.g. 10k row limit hit), we only update the
         counter when the FINAL page is processed to avoid double counting.
         """
+        job = kwargs.get("job")
+        parse_result = kwargs.get("parse_result")
         if not job:
             return
 

@@ -22,6 +22,7 @@ from vertex_forager.constants import (
     QUEUE_MIN,
     QUEUE_TARGET_RAM_RATIO,
 )
+from vertex_forager.core.contracts import TracerProtocol
 from vertex_forager.core.types import JSONValue
 from vertex_forager.exceptions import VertexForagerError
 
@@ -247,6 +248,12 @@ class EngineConfig(BaseModel):
     rpm_floor: int = Field(default=1, ge=1)
     recovery_step: int = Field(default=5, ge=1)
     healthy_window_s: int = Field(default=60, ge=1)
+
+    # 5. Optional Tracing
+    tracer: TracerProtocol | None = None
+    otel_enabled: bool | None = None
+
+    model_config = {"arbitrary_types_allowed": True}
 
     @property
     def fetch_concurrency(self) -> int | None:

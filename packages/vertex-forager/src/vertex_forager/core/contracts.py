@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-from typing import (
-    TYPE_CHECKING,
-    Generic,
-    Protocol,
-    TypeVar,
-)
+from contextlib import AbstractContextManager
+from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar, runtime_checkable
 
 from vertex_forager.core.types import JSONValue, SharadarDataset, YFinanceDataset
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Sequence
+
+    import httpx
 
     from vertex_forager.core.config import FetchJob, FramePacket, ParseResult, RunResult
     from vertex_forager.writers.base import WriteResult
@@ -18,6 +16,30 @@ if TYPE_CHECKING:
 
 T = TypeVar("T", bound=SharadarDataset | YFinanceDataset | str)
 T_contra = TypeVar("T_contra", bound=SharadarDataset | YFinanceDataset | str, contravariant=True)
+
+@runtime_checkable
+class HttpClientProtocol(Protocol):
+    """Minimal async HTTP client protocol used by HttpExecutor."""
+
+    async def run_async(self, method: str, url: str, /, **kwargs: Any) -> httpx.Response:
+        ...
+
+    async def run_sync(self, func: Callable[..., Any], /, *args: Any, **kwargs: Any) -> Any:
+        ...
+
+
+@runtime_checkable
+class TracerProtocol(Protocol):
+    """Minimal tracing protocol used by the pipeline for optional spans."""
+
+    def start_span(
+        self,
+        name: str,
+        /,
+        *,
+        attributes: dict[str, object] | None = None,
+    ) -> AbstractContextManager[object] | None:
+        ...
 
 
 class IRouter(Protocol, Generic[T_contra]):
