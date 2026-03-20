@@ -26,6 +26,7 @@ from collections import defaultdict, deque
 from collections.abc import Callable, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
+from functools import partial
 import inspect
 import itertools
 import logging
@@ -686,8 +687,6 @@ class VertexForager:
                     dataset=job.dataset,
                     symbol=str(job.symbol),
                 ):
-                    from functools import partial
-
                     parse_result = await loop.run_in_executor(
                         self._parse_executor,
                         partial(self._router.parse, job=job, payload=payload),
@@ -712,8 +711,6 @@ class VertexForager:
                 for packet in parse_result.packets:
                     # Normalize packet schema (enforce types, fill missing cols)
                     loop = asyncio.get_running_loop()
-                    from functools import partial
-
                     normalized_packet = await loop.run_in_executor(
                         self._parse_executor, partial(self._mapper.normalize, packet=packet)
                     )
@@ -901,9 +898,7 @@ class VertexForager:
                         fh.flush()
                         os.fsync(fh.fileno())
                     os.replace(tmp_path, fpath)
-                    import contextlib
-
-                    with contextlib.suppress(Exception):
+                    with suppress(Exception):
                         dir_fd = os.open(str(dlq_dir), os.O_RDONLY)
                         try:
                             os.fsync(dir_fd)
@@ -944,9 +939,7 @@ class VertexForager:
                         try:
                             if tmp_path is not None and tmp_path.exists():
                                 tmp_path.unlink()
-                                import contextlib
-
-                                with contextlib.suppress(Exception):
+                                with suppress(Exception):
                                     dir_fd = os.open(str(tmp_path.parent), os.O_RDONLY)
                                     try:
                                         os.fsync(dir_fd)
