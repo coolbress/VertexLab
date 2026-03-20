@@ -35,7 +35,7 @@ def test_schema_mapper_strict_raises_on_type_mismatch(pkt_factory) -> None:
     # Use yfinance_financials schema; provide all required columns but make 'value' incompatible (string)
     df = pl.DataFrame(
         {
-            "date": [pl.date(2024, 1, 1)],  # will be cast from native date
+            "date": [date(2024, 1, 1)],
             "ticker": ["AAPL"],
             "provider": ["yfinance"],
             "period": ["annual"],
