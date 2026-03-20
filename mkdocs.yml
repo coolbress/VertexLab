@@ -61,6 +61,6 @@ nav:
   - Policies:
       - CI Security: ci-security.md
       - CI Node Runtime Policy: explanation/ci-node-policy.md
-    - Labels Policy: explanation/labels-policy.md
+      - Labels Policy: explanation/labels-policy.md
   - Components:
       - vertex-forager: '!include packages/vertex-forager/mkdocs.yml'

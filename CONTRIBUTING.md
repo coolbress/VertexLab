@@ -17,6 +17,7 @@ Thank you for contributing to Vertex Forager!
   - Note (tests): keep packages/vertex-forager/tests/** exceptions S101 and TC002/TC003/TC006 for pytest assert ergonomics and type-checking imports.
 
 ## Lint rules & quick‑fix cheatsheet
+
 - Imports (I001)
   - Keep imports sorted and grouped (stdlib, third‑party, first‑party). Use: `uv run ruff check --select I --fix`.
   - Respect `known-first-party = ["vertex_forager"]` in pyproject.
@@ -36,32 +37,38 @@ Thank you for contributing to Vertex Forager!
 - Type‑checking gates (TC00x)
   - Import heavy/type‑only symbols behind `if TYPE_CHECKING:`; keep runtime imports only for code paths that execute.
   - Example pattern:
-    ```
+    
+    ```python
     from typing import TYPE_CHECKING
     if TYPE_CHECKING:
         from collections.abc import Sequence
     ```
+    
 
 Quick references:
 - pyproject: `[tool.ruff]`, `[tool.ruff.lint]`, `[tool.ruff.lint.per-file-ignores]`
 - Tests keep only: S101, TC002, TC003, TC006 under `packages/vertex-forager/tests/**`.
 
 ## Temporary per‑file‑ignores policy
+
 - When to add
   - Only as a short‑term unblocker when a file cannot be reasonably fixed within the current PR.
   - Scope to the narrowest path (specific file or subfolder), never repo‑wide.
 - How to add (pyproject.toml)
   - Edit `[tool.ruff.lint.per-file-ignores]` and add the minimal rule list for the specific path.
   - Example:
-    ```
+    
+    ```toml
     [tool.ruff.lint.per-file-ignores]
     "packages/vertex-forager/src/vertex_forager/some_legacy.py" = ["E501", "PT011"]
     ```
+    
 - Removal in follow‑up PRs
   - Track ignores in the PR description and open a follow‑up to remove them once code is compliant.
   - Replace ignores with targeted refactors/tests; keep the list shrinking over time.
 
 ## Documentation
+
 - Docs live under `packages/vertex-forager/docs` (MkDocs + Material, Diátaxis).
 - Build locally:
   - `uv pip install "mkdocs>=1.6.0" "mkdocs-material>=9.5.0" "mkdocstrings[python]>=0.25.0" "pymdown-extensions>=10.8"`
