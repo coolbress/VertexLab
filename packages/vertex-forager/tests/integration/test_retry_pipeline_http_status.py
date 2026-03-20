@@ -117,3 +117,26 @@ async def test_fetch_with_retry_logs_and_succeeds_on_429_then_200(
         "stage=http_retry" in m or "stage=http_retry_reason" in m for m in messages
     )
     assert any("stage=http_end" in m for m in messages)
+
+
+@pytest.mark.asyncio
+async def test_fetch_without_retry_when_non_idempotent() -> None:
+    stub_client = StubClient()
+    http = HttpExecutor(client=stub_client)
+    pipeline = VertexForager(
+        router=StubRouter(),
+        http=http,
+        writer=StubWriter(),
+        mapper=StubMapper(),
+        config=stub_client._config,
+        controller=stub_client.controller,
+    )
+    # First call returns 429 in StubClient; non-idempotent must not retry.
+    job = FetchJob(
+        provider="stub",
+        dataset="price",
+        symbol="AAPL",
+        spec=RequestSpec(url="https://example.com", idempotent=False),
+    )
+    with pytest.raises(httpx.HTTPStatusError):
+        await pipeline._fetch_with_retry(job)

@@ -23,6 +23,8 @@ logger = logging.getLogger("vertex_forager.retry")
 
 def create_retry_controller(
     config: RetryConfig,
+    *,
+    idempotent: bool = True,
     log_level: int = logging.WARNING,
     retry_on: tuple[type[Exception], ...] = (httpx.TransportError,),
 ) -> AsyncRetrying:
@@ -57,8 +59,11 @@ def create_retry_controller(
         rnd = secrets.SystemRandom()
         return float(rnd.uniform(0.0, cap))
 
+    # For non-idempotent requests, guard against repeats by forcing a single attempt.
+    stop_policy = stop_after_attempt(1 if not idempotent else config.max_attempts)
+
     return AsyncRetrying(
-        stop=stop_after_attempt(config.max_attempts),
+        stop=stop_policy,
         wait=_wait_capped,
         retry=retry_if_exception(_should_retry),
         before_sleep=before_sleep_log(logger, log_level),

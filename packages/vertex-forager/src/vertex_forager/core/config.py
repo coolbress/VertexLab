@@ -111,6 +111,9 @@ class RequestSpec(BaseModel):
         data: Raw bytes payload for requests (default: None).
         timeout_s: Request timeout in seconds (default: 30.0).
         auth: Authentication strategy to apply (default: RequestAuth()).
+        idempotent: Whether the request is safe to retry without side effects.
+            Defaults to True to preserve existing behavior; set to False to disable
+            automatic retries for non-idempotent operations.
     """
 
     method: HttpMethod = HttpMethod.GET
@@ -121,6 +124,7 @@ class RequestSpec(BaseModel):
     data: bytes | None = None
     timeout_s: float = HTTP_TIMEOUT_S
     auth: RequestAuth = Field(default_factory=RequestAuth)
+    idempotent: bool = True
 
     @field_validator("params", mode="before")
     @classmethod

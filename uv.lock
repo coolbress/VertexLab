@@ -3009,7 +3009,7 @@ source = { editable = "packages/vertex-caliber" }
 
 [[package]]
 name = "vertex-forager"
-version = "0.2.2"
+version = "0.3.0"
 source = { editable = "packages/vertex-forager" }
 dependencies = [
     { name = "click" },
