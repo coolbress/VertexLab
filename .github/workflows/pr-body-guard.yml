@@ -21,7 +21,14 @@ jobs:
           startsWith(github.event.pull_request.head.ref, 'release-please--') &&
           (
             github.actor == 'release-please[bot]' ||
-            github.event.pull_request.user.login == 'release-please[bot]'
+            github.event.pull_request.user.login == 'release-please[bot]' ||
+            (
+              vars.RELEASE_PLEASE_PAT_OWNER != '' &&
+              (
+                github.actor == vars.RELEASE_PLEASE_PAT_OWNER ||
+                github.event.pull_request.user.login == vars.RELEASE_PLEASE_PAT_OWNER
+              )
+            )
           )
         )
       }}
