@@ -1066,7 +1066,8 @@ class VertexForager:
                 buffer_rows[table] = 0
                 logger.exception(f"WRITER: Spool failed after {prefix} for {table}: {spool_exc}")
                 with suppress(Exception):
-                    cast(Any, spool_exc)._already_reported = True
+                    _attr = "_already_reported"
+                    setattr(spool_exc, _attr, True)
                 raise
             summary = _build_writer_error_summary(status=status, table=table, prefix=prefix, exc=exc)
             async with result_lock:

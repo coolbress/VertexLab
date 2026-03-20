@@ -213,7 +213,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         dataset = f"quarterly_{target_kind}" if period == "quarterly" else target_kind
 
         return await self._dispatch_fetch(
-            dataset=cast(YFinanceDataset, dataset),
+            dataset=cast("YFinanceDataset", dataset),
             tickers=tickers,
             connect_db=connect_db,
             desc=f"Fetching YFinance {dataset}",
@@ -301,7 +301,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         dataset = f"{kind}_holders"
 
         return await self._dispatch_fetch(
-            dataset=cast(YFinanceDataset, dataset),
+            dataset=cast("YFinanceDataset", dataset),
             tickers=tickers,
             connect_db=connect_db,
             desc=f"Fetching YFinance {dataset}",

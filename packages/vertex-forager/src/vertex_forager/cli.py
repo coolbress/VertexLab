@@ -21,6 +21,7 @@ import httpx
 import polars as pl
 
 from vertex_forager.clients import create_client
+from vertex_forager.constants import DEFAULT_RATE_LIMIT
 from vertex_forager.core.config import FramePacket, RunResult
 from vertex_forager.writers.duckdb import DuckDBWriter
 
@@ -112,7 +113,7 @@ def collect(symbol: tuple[str, ...], source: str) -> None:
                 raise click.ClickException(f"Environment variable {api_key_env} is not set.")
 
         async def _run_collect() -> pl.DataFrame | RunResult | None:
-            async with create_client(provider=source, api_key=api_key) as client:
+            async with create_client(provider=source, api_key=api_key, rate_limit=DEFAULT_RATE_LIMIT) as client:
                 if source == "sharadar":
                     # For Sharadar, we use the specialized client method
                     # In the future, this can be generalized via a CollectorCore interface
