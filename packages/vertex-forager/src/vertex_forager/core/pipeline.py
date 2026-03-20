@@ -403,6 +403,10 @@ class VertexForager:
 
         # Register tasks for stop()
         self._active_tasks = [producer_task, *fetch_tasks, *writer_tasks]
+        # Expose queues and worker references for unified shutdown in stop()
+        self._req_q = req_q
+        self._pkt_q = pkt_q
+        self._writer_tasks = writer_tasks
 
         try:
             # Create a monitor for writer tasks to detect early failures
@@ -550,6 +554,39 @@ class VertexForager:
             await asyncio.gather(*self._active_tasks, return_exceptions=True)
 
         self._active_tasks.clear()
+        # Best-effort signal queues to unblock waiting workers, without blocking stop()
+        try:
+            req_q = getattr(self, "_req_q", None)
+            fetch_n = int(getattr(self.controller, "concurrency_limit", 0) or 0)
+            if req_q is not None and fetch_n > 0:
+                for _ in range(fetch_n):
+                    try:
+                        req_q.put_nowait((self.PRIORITY_SENTINEL, 0, None))
+                    except Exception as e:
+                        # Queue may be full or already closed; ignore to avoid deadlock
+                        logger.debug("PIPELINE: Skipping req_q sentinel (%s)", e)
+                        break
+        except Exception as e:
+            logger.debug("PIPELINE: Failed to enqueue request sentinels during stop: %s", e, exc_info=True)
+        try:
+            pkt_q = getattr(self, "_pkt_q", None)
+            writer_tasks = getattr(self, "_writer_tasks", None)
+            writer_n = len(writer_tasks) if isinstance(writer_tasks, list) else 0
+            if pkt_q is not None and writer_n > 0:
+                for _ in range(writer_n):
+                    try:
+                        pkt_q.put_nowait(None)
+                    except Exception as e:
+                        # Queue may be full; writers will eventually drain; avoid blocking
+                        logger.debug("PIPELINE: Skipping pkt_q sentinel (%s)", e)
+                        break
+        except Exception as e:
+            logger.debug("PIPELINE: Failed to enqueue packet sentinels during stop: %s", e, exc_info=True)
+        # Ensure writer flush on shutdown for DLQ guarantees
+        try:
+            await self._writer.flush()
+        except Exception:
+            logger.debug("PIPELINE: Writer flush on stop raised but suppressed", exc_info=True)
         try:
             self._parse_executor.shutdown(wait=False)
         except (RuntimeError, ValueError) as e:
@@ -647,8 +684,63 @@ class VertexForager:
                 logger.warning(f"Failed to bind on_progress handler: {e}")
 
         job_count = 0
+        last_symbol: str | None = None
+        burst_count = 0
+        burst_cap = getattr(self._config, "pagination_max_burst", None)
         while True:
             priority, _, job = await req_q.get()
+            if job is None:
+                logger.debug(
+                    f"[Worker-{worker_id}] Received sentinel, shutting down. Total jobs processed: {job_count}"
+                )
+                req_q.task_done()
+                return
+            # Fairness cap for pagination bursts per symbol
+            # If cap is set and we are processing too many consecutive pages for the same symbol,
+            # defer this job once to let other symbols proceed, when possible.
+            if burst_cap is not None and priority == self.PRIORITY_PAGINATION:
+                if job is not None and last_symbol == job.symbol:
+                    burst_count += 1
+                else:
+                    last_symbol = job.symbol if job is not None else None
+                    burst_count = 1
+                if burst_count > burst_cap:
+                    deferred_once = False
+                    try:
+                        # Re-queue current job with lower priority to yield to others temporarily
+                        await req_q.put((self.PRIORITY_NEW_JOB, time.monotonic_ns(), job))
+                        req_q.task_done()
+                        deferred_once = True
+                        # Try to pick a different job immediately; if none available, fall through.
+                        priority, _, job = req_q.get_nowait()
+                        # Reset burst tracking when switching symbol or non-pagination
+                        if priority != self.PRIORITY_PAGINATION or job is None or job.symbol != last_symbol:
+                            last_symbol = job.symbol if job is not None else None
+                            burst_count = 1 if priority == self.PRIORITY_PAGINATION and job is not None else 0
+                    except asyncio.QueueEmpty:
+                        # No alternative available; if we deferred, fetch the next available normally
+                        if deferred_once:
+                            priority, _, job = await req_q.get()
+                        # If still same symbol, proceed to avoid deadlock
+                        last_symbol = job.symbol if job is not None else None
+                        burst_count = 1
+                    # Log deferral for observability
+                    if job is not None:
+                        try:
+                            self._log_structured(
+                                provider=job.provider,
+                                dataset=job.dataset,
+                                symbol=job.symbol,
+                                stage="pagination_fairness_deferral",
+                                attempt=None,
+                            )
+                        except Exception as e:
+                            logger.debug("PIPELINE: fairness deferral log failed: %s", e, exc_info=True)
+            else:
+                # Reset on non-pagination or when no cap
+                last_symbol = (job.symbol if (priority == self.PRIORITY_PAGINATION and job is not None) else None)
+                burst_count = 1 if priority == self.PRIORITY_PAGINATION else 0
+            # Handle sentinel if fairness deferral popped it
             if job is None:
                 logger.debug(
                     f"[Worker-{worker_id}] Received sentinel, shutting down. Total jobs processed: {job_count}"
