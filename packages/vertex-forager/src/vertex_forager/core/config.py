@@ -219,6 +219,20 @@ class EngineConfig(BaseModel):
         recovery_step (int): RPM increment when recovering from downshift.
         healthy_window_s (int): Window (seconds) of healthy operation before stepping up RPM.
 
+        tracer (TracerProtocol | None): Optional tracer used to create spans around
+            engine stages. When None (default), tracing is disabled regardless of
+            otel_enabled. When set, pipeline uses `tracer.start_span(name, attributes=...)`
+            as a context manager for major operations.
+        otel_enabled (bool | None): Toggle for OpenTelemetry instrumentation. When True
+            and a tracer is provided, spans are created; when False or None, spans are
+            not created even if a tracer exists.
+
+    Notes:
+        - `model_config = {"arbitrary_types_allowed": True}` permits using `TracerProtocol`
+          (a Protocol) as a field type on Pydantic v2 models.
+        - If both `tracer is None` and `otel_enabled` is falsy, tracing is a no-op.
+          Providing a tracer and setting `otel_enabled` truthy enables span contexts.
+
     Raises:
         ValueError: If requests_per_minute is not positive.
     """
