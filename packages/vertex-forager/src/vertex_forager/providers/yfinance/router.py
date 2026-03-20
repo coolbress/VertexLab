@@ -298,14 +298,33 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
                     except (json.JSONDecodeError, UnicodeDecodeError) as je:
                         json_err = je
                         if self._allow_pickle_compat:
-                            gate = os.getenv("VF_ALLOW_PICKLE_COMPAT", "0")
+                            # Double-gate pickle fallback and restrict to trusted contexts
+                            lib_type_val: str | None = None
                             test_gate = os.getenv("PYTEST_CURRENT_TEST")
-                            allowed = _parse_bool(gate) or bool(test_gate)
+                            if test_gate:
+                                allowed = True
+                            else:
+                                env_gate = _parse_bool(os.getenv("VF_ALLOW_PICKLE_COMPAT", "0"))
+                                allowed = False
+                                if env_gate:
+                                    src = job.context.get("lib")
+                                    lib_ok = False
+                                    if isinstance(src, dict):
+                                        t = src.get("type")
+                                        if isinstance(t, str):
+                                            lib_type_val = t
+                                            lib_ok = t in {"ticker_attr", "download"}
+                                    # Optional dataset whitelist via env (CSV). If unset, default to deny-by-default.
+                                    ds_env = os.getenv("VF_PICKLE_ALLOWED_DATASETS", "")
+                                    allowed_ds = {s.strip() for s in ds_env.split(",") if s.strip()}
+                                    ds_ok = bool(allowed_ds) and (job.dataset in allowed_ds)
+                                    allowed = lib_ok and ds_ok
                             if allowed:
                                 logger.warning(
-                                    "YFinance pickle fallback used: dataset=%s symbol=%s",
+                                    "YFinance pickle fallback used: dataset=%s symbol=%s lib_type=%s",
                                     job.dataset,
                                     sanitize_field(job.context.get("symbol")),
+                                    lib_type_val,
                                 )
                                 _p = importlib.import_module("pickle")
                                 data_obj = _p.loads(payload)

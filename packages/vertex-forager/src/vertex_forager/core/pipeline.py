@@ -1194,6 +1194,9 @@ class VertexForager:
                                 logger.error("WRITER: Error writing chunk for %s: %s", table, e)
                             return
                         except Exception as e:
+                            # Prevent duplicate DLQ handling if inner handler already raised a DLQSpoolError
+                            if isinstance(e, DLQSpoolError) or getattr(e, "_already_reported", False):
+                                raise
                             remaining_packets = packets[start_i:n]
                             if _duckdb is not None and isinstance(e, _duckdb.Error):
                                 await _handle_flush_error(
@@ -1277,6 +1280,9 @@ class VertexForager:
                 else:
                     logger.error("WRITER: Error writing batch for %s: %s", table, e)
             except Exception as e:
+                # If DLQSpoolError bubbled up or the error was already reported, propagate to avoid duplication
+                if isinstance(e, DLQSpoolError) or getattr(e, "_already_reported", False):
+                    raise
                 # Check for DuckDB Error if available
                 if _duckdb is not None and isinstance(e, _duckdb.Error):
                     await _handle_flush_error(table=table, packets=packets, exc=e, prefix="DuckDBError")
