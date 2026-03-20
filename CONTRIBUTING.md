@@ -37,13 +37,13 @@ Thank you for contributing to Vertex Forager!
 - Type‑checking gates (TC00x)
   - Import heavy/type‑only symbols behind `if TYPE_CHECKING:`; keep runtime imports only for code paths that execute.
   - Example pattern:
-    
+
     ```python
     from typing import TYPE_CHECKING
     if TYPE_CHECKING:
         from collections.abc import Sequence
     ```
-    
+
 
 Quick references:
 - pyproject: `[tool.ruff]`, `[tool.ruff.lint]`, `[tool.ruff.lint.per-file-ignores]`
@@ -57,12 +57,12 @@ Quick references:
 - How to add (pyproject.toml)
   - Edit `[tool.ruff.lint.per-file-ignores]` and add the minimal rule list for the specific path.
   - Example:
-    
+
     ```toml
     [tool.ruff.lint.per-file-ignores]
     "packages/vertex-forager/src/vertex_forager/some_legacy.py" = ["E501", "PT011"]
     ```
-    
+
 - Removal in follow‑up PRs
   - Track ignores in the PR description and open a follow‑up to remove them once code is compliant.
   - Replace ignores with targeted refactors/tests; keep the list shrinking over time.
@@ -80,6 +80,7 @@ Quick references:
   - Run: `pre-commit run lychee -a`
 
 ### Labels policy (overview)
+
 - See `docs/explanation/labels-policy.md` for the label taxonomy (type, area, priority) and how to apply labels on PRs/issues.
 - The PR template includes required sections to help reviewers (Summary, Risk & Rollback, etc.). Link your lint exceptions and follow‑up cleanups there.
 
