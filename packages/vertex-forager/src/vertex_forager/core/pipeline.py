@@ -193,6 +193,10 @@ class VertexForager:
             max_workers=w_int,
             thread_name_prefix="vertex-forager:parse",
         )
+        # Global pagination fairness bookkeeping
+        self._fair_lock: asyncio.Lock | None = None
+        self._fair_last_symbol: str | None = None
+        self._fair_burst_count: int = 0
         self._summary: dict[str, float] = {}
         self._metrics_sink = getattr(config, "metrics_sink", None)
 
@@ -407,12 +411,15 @@ class VertexForager:
         self._req_q = req_q
         self._pkt_q = pkt_q
         self._writer_tasks = writer_tasks
+        # Initialize global fairness state
+        self._fair_lock = asyncio.Lock()
+        self._fair_last_symbol = None
+        self._fair_burst_count = 0
 
         try:
             # Create a monitor for writer tasks to detect early failures
             writer_monitor = asyncio.gather(*writer_tasks)
             writer_monitor = cast("asyncio.Future[Any]", writer_monitor)
-            self._active_tasks.append(writer_monitor)
 
             async def _pipeline_orchestration() -> None:
                 """Orchestrate the producer-fetcher-join sequence."""
@@ -575,13 +582,32 @@ class VertexForager:
             pkt_q = getattr(self, "_pkt_q", None)
             writer_n = len(writer_tasks) if isinstance(writer_tasks, list) else 0
             if pkt_q is not None and writer_n > 0:
+                sentinel_put_tasks: list[asyncio.Task[Any]] = []
+                remaining = writer_n
                 for _ in range(writer_n):
                     try:
                         pkt_q.put_nowait(None)
+                        remaining -= 1
                     except Exception as e:
-                        # Queue may be full; writers will eventually drain; avoid blocking
-                        logger.debug("PIPELINE: Skipping pkt_q sentinel (%s)", e)
+                        logger.debug("PIPELINE: pkt_q full when enqueuing sentinel (%s), scheduling async puts", e)
                         break
+                if remaining > 0:
+                    for _ in range(remaining):
+                        try:
+                            t = asyncio.create_task(pkt_q.put(None))
+                            sentinel_put_tasks.append(t)
+                        except Exception as e:
+                            logger.debug("PIPELINE: Failed to schedule pkt_q.put(None) task: %s", e)
+                    if sentinel_put_tasks:
+                        try:
+                            await asyncio.wait_for(
+                                asyncio.gather(*sentinel_put_tasks, return_exceptions=True), timeout=2.0
+                            )
+                        except asyncio.TimeoutError:
+                            for t in sentinel_put_tasks:
+                                with suppress(Exception):
+                                    t.cancel()
+                            logger.debug("PIPELINE: Timeout waiting for pkt_q sentinel put tasks; tasks cancelled")
         except Exception as e:
             logger.debug("PIPELINE: Failed to enqueue packet sentinels during stop: %s", e, exc_info=True)
         if writer_set:
@@ -689,8 +715,6 @@ class VertexForager:
                 logger.warning(f"Failed to bind on_progress handler: {e}")
 
         job_count = 0
-        last_symbol: str | None = None
-        burst_count = 0
         burst_cap = getattr(self._config, "pagination_max_burst", None)
         while True:
             priority, _, job = await req_q.get()
@@ -704,66 +728,72 @@ class VertexForager:
             # If cap is set and we are processing too many consecutive pages for the same symbol,
             # defer this job once to let other symbols proceed, when possible.
             if burst_cap is not None and priority == self.PRIORITY_PAGINATION:
-                if last_symbol == job.symbol:
-                    burst_count += 1
-                else:
-                    last_symbol = job.symbol if job is not None else None
-                    burst_count = 1
-                if burst_count > burst_cap:
-                    deferred_once = False
-                    try:
-                        # Re-queue current job with lower priority to yield to others temporarily
-                        await req_q.put((self.PRIORITY_NEW_JOB, time.monotonic_ns(), job))
-                        req_q.task_done()
-                        deferred_once = True
-                        # Drain same-symbol pagination jobs and demote them, pick a different item to proceed
-                        while True:
-                            priority, _, candidate = req_q.get_nowait()
-                            if (
-                                priority == self.PRIORITY_PAGINATION
-                                and candidate is not None
-                                and candidate.symbol == last_symbol
-                            ):
-                                await req_q.put((self.PRIORITY_NEW_JOB, time.monotonic_ns(), candidate))
-                                req_q.task_done()
-                                continue
-                            job = candidate
-                            if priority == self.PRIORITY_PAGINATION and job is not None:
-                                last_symbol = job.symbol
-                                burst_count = 1
-                            else:
-                                last_symbol = job.symbol if job is not None else None
-                                burst_count = 0
-                            break
-                    except asyncio.QueueEmpty:
-                        # No alternative available; if we deferred, fetch the next available normally
-                        if deferred_once:
-                            priority, _, job = await req_q.get()
-                            if job is None:
-                                last_symbol = None
-                                burst_count = 1
-                            else:
-                                last_symbol = job.symbol
-                                burst_count = 1 if priority == self.PRIORITY_PAGINATION else 0
-                        # If still same symbol, proceed to avoid deadlock
-                        last_symbol = job.symbol if job is not None else None
-                        burst_count = 1
-                    # Log deferral for observability
-                    if job is not None:
+                if self._fair_lock is None:
+                    self._fair_lock = asyncio.Lock()
+                    self._fair_last_symbol = None
+                    self._fair_burst_count = 0
+                async with self._fair_lock:
+                    if self._fair_last_symbol == (job.symbol if job is not None else None):
+                        self._fair_burst_count += 1
+                    else:
+                        self._fair_last_symbol = job.symbol if job is not None else None
+                        self._fair_burst_count = 1
+                    if self._fair_burst_count > burst_cap:
+                        deferred_once = False
                         try:
-                            self._log_structured(
-                                provider=job.provider,
-                                dataset=job.dataset,
-                                symbol=job.symbol,
-                                stage="pagination_fairness_deferral",
-                                attempt=None,
-                            )
-                        except Exception as e:
-                            logger.debug("PIPELINE: fairness deferral log failed: %s", e, exc_info=True)
+                            await req_q.put((self.PRIORITY_NEW_JOB, time.monotonic_ns(), job))
+                            req_q.task_done()
+                            deferred_once = True
+                            while True:
+                                priority, _, candidate = req_q.get_nowait()
+                                if (
+                                    priority == self.PRIORITY_PAGINATION
+                                    and candidate is not None
+                                    and candidate.symbol == self._fair_last_symbol
+                                ):
+                                    await req_q.put((self.PRIORITY_NEW_JOB, time.monotonic_ns(), candidate))
+                                    req_q.task_done()
+                                    continue
+                                job = candidate
+                                if priority == self.PRIORITY_PAGINATION and job is not None:
+                                    self._fair_last_symbol = job.symbol
+                                    self._fair_burst_count = 1
+                                else:
+                                    self._fair_last_symbol = job.symbol if job is not None else None
+                                    self._fair_burst_count = 0
+                                break
+                        except asyncio.QueueEmpty:
+                            if deferred_once:
+                                priority, _, job = await req_q.get()
+                                if job is None:
+                                    self._fair_last_symbol = None
+                                    self._fair_burst_count = 1
+                                else:
+                                    self._fair_last_symbol = job.symbol
+                                    self._fair_burst_count = 1 if priority == self.PRIORITY_PAGINATION else 0
+                            self._fair_last_symbol = job.symbol if job is not None else None
+                            self._fair_burst_count = 1
+                        if job is not None:
+                            try:
+                                self._log_structured(
+                                    provider=job.provider,
+                                    dataset=job.dataset,
+                                    symbol=job.symbol,
+                                    stage="pagination_fairness_deferral",
+                                    attempt=None,
+                                )
+                            except Exception as e:
+                                logger.debug("PIPELINE: fairness deferral log failed: %s", e, exc_info=True)
             else:
                 # Reset on non-pagination or when no cap
-                last_symbol = (job.symbol if (priority == self.PRIORITY_PAGINATION and job is not None) else None)
-                burst_count = 1 if priority == self.PRIORITY_PAGINATION else 0
+                if priority == self.PRIORITY_PAGINATION:
+                    if self._fair_lock is None:
+                        self._fair_lock = asyncio.Lock()
+                        self._fair_last_symbol = None
+                        self._fair_burst_count = 0
+                    async with self._fair_lock:
+                        self._fair_last_symbol = job.symbol if job is not None else None
+                        self._fair_burst_count = 1
             # Handle sentinel if fairness deferral popped it
             if job is None:
                 logger.debug(
