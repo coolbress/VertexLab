@@ -5,24 +5,14 @@ from datetime import date, datetime, timezone
 import polars as pl
 import pytest
 
-from vertex_forager.core.config import FramePacket
 from vertex_forager.schema.mapper import SchemaMapper
 
 
-def _packet(table: str, frame: pl.DataFrame) -> FramePacket:
-    return FramePacket(
-        provider="test",
-        table=table,
-        frame=frame,
-        observed_at=datetime.now(tz=timezone.utc),
-    )
-
-
-def test_schema_mapper_non_strict_fills_missing_and_counts() -> None:
+def test_schema_mapper_non_strict_fills_missing_and_counts(pkt_factory) -> None:
     # yfinance_info has many columns; provide only a subset to force fills
     df = pl.DataFrame({"provider": ["yfinance"], "ticker": ["AAPL"]})
     mapper = SchemaMapper(strict_validation=False)
-    pkt = _packet("yfinance_info", df)
+    pkt = pkt_factory("yfinance_info", df)
     out = mapper.normalize(pkt)
 
     assert out.frame.height == 1
@@ -33,15 +23,15 @@ def test_schema_mapper_non_strict_fills_missing_and_counts() -> None:
     assert counters.get("schema_missing_cols_filled", 0) > 0
 
 
-def test_schema_mapper_strict_raises_on_missing_columns() -> None:
+def test_schema_mapper_strict_raises_on_missing_columns(pkt_factory) -> None:
     df = pl.DataFrame({"provider": ["yfinance"], "ticker": ["AAPL"]})
     mapper = SchemaMapper(strict_validation=True)
-    pkt = _packet("yfinance_info", df)
+    pkt = pkt_factory("yfinance_info", df)
     with pytest.raises(ValueError, match=r"Schema validation failed: missing required columns"):
         mapper.normalize(pkt)
 
 
-def test_schema_mapper_strict_raises_on_type_mismatch() -> None:
+def test_schema_mapper_strict_raises_on_type_mismatch(pkt_factory) -> None:
     # Use yfinance_financials schema; provide all required columns but make 'value' incompatible (string)
     df = pl.DataFrame(
         {
@@ -55,12 +45,12 @@ def test_schema_mapper_strict_raises_on_type_mismatch() -> None:
         }
     )
     mapper = SchemaMapper(strict_validation=True)
-    pkt = _packet("yfinance_financials", df)
+    pkt = pkt_factory("yfinance_financials", df)
     with pytest.raises(ValueError, match=r"Schema validation failed: type casting error"):
         mapper.normalize(pkt)
 
 
-def test_schema_mapper_strict_ok_when_columns_and_types_valid() -> None:
+def test_schema_mapper_strict_ok_when_columns_and_types_valid(pkt_factory) -> None:
     df = pl.DataFrame(
         {
             "date": [date(2024, 1, 1)],
@@ -73,7 +63,7 @@ def test_schema_mapper_strict_ok_when_columns_and_types_valid() -> None:
         }
     )
     mapper = SchemaMapper(strict_validation=True)
-    pkt = _packet("yfinance_financials", df)
+    pkt = pkt_factory("yfinance_financials", df)
     out = mapper.normalize(pkt)
     assert out.frame.height == 1
     counters = mapper.get_counters_and_reset()
