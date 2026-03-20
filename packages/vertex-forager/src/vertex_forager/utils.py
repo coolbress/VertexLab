@@ -12,7 +12,7 @@ import shutil
 import sys
 import threading
 import time
-from typing import Any, Literal, ParamSpec
+from typing import Any, Literal
 import warnings
 
 from dotenv import load_dotenv
@@ -264,10 +264,7 @@ def check_memory_safety(
         )
 
 
-P = ParamSpec("P")
-
-
-def create_pbar_updater(pbar: tqdm) -> Callable[P, None]:
+def create_pbar_updater(pbar: tqdm) -> Callable[..., None]:
     """Create a progress bar update callback.
 
     Args:
@@ -277,7 +274,7 @@ def create_pbar_updater(pbar: tqdm) -> Callable[P, None]:
         Callable to update the progress bar.
     """
 
-    def _update_pbar(*args: P.args, **kwargs: P.kwargs) -> None:
+    def _update_pbar(*args: Any, **kwargs: Any) -> None:
         """Update progress bar based on fully processed ticker count.
 
         With Smart Batching, we expect most requests to complete in a single fetch.

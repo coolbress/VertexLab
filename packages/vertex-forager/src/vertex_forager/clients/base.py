@@ -433,8 +433,7 @@ class BaseClient(ABC, Generic[T]):
             leave=True,
             disable=False,
         )
-        from collections.abc import Callable as _Callable
-        pbar_updater: _Callable[..., None] = create_pbar_updater(pbar)
+        pbar_updater: Callable[..., None] = create_pbar_updater(pbar)
         return pbar, pbar_updater
 
     async def collect_results(

@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-from contextlib import AbstractContextManager
 from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar, runtime_checkable
 
 from vertex_forager.core.types import JSONValue, SharadarDataset, YFinanceDataset
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Sequence
+    from contextlib import AbstractContextManager
 
-    import httpx
 
     from vertex_forager.core.config import FetchJob, FramePacket, ParseResult, RunResult
     from vertex_forager.writers.base import WriteResult
@@ -21,10 +20,10 @@ T_contra = TypeVar("T_contra", bound=SharadarDataset | YFinanceDataset | str, co
 class HttpClientProtocol(Protocol):
     """Minimal async HTTP client protocol used by HttpExecutor."""
 
-    async def run_async(self, method: str, url: str, /, **kwargs: Any) -> httpx.Response:
+    async def run_async(self, method: str, url: str, **kwargs: Any) -> Any:
         ...
 
-    async def run_sync(self, func: Callable[..., Any], /, *args: Any, **kwargs: Any) -> Any:
+    async def run_sync(self, func: Any, *args: Any, **kwargs: Any) -> Any:
         ...
 
 
@@ -35,7 +34,6 @@ class TracerProtocol(Protocol):
     def start_span(
         self,
         name: str,
-        /,
         *,
         attributes: dict[str, object] | None = None,
     ) -> AbstractContextManager[object] | None:
