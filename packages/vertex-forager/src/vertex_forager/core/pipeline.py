@@ -418,6 +418,9 @@ class VertexForager:
         self._fair_lock = asyncio.Lock()
         self._fair_last_symbol = None
         self._fair_burst_count = 0
+        # Reset writer flush guards for a new run
+        self._writer_flush_attempted = False
+        self._writer_flushed = False
 
         try:
             # Create a monitor for writer tasks to detect early failures
@@ -752,21 +755,19 @@ class VertexForager:
                 )
                 req_q.task_done()
                 return
+            demote_jobs: list[FetchJob] = []
+            need_put = False
+            need_get_after = False
+            next_priority: int | None = None
+            next_job: FetchJob | None = None
             # Fairness cap for pagination bursts per symbol
-            # If cap is set and we are processing too many consecutive pages for the same symbol,
-            # defer this job once to let other symbols proceed, when possible.
             if burst_cap is not None and priority == self.PRIORITY_PAGINATION:
                 if self._fair_lock is None:
                     self._fair_lock = asyncio.Lock()
                     self._fair_last_symbol = None
                     self._fair_burst_count = 0
-                demote_jobs: list[FetchJob] = []
-                next_priority: int | None = None
-                next_job: FetchJob | None = None
-                need_put = False
-                need_get_after = False
                 async with self._fair_lock:
-                    job_symbol = job.symbol if job is not None else None
+                    job_symbol = job.symbol
                     if self._fair_last_symbol == job_symbol:
                         self._fair_burst_count += 1
                     else:
@@ -774,78 +775,75 @@ class VertexForager:
                         self._fair_burst_count = 1
                     if self._fair_burst_count > burst_cap:
                         need_put = True
-                        if job is not None:
-                            demote_jobs.append(job)
+                        demote_jobs.append(job)
+                        # Mark dequeued item as done since we will not process it now
                         req_q.task_done()
+                        # Drain same-symbol head
                         while True:
                             try:
-                                p, _, cand = req_q.get_nowait()
+                                p2, _, cand = req_q.get_nowait()
                             except asyncio.QueueEmpty:
                                 need_get_after = True
                                 break
                             if (
-                                p == self.PRIORITY_PAGINATION
+                                p2 == self.PRIORITY_PAGINATION
                                 and cand is not None
                                 and cand.symbol == self._fair_last_symbol
                             ):
                                 demote_jobs.append(cand)
                                 req_q.task_done()
                                 continue
-                            next_priority, next_job = p, cand
-                            if p == self.PRIORITY_PAGINATION and cand is not None:
+                            next_priority, next_job = p2, cand
+                            if p2 == self.PRIORITY_PAGINATION and cand is not None:
                                 self._fair_last_symbol = cand.symbol
                                 self._fair_burst_count = 1
                             else:
                                 self._fair_last_symbol = cand.symbol if cand is not None else None
                                 self._fair_burst_count = 0
                             break
-                if need_put:
-                    for dj in demote_jobs:
-                        await req_q.put((self.PRIORITY_NEW_JOB, time.monotonic_ns(), dj))
-                    if need_get_after:
-                        next_priority, _, next_job = await req_q.get()
-                        if self._fair_lock is None:
-                            self._fair_lock = asyncio.Lock()
-                            self._fair_last_symbol = None
-                            self._fair_burst_count = 0
-                        async with self._fair_lock:
-                            if next_priority == self.PRIORITY_PAGINATION and next_job is not None:
-                                self._fair_last_symbol = next_job.symbol
-                                self._fair_burst_count = 1
-                            else:
-                                self._fair_last_symbol = next_job.symbol if next_job is not None else None
-                                self._fair_burst_count = 0
-                    job = next_job
-                    priority = int(next_priority if next_priority is not None else priority)
-                    if job is not None:
-                        try:
-                            self._log_structured(
-                                provider=job.provider,
-                                dataset=job.dataset,
-                                symbol=job.symbol,
-                                stage="pagination_fairness_deferral",
-                                attempt=None,
-                            )
-                        except Exception as e:
-                            logger.debug("PIPELINE: fairness deferral log failed: %s", e, exc_info=True)
             else:
-                if priority == self.PRIORITY_PAGINATION:
-                    if self._fair_lock is None:
-                        self._fair_lock = asyncio.Lock()
-                        self._fair_last_symbol = None
-                        self._fair_burst_count = 0
-                    async with self._fair_lock:
+                # Baseline fairness on non-pagination or when cap is not set
+                if self._fair_lock is None:
+                    self._fair_lock = asyncio.Lock()
+                    self._fair_last_symbol = None
+                    self._fair_burst_count = 0
+                async with self._fair_lock:
+                    if priority == self.PRIORITY_PAGINATION:
                         self._fair_last_symbol = job.symbol if job is not None else None
                         self._fair_burst_count = 1
-                else:
+                    else:
+                        self._fair_last_symbol = None
+                        self._fair_burst_count = 0
+            # Apply demotions outside the lock
+            if need_put:
+                for dj in demote_jobs:
+                    await req_q.put((self.PRIORITY_NEW_JOB, time.monotonic_ns(), dj))
+                if need_get_after:
+                    next_priority, _, next_job = await req_q.get()
                     if self._fair_lock is None:
                         self._fair_lock = asyncio.Lock()
                         self._fair_last_symbol = None
                         self._fair_burst_count = 0
                     async with self._fair_lock:
-                        self._fair_last_symbol = None
-                        self._fair_burst_count = 0
-            # Handle sentinel if fairness deferral popped it
+                        if next_priority == self.PRIORITY_PAGINATION and next_job is not None:
+                            self._fair_last_symbol = next_job.symbol
+                            self._fair_burst_count = 1
+                        else:
+                            self._fair_last_symbol = next_job.symbol if next_job is not None else None
+                            self._fair_burst_count = 0
+                job = next_job if next_job is not None else job
+                priority = int(next_priority if next_priority is not None else priority)
+                if job is not None:
+                    try:
+                        self._log_structured(
+                            provider=job.provider,
+                            dataset=job.dataset,
+                            symbol=job.symbol,
+                            stage="pagination_fairness_deferral",
+                            attempt=None,
+                        )
+                    except Exception as e:
+                        logger.debug("PIPELINE: fairness deferral log failed: %s", e, exc_info=True)
             if job is None:
                 logger.debug(
                     f"[Worker-{worker_id}] Received sentinel, shutting down. Total jobs processed: {job_count}"
