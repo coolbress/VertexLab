@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Sequence
 from datetime import date, datetime, timezone
 import importlib
 import io
@@ -7,7 +8,7 @@ import json
 import logging
 import os
 import time
-from typing import TYPE_CHECKING, Any, Final
+from typing import Any, Final
 import uuid
 
 import pandas as pd
@@ -15,7 +16,7 @@ import polars as pl
 from polars.exceptions import ComputeError, PolarsError
 
 from vertex_forager.constants import DEFAULT_TIME_ZONE, ISO8601_Z_SUFFIX
-from vertex_forager.core.config import FramePacket
+from vertex_forager.core.config import FetchJob, FramePacket, ParseResult
 from vertex_forager.core.types import JSONValue, YFinanceDataset
 from vertex_forager.logging.constants import (
     LOG_BUILD_JOB,
@@ -51,13 +52,6 @@ from vertex_forager.routers.jobs import build_symbol_context, single_symbol_job
 from vertex_forager.utils import sanitize_field
 
 logger = logging.getLogger("vertex_forager.providers.yfinance.router")
-
-if TYPE_CHECKING:
-    from collections.abc import AsyncIterator, Sequence
-
-    from vertex_forager.core.config import FetchJob, ParseResult
-else:
-    from vertex_forager.core.config import FetchJob, ParseResult
 
 
 def _parse_bool(value: Any) -> bool:
