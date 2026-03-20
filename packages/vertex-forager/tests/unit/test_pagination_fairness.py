@@ -83,6 +83,7 @@ async def test_pagination_fairness_cap_prevents_long_bursts() -> None:
         exc: Exception | None,
         parse_result: ParseResult | None,
     ) -> None:
+        assert job.symbol is not None
         order.append(job.symbol)
 
     res: RunResult = await engine.run(dataset="d", symbols=["AAPL", "MSFT"], on_progress=on_progress)

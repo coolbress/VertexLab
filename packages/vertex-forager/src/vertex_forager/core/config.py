@@ -323,8 +323,6 @@ class EngineConfig(BaseModel):
             self.writer_chunk_rows = v
         if self.rpm_floor > self.requests_per_minute:
             raise ValueError("rpm_floor must be <= requests_per_minute")
-        if self.pagination_max_burst is not None and self.pagination_max_burst < 1:
-            raise ValueError("pagination_max_burst must be >= 1 when specified")
 
 
 class RunResult(BaseModel):

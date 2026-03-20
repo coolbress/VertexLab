@@ -699,7 +699,7 @@ class VertexForager:
             # If cap is set and we are processing too many consecutive pages for the same symbol,
             # defer this job once to let other symbols proceed, when possible.
             if burst_cap is not None and priority == self.PRIORITY_PAGINATION:
-                if job is not None and last_symbol == job.symbol:
+                if last_symbol == job.symbol:
                     burst_count += 1
                 else:
                     last_symbol = job.symbol if job is not None else None
@@ -721,6 +721,12 @@ class VertexForager:
                         # No alternative available; if we deferred, fetch the next available normally
                         if deferred_once:
                             priority, _, job = await req_q.get()
+                            if job is None:
+                                last_symbol = None
+                                burst_count = 1
+                            else:
+                                last_symbol = job.symbol
+                                burst_count = 1 if priority == self.PRIORITY_PAGINATION else 0
                         # If still same symbol, proceed to avoid deadlock
                         last_symbol = job.symbol if job is not None else None
                         burst_count = 1
