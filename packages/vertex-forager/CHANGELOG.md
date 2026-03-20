@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.3.0...vertex-forager-v0.4.0) (2026-03-20)
+
+
+### Features
+
+* add RequestSpec.idempotent flag and honor it in retries ([#157](https://github.com/coolbress/VertexLab/issues/157)) ([6c73062](https://github.com/coolbress/VertexLab/commit/6c73062559c9b41bb4baff1b2f896532d4134b11))
+
 ## [0.3.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.2.2...vertex-forager-v0.3.0) (2026-03-20)
 
 
