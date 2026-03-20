@@ -6,6 +6,7 @@ from pathlib import Path
 import duckdb
 import polars as pl
 import pytest
+
 from vertex_forager.core.config import FramePacket
 from vertex_forager.writers.duckdb import DuckDBWriter
 

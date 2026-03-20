@@ -13,47 +13,59 @@ Usage:
     await writer.compact()
     await writer.close()
 """
+
 from __future__ import annotations
 
 import asyncio
-import logging
-import time
-import functools
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
-from typing import Sequence
+import contextlib
+import functools
+import logging
+from string import Template
+import time
+from typing import TYPE_CHECKING
 
 import duckdb
 import polars as pl
 
-from vertex_forager.core.config import FramePacket
-from vertex_forager.constants import WRITER_DUCKDB_MAX_WORKERS, WAL_AUTOCHECKPOINT_LIMIT
+from vertex_forager.constants import WAL_AUTOCHECKPOINT_LIMIT, WRITER_DUCKDB_MAX_WORKERS
+from vertex_forager.exceptions import (
+    InputError,
+    PrimaryKeyMissingError,
+    PrimaryKeyNullError,
+    ValidationError,
+)
+from vertex_forager.writers.base import BaseWriter, WriteResult
 from vertex_forager.writers.constants import (
-    WR_LOG_PREFIX,
     DK_LOG_PREFIX,
-    LOG_START_SYNC_WRITE,
-    LOG_FINISH_SYNC_WRITE,
-    LOG_SCHEMA_MISMATCH,
-    LOG_MISSING_PK_COL,
-    LOG_NULLS_PK_COL,
-    LOG_FAILED_BATCH,
-    LOG_VALIDATION_ERROR,
-    LOG_NO_CONN_SKIP_COMPACT,
-    LOG_COMPACTING,
-    LOG_COMPACT_DONE,
-    LOG_CREATE_TABLE,
-    LOG_UNIQUE_INDEX_CREATED,
-    LOG_UNIQUE_INDEX_FAIL,
-    LOG_SKIP_UNIQUE_INDEX_MISSING_PK,
-    LOG_SCHEMA_EVOLUTION_ADDING,
     LOG_ADD_COLUMN,
     LOG_ADD_COLUMN_FAIL,
     LOG_CLOSE_CONN_WARNING,
-    LOG_CORRELATION_SUMMARY,
+    LOG_COMPACT_DONE,
+    LOG_COMPACTING,
     LOG_CORRELATION_SAMPLES,
+    LOG_CORRELATION_SUMMARY,
+    LOG_CREATE_TABLE,
+    LOG_FAILED_BATCH,
+    LOG_FINISH_SYNC_WRITE,
+    LOG_MISSING_PK_COL,
+    LOG_NO_CONN_SKIP_COMPACT,
+    LOG_NULLS_PK_COL,
+    LOG_SCHEMA_EVOLUTION_ADDING,
+    LOG_SCHEMA_MISMATCH,
+    LOG_SKIP_UNIQUE_INDEX_MISSING_PK,
+    LOG_START_SYNC_WRITE,
+    LOG_UNIQUE_INDEX_CREATED,
+    LOG_UNIQUE_INDEX_FAIL,
+    LOG_VALIDATION_ERROR,
+    WR_LOG_PREFIX,
 )
-from vertex_forager.writers.base import BaseWriter, WriteResult
-from vertex_forager.exceptions import InputError, ValidationError, PrimaryKeyMissingError, PrimaryKeyNullError
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+    from pathlib import Path
+
+    from vertex_forager.core.config import FramePacket
 
 
 class DuckDBWriter(BaseWriter):
@@ -90,6 +102,7 @@ class DuckDBWriter(BaseWriter):
         self._table_schemas: dict[str, set[str]] = {}
         # Instance-scoped schema getter to avoid module-level globals
         from vertex_forager.schema.registry import get_table_schema
+
         self._get_table_schema = get_table_schema
 
     def _validate_identifier(self, identifier: str) -> None:
@@ -131,7 +144,7 @@ class DuckDBWriter(BaseWriter):
 
         Returns:
             WriteResult: Result object containing table name and number of rows written.
-        
+
         Raises:
             duckdb.Error: If DuckDB execution fails during upsert.
             ValidationError: If schema validation fails during write.
@@ -154,7 +167,7 @@ class DuckDBWriter(BaseWriter):
 
         Returns:
             list[WriteResult]: List of result objects for each written packet.
-        
+
         Raises:
             duckdb.Error: If DuckDB execution fails during batch upsert.
             ValidationError: If schema validation fails during write.
@@ -167,14 +180,9 @@ class DuckDBWriter(BaseWriter):
         # Persist data (table-level batching for efficiency)
         await self._write_internal(packets)
         # Preserve BaseWriter contract: one result per input packet
-        return [
-            WriteResult(table=p.table, rows=p.frame.height)
-            for p in packets
-        ]
+        return [WriteResult(table=p.table, rows=p.frame.height) for p in packets]
 
-    async def _write_internal(
-        self, packets: Sequence[FramePacket]
-    ) -> list[WriteResult]:
+    async def _write_internal(self, packets: Sequence[FramePacket]) -> list[WriteResult]:
         """
         Write a bulk of packets to DuckDB.
         Uses a single connection lock to ensure thread safety (DuckDB limitation).
@@ -182,9 +190,7 @@ class DuckDBWriter(BaseWriter):
         """
         async with self._lock:
             loop = asyncio.get_running_loop()
-            return await loop.run_in_executor(
-                self._executor, functools.partial(self._write_sync, packets)
-            )
+            return await loop.run_in_executor(self._executor, functools.partial(self._write_sync, packets))
 
     def _write_sync(self, packets: Sequence[FramePacket]) -> list[WriteResult]:
         """Synchronous implementation of write logic for offloading."""
@@ -194,7 +200,7 @@ class DuckDBWriter(BaseWriter):
         t0 = time.monotonic()
 
         # Correlation summary (trace_id/request_id counts)
-        try:
+        with contextlib.suppress(Exception):
             trace_ids = set()
             request_ids = set()
             for p in packets:
@@ -214,7 +220,7 @@ class DuckDBWriter(BaseWriter):
                 )
             )
             trace_samples = list(trace_ids)[:2]
-            request_samples = list(sorted(request_ids))[:2]
+            request_samples = sorted(request_ids)[:2]
             if trace_samples or request_samples:
                 self._logger.debug(
                     LOG_CORRELATION_SAMPLES.format(
@@ -223,9 +229,6 @@ class DuckDBWriter(BaseWriter):
                         request_ids=request_samples,
                     )
                 )
-        except Exception:
-            # best-effort; ignore correlation computation errors
-            pass
         # Group by table but keep track of original indices to return ordered results
         by_table: dict[str, list[tuple[int, FramePacket]]] = {}
         final_results: list[WriteResult | None] = [None] * len(packets)
@@ -234,7 +237,7 @@ class DuckDBWriter(BaseWriter):
             if p.frame.is_empty():
                 final_results[i] = WriteResult(table=p.table, rows=0)
                 continue
-            
+
             if p.table not in by_table:
                 by_table[p.table] = []
             by_table[p.table].append((i, p))
@@ -264,18 +267,33 @@ class DuckDBWriter(BaseWriter):
                 if pk_cols:
                     for c in pk_cols:
                         if c not in merged_df.columns:
-                            self._logger.error(LOG_MISSING_PK_COL.format(prefix=WR_LOG_PREFIX, col=c, table=table_name, columns=merged_df.columns))
+                            self._logger.error(
+                                LOG_MISSING_PK_COL.format(
+                                    prefix=WR_LOG_PREFIX,
+                                    col=c,
+                                    table=table_name,
+                                    columns=merged_df.columns,
+                                )
+                            )
                             raise PrimaryKeyMissingError(table=table_name, column=c)
                         else:
                             nulls = merged_df.get_column(c).null_count()
                             if nulls > 0:
-                                self._logger.error(LOG_NULLS_PK_COL.format(prefix=WR_LOG_PREFIX, col=c, table=table_name, rows=len(merged_df), columns=merged_df.columns))
+                                self._logger.error(
+                                    LOG_NULLS_PK_COL.format(
+                                        prefix=WR_LOG_PREFIX,
+                                        col=c,
+                                        table=table_name,
+                                        rows=len(merged_df),
+                                        columns=merged_df.columns,
+                                    )
+                                )
                                 raise PrimaryKeyNullError(table=table_name, column=c, null_count=nulls)
                 rows = len(merged_df)
-                
+
                 if rows > 0:
                     self._ensure_table_exists(conn, table_name, merged_df)
-                    # We upsert the whole batch. 
+                    # We upsert the whole batch.
                     # Note: This assumes _upsert_data succeeds for the whole batch.
                     # If partial failure is possible, this logic would need refinement,
                     # but DuckDB operations are typically transactional per statement.
@@ -299,9 +317,9 @@ class DuckDBWriter(BaseWriter):
         # 1. Empty packets -> filled immediately.
         # 2. Non-empty packets -> added to by_table -> filled in loop.
         # So all should be filled.
-        
+
         results = [res for res in final_results if res is not None]
-        
+
         t1 = time.monotonic()
         self._logger.debug(LOG_FINISH_SYNC_WRITE.format(prefix=DK_LOG_PREFIX, seconds=(t1 - t0), results=len(results)))
         return results
@@ -328,7 +346,7 @@ class DuckDBWriter(BaseWriter):
 
         Returns:
             None
-        
+
         Raises:
             duckdb.Error: If VACUUM or CHECKPOINT commands fail.
         """
@@ -365,7 +383,7 @@ class DuckDBWriter(BaseWriter):
 
         Returns:
             None
-        
+
         Raises:
             duckdb.Error: If the connection close operation fails.
         """
@@ -396,9 +414,7 @@ class DuckDBWriter(BaseWriter):
             return schema.unique_key
         return ()
 
-    def _ensure_table_exists(
-        self, conn: duckdb.DuckDBPyConnection, table_name: str, df: pl.DataFrame
-    ) -> None:
+    def _ensure_table_exists(self, conn: duckdb.DuckDBPyConnection, table_name: str, df: pl.DataFrame) -> None:
         """
         Ensure table exists and has all required columns.
         Handles both table creation and schema evolution (adding new columns).
@@ -430,9 +446,10 @@ class DuckDBWriter(BaseWriter):
             try:
                 # Create the table structure
                 q_table = self._quote_identifier(table_name)
-                conn.execute(
-                    f"CREATE TABLE {q_table} AS SELECT * FROM temp_df_view WHERE 1=0"
-                )
+
+                _tmpl = Template("CREATE TABLE ${t} AS SELECT * FROM temp_df_view WHERE 1=0")
+                _q = _tmpl.substitute(t=q_table)
+                conn.execute(_q)
 
                 # Apply Primary Key constraint from Schema Registry
                 pk_cols = self._get_primary_keys(table_name)
@@ -443,15 +460,32 @@ class DuckDBWriter(BaseWriter):
                         pk_str = ", ".join(self._quote_identifier(c) for c in pk_cols)
                         try:
                             idx_name = self._quote_identifier(f"idx_{table_name}_pk")
-                            conn.execute(
-                                f"CREATE UNIQUE INDEX IF NOT EXISTS {idx_name} ON {q_table} ({pk_str})"
+                            _q = f"CREATE UNIQUE INDEX IF NOT EXISTS {idx_name} ON {q_table} ({pk_str})"
+                            conn.execute(_q)
+                            self._logger.info(
+                                LOG_UNIQUE_INDEX_CREATED.format(
+                                    prefix=DK_LOG_PREFIX,
+                                    table=table_name,
+                                    pk_str=pk_str,
+                                )
                             )
-                            self._logger.info(LOG_UNIQUE_INDEX_CREATED.format(prefix=DK_LOG_PREFIX, table=table_name, pk_str=pk_str))
                         except duckdb.Error as e:
-                            self._logger.warning(LOG_UNIQUE_INDEX_FAIL.format(prefix=DK_LOG_PREFIX, table=table_name, error=e))
+                            self._logger.warning(
+                                LOG_UNIQUE_INDEX_FAIL.format(
+                                    prefix=DK_LOG_PREFIX,
+                                    table=table_name,
+                                    error=e,
+                                )
+                            )
                     else:
                         missing = [col for col in pk_cols if col not in df.columns]
-                        self._logger.warning(LOG_SKIP_UNIQUE_INDEX_MISSING_PK.format(prefix=DK_LOG_PREFIX, table=table_name, missing=missing))
+                        self._logger.warning(
+                            LOG_SKIP_UNIQUE_INDEX_MISSING_PK.format(
+                                prefix=DK_LOG_PREFIX,
+                                table=table_name,
+                                missing=missing,
+                            )
+                        )
             finally:
                 conn.unregister("temp_df_view")
 
@@ -461,16 +495,15 @@ class DuckDBWriter(BaseWriter):
             # Table exists but not in cache yet (first run or restart)
             # Fetch existing schema
             q_table = self._quote_identifier(table_name)
-            existing_info = conn.execute(f"DESCRIBE {q_table}").fetchall()
+            _q = f"DESCRIBE {q_table}"
+            existing_info = conn.execute(_q).fetchall()
             existing_cols = {row[0] for row in existing_info}
             self._table_schemas[table_name] = existing_cols
 
             # Schema Evolution: Add missing columns
             self._sync_schema(conn, table_name, df)
 
-    def _sync_schema(
-        self, conn: duckdb.DuckDBPyConnection, table_name: str, df: pl.DataFrame
-    ) -> None:
+    def _sync_schema(self, conn: duckdb.DuckDBPyConnection, table_name: str, df: pl.DataFrame) -> None:
         """
         Check for missing columns in the table and add them if necessary.
         """
@@ -479,7 +512,8 @@ class DuckDBWriter(BaseWriter):
             existing_cols = self._table_schemas[table_name]
         else:
             q_table = self._quote_identifier(table_name)
-            existing_info = conn.execute(f"DESCRIBE {q_table}").fetchall()
+            _q = f"DESCRIBE {q_table}"
+            existing_info = conn.execute(_q).fetchall()
             existing_cols = {row[0] for row in existing_info}
             self._table_schemas[table_name] = existing_cols
 
@@ -489,7 +523,13 @@ class DuckDBWriter(BaseWriter):
         if not new_cols:
             return
 
-        self._logger.info(LOG_SCHEMA_EVOLUTION_ADDING.format(prefix=DK_LOG_PREFIX, count=len(new_cols), table=table_name))
+        self._logger.info(
+            LOG_SCHEMA_EVOLUTION_ADDING.format(
+                prefix=DK_LOG_PREFIX,
+                count=len(new_cols),
+                table=table_name,
+            )
+        )
 
         q_table = self._quote_identifier(table_name)
         # Add each new column
@@ -499,12 +539,28 @@ class DuckDBWriter(BaseWriter):
             q_col = self._quote_identifier(col_name)
 
             try:
-                self._logger.debug(LOG_ADD_COLUMN.format(prefix=DK_LOG_PREFIX, col=col_name, sql_type=sql_type, table=table_name))
-                conn.execute(f"ALTER TABLE {q_table} ADD COLUMN {q_col} {sql_type}")
+                self._logger.debug(
+                    LOG_ADD_COLUMN.format(
+                        prefix=DK_LOG_PREFIX,
+                        col=col_name,
+                        sql_type=sql_type,
+                        table=table_name,
+                    )
+                )
+                _tmpl = Template("ALTER TABLE ${t} ADD COLUMN ${c} ${ty}")
+                _q = _tmpl.substitute(t=q_table, c=q_col, ty=sql_type)
+                conn.execute(_q)
                 # Update Cache
                 self._table_schemas[table_name].add(col_name)
             except duckdb.Error as e:
-                self._logger.error(LOG_ADD_COLUMN_FAIL.format(prefix=DK_LOG_PREFIX, col=col_name, table=table_name, error=e))
+                self._logger.error(
+                    LOG_ADD_COLUMN_FAIL.format(
+                        prefix=DK_LOG_PREFIX,
+                        col=col_name,
+                        table=table_name,
+                        error=e,
+                    )
+                )
                 # Fail fast to prevent data integrity issues
                 raise
 
@@ -522,7 +578,8 @@ class DuckDBWriter(BaseWriter):
         # Unsigned integer mapping (DuckDB has UTINYINT etc but safest to map to next signed up if unsure,
         # but DuckDB supports USMALLINT/UINTEGER/UBIGINT.
         # However, user requested "map unsigned widths to the smallest safe signed type if DuckDB lacks unsigned types".
-        # DuckDB DOES support unsigned, but let's follow the user instruction to map to signed types as a safety/compatibility choice if that was the implication.
+        # DuckDB DOES support unsigned, but we'll follow the instruction to map to
+        # signed types as a safety/compatibility choice if that was the implication.
         # Actually user said "if DuckDB lacks unsigned types (e.g., pl.UInt8->SMALLINT)".
         # DuckDB has UTINYINT, USMALLINT, UINTEGER, UBIGINT.
         # But to be safe and strictly follow "map unsigned widths to the smallest safe signed type":
@@ -562,16 +619,12 @@ class DuckDBWriter(BaseWriter):
             return "VARCHAR"
         elif isinstance(dtype, (pl.Struct, pl.List)):
             # Complex types fallback to VARCHAR
-            self._logger.warning(
-                f"Coercing complex type {dtype} to VARCHAR. Nested structure may be lost."
-            )
+            self._logger.warning(f"Coercing complex type {dtype} to VARCHAR. Nested structure may be lost.")
             return "VARCHAR"
         else:
             return "VARCHAR"  # Default fallback
 
-    def _upsert_data(
-        self, conn: duckdb.DuckDBPyConnection, table_name: str, df: pl.DataFrame
-    ) -> int:
+    def _upsert_data(self, conn: duckdb.DuckDBPyConnection, table_name: str, df: pl.DataFrame) -> int:
         """
         Insert data into the table, handling conflicts if unique index exists.
         """
@@ -585,12 +638,12 @@ class DuckDBWriter(BaseWriter):
         try:
             # If no PK, simple append
             if not pk_cols:
-                # Use explicit column names to handle schema evolution (new columns in table but not in this batch)
                 cols_str = ", ".join(self._quote_identifier(c) for c in df.columns)
-                conn.execute(
-                    f"INSERT INTO {q_table} ({cols_str}) SELECT {cols_str} FROM temp_batch_view"
-                )
+                _tmpl = Template("INSERT INTO ${t} (${cols}) SELECT ${cols} FROM temp_batch_view")
+                _q = _tmpl.substitute(t=q_table, cols=cols_str)
+                conn.execute(_q)
                 return len(df)
+
 
             # If PK exists, perform Upsert
             # DuckDB's INSERT OR REPLACE / ON CONFLICT logic
@@ -611,11 +664,10 @@ class DuckDBWriter(BaseWriter):
 
             # If there are no columns to update (only PK columns), we do NOTHING
             if all(col in pk_cols for col in cols):
-                query = f"""
-                INSERT INTO {q_table} ({cols_str})
-                SELECT {cols_str} FROM temp_batch_view
-                ON CONFLICT ({pk_str}) DO NOTHING
-                """
+                _tmpl = Template(
+                    "INSERT INTO ${t} (${cols}) SELECT ${cols} FROM temp_batch_view ON CONFLICT (${pk}) DO NOTHING"
+                )
+                query = _tmpl.substitute(t=q_table, cols=cols_str, pk=pk_str)
             else:
                 update_set = ", ".join(
                     [
@@ -624,11 +676,12 @@ class DuckDBWriter(BaseWriter):
                         if col not in pk_cols
                     ]
                 )
-                query = f"""
-                INSERT INTO {q_table} ({cols_str})
-                SELECT {cols_str} FROM temp_batch_view
-                ON CONFLICT ({pk_str}) DO UPDATE SET {update_set}
-                """
+                _tmpl = Template(
+                    "INSERT INTO ${t} (${cols}) "
+                    "SELECT ${cols} FROM temp_batch_view "
+                    "ON CONFLICT (${pk}) DO UPDATE SET ${upd}"
+                )
+                query = _tmpl.substitute(t=q_table, cols=cols_str, pk=pk_str, upd=update_set)
 
             conn.execute(query)
             return len(df)

@@ -1,37 +1,50 @@
 from __future__ import annotations
 
-import logging
-import time
 from abc import ABC
 import asyncio
-from contextlib import asynccontextmanager, AsyncExitStack, nullcontext
+from contextlib import AsyncExitStack, asynccontextmanager, nullcontext
 from functools import partial
-from pathlib import Path
-from typing import Any, Callable, AsyncGenerator, TypeVar, Generic, Union
-from types import TracebackType
+import logging
+import time
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
-import httpx
-import polars as pl
 from tqdm.auto import tqdm
 
-from vertex_forager.core.http import default_async_client
-from vertex_forager.core.http import HttpExecutor as _HttpExecutor
-from vertex_forager.core.pipeline import VertexForager as _VertexForager
 from vertex_forager.core.config import EngineConfig, RunResult
 from vertex_forager.core.controller import FlowController
-from vertex_forager.core.contracts import IRouter, IWriter, IMapper
-from vertex_forager.schema.registry import get_table_schema
-from vertex_forager.writers.base import BaseWriter
-from vertex_forager.writers import create_writer
-from vertex_forager.utils import Spinner, create_pbar_updater, sanitize_field, env_int, env_bool
+from vertex_forager.core.http import HttpExecutor as _HttpExecutor
+from vertex_forager.core.http import default_async_client
+from vertex_forager.core.pipeline import VertexForager as _VertexForager
 from vertex_forager.core.types import JSONValue, SharadarDataset, YFinanceDataset
+from vertex_forager.schema.registry import get_table_schema
+from vertex_forager.utils import (
+    Spinner,
+    create_pbar_updater,
+    env_bool,
+    env_int,
+    sanitize_field,
+)
+from vertex_forager.writers import create_writer
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator, Callable
+    from pathlib import Path
+    from types import TracebackType
+
+    import httpx
+    import polars as pl
+
+    from vertex_forager.core.contracts import IMapper, IRouter, IWriter
+    from vertex_forager.writers.base import BaseWriter
+
 HttpExecutor = _HttpExecutor
 VertexForager = _VertexForager
 
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar("T", bound=Union[SharadarDataset, YFinanceDataset, str])
+T = TypeVar("T", bound=SharadarDataset | YFinanceDataset | str)
+
 
 class BaseClient(ABC, Generic[T]):
     """
@@ -58,23 +71,23 @@ class BaseClient(ABC, Generic[T]):
 
     Standardized Provider Implementation Pattern:
     All provider clients should follow this consistent structure for extensibility:
-    
+
     1. **execute_collection()** - Unified data collection pipeline with:
        - Router creation with provider-specific configuration
        - Writer lifecycle management (DB storage or in-memory)
        - Progress tracking and result collection
        - Memory safety validation
-    
+
     2. **Provider-specific characteristics** documented in docstrings:
        - API rate limits and batching strategies
        - Data source characteristics (coverage, update frequency)
        - Special handling requirements
        - Performance optimization techniques
-    
+
     3. **Memory management** via common utilities:
        - validate_memory_usage() for safety checks
        - Provider-specific memory parameters
-    
+
     4. **Error handling patterns**:
        - Rate limit handling via FlowController
        - Network retry logic via HttpExecutor
@@ -144,7 +157,7 @@ class BaseClient(ABC, Generic[T]):
             await self._client.aclose()
             self._client = None
 
-    async def __aenter__(self) -> "BaseClient":
+    async def __aenter__(self) -> BaseClient:
         """Async context manager entry.
 
         Initializes the shared HTTP client.
@@ -193,7 +206,7 @@ class BaseClient(ABC, Generic[T]):
 
     async def run_async(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         """Execute a standard async HTTP request using the underlying client.
-        
+
         Delegates directly to client.request().
         """
         if self._client is None:
@@ -202,18 +215,18 @@ class BaseClient(ABC, Generic[T]):
 
     async def run_sync(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         """Execute a blocking (synchronous) function in a separate thread.
-        
+
         This wrapper ensures that blocking library calls (like yfinance, pandas I/O)
         do not freeze the main asyncio event loop.
-        
+
         Args:
             func: Callable to execute in a worker thread.
             *args: Positional arguments for the callable.
             **kwargs: Keyword arguments for the callable.
-        
+
         Returns:
             Any: The return value of the callable.
-        
+
         Raises:
             Exception: Any exception raised by the callable is propagated.
         """
@@ -240,7 +253,7 @@ class BaseClient(ABC, Generic[T]):
     ) -> RunResult:
         """
         Run the VertexForager pipeline for the given router, dataset, and symbols.
-        
+
         Args:
             router: Data router to fetch data from.
             dataset: Dataset name (e.g., "price").
@@ -249,10 +262,10 @@ class BaseClient(ABC, Generic[T]):
             mapper: Schema mapper to transform connector data to sink schema.
             on_progress: Optional callback function called on each completed request.
             **kwargs: Additional arguments passed to the pipeline run method.
-        
+
         Returns:
             RunResult: Summary of the pipeline run, including success/failure status.
-        
+
         Raises:
             httpx.RequestError: If a network error occurs during fetching.
             httpx.HTTPStatusError: If an HTTP response returns non-2xx.
@@ -261,6 +274,7 @@ class BaseClient(ABC, Generic[T]):
             PrimaryKeyNullError: When PK columns contain nulls.
         """
         from vertex_forager.clients.validation import filter_reserved_kwargs
+
         reserved = {
             "router",
             "dataset",
@@ -277,7 +291,12 @@ class BaseClient(ABC, Generic[T]):
         if self._structured_logs:
             sym_count = len(symbols or [])
             attempt = self._safe_int(run_kwargs.get("attempt", 0))
-            msg_s = f"OBS provider={sanitize_field(router.provider)} dataset={sanitize_field(dataset)} symbol=* symbols={sym_count} stage=client_run_start attempt={attempt} duration=0.000s"
+            msg_s = (
+                f"OBS provider={sanitize_field(router.provider)} "
+                f"dataset={sanitize_field(dataset)} "
+                f"symbol=* symbols={sym_count} "
+                f"stage=client_run_start attempt={attempt} duration=0.000s"
+            )
             if self._log_verbose:
                 logger.info(msg_s)
             else:
@@ -285,6 +304,7 @@ class BaseClient(ABC, Generic[T]):
 
         # Delegate orchestration to dispatcher
         from vertex_forager.clients.dispatcher import run_pipeline_for
+
         t0 = time.monotonic()
         self.last_run = await run_pipeline_for(
             client=self,
@@ -304,7 +324,12 @@ class BaseClient(ABC, Generic[T]):
             err_n = len(self.last_run.errors) if self.last_run else 0
             dur = time.monotonic() - t0
             attempt = self._safe_int(run_kwargs.get("attempt", 0))
-            msg_e = f"OBS provider={sanitize_field(router.provider)} dataset={sanitize_field(dataset)} symbol=* stage=client_run_end errors={err_n} attempt={attempt} duration={dur:.3f}s"
+            msg_e = (
+                f"OBS provider={sanitize_field(router.provider)} "
+                f"dataset={sanitize_field(dataset)} "
+                f"symbol=* stage=client_run_end errors={err_n} "
+                f"attempt={attempt} duration={dur:.3f}s"
+            )
             if self._log_verbose:
                 logger.info(msg_e)
             else:
@@ -339,22 +364,22 @@ class BaseClient(ABC, Generic[T]):
         show_progress: bool = True,
     ) -> AsyncGenerator[BaseWriter, None]:
         """Manage writer lifecycle with proper resource cleanup.
-        
+
         This is a common infrastructure component that all providers can use
         to ensure consistent writer lifecycle management.
-        
+
         Args:
             connect_db: Database connection string/path, or None for in-memory.
             show_progress: Whether to show progress indicators (default: True).
-            
+
         Yields:
             BaseWriter: Properly initialized writer instance.
-        
+
         Raises:
             duckdb.Error: If a DuckDB connection cannot be established.
             ValidationError: If writer initialization fails due to schema issues.
             Exception: Any unexpected errors during writer setup are propagated.
-        
+
         Example:
             async with self.managed_writer(connect_db, show_progress=True) as writer:
                 result = await self.run_pipeline(..., writer=writer)
@@ -371,7 +396,7 @@ class BaseClient(ABC, Generic[T]):
                     for err in run.errors:
                         logger.error("%s", err)
         finally:
-            with (Spinner("Finalizing database writes...") if show_progress else nullcontext()):
+            with Spinner("Finalizing database writes...") if show_progress else nullcontext():
                 await stack.__aexit__(None, None, None)
 
     def create_progress_tracker(
@@ -383,24 +408,24 @@ class BaseClient(ABC, Generic[T]):
         show_progress: bool = True,
     ) -> tuple[Any, Callable | None]:
         """Create progress tracking infrastructure.
-        
+
         Common progress tracking setup that can be used by all providers.
         Uses `tqdm` only when `show_progress=True`; otherwise returns (None, None)
         to minimize overhead for high-performance/headless runs.
-        
+
         Args:
             total_items: Total number of items to process
             unit: Unit label (e.g., "tickers", "pages", "it")
             desc: Description for the progress bar
             show_progress: Whether to show progress bar. If False, tqdm is skipped.
-            
+
         Returns:
             tuple: (progress_bar_object, progress_updater_callback)
             Both will be None if show_progress is False
         """
         if not show_progress:
             return None, None
-            
+
         pbar = tqdm(
             total=total_items,
             unit=unit,
@@ -420,15 +445,15 @@ class BaseClient(ABC, Generic[T]):
         sort_by_unique_key: bool = True,
     ) -> pl.DataFrame | RunResult:
         """Collect and return results from writer.
-        
+
         Common result collection logic that handles both database and in-memory scenarios.
-        
+
         Args:
             writer: Writer instance to collect from
             table_name: Name of the table to collect
             connect_db: Database connection (determines collection mode)
             sort_by_unique_key: Whether to sort by schema's unique key if available
-            
+
         Returns:
             pl.DataFrame if in-memory mode, RunResult if database mode
         """
@@ -440,7 +465,7 @@ class BaseClient(ABC, Generic[T]):
                     "Ensure run_pipeline completed before collecting database results."
                 )
             return self.last_run
-            
+
         # In-memory mode: collect DataFrame from writer
         sort_cols = None
         if sort_by_unique_key:
@@ -448,5 +473,5 @@ class BaseClient(ABC, Generic[T]):
             schema = get_table_schema(table_name)
             if schema and schema.unique_key:
                 sort_cols = list(schema.unique_key)
-                
+
         return writer.collect_table(table_name, sort_cols=sort_cols)

@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 import polars as pl
 import pytest
+
 from vertex_forager.clients.dispatcher import run_pipeline_for
 from vertex_forager.core.config import (
     EngineConfig,
@@ -52,6 +53,7 @@ class StubRouter(IRouter[str]):
 class StubWriter(IWriter):
     async def write(self, packet: FramePacket) -> WriteResult:
         return WriteResult(table=packet.table, rows=packet.frame.height)
+
     async def flush(self) -> None:
         return None
 
@@ -64,9 +66,11 @@ class StubMapper(IMapper):
 class StubClient:
     def __init__(self) -> None:
         self._config = EngineConfig(requests_per_minute=60)
+
         @dataclass
         class StubController:
             concurrency_limit: int
+
         self.controller = StubController(concurrency_limit=1)
         self.last_run: RunResult | None = None
 

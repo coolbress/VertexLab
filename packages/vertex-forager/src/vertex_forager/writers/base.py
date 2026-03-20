@@ -18,15 +18,18 @@ Notes:
     All writers must implement the `write` and `write_bulk` methods and handle
     async context management.
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
-import polars as pl
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
-from vertex_forager.core.config import FramePacket
+if TYPE_CHECKING:
+    import polars as pl
+
+    from vertex_forager.core.config import FramePacket
 
 
 class WriteResult(BaseModel):
@@ -41,7 +44,7 @@ class WriteResult(BaseModel):
 
     table: str
     rows: int
-    partitions: Mapping[str, str] = Field(default_factory=dict)
+    partitions: dict[str, str] = Field(default_factory=dict)
 
 
 class BaseWriter(ABC):
@@ -107,22 +110,20 @@ class BaseWriter(ABC):
 
         Default implementation does nothing. Override if buffering is used.
         """
-        pass
+        return None
 
     async def close(self) -> None:
         """Close any open resources (connections, files).
 
         Default implementation does nothing. Override if resources need cleanup.
         """
-        pass
+        return None
 
-    async def __aenter__(self) -> "BaseWriter":
+    async def __aenter__(self) -> BaseWriter:
         """Async context manager entry."""
         return self
 
-    async def __aexit__(
-        self, exc_type: object, exc_val: object, exc_tb: object
-    ) -> None:
+    async def __aexit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
         """Async context manager exit.
 
         Ensures resources are closed even if an error occurs.

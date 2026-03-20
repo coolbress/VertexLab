@@ -1,22 +1,28 @@
 from __future__ import annotations
 
-from typing import Protocol, TypeVar, Generic, Sequence, AsyncIterator, Callable, TYPE_CHECKING, Union
-from vertex_forager.core.types import JSONValue
-from vertex_forager.core.types import SharadarDataset, YFinanceDataset
+from typing import (
+    TYPE_CHECKING,
+    Generic,
+    Protocol,
+    TypeVar,
+)
 
-from vertex_forager.core.config import FetchJob, ParseResult, RunResult
+from vertex_forager.core.types import JSONValue, SharadarDataset, YFinanceDataset
+
 if TYPE_CHECKING:
+    from collections.abc import AsyncIterator, Callable, Sequence
+
+    from vertex_forager.core.config import FetchJob, FramePacket, ParseResult, RunResult
     from vertex_forager.writers.base import WriteResult
-    from vertex_forager.core.config import FramePacket
 
 
-T = TypeVar("T", bound=Union[SharadarDataset, YFinanceDataset, str])
-T_contra = TypeVar("T_contra", bound=Union[SharadarDataset, YFinanceDataset, str], contravariant=True)
+T = TypeVar("T", bound=SharadarDataset | YFinanceDataset | str)
+T_contra = TypeVar("T_contra", bound=SharadarDataset | YFinanceDataset | str, contravariant=True)
 
 
 class IRouter(Protocol, Generic[T_contra]):
     """Provider-agnostic Router protocol.
-    
+
     Defines the interface expected from all router implementations that
     adapt provider APIs into the Vertex Forager pipeline.
     """
@@ -30,12 +36,12 @@ class IRouter(Protocol, Generic[T_contra]):
         self, *, dataset: T_contra, symbols: Sequence[str] | None, **kwargs: object
     ) -> AsyncIterator[FetchJob]:
         """Generate provider-specific fetch jobs.
-        
+
         Args:
             dataset: Target dataset name for the provider.
             symbols: Optional sequence of target symbols; None for provider-wide fetch.
             **kwargs: Provider-specific options (e.g., dimension, date range).
-        
+
         Returns:
             AsyncIterator[FetchJob]: Stream of constructed jobs.
         """
@@ -43,11 +49,11 @@ class IRouter(Protocol, Generic[T_contra]):
 
     def parse(self, *, job: FetchJob, payload: bytes) -> ParseResult:
         """Normalize provider response into packets and follow-up jobs.
-        
+
         Args:
             job: Fetch job that produced the payload.
             payload: Raw response bytes.
-        
+
         Returns:
             ParseResult: Extracted packets and any subsequent jobs (e.g., pagination).
         """
@@ -56,7 +62,7 @@ class IRouter(Protocol, Generic[T_contra]):
 
 class IClient(Protocol, Generic[T]):
     """Client protocol for running the pipeline.
-    
+
     Specifies the minimal interface the pipeline expects from clients.
     """
 
@@ -66,13 +72,13 @@ class IClient(Protocol, Generic[T]):
         router: IRouter[T],
         dataset: T,
         symbols: list[str] | None,
-        writer: "IWriter",
-        mapper: "IMapper",
+        writer: IWriter,
+        mapper: IMapper,
         on_progress: Callable[..., None] | None = None,
         **kwargs: JSONValue,
     ) -> RunResult:
         """Execute the VertexForager pipeline.
-        
+
         Args:
             router: Router responsible for job generation and parsing.
             dataset: Dataset identifier for the provider.
@@ -81,16 +87,17 @@ class IClient(Protocol, Generic[T]):
             mapper: Schema mapper used to enforce target types/columns.
             on_progress: Optional callback invoked per completed job.
             **kwargs: Additional pipeline options (JSONValue-safe).
-        
+
         Returns:
             RunResult: Summary metrics and error collection from the run.
         """
         ...
 
+
 class IWriter(Protocol):
     """Writer protocol for persisting normalized packets."""
 
-    async def write(self, packet: "FramePacket") -> "WriteResult":
+    async def write(self, packet: FramePacket) -> WriteResult:
         """Persist a normalized packet.
 
         Args:
@@ -117,7 +124,7 @@ class IWriter(Protocol):
 class IMapper(Protocol):
     """Schema mapper protocol for normalizing packets."""
 
-    def normalize(self, *, packet: "FramePacket") -> "FramePacket":
+    def normalize(self, *, packet: FramePacket) -> FramePacket:
         """Normalize a packet to the target schema.
 
         Args:

@@ -16,6 +16,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import polars as pl
 import pytest
+
 from vertex_forager.core.config import RunResult
 
 
@@ -35,8 +36,9 @@ class TestClientVisualization:
         ):
             # Setup mock pipeline run return value
             mock_pipeline_instance = MockPipeline.return_value
+            dummy_result = MagicMock()
             mock_pipeline_instance.run = AsyncMock(
-                return_value=MagicMock()
+                return_value=dummy_result
             )  # Return dummy result
 
             # Setup mock spinner context manager
@@ -159,7 +161,9 @@ class TestClientIntegration:
 
     @pytest.mark.asyncio
     async def test_get_daily_metrics_handles_financial_data(
-        self, sharadar_client, mock_http_executor
+        self,
+        sharadar_client,
+        mock_http_executor,
     ) -> None:
         """Test that get_daily_metrics processes financial metrics correctly."""
         # Arrange
@@ -193,7 +197,9 @@ class TestClientIntegration:
 
     @pytest.mark.asyncio
     async def test_get_corporate_actions_processes_dividend_events(
-        self, sharadar_client, mock_http_executor
+        self,
+        sharadar_client,
+        mock_http_executor,
     ) -> None:
         """Test that get_corporate_actions handles dividend events correctly."""
         # Arrange
@@ -231,7 +237,9 @@ class TestClientErrorHandling:
 
     @pytest.mark.asyncio
     async def test_client_handles_empty_response_gracefully(
-        self, sharadar_client, mock_http_executor
+        self,
+        sharadar_client,
+        mock_http_executor,
     ) -> None:
         """Test that client handles empty API responses gracefully."""
         # Arrange
@@ -255,7 +263,9 @@ class TestClientErrorHandling:
 
     @pytest.mark.asyncio
     async def test_client_handles_api_error_gracefully(
-        self, sharadar_client, mock_http_executor
+        self,
+        sharadar_client,
+        mock_http_executor,
     ) -> None:
         """Test that client handles API errors gracefully."""
         # Arrange - Mock http executor to raise exception
@@ -276,7 +286,10 @@ class TestClientErrorHandling:
 
     @pytest.mark.asyncio
     async def test_client_maintains_rate_limiting(
-        self, sharadar_client, mock_http_executor, sample_price_data
+        self,
+        sharadar_client,
+        mock_http_executor,
+        sample_price_data,
     ) -> None:
         """Test that client respects rate limiting configuration."""
         # Arrange

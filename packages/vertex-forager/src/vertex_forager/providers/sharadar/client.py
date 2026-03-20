@@ -1,36 +1,19 @@
 from __future__ import annotations
 
+import asyncio
+from contextlib import nullcontext
+from dataclasses import dataclass, field
 import logging
 import re
-from pathlib import Path
-import asyncio
-from typing import Any, cast
-from dataclasses import dataclass, field
-from contextlib import nullcontext
+from typing import TYPE_CHECKING, Any, cast
 
-import polars as pl
 import duckdb
 import httpx
+import polars as pl
 
 from vertex_forager.clients.base import BaseClient
-from vertex_forager.core.config import RunResult
-from vertex_forager.routers import create_router
-from vertex_forager.schema.mapper import SchemaMapper
-from vertex_forager.utils import (
-    jupyter_safe,
-    validate_memory_usage,
-    Spinner,
-    validate_tickers,
-)
-from vertex_forager.providers.sharadar.schema import DATASET_TABLE
-from vertex_forager.constants import TICKERS_UNIT, PAGES_UNIT, RESERVED_PIPELINE_KEYS
-from vertex_forager.providers.sharadar.constants import (
-    BYTES_PER_TICKER_METADATA as SH_BYTES_PER_TICKER_METADATA,
-    BYTES_PER_TICKER_FULL as SH_BYTES_PER_TICKER_FULL,
-    ESTIMATED_TOTAL_TICKERS as SH_ESTIMATED_TOTAL_TICKERS,
-)
-from vertex_forager.core.types import JSONValue
-from vertex_forager.core.types import SharadarDataset
+from vertex_forager.constants import PAGES_UNIT, RESERVED_PIPELINE_KEYS, TICKERS_UNIT
+from vertex_forager.core.types import JSONValue, SharadarDataset
 from vertex_forager.exceptions import InputError
 from vertex_forager.logging.constants import (
     CLIENT_LOG_PREFIX,
@@ -38,10 +21,34 @@ from vertex_forager.logging.constants import (
     LOG_META_CACHED_COUNT,
     LOG_META_PREFETCH_FAIL,
 )
+from vertex_forager.providers.sharadar.constants import (
+    BYTES_PER_TICKER_FULL as SH_BYTES_PER_TICKER_FULL,
+)
+from vertex_forager.providers.sharadar.constants import (
+    BYTES_PER_TICKER_METADATA as SH_BYTES_PER_TICKER_METADATA,
+)
+from vertex_forager.providers.sharadar.constants import (
+    ESTIMATED_TOTAL_TICKERS as SH_ESTIMATED_TOTAL_TICKERS,
+)
+from vertex_forager.providers.sharadar.schema import DATASET_TABLE
+from vertex_forager.routers import create_router
+from vertex_forager.schema.mapper import SchemaMapper
+from vertex_forager.utils import (
+    Spinner,
+    jupyter_safe,
+    validate_memory_usage,
+    validate_tickers,
+)
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from vertex_forager.core.config import RunResult
 
 logger = logging.getLogger(__name__)
 
 TICKER_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
+
 
 @dataclass(slots=True)
 class FetchConfig:
@@ -61,6 +68,7 @@ class FetchConfig:
         end_date (str | None): End date (YYYY-MM-DD) for range datasets.
         extra (dict[str, Any]): Extra options passed through to router/client.
     """
+
     dataset: SharadarDataset
     symbols: list[str] | None
     connect_db: str | Path | None
@@ -77,10 +85,10 @@ class FetchConfig:
 
 class SharadarClient(BaseClient[SharadarDataset]):
     """Client for Sharadar (Nasdaq Data Link) datasets.
-    
+
     This client integrates Sharadar with the VertexForager pipeline to provide
     consistent rate limiting, logging, and error handling across datasets.
-    
+
     Attributes:
         Authentication: API key required; passed via query parameter.
         Rate Limiting: Configurable requests per minute through `rate_limit`.
@@ -88,7 +96,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             `actions`, `insider` (SF2), `institutional` (SF3), `tickers`, and `sp500`.
         Metadata Cache: Optional ticker metadata cache used for smart batching.
         Data Model: Datatables JSON responses normalized to Polars frames.
-    
+
     Notes:
         - Pipeline flow: Router -> HttpExecutor -> Writer.
         - Guarantees: Unified rate limiting, structured logging, and error
@@ -132,7 +140,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
 
         self._mapper = SchemaMapper()
         self._metadata_cache: pl.DataFrame | None = None
-        
+
     # ----------------------------------------------------------------
     # Public User Methods
     # ----------------------------------------------------------------
@@ -145,15 +153,15 @@ class SharadarClient(BaseClient[SharadarDataset]):
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Fetch metadata for all or specific tickers (TICKERS).
-        
+
         Args:
             tickers: Optional list of ticker symbols to filter. If None, fetches all.
             connect_db: Optional DuckDB connection string/path for persistence.
             **kwargs: Additional provider-specific options forwarded to the pipeline.
-        
+
         Returns:
             pl.DataFrame in memory mode; RunResult when persisting to DuckDB.
-        
+
         Raises:
             InputError: If parameters (tickers) are invalid.
             FetchError: If network/API errors occur during data retrieval.
@@ -170,14 +178,14 @@ class SharadarClient(BaseClient[SharadarDataset]):
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Fetch S&P 500 component history.
-        
+
         Args:
             connect_db: Optional DuckDB connection string/path for persistence.
             **kwargs: Additional provider-specific options forwarded to the pipeline.
-        
+
         Returns:
             pl.DataFrame in memory mode; RunResult when persisting to DuckDB.
-        
+
         Raises:
             FetchError: If network/API errors occur during data retrieval.
             TransformError: If data normalization fails.
@@ -258,7 +266,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Fetch fundamental data (SF1).
-        
+
         Args:
             tickers: List of ticker symbols to fetch.
             connect_db: Optional DuckDB connection string/path for persistence.
@@ -266,11 +274,11 @@ class SharadarClient(BaseClient[SharadarDataset]):
             end_date: Optional end date filter (YYYY-MM-DD).
             dimension: SF1 dimension (e.g., 'MRT', 'ARQ', 'ARY').
             **kwargs: Additional provider-specific options.
-        
+
         Returns:
             pl.DataFrame in memory mode; RunResult when persisting to DuckDB.
             Rows include SF1 metrics keyed by ticker and calendardate.
-        
+
         Raises:
             InputError: If tickers list is empty or invalid.
             FetchError: If network/API errors occur during data retrieval.
@@ -305,18 +313,18 @@ class SharadarClient(BaseClient[SharadarDataset]):
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Fetch daily metrics (DAILY).
-        
+
         Args:
             tickers: List of ticker symbols to fetch.
             connect_db: Optional DuckDB connection string/path.
             start_date: Optional start date (YYYY-MM-DD).
             end_date: Optional end date (YYYY-MM-DD).
             **kwargs: Additional provider-specific options.
-        
+
         Returns:
             pl.DataFrame in memory mode; RunResult when persisting.
             Data includes per-day metrics keyed by ticker and date.
-        
+
         Raises:
             InputError: If tickers list is empty or invalid.
             FetchError: If network/API errors occur during data retrieval.
@@ -350,18 +358,18 @@ class SharadarClient(BaseClient[SharadarDataset]):
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Fetch corporate actions (ACTIONS).
-        
+
         Args:
             tickers: List of ticker symbols.
             connect_db: Optional DuckDB connection string/path.
             start_date: Optional start date (YYYY-MM-DD).
             end_date: Optional end date (YYYY-MM-DD).
             **kwargs: Additional provider-specific options.
-        
+
         Returns:
             pl.DataFrame in memory; RunResult when persisting.
             Rows include dividends/splits keyed by ticker and date.
-        
+
         Raises:
             InputError: If tickers list is empty or invalid.
             FetchError: If network/API errors occur during data retrieval.
@@ -395,18 +403,18 @@ class SharadarClient(BaseClient[SharadarDataset]):
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Fetch insider trading data (SF2).
-        
+
         Args:
             tickers: List of ticker symbols.
             connect_db: Optional DuckDB connection string/path.
             start_date: Optional start date (YYYY-MM-DD).
             end_date: Optional end date (YYYY-MM-DD).
             **kwargs: Additional provider-specific options.
-        
+
         Returns:
             pl.DataFrame in memory; RunResult when persisting.
             Data includes insider transactions keyed by ticker and filingdate.
-        
+
         Raises:
             InputError: If tickers list is empty or invalid.
             FetchError: If network/API errors occur during data retrieval.
@@ -440,18 +448,18 @@ class SharadarClient(BaseClient[SharadarDataset]):
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Fetch institutional ownership data (SF3).
-        
+
         Args:
             tickers: List of ticker symbols.
             connect_db: Optional DuckDB connection string/path.
             start_date: Optional start date (YYYY-MM-DD).
             end_date: Optional end date (YYYY-MM-DD).
             **kwargs: Additional provider-specific options.
-        
+
         Returns:
             pl.DataFrame in memory; RunResult when persisting.
             Data includes institutional positions keyed by ticker and calendardate.
-        
+
         Raises:
             InputError: If tickers are empty or invalid.
             FetchError: If network/API errors occur during data retrieval.
@@ -475,9 +483,9 @@ class SharadarClient(BaseClient[SharadarDataset]):
         return await self._fetch_per_ticker(cfg)
 
     # ----------------------------------------------------------------
-    # Internal Data Fetchers 
+    # Internal Data Fetchers
     # ----------------------------------------------------------------
-    
+
     async def _get_ticker_info_impl(
         self,
         *,
@@ -532,10 +540,12 @@ class SharadarClient(BaseClient[SharadarDataset]):
             try:
                 table = DATASET_TABLE["tickers"]
                 q_table = f'"{table}"'
+                from string import Template
+
                 with duckdb.connect(str(connect_db)) as conn:
-                    df_pl = conn.execute(
-                        f"SELECT ticker, firstpricedate, lastpricedate FROM {q_table}"
-                    ).pl()
+                    _tmpl = Template("SELECT ticker, firstpricedate, lastpricedate FROM ${t}")
+                    _q = _tmpl.substitute(t=q_table)
+                    df_pl = conn.execute(_q).pl()
                 self._metadata_cache = df_pl
             except duckdb.Error as e:
                 logger.error("DuckDB error while loading ticker metadata cache: %s", e)
@@ -544,23 +554,22 @@ class SharadarClient(BaseClient[SharadarDataset]):
                 raise
         return result
 
-    
-    async def _fetch_per_ticker(self, config: "FetchConfig") -> pl.DataFrame | RunResult:
+    async def _fetch_per_ticker(self, config: FetchConfig) -> pl.DataFrame | RunResult:
         """Fetch data for specific tickers using per-ticker batching.
-        
+
         This method implements the per-ticker fetching pattern using BaseClient's
         common infrastructure while maintaining Sharadar-specific logic for
         metadata caching and memory validation.
-        
+
         Sharadar-specific characteristics:
         - Metadata caching for smart batching optimization
         - Memory validation for large dataset safety
         - Priority queue-based request scheduling
         - Automatic metadata prefetch for optimal performance
-        
+
         Args:
             config: FetchConfig object containing all parameters
-            
+
         Returns:
             pl.DataFrame for in-memory mode, RunResult for database mode
         """
@@ -571,9 +580,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         if symbols:
             self._validate_tickers(symbols)
 
-        bytes_per_item = (
-            self.BYTES_PER_TICKER_METADATA if config.dataset == "tickers" else self.BYTES_PER_TICKER_FULL
-        )
+        bytes_per_item = self.BYTES_PER_TICKER_METADATA if config.dataset == "tickers" else self.BYTES_PER_TICKER_FULL
         validate_memory_usage(
             symbols=config.symbols,
             connect_db=config.connect_db,
@@ -585,7 +592,11 @@ class SharadarClient(BaseClient[SharadarDataset]):
             logger.info(LOG_META_CACHE_MISS.format(prefix=CLIENT_LOG_PREFIX))
             try:
                 with Spinner("Prefetching metadata for smart batching..."):
-                    meta_result = await self._get_ticker_info_impl(tickers=None, connect_db=config.connect_db, show_spinner=False)
+                    meta_result = await self._get_ticker_info_impl(
+                        tickers=None,
+                        connect_db=config.connect_db,
+                        show_spinner=False,
+                    )
                     if isinstance(meta_result, pl.DataFrame):
                         logger.info(LOG_META_CACHED_COUNT.format(prefix=CLIENT_LOG_PREFIX, count=len(meta_result)))
             except (httpx.RequestError, asyncio.TimeoutError, OSError) as e:
@@ -605,7 +616,9 @@ class SharadarClient(BaseClient[SharadarDataset]):
             "start_date": config.start_date,
             "end_date": config.end_date,
         }
-        pipeline_kwargs: dict[str, JSONValue] = {k: v for k, v in dict(config.extra).items() if k not in RESERVED_PIPELINE_KEYS}
+        pipeline_kwargs: dict[str, JSONValue] = {
+            k: v for k, v in dict(config.extra).items() if k not in RESERVED_PIPELINE_KEYS
+        }
 
         result_obj = await self._run_sharadar_pipeline(
             config=config,
@@ -619,17 +632,17 @@ class SharadarClient(BaseClient[SharadarDataset]):
             self._metadata_cache = result_obj
         return result_obj
 
-    async def _fetch_pagination(self, config: "FetchConfig") -> pl.DataFrame | RunResult:
+    async def _fetch_pagination(self, config: FetchConfig) -> pl.DataFrame | RunResult:
         """Fetch full dataset via pagination (e.g., SP500, All Tickers).
-        
+
         This method implements pagination using BaseClient infrastructure with
         Sharadar-specific handling for large datasets.
-        
+
         Args:
             config: FetchConfig containing dataset, symbols, connect_db, desc,
                 table_name, show_progress, use_progress_bar, total_items, unit,
                 start_date, end_date, and extra.
-        
+
         Returns:
             pl.DataFrame for in-memory mode, RunResult for database mode.
         """
@@ -638,7 +651,9 @@ class SharadarClient(BaseClient[SharadarDataset]):
             "start_date": config.start_date,
             "end_date": config.end_date,
         }
-        pipeline_kwargs: dict[str, JSONValue] = {k: v for k, v in dict(config.extra).items() if k not in RESERVED_PIPELINE_KEYS}
+        pipeline_kwargs: dict[str, JSONValue] = {
+            k: v for k, v in dict(config.extra).items() if k not in RESERVED_PIPELINE_KEYS
+        }
 
         result_obj = await self._run_sharadar_pipeline(
             config=config,
@@ -651,7 +666,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
     async def _run_sharadar_pipeline(
         self,
         *,
-        config: "FetchConfig",
+        config: FetchConfig,
         total_items: int | None,
         router_kwargs: dict[str, JSONValue],
         pipeline_kwargs: dict[str, JSONValue],
@@ -666,14 +681,18 @@ class SharadarClient(BaseClient[SharadarDataset]):
             async with self.managed_writer(config.connect_db, show_progress=config.show_progress) as writer:
                 router = create_router(
                     "sharadar",
-                    api_key=cast(str, self.api_key),
+                    api_key=cast("str", self.api_key),
                     config=self._config,
                     start_date=config.start_date,
                     end_date=config.end_date,
                     ticker_metadata=self._metadata_cache,
                 )
 
-                spinner_ctx = Spinner(config.desc, persist=True) if (config.show_progress and not config.use_progress_bar) else nullcontext()
+                spinner_ctx = (
+                    Spinner(config.desc, persist=True)
+                    if (config.show_progress and not config.use_progress_bar)
+                    else nullcontext()
+                )
                 with spinner_ctx:
                     await self.run_pipeline(
                         router=router,

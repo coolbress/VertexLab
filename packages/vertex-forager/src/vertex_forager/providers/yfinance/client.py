@@ -1,54 +1,59 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
-from typing import Any, Literal
-from vertex_forager.core.types import YFinanceDataset
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import polars as pl
 
 from vertex_forager.clients.base import BaseClient
-from vertex_forager.core.config import RunResult
-from vertex_forager.routers import create_router
-from vertex_forager.utils import jupyter_safe, validate_memory_usage, validate_tickers
-from vertex_forager.schema.mapper import SchemaMapper
-from vertex_forager.core.config import RetryConfig
 from vertex_forager.constants import (
     DEFAULT_RATE_LIMIT,
-    DEFAULT_RETRY_MAX_ATTEMPTS,
     DEFAULT_RETRY_BASE_BACKOFF_S,
+    DEFAULT_RETRY_MAX_ATTEMPTS,
     DEFAULT_RETRY_MAX_BACKOFF_S,
     RESERVED_PIPELINE_KEYS,
 )
-from vertex_forager.providers.yfinance.constants import SIZE_MAP as YF_SIZE_MAP, DEFAULT_BYTES_PER_ITEM, PRICE_BATCH_SIZE_KEY
+from vertex_forager.core.config import RetryConfig, RunResult
+from vertex_forager.core.types import YFinanceDataset
 from vertex_forager.exceptions import InputError
 from vertex_forager.logging.constants import (
     CLIENT_LOG_PREFIX,
-    LOG_RATE_LIMIT_INVALID_INT,
     LOG_RATE_LIMIT_EXCEEDS_DEFAULT,
+    LOG_RATE_LIMIT_INVALID_INT,
     LOG_RATE_LIMIT_INVALID_TYPE,
 )
+from vertex_forager.providers.yfinance.constants import (
+    DEFAULT_BYTES_PER_ITEM,
+    PRICE_BATCH_SIZE_KEY,
+)
+from vertex_forager.providers.yfinance.constants import SIZE_MAP as YF_SIZE_MAP
+from vertex_forager.routers import create_router
+from vertex_forager.schema.mapper import SchemaMapper
+from vertex_forager.utils import jupyter_safe, validate_memory_usage, validate_tickers
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+
 class YFinanceClient(BaseClient[YFinanceDataset]):
     """Client for Yahoo Finance datasets via yfinance.
-    
+
     This client integrates yfinance with the VertexForager pipeline to provide
     consistent rate limiting, logging, and error handling across datasets.
-    
+
     Attributes:
         Free API: No authentication required.
         Rate Limiting: Default 60 requests per minute to avoid IP bans.
         Data Quality: Real-time data may be delayed; historical accuracy is best-effort.
         Limitations: Financial statements expose only recent periods (no full-history).
-    
+
     Notes:
         - Pipeline flow: Router -> HttpExecutor -> Writer.
         - Guarantees: Unified rate limiting, structured logging, and error propagation.
         - Preferred usage: Per-ticker jobs for stability; bulk price downloads avoided.
     """
-
 
     def __init__(
         self,
@@ -76,34 +81,28 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         # Ensure api_key is None for YFinanceClient
         super().__init__(api_key=None, rate_limit=normalized, **kwargs)
         self._mapper = SchemaMapper()
-        
-        
+
     # ----------------------------------------------------------------
     # Public User Methods
     # ----------------------------------------------------------------
-    
+
     # --- Reference Data ---
-    
+
     @jupyter_safe
     async def get_info(
-        self,
-        *,
-        tickers: list[str],
-        connect_db: str | Path | None = None,
-        show_progress: bool = True,
-        **kwargs: Any
+        self, *, tickers: list[str], connect_db: str | Path | None = None, show_progress: bool = True, **kwargs: Any
     ) -> pl.DataFrame | RunResult:
         """Fetch ticker metadata/info.
-        
+
         Args:
             tickers: List of ticker symbols.
             connect_db: Optional DuckDB connection string/path for persistence.
             show_progress: Whether to display progress indicators (default: True).
             **kwargs: Additional provider-specific options.
-        
+
         Returns:
             Polars DataFrame in memory or RunResult when persisting.
-        
+
         Raises:
             InputError: If tickers list is empty or invalid.
             FetchError: If network/API errors occur during data retrieval.
@@ -119,7 +118,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             show_progress=show_progress,
             **kwargs,
         )
-        
+
     # --- Market Data ---
 
     @jupyter_safe
@@ -134,7 +133,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         """Fetch historical price data (OHLCV).
-        
+
         Args:
             tickers: List of ticker symbols.
             connect_db: Database connection string.
@@ -142,13 +141,13 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             end_date: End date (YYYY-MM-DD). If None, fetches up to latest available date.
             show_progress: Whether to display progress indicators (default: True).
             **kwargs: Additional provider-specific options forwarded to the pipeline/executor.
-        
+
         Returns:
             Polars DataFrame in memory or RunResult when persisting.
-        
+
         Notes:
             Date filters (start/end) apply to price only; other datasets ignore date filters.
-        
+
         Raises:
             InputError: If tickers list is empty or invalid.
             FetchError: If network/API errors occur during data retrieval.
@@ -178,25 +177,25 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         tickers: list[str],
         connect_db: str | Path | None = None,
         show_progress: bool = True,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         """Fetch financial statements (Unified Method).
-        
+
         Args:
             kind: Type of financial statement ('balance_sheet', 'income_stmt', 'cashflow', 'earnings').
             period: Reporting period ('annual' or 'quarterly'). For 'earnings', quarterly is deprecated.
             tickers: List of ticker symbols.
             connect_db: Optional DuckDB connection string.
-        
+
         Returns:
             Polars DataFrame in memory or RunResult when persisting.
-        
+
         Notes:
             - yfinance provides only recent periods for financials (e.g., last few years/quarters).
             - Date filters (start/end) are not applicable to financials endpoints.
             - Period selects quarterly vs annual datasets. yfinance no longer supports 'quarterly_earnings'.
             - For full historical coverage, prefer institutional sources like Sharadar SF1 (ARY/ARQ).
-        
+
         Raises:
             InputError: If requesting deprecated quarterly earnings or tickers list is invalid.
             FetchError: If network/API errors occur during data retrieval.
@@ -206,13 +205,15 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         # Map 'income_stmt' alias to 'financials' and prevent deprecated quarterly_earnings.
         target_kind = "financials" if kind in ("income_stmt", "earnings") else kind
         if kind == "earnings":
-            logger.warning("YFinance 'earnings' maps to 'financials' (income statements). Annual earnings requests are redirected.")
+            logger.warning(
+                "YFinance 'earnings' maps to 'financials' (income statements). Annual earnings requests are redirected."
+            )
         if kind == "earnings" and period == "quarterly":
             raise InputError("quarterly_earnings is deprecated in yfinance; use income_stmt with period='quarterly'.")
         dataset = f"quarterly_{target_kind}" if period == "quarterly" else target_kind
-        from typing import cast
+
         return await self._dispatch_fetch(
-            dataset=cast(YFinanceDataset, dataset),
+            dataset=cast("YFinanceDataset", dataset),
             tickers=tickers,
             connect_db=connect_db,
             desc=f"Fetching YFinance {dataset}",
@@ -233,10 +234,10 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         start_date: str | None = None,
         end_date: str | None = None,
         show_progress: bool = True,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         """Fetch corporate actions (Unified Method: dividends or splits).
-        
+
         Args:
             kind: Type of action ('dividends' or 'splits').
             tickers: List of ticker symbols.
@@ -244,19 +245,18 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             start_date: Optional start date (YYYY-MM-DD).
             end_date: Optional end date (YYYY-MM-DD).
             **kwargs: Additional provider-specific options.
-        
+
         Returns:
             Polars DataFrame in memory or RunResult when persisting.
-        
+
         Raises:
             InputError: If tickers list is empty or invalid.
             FetchError: If network/API errors occur during data retrieval.
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        from typing import cast
         return await self._dispatch_fetch(
-            dataset=cast(YFinanceDataset, kind),
+            dataset=cast("YFinanceDataset", kind),
             tickers=tickers,
             connect_db=connect_db,
             desc=f"Fetching YFinance {kind}",
@@ -268,7 +268,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         )
 
     # --- Holders ---
-    
+
     @jupyter_safe
     async def get_holders(
         self,
@@ -277,19 +277,19 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         tickers: list[str],
         connect_db: str | Path | None = None,
         show_progress: bool = True,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         """Fetch holders information (Unified Method).
-        
+
         Args:
             kind: Type of holder ('institutional', 'mutualfund').
             tickers: List of ticker symbols.
             connect_db: Optional DuckDB connection string.
             **kwargs: Additional provider-specific options.
-        
+
         Returns:
             Polars DataFrame in memory or RunResult when persisting.
-        
+
         Raises:
             InputError: If tickers list is empty or invalid.
             FetchError: If network/API errors occur during data retrieval.
@@ -297,9 +297,9 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             WriterError: If persistence fails.
         """
         dataset = f"{kind}_holders"
-        from typing import cast
+
         return await self._dispatch_fetch(
-            dataset=cast(YFinanceDataset, dataset),
+            dataset=cast("YFinanceDataset", dataset),
             tickers=tickers,
             connect_db=connect_db,
             desc=f"Fetching YFinance {dataset}",
@@ -307,7 +307,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             show_progress=show_progress,
             **kwargs,
         )
-    
+
     @jupyter_safe
     async def get_major_holders(
         self,
@@ -318,15 +318,15 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         """Fetch major holders summary metrics.
-        
+
         Args:
             tickers: List of ticker symbols.
             connect_db: Optional DuckDB connection string.
             **kwargs: Additional provider-specific options.
-        
+
         Returns:
             Polars DataFrame in memory or RunResult when persisting.
-        
+
         Raises:
             InputError: If tickers list is empty or invalid.
             FetchError: If network/API errors occur during data retrieval.
@@ -342,9 +342,9 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             show_progress=show_progress,
             **kwargs,
         )
-    
+
     # --- Insider ---
-    
+
     @jupyter_safe
     async def get_insider_roster_holders(
         self,
@@ -355,15 +355,15 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         """Fetch insider roster holders.
-        
+
         Args:
             tickers: List of ticker symbols.
             connect_db: Optional DuckDB connection string.
             **kwargs: Additional provider-specific options.
-        
+
         Returns:
             Polars DataFrame in memory or RunResult when persisting.
-        
+
         Raises:
             InputError: If tickers list is empty or invalid.
             FetchError: If network/API errors occur during data retrieval.
@@ -379,26 +379,21 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             show_progress=show_progress,
             **kwargs,
         )
-    
+
     @jupyter_safe
     async def get_insider_purchases(
-        self,
-        *,
-        tickers: list[str],
-        connect_db: str | Path | None = None,
-        show_progress: bool = True,
-        **kwargs: Any
+        self, *, tickers: list[str], connect_db: str | Path | None = None, show_progress: bool = True, **kwargs: Any
     ) -> pl.DataFrame | RunResult:
         """Fetch insider purchases.
-        
+
         Args:
             tickers: List of ticker symbols.
             connect_db: Optional DuckDB connection string.
             **kwargs: Additional provider-specific options.
-        
+
         Returns:
             Polars DataFrame in memory or RunResult when persisting.
-        
+
         Raises:
             InputError: If tickers list is empty or invalid.
             FetchError: If network/API errors occur during data retrieval.
@@ -416,26 +411,21 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         )
 
     # --- Calendar ---
-    
+
     @jupyter_safe
     async def get_calendar(
-        self,
-        *,
-        tickers: list[str],
-        connect_db: str | Path | None = None,
-        show_progress: bool = True,
-        **kwargs: Any
+        self, *, tickers: list[str], connect_db: str | Path | None = None, show_progress: bool = True, **kwargs: Any
     ) -> pl.DataFrame | RunResult:
         """Fetch earnings calendar.
-        
+
         Args:
             tickers: List of ticker symbols.
             connect_db: Optional DuckDB connection string.
             **kwargs: Additional provider-specific options.
-        
+
         Returns:
             Polars DataFrame in memory or RunResult when persisting.
-        
+
         Raises:
             InputError: If tickers list is empty or invalid.
             FetchError: If network/API errors occur during data retrieval.
@@ -453,26 +443,21 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         )
 
     # --- Analyst Recommendations ---
-    
+
     @jupyter_safe
     async def get_recommendations(
-        self,
-        *,
-        tickers: list[str],
-        connect_db: str | Path | None = None,
-        show_progress: bool = True,
-        **kwargs: Any
+        self, *, tickers: list[str], connect_db: str | Path | None = None, show_progress: bool = True, **kwargs: Any
     ) -> pl.DataFrame | RunResult:
         """Fetch analyst recommendations.
-        
+
         Args:
             tickers: List of ticker symbols.
             connect_db: Optional DuckDB connection string.
             **kwargs: Additional provider-specific options.
-        
+
         Returns:
             Polars DataFrame in memory or RunResult when persisting.
-        
+
         Raises:
             InputError: If tickers list is empty or invalid.
             FetchError: If network/API errors occur during data retrieval.
@@ -490,26 +475,21 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         )
 
     # --- news ---
-    
+
     @jupyter_safe
     async def get_news(
-        self,
-        *,
-        tickers: list[str],
-        connect_db: str | Path | None = None,
-        show_progress: bool = True,
-        **kwargs: Any
+        self, *, tickers: list[str], connect_db: str | Path | None = None, show_progress: bool = True, **kwargs: Any
     ) -> pl.DataFrame | RunResult:
         """Fetch ticker news.
-        
+
         Args:
             tickers: List of ticker symbols.
             connect_db: Optional DuckDB connection string.
             **kwargs: Additional provider-specific options.
-        
+
         Returns:
             Polars DataFrame in memory or RunResult when persisting.
-        
+
         Raises:
             InputError: If tickers list is empty or invalid.
             FetchError: If network/API errors occur during data retrieval.
@@ -527,9 +507,9 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         )
 
     # ----------------------------------------------------------------
-    # Internal Data Fetchers 
+    # Internal Data Fetchers
     # ----------------------------------------------------------------
-    
+
     async def _fetch_per_ticker(
         self,
         *,
@@ -546,17 +526,17 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         """Fetch data for specific tickers using per-ticker batching.
-        
+
         This method implements the per-ticker fetching pattern using BaseClient's
         common infrastructure while maintaining YFinance-specific logic for
         memory validation and rate limiting optimization.
-        
+
         YFinance-specific characteristics:
         - Free API with no authentication required
         - Conservative rate limiting to avoid IP bans (60 req/min default)
         - Compact data format (smaller memory footprint than premium APIs)
         - Limited ticker universe compared to institutional providers
-        
+
         Args:
             dataset: Dataset name (e.g., "price", "financials", "info")
             symbols: List of symbols to fetch (required; must be non-empty)
@@ -569,7 +549,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             start_date: Start date for data fetch
             end_date: End date for data fetch
             **kwargs: Additional provider-specific arguments
-            
+
         Returns:
             pl.DataFrame for in-memory mode, RunResult for database mode
         """
@@ -588,7 +568,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             desc=desc,
             show_progress=show_progress,
         )
-        
+
         result_obj: pl.DataFrame | RunResult = (
             RunResult(provider="yfinance") if connect_db is not None else pl.DataFrame()
         )
@@ -602,7 +582,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
                     end_date=end_date,
                     **{k: v for k, v in kwargs.items() if k in {PRICE_BATCH_SIZE_KEY}},
                 )
-                
+
                 await self.run_pipeline(
                     router=router,
                     dataset=dataset,
@@ -612,7 +592,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
                     on_progress=pbar_updater,
                     **{k: v for k, v in kwargs.items() if k not in (RESERVED_PIPELINE_KEYS | {PRICE_BATCH_SIZE_KEY})},
                 )
-                
+
                 result_obj = await self.collect_results(
                     writer=writer,
                     table_name=table_name,

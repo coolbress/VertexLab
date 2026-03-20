@@ -1,5 +1,5 @@
 """Router implementations for different data sources.
- 
+
 DIP Note:
 - Factories return instances conforming to the IRouter protocol
   to keep core layers dependent on abstractions, not concretes.
@@ -7,24 +7,34 @@ DIP Note:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from vertex_forager.core.config import EngineConfig
-from vertex_forager.routers.base import BaseRouter
+from vertex_forager.core.registries import (
+    RouterRegistration,
+)
+
+if TYPE_CHECKING:
+    from vertex_forager.core.config import EngineConfig
+
 # from vertex_forager.providers.sharadar.router import SharadarRouter
 # from vertex_forager.providers.yfinance.router import YFinanceRouter
 from vertex_forager.core.registries import (
     routers as router_registry,
-    RouterRegistration,
 )
+from vertex_forager.routers.base import BaseRouter
+
 
 def _sharadar_factory(**kwargs: Any) -> BaseRouter:
     from vertex_forager.providers.sharadar.router import SharadarRouter
+
     return SharadarRouter(**kwargs)
+
 
 def _yfinance_factory(**kwargs: Any) -> BaseRouter:
     from vertex_forager.providers.yfinance.router import YFinanceRouter
+
     return YFinanceRouter(**kwargs)
+
 
 # Register known providers
 router_registry.register(

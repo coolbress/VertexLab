@@ -14,8 +14,9 @@ import json
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
-import pytest
 from httpx import Response
+import pytest
+
 from vertex_forager.core.config import HttpMethod, RequestAuth, RequestSpec
 from vertex_forager.core.http import HttpExecutor
 
@@ -58,7 +59,9 @@ class TestHttpExecutor:
         # Mock raise_for_status to raise HTTPStatusError for error responses
         def raise_for_status() -> None:
             raise httpx.HTTPStatusError(
-                "Server error", request=MagicMock(), response=response
+                "Server error",
+                request=MagicMock(),
+                response=response,
             )
 
         response.raise_for_status = raise_for_status
@@ -181,7 +184,8 @@ class TestHttpExecutor:
         """Test that network errors are properly handled."""
         # Arrange
         mock_async_client.run_async.side_effect = httpx.RequestError(
-            "Network error", request=MagicMock()
+            "Network error",
+            request=MagicMock(),
         )
 
         # Act & Assert
@@ -202,7 +206,9 @@ class TestHttpExecutor:
 
         # Create spec with custom timeout
         spec_with_timeout = RequestSpec(
-            method=HttpMethod.GET, url="https://api.example.com/data", timeout_s=10.0
+            method=HttpMethod.GET,
+            url="https://api.example.com/data",
+            timeout_s=10.0,
         )
 
         # Act
@@ -241,8 +247,10 @@ class TestHttpExecutor:
         # Assert
         assert result == b""
 
+
 class TestHttpExecutorYFinance:
     """Tests for yfinance:// library branch behavior."""
+
     @pytest.fixture
     def http_executor(self, mock_async_client: AsyncMock) -> HttpExecutor:
         return HttpExecutor(client=mock_async_client)
@@ -257,13 +265,17 @@ class TestHttpExecutorYFinance:
         class DummyTicker:
             def __init__(self, symbol: str) -> None:
                 self.symbol = symbol
+
             def info(self) -> dict[str, str]:
                 return {"ok": "yes"}
+
         class DummyYF:
             def __init__(self) -> None:
                 pass
+
             def Ticker(self, sym: str) -> DummyTicker:
                 return DummyTicker(sym)
+
         monkeypatch.setattr("vertex_forager.core.http.yf", DummyYF())
         mock_async_client.run_sync = AsyncMock(side_effect=lambda func: func())
         spec = RequestSpec(
@@ -290,6 +302,7 @@ class TestHttpExecutorYFinance:
         class DummyYF:
             def download(self, **kwargs: object) -> str:
                 return "downloaded"
+
         monkeypatch.setattr("vertex_forager.core.http.yf", DummyYF())
         mock_async_client.run_sync = AsyncMock(side_effect=lambda func: func())
         spec = RequestSpec(
@@ -339,12 +352,14 @@ class TestHttpExecutorYFinance:
         with pytest.raises(ValueError, match=r".*"):
             await http_executor.fetch(spec)
 
+
 class TestHttpExecutorConcurrency:
     """Tests for HTTP executor concurrency behavior."""
 
     @pytest.mark.asyncio
     async def test_executor_handles_concurrent_requests(
-        self, mock_async_client: AsyncMock
+        self,
+        mock_async_client: AsyncMock,
     ) -> None:
         """Test that executor can handle concurrent requests."""
         # Arrange

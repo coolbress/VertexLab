@@ -4,6 +4,7 @@ from pathlib import Path
 
 import duckdb
 import polars as pl
+
 from vertex_forager.core.config import FramePacket
 from vertex_forager.writers.duckdb import DuckDBWriter
 

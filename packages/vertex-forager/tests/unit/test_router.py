@@ -11,11 +11,12 @@ Notes:
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
+import json
 
 import polars as pl
 import pytest
+
 from vertex_forager.core.config import FetchJob, ParseResult, RequestSpec
 from vertex_forager.core.types import JSONValue
 from vertex_forager.providers.sharadar.constants import MAX_ROWS_PER_REQUEST

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 import pytest
+
 from vertex_forager.clients import create_client
 from vertex_forager.providers.yfinance.client import YFinanceClient
 from vertex_forager.providers.yfinance.router import YFinanceRouter

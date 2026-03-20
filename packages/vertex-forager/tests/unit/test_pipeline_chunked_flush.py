@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import polars as pl
 import pytest
+
 from vertex_forager.core.config import EngineConfig, FramePacket, RunResult
 from vertex_forager.core.pipeline import VertexForager
 from vertex_forager.exceptions import VertexForagerError
@@ -96,6 +97,7 @@ def test_engine_config_writer_chunk_rows_coercion() -> None:
 async def test_chunked_flush_partial_error(tmp_path, monkeypatch) -> None:
     # Writer mock that fails on second chunk
     call = {"n": 0}
+
     async def _write(pkt: FramePacket) -> WriteResult:
         call["n"] += 1
         if call["n"] == 1:

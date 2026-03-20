@@ -1,39 +1,80 @@
+---
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.6
+  - repo: local
     hooks:
-      - id: ruff-check
-        args: ["packages/", "--exclude", "legacy_code"]
       - id: ruff-format
+        name: ruff-format
+        entry: uv run ruff format
+        language: system
+        types: [python]
+        require_serial: true
+      - id: ruff-lint
+        name: ruff-lint
+        entry: uv run ruff check --fix
+        language: system
+        types: [python]
+        require_serial: true
+      - id: mypy
+        name: mypy
+        entry: uv run mypy packages/vertex-forager/src --strict
+        language: system
+        types: [python]
+        pass_filenames: false
+        require_serial: true
+      - id: yamllint
+        name: yamllint
+        entry: uv run yamllint -c .yamllint
+        language: system
+        types: [yaml]
+        files: ^(packages/|\.github/|docs/).+\.ya?ml$
+        stages: [manual]
+      - id: detect-secrets
+        name: detect-secrets
+        entry: uv run detect-secrets-hook --baseline .secrets.baseline
+        language: system
+        pass_filenames: true
+        require_serial: true
+      - id: hotspot-diff-check
+        name: hotspot-diff-check
+        entry: uv run python scripts/precommit_hotspot_check.py
+        language: system
+        types: [python]
+        pass_filenames: false
+        require_serial: true
+        always_run: true
   - repo: https://github.com/lycheeverse/lychee
     rev: v0.15.1
     hooks:
       - id: lychee
-        name: Markdown link checker
-        args: ["--verbose", "--no-progress", "--max-concurrency", "8", "packages/vertex-forager/docs/**/*.md", "README.md"]
-  - repo: https://github.com/Yelp/detect-secrets
-    rev: v1.5.0
+        args: ["--verbose", "--max-concurrency", "10", "--retry-wait-time", "2"]
+        files: |-
+          ^(README\.md|packages/.+\.md|docs/.+\.md|packages/vertex-forager/mkdocs\.yml)
+        stages: [manual]
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
     hooks:
-      - id: detect-secrets
-        name: Detect secrets
-        args: ["--baseline", ".secrets.baseline"]
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.10.0
+      - id: end-of-file-fixer
+        files: |-
+          ^(packages/|scripts/|docs/|\.github/|README\.md|CONTRIBUTING\.md|pyproject\.toml|\.pre-commit-config\.yaml)
+      - id: trailing-whitespace
+        files: |-
+          ^(packages/|scripts/|docs/|\.github/|README\.md|CONTRIBUTING\.md|pyproject\.toml|\.pre-commit-config\.yaml)
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+        files: |-
+          ^(packages/|scripts/|docs/|\.github/|README\.md|CONTRIBUTING\.md|pyproject\.toml|\.pre-commit-config\.yaml)
+  - repo: https://github.com/executablebooks/mdformat
+    rev: 0.7.17
     hooks:
-      - id: mypy
-        additional_dependencies: ["types-requests"]
-        args: ["--strict", "packages/vertex-forager/src"]
-        pass_filenames: false
-  - repo: https://github.com/adrienverge/yamllint
-    rev: v1.35.1
+      - id: mdformat
+        additional_dependencies: ["mdformat-gfm"]
+        files: |-
+          ^(README\.md|docs/.+\.md|packages/vertex-forager/docs/.+\.md)$
+        stages: [manual]
+  - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
+    rev: v2.12.0
     hooks:
-      - id: yamllint
-        files: "\\.(yml|yaml)$"
-        args: ["-s"]
-  - repo: local
-    hooks:
-      - id: hotspot-diff-check
-        name: Hotspot diff check against origin/main
-        entry: python3 scripts/precommit_hotspot_check.py
-        language: system
-        pass_filenames: false
+      - id: pretty-format-yaml
+        args: ["--autofix", "--indent=2"]
+        files: "\\.(ya?ml)$"
+        stages: [manual]

@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 import duckdb
 import polars as pl
+
 from vertex_forager.core.config import (
     EngineConfig,
     FetchJob,

@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import polars as pl
 import pytest
+
 from vertex_forager.core.config import EngineConfig, FramePacket
 from vertex_forager.core.pipeline import RunResult, VertexForager
 from vertex_forager.writers.base import BaseWriter, WriteResult
@@ -16,8 +17,10 @@ async def test_dlq_ipc_file_mode_is_0600(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "app"))
 
     mock_writer = AsyncMock(spec=BaseWriter)
+
     async def write_side_effect(pkt: FramePacket) -> WriteResult:
         raise Exception("Disk Full")
+
     mock_writer.write.side_effect = write_side_effect
 
     mock_router = MagicMock()

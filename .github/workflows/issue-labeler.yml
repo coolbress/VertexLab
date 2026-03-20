@@ -1,3 +1,4 @@
+---
 name: Issue Form Auto Labeler
 on:
   issues:

@@ -21,14 +21,19 @@ Notes:
     - Polars (pl) is used for column types.
     - All timestamps should be UTC where applicable.
 """
+
 from __future__ import annotations
 
-import polars as pl
 from typing import Final
-from vertex_forager.providers.yfinance.constants import DATASET_ENDPOINT, DATE_FILTER_COL
 
-from vertex_forager.schema.config import TableSchema
+import polars as pl
+
 from vertex_forager.constants import DEFAULT_TIME_ZONE
+from vertex_forager.providers.yfinance.constants import (
+    DATASET_ENDPOINT,
+    DATE_FILTER_COL,
+)
+from vertex_forager.schema.config import TableSchema
 
 # --------------------------------------------------------------------------
 # Schemas
@@ -246,8 +251,8 @@ YFINANCE_INSIDER_PURCHASES_SCHEMA = TableSchema(
         "provider": pl.Utf8,
         "holder": pl.Utf8,
         "shares": pl.Float64,
-        "trans": pl.Int64, # Number of transactions? Or shares transacted? yfinance says 'Shares' and 'Trans'
-        "insider_purchases_last_6m": pl.Utf8, # Usually text like 'Purchases', 'Sales', 'Net Shares Purchased'
+        "trans": pl.Int64,  # Number of transactions? Or shares transacted? yfinance says 'Shares' and 'Trans'
+        "insider_purchases_last_6m": pl.Utf8,  # Usually text like 'Purchases', 'Sales', 'Net Shares Purchased'
         "ticker": pl.Utf8,
         "fetched_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
     },
@@ -279,19 +284,16 @@ YFINANCE_INSIDER_ROSTER_SCHEMA = TableSchema(
 
 # Mapping: dataset name -> DuckDB table name
 DATASET_TABLE: Final[dict[str, str]] = {
-    # Meta 
+    # Meta
     "info": "yfinance_info",
     "fast_info": "yfinance_fast_info",
-    
     # Market
     "price": "yfinance_price",
-    
-    # Actions 
+    # Actions
     "dividends": "yfinance_dividends",
     "splits": "yfinance_splits",
     "actions": "yfinance_actions",
-    
-    # financials 
+    # financials
     "financials": "yfinance_financials",
     "income_stmt": "yfinance_financials",
     "balance_sheet": "yfinance_financials",
@@ -301,49 +303,39 @@ DATASET_TABLE: Final[dict[str, str]] = {
     "quarterly_balance_sheet": "yfinance_financials",
     "quarterly_cashflow": "yfinance_financials",
     "quarterly_earnings": "yfinance_financials",
-    
-    # Holders 
+    # Holders
     "major_holders": "yfinance_major_holders",
     "institutional_holders": "yfinance_holders",
     "mutualfund_holders": "yfinance_holders",
-    
-    # Insider 
+    # Insider
     "insider_roster_holders": "yfinance_insider_roster_holders",
     "insider_purchases": "yfinance_insider_purchases",
-    
-    # Analyst 
+    # Analyst
     "recommendations": "yfinance_recommendations",
-    
     # Calendar
     "calendar": "yfinance_calendar",
-    
     # News
     "news": "yfinance_news",
 }
 
 # Table Schemas
 DATASET_SCHEMA: Final[dict[str, TableSchema]] = {
-    # meta 
+    # meta
     "info": YFINANCE_INFO_SCHEMA,
     "fast_info": YFINANCE_FAST_INFO_SCHEMA,
-    
-    # market 
+    # market
     "price": YFINANCE_PRICE_SCHEMA,
-    
-    # Actions 
+    # Actions
     "dividends": YFINANCE_DIVIDENDS_SCHEMA,
     "splits": YFINANCE_SPLITS_SCHEMA,
     "actions": YFINANCE_ACTIONS_SCHEMA,
-
-    # Holders 
+    # Holders
     "major_holders": YFINANCE_MAJOR_HOLDERS_SCHEMA,
     "institutional_holders": YFINANCE_HOLDERS_SCHEMA,
     "mutualfund_holders": YFINANCE_HOLDERS_SCHEMA,
-    
-    # Insider 
+    # Insider
     "insider_roster_holders": YFINANCE_INSIDER_ROSTER_SCHEMA,
     "insider_purchases": YFINANCE_INSIDER_PURCHASES_SCHEMA,
-    
     # Financials
     "financials": YFINANCE_FINANCIALS_SCHEMA,
     "income_stmt": YFINANCE_FINANCIALS_SCHEMA,
@@ -354,16 +346,12 @@ DATASET_SCHEMA: Final[dict[str, TableSchema]] = {
     "quarterly_balance_sheet": YFINANCE_FINANCIALS_SCHEMA,
     "quarterly_cashflow": YFINANCE_FINANCIALS_SCHEMA,
     "quarterly_earnings": YFINANCE_FINANCIALS_SCHEMA,
-    
     # Calendar
     "calendar": YFINANCE_CALENDAR_SCHEMA,
-    
     # Analyst
     "recommendations": YFINANCE_RECOMMENDATIONS_SCHEMA,
-    
     # News
     "news": YFINANCE_NEWS_SCHEMA,
-    
 }
 
 
@@ -393,6 +381,7 @@ TABLES: Final[dict[str, TableSchema]] = {
     ]
 }
 
+
 def _validate_mappings() -> None:
     keys_table = set(DATASET_TABLE.keys())
     keys_schema = set(DATASET_SCHEMA.keys())
@@ -413,8 +402,7 @@ def _validate_mappings() -> None:
         missing = sorted(keys_date_filter - union)
         errors.append(f"DATE_FILTER_COL must be subset of datasets; extra={missing}")
     if errors:
-        raise RuntimeError(
-            "YFinance schema mapping keys inconsistent: " + "; ".join(errors)
-        )
+        raise RuntimeError("YFinance schema mapping keys inconsistent: " + "; ".join(errors))
+
 
 _validate_mappings()

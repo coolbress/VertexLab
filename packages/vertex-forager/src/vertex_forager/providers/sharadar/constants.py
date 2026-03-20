@@ -4,6 +4,7 @@ Purpose:
 - Centralize dataset endpoints, date filters, batching limits, and request keys
 - Improve maintainability and reduce duplication across router/schema/client
 """
+
 from __future__ import annotations
 
 from typing import Final

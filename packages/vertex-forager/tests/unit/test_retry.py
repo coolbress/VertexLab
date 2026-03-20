@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import httpx
 import pytest
+
 from vertex_forager.core.config import RetryConfig
 from vertex_forager.core.retry import create_retry_controller
 

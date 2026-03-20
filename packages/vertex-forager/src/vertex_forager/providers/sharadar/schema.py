@@ -4,13 +4,12 @@ from typing import Final
 
 import polars as pl
 
-from vertex_forager.schema.config import TableSchema
 from vertex_forager.constants import DEFAULT_TIME_ZONE
 from vertex_forager.providers.sharadar.constants import (
     DATASET_ENDPOINT,
     DATE_FILTER_COL,
 )
-
+from vertex_forager.schema.config import TableSchema
 
 SHARADAR_SEP: Final[TableSchema] = TableSchema(
     table="sharadar_sep",
@@ -345,6 +344,7 @@ DATASET_SCHEMA: Final[dict[str, TableSchema]] = {
 
 # Endpoint mapping for provider API
 
+
 def _validate_mappings() -> None:
     keys_table = set(DATASET_TABLE.keys())
     keys_schema = set(DATASET_SCHEMA.keys())
@@ -365,8 +365,7 @@ def _validate_mappings() -> None:
         missing = sorted(keys_date_filter - union)
         errors.append(f"DATE_FILTER_COL must be subset of datasets; extra={missing}")
     if errors:
-        raise RuntimeError(
-            "Sharadar schema mapping keys inconsistent: " + "; ".join(errors)
-        )
+        raise RuntimeError("Sharadar schema mapping keys inconsistent: " + "; ".join(errors))
+
 
 _validate_mappings()

@@ -14,28 +14,20 @@ vertex-forager = { workspace = true }
 
 [tool.ruff]
 # 전체 프로젝트에 적용될 린터 설정
-line-length = 88
+line-length = 120
 target-version = "py310"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "S", "TCH", "SIM", "PT", "RUF", "C4"]
+# Tier‑1 (blocking): core correctness/safety; Tier‑2 runs in CI for C4/PT/TCH/SIM/TC
+select = ["E", "F", "W", "I", "UP", "B", "S", "RUF"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["vertex_forager"]
+force-sort-within-sections = true
 
 [tool.ruff.lint.per-file-ignores]
 # Tests: keep S101 and TC002/TC003/TC006 for pytest asserts and type-checking imports
 "packages/vertex-forager/tests/**" = ["S101", "TC002", "TC003", "TC006"]
-"packages/vertex-forager/src/vertex_forager/writers/duckdb.py" = ["E501", "S608", "S110"]
-"packages/vertex-forager/src/vertex_forager/writers/memory.py" = ["E501", "TC001"]
-"packages/vertex-forager/src/**" = ["E501", "I001", "TC001", "TC002", "TC003", "TC005", "TC006", "UP035", "UP037", "UP045", "UP007", "UP006", "B008", "B010", "B027", "B904", "B905", "B023", "SIM102", "SIM105", "SIM108", "SIM113", "SIM118", "W", "RUF", "C4"]
-"packages/vertex-forager/src/vertex_forager/providers/yfinance/router.py" = ["S301"]
-"packages/vertex-forager/src/vertex_forager/routers/errors.py" = ["S301"]
-"packages/vertex-forager/src/vertex_forager/providers/sharadar/client.py" = ["S608"]
-"packages/vertex-forager/src/vertex_forager/core/retry.py" = ["S311"]
-"packages/vertex-forager/src/vertex_forager/core/pipeline.py" = ["S110"]
-"packages/vertex-forager/src/vertex_forager/utils.py" = ["S110"]
-"packages/vertex-forager/src/vertex_forager/cli.py" = ["S311", "S110"]
-"packages/vertex-forager/src/vertex_forager/logging/constants.py" = ["S105"]
-
-
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

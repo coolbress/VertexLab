@@ -1,34 +1,38 @@
 from __future__ import annotations
 
-import logging
-from typing import Any
 import inspect
-import re
-import httpx
 import io
 import json
-import polars as pl
+import logging
+import re
+from typing import TYPE_CHECKING, Any
+
+import httpx
 import pandas as pd
+import polars as pl
 from polars.exceptions import ComputeError
+
 try:
     import yfinance as yf  # test compatibility: allow monkeypatching core.http.yf
 except ImportError:
     yf = None
-from vertex_forager.core.types import JSONValue
-from vertex_forager.core.config import RequestSpec
 from vertex_forager.constants import (
-    HTTP_TIMEOUT_S,
-    HTTP_MAX_KEEPALIVE_CONNECTIONS,
     HTTP_MAX_CONNECTIONS,
+    HTTP_MAX_KEEPALIVE_CONNECTIONS,
+    HTTP_TIMEOUT_S,
     HTTP_USER_AGENT,
 )
+from vertex_forager.core.config import RequestSpec
 from vertex_forager.core.library import get_library_fetcher
-from vertex_forager.utils import env_int, env_float
+from vertex_forager.utils import env_float, env_int
 
+if TYPE_CHECKING:
+    from vertex_forager.core.types import JSONValue
 
 logger = logging.getLogger("vertex_forager.core.http")
 
 _URL_REDACT_RE = re.compile(r"https?://\S+")
+
 
 def _redact_urls(message: str) -> str:
     return _URL_REDACT_RE.sub("[redacted]", message)
@@ -36,13 +40,13 @@ def _redact_urls(message: str) -> str:
 
 class HttpExecutor:
     """Async HTTP Request Executor using httpx.
-    
+
     This class abstracts the low-level HTTP client details and maps `RequestSpec`
     objects to actual network requests. It handles authentication header injection
     and response status checking.
-    
+
     It also supports special schemes like `yfinance://` to bypass HTTP and use internal libraries.
-    
+
     Notes:
         - Error logs redact URLs using a sanitizer to avoid leaking sensitive query
           parameters (e.g., API keys) in messages.
@@ -81,13 +85,13 @@ class HttpExecutor:
 
     async def _fetch_http(self, spec: RequestSpec) -> bytes:
         """Execute a standard HTTP request using the unified client interface.
-        
+
         Args:
             spec: Request specification including method, url, headers, params, body, and timeout.
-        
+
         Returns:
             bytes: Raw response content.
-        
+
         Raises:
             httpx.RequestError: Network error during HTTP request.
             httpx.HTTPStatusError: Non-2xx HTTP status returned.
@@ -114,7 +118,7 @@ class HttpExecutor:
                 logger.debug("before_http_request hook raised: %s", e, exc_info=True)
 
         headers: dict[str, str] = dict(spec.headers)
-        params: dict[str, "JSONValue"] = dict(spec.params)
+        params: dict[str, JSONValue] = dict(spec.params)
 
         if spec.auth.kind == "bearer" and spec.auth.token:
             headers["Authorization"] = f"Bearer {spec.auth.token}"
@@ -144,13 +148,13 @@ class HttpExecutor:
 
     async def _fetch_library(self, spec: RequestSpec) -> bytes:
         """Execute a non-HTTP library call using the unified client interface.
-        
+
         Args:
             spec: Request specification with a library URL scheme (e.g., yfinance://).
-        
+
         Returns:
             bytes: Serialized payload (IPC for DataFrame-like, JSON for others).
-        
+
         Raises:
             ValueError: Unsupported scheme or invalid library call configuration.
             TypeError: Invalid types passed to library call.
@@ -176,10 +180,7 @@ class HttpExecutor:
                 data.write_ipc(buf)
                 return b"IPC:" + buf.getvalue()
             if isinstance(data, (pd.DataFrame, pd.Series)):
-                if isinstance(data, pd.Series):
-                    df_pd = data.to_frame().reset_index()
-                else:
-                    df_pd = data.reset_index()
+                df_pd = data.to_frame().reset_index() if isinstance(data, pd.Series) else data.reset_index()
                 try:
                     df_pl = pl.from_pandas(df_pd)
                 except (ValueError, TypeError, ComputeError):
@@ -209,16 +210,16 @@ class HttpExecutor:
 
 def default_async_client() -> httpx.AsyncClient:
     """Create a default httpx AsyncClient instance.
-    
+
     Configured with centralized defaults (see vertex_forager.constants):
     - User-Agent: HTTP_USER_AGENT
     - Timeout: HTTP_TIMEOUT_S seconds
     - Connection Pool: HTTP_MAX_CONNECTIONS (max), HTTP_MAX_KEEPALIVE_CONNECTIONS (keep-alive)
-    
+
     Returns:
         httpx.AsyncClient: Configured client for HTTP operations.
     """
-    
+
     mk = env_int("VF_HTTP_MAX_KEEPALIVE", HTTP_MAX_KEEPALIVE_CONNECTIONS)
     max_keepalive = mk if mk is not None and mk > 0 else HTTP_MAX_KEEPALIVE_CONNECTIONS
 

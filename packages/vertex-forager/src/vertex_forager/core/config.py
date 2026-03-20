@@ -1,31 +1,29 @@
 from __future__ import annotations
 
-import psutil
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import Enum
-from typing import Any
-from typing import Literal
+from typing import Any, Literal
 
 import polars as pl
-from pydantic import BaseModel, Field
-from pydantic import field_validator
-from pydantic import ValidationInfo
+import psutil
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
+
+from vertex_forager.constants import (
+    DEFAULT_RETRY_BASE_BACKOFF_S,
+    DEFAULT_RETRY_MAX_ATTEMPTS,
+    DEFAULT_RETRY_MAX_BACKOFF_S,
+    FLUSH_THRESHOLD_ROWS,
+    HTTP_TIMEOUT_S,
+    PACKET_SIZE_EST_BYTES,
+    QUEUE_DEFAULT,
+    QUEUE_MAX,
+    QUEUE_MIN,
+    QUEUE_TARGET_RAM_RATIO,
+)
 from vertex_forager.core.types import JSONValue
 from vertex_forager.exceptions import VertexForagerError
-from vertex_forager.constants import (
-    FLUSH_THRESHOLD_ROWS,
-    DEFAULT_RETRY_MAX_ATTEMPTS,
-    DEFAULT_RETRY_BASE_BACKOFF_S,
-    DEFAULT_RETRY_MAX_BACKOFF_S,
-    HTTP_TIMEOUT_S,
-    QUEUE_TARGET_RAM_RATIO,
-    PACKET_SIZE_EST_BYTES,
-    QUEUE_MIN,
-    QUEUE_MAX,
-    QUEUE_DEFAULT,
-)
-from collections.abc import Mapping
 
 
 class RetryConfig(BaseModel):
@@ -39,7 +37,8 @@ class RetryConfig(BaseModel):
         retry_status_codes: Tuple of HTTP status codes to trigger retries (default: (429, 503)).
 
     Notes:
-        - Backoff uses Full Jitter: sleep is drawn uniformly from [0, min(max_backoff_s, base_backoff_s * 2^(attempt-1))].
+        - Backoff uses Full Jitter: sleep is drawn uniformly from
+          [0, min(max_backoff_s, base_backoff_s * 2^(attempt-1))].
         - Defaults are conservative: retries on 429 (Too Many Requests) and 503 (Service Unavailable).
         - Opt-in to broader server errors (e.g., 500, 502, 504) ONLY when requests are idempotent.
           Non-idempotent operations (e.g., POST/PUT without idempotency keys) may cause duplicate side effects.
@@ -133,6 +132,7 @@ class RequestSpec(BaseModel):
             if isinstance(val, dict):
                 return all(isinstance(k, str) and _is_json_value(val[k]) for k in val)
             return False
+
         if not isinstance(v, dict):
             raise TypeError("params must be a dict[str, JSONValue]")
         for key, val in v.items():
@@ -193,18 +193,21 @@ class EngineConfig(BaseModel):
         Storage & Flush: flush_threshold_rows, writer_chunk_rows
         Observability: metrics_enabled, structured_logs, log_verbose
         DLQ: dlq_enabled, dlq_tmp_cleanup_on_error, dlq_tmp_periodic_cleanup, dlq_tmp_retention_s
-        Adaptive Downshift: downshift_enabled, downshift_window_s, error_rate_threshold, rpm_floor, recovery_step, healthy_window_s
+        Adaptive Downshift:
+          downshift_enabled, downshift_window_s, error_rate_threshold,
+          rpm_floor, recovery_step, healthy_window_s
 
     Attributes:
         requests_per_minute (int): Maximum allowed requests per minute; must be > 0.
         concurrency (int | None): Explicit concurrency limit; if None, executor derives a safe value.
         retry (RetryConfig): Retry/backoff policy (attempts, backoff window, status codes).
         flush_threshold_rows (int): Rows buffered per table before flush; higher = fewer large flushes.
-        writer_chunk_rows (int | None): Target per‑chunk rows during flush; when set must be >= 10_000.
+        writer_chunk_rows (int | None): Target per-chunk rows during flush; when set must be >= 10_000.
         metrics_enabled (bool): Emit counters/histograms when True.
         structured_logs (bool): Emit structured stage logs when True.
         log_verbose (bool): Increase logging verbosity when True.
-        dlq_enabled (bool): Enable on‑disk DLQ spooling; when False, files are not written and summaries/counts still populate.
+        dlq_enabled (bool): Enable on-disk DLQ spooling; when False,
+            files are not written and summaries/counts still populate.
         dlq_tmp_cleanup_on_error (bool): Attempt cleanup of temporary DLQ files on writer errors.
         dlq_tmp_periodic_cleanup (bool): Periodically clean temporary DLQ spool artifacts.
         dlq_tmp_retention_s (int): Retention window (seconds) for temporary DLQ artifacts (default 86_400 = 1 day).
@@ -344,12 +347,12 @@ class ParseResult:
 
 __all__ = [
     "EngineConfig",
-    "RetryConfig",
-    "HttpMethod",
-    "RequestAuth",
-    "RequestSpec",
     "FetchJob",
     "FramePacket",
-    "RunResult",
+    "HttpMethod",
     "ParseResult",
+    "RequestAuth",
+    "RequestSpec",
+    "RetryConfig",
+    "RunResult",
 ]

@@ -1,9 +1,10 @@
+---
 name: Actionlint
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 concurrency:
   group: actionlint-${{ github.ref }}
   cancel-in-progress: true

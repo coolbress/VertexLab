@@ -29,8 +29,6 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
-    "SharadarClient",
-    "SharadarRouter",
     "SHARADAR_ACTIONS",
     "SHARADAR_DAILY",
     "SHARADAR_SEP",
@@ -39,4 +37,6 @@ __all__ = [
     "SHARADAR_SF3",
     "SHARADAR_SP500",
     "SHARADAR_TICKERS",
+    "SharadarClient",
+    "SharadarRouter",
 ]

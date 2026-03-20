@@ -1,9 +1,10 @@
-import pickle
 from datetime import datetime, timezone
+import pickle
 
 import httpx
 import polars as pl
 import pytest
+
 from vertex_forager.core.config import RequestAuth
 from vertex_forager.exceptions import FetchError, TransformError
 from vertex_forager.routers.errors import raise_quandl_error, raise_yfinance_parse_error

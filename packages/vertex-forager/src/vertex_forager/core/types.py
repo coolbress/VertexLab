@@ -1,17 +1,19 @@
 from __future__ import annotations
 
-from typing import Union, Any
-from typing import Literal, TypeAlias
-from typing_extensions import TypedDict, Required, NotRequired
+from typing import Any, Literal, TypeAlias
+
+from typing_extensions import NotRequired, Required, TypedDict
 
 # JSONValue: JSON-safe union used in params/payloads
 # Allows only primitives, lists, and dicts (validated recursively by RequestSpec._validate_params)
-JSONValue = Union[str, int, float, bool, None, dict[str, Any], list[Any]]
+JSONValue = str | int | float | bool | None | dict[str, Any] | list[Any]
+
 
 class PaginationParams(TypedDict):
     cursor_param: Required[str]
     meta_key: Required[str]
     max_pages: NotRequired[int]
+
 
 class JobContext(TypedDict, total=False):
     pagination: PaginationParams
@@ -20,9 +22,11 @@ class JobContext(TypedDict, total=False):
     trace_id: str
     request_id: int
 
+
 class SymbolContext(TypedDict, total=False):
     dataset: Required[str]
     symbol: Required[str]
+
 
 class PaginationJobContext(TypedDict, total=False):
     pagination: Required[PaginationParams]
@@ -30,12 +34,14 @@ class PaginationJobContext(TypedDict, total=False):
     trace_id: str
     request_id: int
 
+
 class PerSymbolJobContext(TypedDict, total=False):
     dataset: Required[str]
     symbol: Required[str]
     pagination: NotRequired[PaginationParams]
     trace_id: str
     request_id: int
+
 
 # Dataset Literals for typing clarity (runtime remains flexible via str fields)
 SharadarDataset: TypeAlias = Literal[
@@ -75,12 +81,14 @@ YFinanceDataset: TypeAlias = Literal[
     "actions",
 ]
 
+
 class DLQStatusSpooled(TypedDict):
     status: Literal["spooled"]
     rescued: int
     remaining: int
     path: str
     error: None
+
 
 class DLQStatusRescuedOnly(TypedDict):
     status: Literal["rescued_only"]
@@ -89,12 +97,14 @@ class DLQStatusRescuedOnly(TypedDict):
     path: None
     error: None
 
+
 class DLQStatusNoop(TypedDict):
     status: Literal["noop"]
     rescued: int
     remaining: int
     path: None
     error: None
+
 
 class DLQStatusSpoolFailed(TypedDict):
     status: Literal["spool_failed"]
@@ -103,6 +113,7 @@ class DLQStatusSpoolFailed(TypedDict):
     path: None
     error: Exception
 
+
 class DLQStatusDisabled(TypedDict):
     status: Literal["disabled"]
     rescued: int
@@ -110,4 +121,5 @@ class DLQStatusDisabled(TypedDict):
     path: None
     error: None
 
-DLQStatus = Union[DLQStatusSpooled, DLQStatusRescuedOnly, DLQStatusNoop, DLQStatusSpoolFailed, DLQStatusDisabled]
+
+DLQStatus = DLQStatusSpooled | DLQStatusRescuedOnly | DLQStatusNoop | DLQStatusSpoolFailed | DLQStatusDisabled

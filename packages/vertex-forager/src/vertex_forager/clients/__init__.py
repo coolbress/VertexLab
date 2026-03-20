@@ -2,20 +2,23 @@
 
 from __future__ import annotations
 
-import os
-
 import logging
+import os
+from typing import Any
+
 from vertex_forager.clients.base import BaseClient
+from vertex_forager.constants import DEFAULT_RATE_LIMIT
 from vertex_forager.core.registries import (
-    clients as client_registry,
     ClientRegistration,
 )
-from typing import Any
-from vertex_forager.constants import DEFAULT_RATE_LIMIT
+from vertex_forager.core.registries import (
+    clients as client_registry,
+)
 
 
 def _register_sharadar() -> None:
     from vertex_forager.providers.sharadar.client import SharadarClient
+
     def _sharadar_factory(*, api_key: str | None = None, rate_limit: int, **kwargs: Any) -> BaseClient:
         return SharadarClient(api_key=api_key or "", rate_limit=rate_limit, **kwargs)
 
@@ -23,7 +26,7 @@ def _register_sharadar() -> None:
     client_registry.register(
         "sharadar",
         ClientRegistration(
-            env_api_key="SHARADAR_API_KEY",
+            env_api_key="SHARADAR_API_KEY",  # pragma: allowlist secret (variable name only)
             factory=_sharadar_factory,
         ),
     )
@@ -31,6 +34,7 @@ def _register_sharadar() -> None:
 
 def _register_yfinance() -> None:
     from vertex_forager.providers.yfinance.client import YFinanceClient
+
     def _yfinance_factory(*, api_key: str | None = None, rate_limit: int, **kwargs: Any) -> BaseClient:
         return YFinanceClient(api_key=api_key or "", rate_limit=rate_limit, **kwargs)
 
@@ -85,14 +89,14 @@ def create_client(
         resolved_key = os.getenv(registration.env_api_key)
 
     if not resolved_key and registration.env_api_key:
-        raise ValueError(
-            f"Missing api_key (set api_key or {registration.env_api_key} in environment/.env)"
-        )
+        raise ValueError(f"Missing api_key (set api_key or {registration.env_api_key} in environment/.env)")
 
     if provider == "yfinance":
         if api_key is not None:
-            logging.getLogger(__name__).warning("Provided API key will be ignored for yfinance; continuing with api_key=None")
-        
+            logging.getLogger(__name__).warning(
+                "Provided API key will be ignored for yfinance; continuing with api_key=None"
+            )
+
         # Determine effective rate limit with centralized default fallback
         effective_limit = rate_limit if rate_limit is not None else DEFAULT_RATE_LIMIT
         return registration.factory(api_key=None, rate_limit=effective_limit, **kwargs)

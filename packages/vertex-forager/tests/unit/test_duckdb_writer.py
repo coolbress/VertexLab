@@ -6,6 +6,7 @@ from typing import Any, cast
 import duckdb
 import polars as pl
 import pytest
+
 from vertex_forager.core.config import FramePacket
 from vertex_forager.writers import create_writer
 from vertex_forager.writers.duckdb import DuckDBWriter
@@ -68,7 +69,10 @@ class TestDuckDBWriter:
                     provider="test",
                     table="concurrent_test",
                     frame=pl.DataFrame(
-                        {"id": range(i * 10, (i + 1) * 10), "val": [i] * 10}
+                        {
+                            "id": range(i * 10, (i + 1) * 10),
+                            "val": [i] * 10,
+                        }
                     ),
                     observed_at=datetime.now(),
                 )
@@ -182,6 +186,7 @@ def test_compact_sync_checkpoint_warning_on_error(
     class _FakeConn:
         def __init__(self) -> None:
             self.calls = 0
+
         def execute(self, sql: str) -> Any:
             self.calls += 1
             if self.calls == 2:
@@ -207,6 +212,7 @@ def test_compact_sync_checkpoint_ok(
     class _FakeConnOK:
         def __init__(self) -> None:
             self.calls = 0
+
         def execute(self, sql: str) -> Any:
             self.calls += 1
             return None

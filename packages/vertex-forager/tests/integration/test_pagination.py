@@ -2,6 +2,7 @@ from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
 from vertex_forager.clients import base as base_module
 from vertex_forager.core.config import RunResult
 from vertex_forager.core.types import SharadarDataset
@@ -25,9 +26,7 @@ def mock_client() -> SharadarClient:
 async def test_fetch_pagination_show_progress_true(mock_client):
     with (
         patch.object(base_module, "tqdm") as mock_tqdm,
-        patch.object(
-            base_module, "create_writer"
-        ) as mock_create_writer,
+        patch.object(base_module, "create_writer") as mock_create_writer,
         patch("vertex_forager.providers.sharadar.client.create_router"),
     ):
         # Setup mocks
@@ -61,9 +60,7 @@ async def test_fetch_pagination_show_progress_true(mock_client):
 async def test_fetch_pagination_show_progress_false(mock_client):
     with (
         patch.object(base_module, "tqdm") as mock_tqdm,
-        patch.object(
-            base_module, "create_writer"
-        ) as mock_create_writer,
+        patch.object(base_module, "create_writer") as mock_create_writer,
         patch("vertex_forager.providers.sharadar.client.create_router"),
     ):
         # Setup mocks
