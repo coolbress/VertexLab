@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Sequence
 from datetime import date, datetime, timezone
 import importlib
 import io
@@ -8,7 +7,7 @@ import json
 import logging
 import os
 import time
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
 import uuid
 
 import pandas as pd
@@ -50,6 +49,9 @@ from vertex_forager.routers.base import BaseRouter
 from vertex_forager.routers.errors import raise_yfinance_parse_error
 from vertex_forager.routers.jobs import build_symbol_context, single_symbol_job
 from vertex_forager.utils import sanitize_field
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator, Sequence
 
 logger = logging.getLogger("vertex_forager.providers.yfinance.router")
 
