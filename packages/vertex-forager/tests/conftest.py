@@ -14,7 +14,7 @@ from collections.abc import Generator
 from datetime import datetime, timezone
 import importlib
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock
 
 from httpx import AsyncClient
@@ -24,9 +24,12 @@ import pytest
 
 from vertex_forager.core.config import FetchJob, FramePacket, RequestSpec
 from vertex_forager.core.http import HttpExecutor
-from vertex_forager.providers.sharadar.client import SharadarClient
 from vertex_forager.providers.sharadar.router import SharadarRouter
 from vertex_forager.providers.yfinance.router import YFinanceRouter
+
+if TYPE_CHECKING:
+    # Type-only import for annotations; avoid runtime import to satisfy Ruff TC001
+    from vertex_forager.providers.sharadar.client import SharadarClient
 
 
 @pytest.fixture
@@ -265,3 +268,15 @@ def create_test_frame_packet() -> FramePacket:
         frame=frame,
         observed_at=datetime(2024, 1, 2, tzinfo=timezone.utc),
     )
+
+@pytest.fixture
+def pkt_factory():
+    """Factory fixture to build a FramePacket for a given table and DataFrame."""
+    def _make(table: str, df: pl.DataFrame) -> FramePacket:
+        return FramePacket(
+            provider="test",
+            table=table,
+            frame=df,
+            observed_at=datetime.now(tz=timezone.utc),
+        )
+    return _make

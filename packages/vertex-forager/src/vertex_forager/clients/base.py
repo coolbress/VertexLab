@@ -468,10 +468,37 @@ class BaseClient(ABC, Generic[T]):
 
         # In-memory mode: collect DataFrame from writer
         sort_cols = None
-        if sort_by_unique_key:
-            # Use schema unique_key for deterministic sorting if available
-            schema = get_table_schema(table_name)
-            if schema and schema.unique_key:
+        schema = get_table_schema(table_name)
+        # Always attempt unique_key setup for in-memory writer if schema has one
+        if schema and schema.unique_key:
+            try:
+                # local import for optionality
+                from vertex_forager.writers.memory import InMemoryBufferWriter as _IMW
+                if isinstance(writer, _IMW):
+                    writer.set_unique_key(list(schema.unique_key))
+            except Exception as e:
+                msg = (
+                    "InMemoryBufferWriter unique_key setup failed "
+                    "(independent of sorting): writer=%s unique_key=%s error=%s"
+                )
+                logger.debug(msg, writer, list(schema.unique_key), e)
+            if sort_by_unique_key:
                 sort_cols = list(schema.unique_key)
 
-        return writer.collect_table(table_name, sort_cols=sort_cols)
+        df = writer.collect_table(table_name, sort_cols=sort_cols)
+
+        # Merge any post-collection counters (e.g., in-memory dedup) into RunResult when metrics enabled
+        if getattr(self._config, "metrics_enabled", False):
+            try:
+                counters = getattr(writer, "get_counters_and_reset", None)
+                if callable(counters):
+                    writer_counts = dict(counters())
+                    if self.last_run is not None:
+                        base = dict(self.last_run.metrics_counters or {})
+                        for k, v in writer_counts.items():
+                            base[k] = base.get(k, 0) + int(v)
+                        self.last_run.metrics_counters = base
+            except Exception as e:
+                logger.debug("Merging writer counters after collect_table failed: error=%s", e)
+
+        return df
