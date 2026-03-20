@@ -285,6 +285,19 @@ from vertex_forager import (
     Non-idempotent requests (e.g., POST/PUT without idempotency keys) can cause duplicate side effects.
     Use idempotency keys or ensure upstream idempotent semantics before opting in.
 
+### Per-request Idempotency Flag
+
+- Each RequestSpec now supports `idempotent: bool` (default `True`).
+- When `idempotent=False`, the retry controller performs a single attempt (no retry), even if transport/status rules match.
+- Example:
+
+```python
+from vertex_forager.core.config import RequestSpec
+
+# Non-idempotent request — do not retry
+spec = RequestSpec(url="https://api.example.com/submit", method="POST", json_body={"x": 1}, idempotent=False)
+```
+
 ## License
 
 MIT

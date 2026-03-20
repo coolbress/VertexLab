@@ -1361,7 +1361,8 @@ class VertexForager:
             This guarantees that the physical request rate (RPM) never exceeds the limit,
             even if one "logical" user request expands into hundreds of API calls.
         """
-        retry_controller = create_retry_controller(self._config.retry)
+        # Honor per-request idempotency: non-idempotent requests should not retry.
+        retry_controller = create_retry_controller(self._config.retry, idempotent=job.spec.idempotent)
 
         async for attempt in retry_controller:
             with attempt:
