@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 import polars as pl
 import pytest
@@ -39,3 +39,42 @@ def test_schema_mapper_strict_raises_on_missing_columns() -> None:
     pkt = _packet("yfinance_info", df)
     with pytest.raises(ValueError, match=r"Schema validation failed: missing required columns"):
         mapper.normalize(pkt)
+
+
+def test_schema_mapper_strict_raises_on_type_mismatch() -> None:
+    # Use yfinance_financials schema; provide all required columns but make 'value' incompatible (string)
+    df = pl.DataFrame(
+        {
+            "date": [pl.date(2024, 1, 1)],  # will be cast from native date
+            "ticker": ["AAPL"],
+            "provider": ["yfinance"],
+            "period": ["annual"],
+            "metric": ["net_income"],
+            "value": ["not_a_number"],  # type mismatch for Float64
+            "fetched_at": [datetime.now(tz=timezone.utc)],
+        }
+    )
+    mapper = SchemaMapper(strict_validation=True)
+    pkt = _packet("yfinance_financials", df)
+    with pytest.raises(ValueError, match=r"Schema validation failed: type casting error"):
+        mapper.normalize(pkt)
+
+
+def test_schema_mapper_strict_ok_when_columns_and_types_valid() -> None:
+    df = pl.DataFrame(
+        {
+            "date": [date(2024, 1, 1)],
+            "ticker": ["AAPL"],
+            "provider": ["yfinance"],
+            "period": ["annual"],
+            "metric": ["net_income"],
+            "value": [123.45],
+            "fetched_at": [datetime.now(tz=timezone.utc)],
+        }
+    )
+    mapper = SchemaMapper(strict_validation=True)
+    pkt = _packet("yfinance_financials", df)
+    out = mapper.normalize(pkt)
+    assert out.frame.height == 1
+    counters = mapper.get_counters_and_reset()
+    assert counters.get("schema_missing_cols_filled", 0) == 0

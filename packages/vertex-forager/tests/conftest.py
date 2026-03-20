@@ -14,7 +14,7 @@ from collections.abc import Generator
 from datetime import datetime, timezone
 import importlib
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock
 
 from httpx import AsyncClient
@@ -24,9 +24,12 @@ import pytest
 
 from vertex_forager.core.config import FetchJob, FramePacket, RequestSpec
 from vertex_forager.core.http import HttpExecutor
-from vertex_forager.providers.sharadar.client import SharadarClient
 from vertex_forager.providers.sharadar.router import SharadarRouter
 from vertex_forager.providers.yfinance.router import YFinanceRouter
+
+if TYPE_CHECKING:
+    # Type-only import for annotations; avoid runtime import to satisfy Ruff TC001
+    from vertex_forager.providers.sharadar.client import SharadarClient
 
 
 @pytest.fixture

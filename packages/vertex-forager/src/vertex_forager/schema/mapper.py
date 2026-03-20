@@ -22,8 +22,10 @@ class SchemaMapper:
     Key Responsibilities:
     1. **Schema Lookup**: Retrieves the authoritative `TableSchema` for a given table name
         from the central registry.
-    2. **Type Casting**: casts columns to the Polars data types defined in the schema
-        using non-strict casting (strict=False) to allow nulls on failure.
+    2. **Type Casting**:
+        - Default (strict_validation=False): Casts columns with non-strict casting (strict=False),
+          allowing nulls on failure.
+        - Strict (strict_validation=True): Casts with strict=True and raises on type mismatches.
     3. **Missing Column Handling**: Automatically adds missing schema columns with `null`
         values to ensure downstream systems receive complete records.
     4. **Column Ordering**: Reorders columns to match the canonical schema definition.
@@ -128,7 +130,12 @@ class SchemaMapper:
         # 2. Apply Projections
         # Note: We do NOT filter out extra columns. They are preserved.
         # This allows the schema to define the "required core" while allowing extensibility.
-        out = frame.with_columns(exprs)
+        try:
+            out = frame.with_columns(exprs)
+        except Exception as e:
+            if self.strict_validation:
+                raise ValueError(f"Schema validation failed: type casting error: {e}") from e
+            raise
 
         # 3. Reorder Columns
         # Schema columns come first in defined order, followed by any extra columns found in input

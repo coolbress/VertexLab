@@ -2,7 +2,6 @@
 
 Enable stricter validation and lightweight dedup/upsert without changing defaults.
 
- 
 ## Strict schema validation
 
 - Default: lenient — missing columns are added with `null`, casts use `strict=False`.

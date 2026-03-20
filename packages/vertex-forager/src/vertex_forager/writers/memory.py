@@ -78,12 +78,6 @@ class InMemoryBufferWriter(BaseWriter):
 
             df = parts[0] if len(parts) == 1 else pl.concat(parts, how="vertical", rechunk=False)
 
-            if sort_cols:
-                # Only sort by columns that actually exist in the DataFrame
-                valid_sort_cols = [c for c in sort_cols if c in df.columns]
-                if valid_sort_cols:
-                    df = df.sort(valid_sort_cols)
-
             # Optional in-memory dedup/upsert by unique key
             if self._unique_key:
                 subset = [c for c in self._unique_key if c in df.columns]
@@ -96,5 +90,11 @@ class InMemoryBufferWriter(BaseWriter):
                         self._counters["inmem_dedup_dropped_rows"] = (
                             self._counters.get("inmem_dedup_dropped_rows", 0) + dropped
                         )
+
+            if sort_cols:
+                # Only sort by columns that actually exist in the DataFrame
+                valid_sort_cols = [c for c in sort_cols if c in df.columns]
+                if valid_sort_cols:
+                    df = df.sort(valid_sort_cols, maintain_order=True)
 
             return df
