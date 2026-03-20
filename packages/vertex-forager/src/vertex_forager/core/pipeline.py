@@ -733,7 +733,6 @@ class VertexForager:
                     self._fair_last_symbol = None
                     self._fair_burst_count = 0
                 demote_jobs: list[FetchJob] = []
-                have_next = False
                 next_priority: int | None = None
                 next_job: FetchJob | None = None
                 need_put = False
@@ -755,7 +754,11 @@ class VertexForager:
                             except asyncio.QueueEmpty:
                                 need_get_after = True
                                 break
-                            if p == self.PRIORITY_PAGINATION and cand is not None and cand.symbol == self._fair_last_symbol:
+                            if (
+                                p == self.PRIORITY_PAGINATION
+                                and cand is not None
+                                and cand.symbol == self._fair_last_symbol
+                            ):
                                 demote_jobs.append(cand)
                                 req_q.task_done()
                                 continue
@@ -766,7 +769,6 @@ class VertexForager:
                             else:
                                 self._fair_last_symbol = cand.symbol if cand is not None else None
                                 self._fair_burst_count = 0
-                            have_next = True
                             break
                 if need_put:
                     for dj in demote_jobs:
