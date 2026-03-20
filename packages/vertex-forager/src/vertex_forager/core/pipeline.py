@@ -197,6 +197,8 @@ class VertexForager:
         self._fair_lock: asyncio.Lock | None = None
         self._fair_last_symbol: str | None = None
         self._fair_burst_count: int = 0
+        # Writer flush idempotence
+        self._writer_flushed: bool = False
         self._summary: dict[str, float] = {}
         self._metrics_sink = getattr(config, "metrics_sink", None)
 
@@ -494,7 +496,9 @@ class VertexForager:
 
             # Flush any buffered data in the writer
             logger.debug("PIPELINE: Flushing writer buffer...")
-            await self._writer.flush()
+            if not getattr(self, "_writer_flushed", False):
+                await self._writer.flush()
+                self._writer_flushed = True
 
             logger.info(f"PIPELINE: Run completed. Total errors: {len(result.errors)}")
             if self._metrics_enabled:
@@ -598,24 +602,24 @@ class VertexForager:
                             sentinel_put_tasks.append(t)
                         except Exception as e:
                             logger.debug("PIPELINE: Failed to schedule pkt_q.put(None) task: %s", e)
-                    if sentinel_put_tasks:
-                        try:
-                            await asyncio.wait_for(
-                                asyncio.gather(*sentinel_put_tasks, return_exceptions=True), timeout=2.0
-                            )
-                        except asyncio.TimeoutError:
-                            for t in sentinel_put_tasks:
-                                with suppress(Exception):
-                                    t.cancel()
-                            logger.debug("PIPELINE: Timeout waiting for pkt_q sentinel put tasks; tasks cancelled")
+                self._sentinel_put_tasks = sentinel_put_tasks
         except Exception as e:
             logger.debug("PIPELINE: Failed to enqueue packet sentinels during stop: %s", e, exc_info=True)
-        if writer_set:
-            await asyncio.gather(*writer_set, return_exceptions=True)
+        sentinel_put_tasks = getattr(self, "_sentinel_put_tasks", [])
+        try:
+            if writer_set:
+                if sentinel_put_tasks:
+                    await asyncio.gather(*writer_set, *sentinel_put_tasks, return_exceptions=True)
+                else:
+                    await asyncio.gather(*writer_set, return_exceptions=True)
+        except Exception:
+            logger.debug("PIPELINE: Awaiting writers and sentinel put tasks raised but suppressed", exc_info=True)
         self._active_tasks.clear()
         # Ensure writer flush on shutdown for DLQ guarantees
         try:
-            await self._writer.flush()
+            if not getattr(self, "_writer_flushed", False):
+                await self._writer.flush()
+                self._writer_flushed = True
         except Exception:
             logger.debug("PIPELINE: Writer flush on stop raised but suppressed", exc_info=True)
         try:
@@ -738,10 +742,11 @@ class VertexForager:
                 need_put = False
                 need_get_after = False
                 async with self._fair_lock:
-                    if self._fair_last_symbol == (job.symbol if job is not None else None):
+                    job_symbol = job.symbol if job is not None else None
+                    if self._fair_last_symbol == job_symbol:
                         self._fair_burst_count += 1
                     else:
-                        self._fair_last_symbol = job.symbol if job is not None else None
+                        self._fair_last_symbol = job_symbol
                         self._fair_burst_count = 1
                     if self._fair_burst_count > burst_cap:
                         need_put = True
