@@ -845,6 +845,7 @@ class VertexForager:
         """
         demote_jobs: list[FetchJob] = []
         already_done = False
+        assert self._fair_lock is not None, "Fairness lock must be initialized before use"
         async with self._fair_lock:
             while True:
                 priority, _, job = await req_q.get()
