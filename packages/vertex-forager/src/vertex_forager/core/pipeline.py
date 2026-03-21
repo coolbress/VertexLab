@@ -777,6 +777,9 @@ class VertexForager:
                     logger.exception(f"PIPELINE: DLQ spool failed for drained packet: {e2}")
                     if result is not None and result_lock is not None:
                         async with result_lock:
+                            pending = result.dlq_pending.get(pkt.table, [])
+                            pending.append(pkt)
+                            result.dlq_pending[pkt.table] = pending
                             result.errors.append(f"Writer:Unexpected:{e}")
 
     async def _pop_next_job_respecting_fairness(
@@ -1571,8 +1574,8 @@ class VertexForager:
                     return
 
         while True:
-            packet = await pkt_q.get()
             try:
+                packet = await pkt_q.get()
                 if packet is None:
                     # Flush all remaining buffers
                     logger.debug("WRITER: Received shutdown signal. Flushing remaining buffers...")
@@ -1601,11 +1604,13 @@ class VertexForager:
                     await flush(table)
 
             except asyncio.CancelledError:
-                try:
-                    for table in list(buffers.keys()):
+                errs: list[Exception] = []
+                for table in list(buffers.keys()):
+                    try:
                         await asyncio.shield(flush(table))
-                except Exception as e:
-                    logger.exception(f"WRITER: Error during cancellation flush: {e}")
+                    except Exception as e:
+                        logger.exception(f"WRITER: Error during cancellation flush for {table}: {e}")
+                        errs.append(e)
                 raise
             except Exception as e:
                 async with result_lock:
