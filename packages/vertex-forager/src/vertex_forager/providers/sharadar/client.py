@@ -175,12 +175,14 @@ class SharadarClient(BaseClient[SharadarDataset]):
         self,
         *,
         connect_db: str | Path | None = None,
+        show_progress: bool = True,
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Fetch S&P 500 component history.
 
         Args:
             connect_db: Optional DuckDB connection string/path for persistence.
+            show_progress: Whether to display progress indicators (default: True).
             **kwargs: Additional provider-specific options forwarded to the pipeline.
 
         Returns:
@@ -202,7 +204,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             start_date=None,
             end_date=None,
             extra=dict(kwargs),
-            show_progress=True,
+            show_progress=show_progress,
             use_progress_bar=False,
         )
         return await self._fetch_pagination(cfg)
