@@ -642,6 +642,14 @@ class VertexForager:
                             self._writer_flushed = True
                         finally:
                             self._writer_flush_attempted = True
+                # If writers could still be blocked on pkt_q.get(), cancel them to avoid hang
+                if writer_set:
+                    for w in list(writer_set):
+                        with suppress(Exception):
+                            w.cancel()
+                    with suppress(Exception):
+                        await asyncio.gather(*writer_set, return_exceptions=True)
+                    writer_set = set()
         # Then, always await writers without a timeout to let them drain gracefully
         try:
             if writer_set:
@@ -837,12 +845,6 @@ class VertexForager:
                 # already_done indicates we consumed the sentinel and called task_done
                 if not already_done:
                     req_q.task_done()
-                return
-            if job is None:
-                logger.debug(
-                    f"[Worker-{worker_id}] Received sentinel, shutting down. Total jobs processed: {job_count}"
-                )
-                req_q.task_done()
                 return
             job_count += 1
             self._inc("jobs_processed", 1)
