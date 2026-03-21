@@ -14,43 +14,43 @@ from vertex_forager.writers.duckdb import DuckDBWriter
 async def test_duckdb_writer_creates_unique_index_and_upserts(tmp_path: Path) -> None:
     db_path = tmp_path / "test_db.duckdb"
     writer = DuckDBWriter(db_path)
+    try:
+        # Initial insert for yfinance_price with full PK
+        df1 = pl.DataFrame(
+            {
+                "provider": ["yfinance"],
+                "ticker": ["AAPL"],
+                "date": [date(2020, 1, 1)],
+                "close": [100.0],
+            }
+        )
+        pkt1 = FramePacket(
+            provider="yfinance",
+            table="yfinance_price",
+            frame=df1,
+            observed_at=datetime.now(timezone.utc),
+        )
+        await writer.write(pkt1)
 
-    # Initial insert for yfinance_price with full PK
-    df1 = pl.DataFrame(
-        {
-            "provider": ["yfinance"],
-            "ticker": ["AAPL"],
-            "date": [date(2020, 1, 1)],
-            "close": [100.0],
-        }
-    )
-    pkt1 = FramePacket(
-        provider="yfinance",
-        table="yfinance_price",
-        frame=df1,
-        observed_at=datetime.now(timezone.utc),
-    )
-    await writer.write(pkt1)
-
-    # Second write with same PK but different close to exercise ON CONFLICT DO UPDATE
-    df2 = pl.DataFrame(
-        {
-            "provider": ["yfinance"],
-            "ticker": ["AAPL"],
-            "date": [date(2020, 1, 1)],
-            "close": [111.0],
-        }
-    )
-    pkt2 = FramePacket(
-        provider="yfinance",
-        table="yfinance_price",
-        frame=df2,
-        observed_at=datetime.now(timezone.utc),
-    )
-    await writer.write(pkt2)
-
-    # Ensure writer resources are cleaned up before direct DB access
-    await writer.close()
+        # Second write with same PK but different close to exercise ON CONFLICT DO UPDATE
+        df2 = pl.DataFrame(
+            {
+                "provider": ["yfinance"],
+                "ticker": ["AAPL"],
+                "date": [date(2020, 1, 1)],
+                "close": [111.0],
+            }
+        )
+        pkt2 = FramePacket(
+            provider="yfinance",
+            table="yfinance_price",
+            frame=df2,
+            observed_at=datetime.now(timezone.utc),
+        )
+        await writer.write(pkt2)
+    finally:
+        # Ensure writer resources are cleaned up before direct DB access
+        await writer.close()
 
     con = duckdb.connect(str(db_path))
     try:
@@ -80,43 +80,43 @@ async def test_duckdb_writer_creates_unique_index_and_upserts(tmp_path: Path) ->
 async def test_duckdb_writer_schema_evolution_adds_column(tmp_path: Path) -> None:
     db_path = tmp_path / "evolve.duckdb"
     writer = DuckDBWriter(db_path)
+    try:
+        df1 = pl.DataFrame(
+            {
+                "provider": ["yfinance"],
+                "ticker": ["MSFT"],
+                "date": [date(2021, 5, 4)],
+                "close": [250.0],
+            }
+        )
+        pkt1 = FramePacket(
+            provider="yfinance",
+            table="yfinance_price",
+            frame=df1,
+            observed_at=datetime.now(timezone.utc),
+        )
+        await writer.write(pkt1)
 
-    df1 = pl.DataFrame(
-        {
-            "provider": ["yfinance"],
-            "ticker": ["MSFT"],
-            "date": [date(2021, 5, 4)],
-            "close": [250.0],
-        }
-    )
-    pkt1 = FramePacket(
-        provider="yfinance",
-        table="yfinance_price",
-        frame=df1,
-        observed_at=datetime.now(timezone.utc),
-    )
-    await writer.write(pkt1)
-
-    # Add a new column not present before -> triggers _sync_schema
-    df2 = pl.DataFrame(
-        {
-            "provider": ["yfinance"],
-            "ticker": ["MSFT"],
-            "date": [date(2021, 5, 4)],
-            "close": [255.0],
-            "extra_col": [1],
-        }
-    )
-    pkt2 = FramePacket(
-        provider="yfinance",
-        table="yfinance_price",
-        frame=df2,
-        observed_at=datetime.now(timezone.utc),
-    )
-    await writer.write(pkt2)
-
-    # Ensure writer is closed before direct inspection
-    await writer.close()
+        # Add a new column not present before -> triggers _sync_schema
+        df2 = pl.DataFrame(
+            {
+                "provider": ["yfinance"],
+                "ticker": ["MSFT"],
+                "date": [date(2021, 5, 4)],
+                "close": [255.0],
+                "extra_col": [1],
+            }
+        )
+        pkt2 = FramePacket(
+            provider="yfinance",
+            table="yfinance_price",
+            frame=df2,
+            observed_at=datetime.now(timezone.utc),
+        )
+        await writer.write(pkt2)
+    finally:
+        # Ensure writer is closed before direct inspection
+        await writer.close()
 
     con = duckdb.connect(str(db_path))
     try:
@@ -130,51 +130,52 @@ async def test_duckdb_writer_schema_evolution_adds_column(tmp_path: Path) -> Non
 async def test_duckdb_writer_missing_pk_raises(tmp_path: Path) -> None:
     db_path = tmp_path / "pk_missing.duckdb"
     writer = DuckDBWriter(db_path)
-
-    # Missing 'date' from PK ("provider","ticker","date")
-    df = pl.DataFrame(
-        {
-            "provider": ["yfinance"],
-            "ticker": ["AAPL"],
-            "close": [123.0],
-        }
-    )
-    pkt = FramePacket(
-        provider="yfinance",
-        table="yfinance_price",
-        frame=df,
-        observed_at=datetime.now(timezone.utc),
-    )
-    with pytest.raises(PrimaryKeyMissingError):
-        await writer.write(pkt)
-    await writer.close()
+    try:
+        # Missing 'date' from PK ("provider","ticker","date")
+        df = pl.DataFrame(
+            {
+                "provider": ["yfinance"],
+                "ticker": ["AAPL"],
+                "close": [123.0],
+            }
+        )
+        pkt = FramePacket(
+            provider="yfinance",
+            table="yfinance_price",
+            frame=df,
+            observed_at=datetime.now(timezone.utc),
+        )
+        with pytest.raises(PrimaryKeyMissingError):
+            await writer.write(pkt)
+    finally:
+        await writer.close()
 
 
 @pytest.mark.asyncio
 async def test_duckdb_writer_upsert_do_nothing_only_pk(tmp_path: Path) -> None:
     db_path = tmp_path / "pk_only.duckdb"
     writer = DuckDBWriter(db_path)
-
-    df = pl.DataFrame(
-        {
-            "provider": ["yfinance"],
-            "ticker": ["IBM"],
-            "date": [date(2022, 2, 2)],
-        }
-    )
-    pkt = FramePacket(
-        provider="yfinance",
-        table="yfinance_price",
-        frame=df,
-        observed_at=datetime.now(timezone.utc),
-    )
-    # First write creates table and inserts PK-only row (DO NOTHING on conflict not triggered)
-    await writer.write(pkt)
-    # Second write with identical PK and PK-only columns should DO NOTHING on conflict
-    await writer.write(pkt)
-
-    # Close writer prior to direct DB readback
-    await writer.close()
+    try:
+        df = pl.DataFrame(
+            {
+                "provider": ["yfinance"],
+                "ticker": ["IBM"],
+                "date": [date(2022, 2, 2)],
+            }
+        )
+        pkt = FramePacket(
+            provider="yfinance",
+            table="yfinance_price",
+            frame=df,
+            observed_at=datetime.now(timezone.utc),
+        )
+        # First write creates table and inserts PK-only row (DO NOTHING on conflict not triggered)
+        await writer.write(pkt)
+        # Second write with identical PK and PK-only columns should DO NOTHING on conflict
+        await writer.write(pkt)
+    finally:
+        # Close writer prior to direct DB readback
+        await writer.close()
 
     con = duckdb.connect(str(db_path))
     try:

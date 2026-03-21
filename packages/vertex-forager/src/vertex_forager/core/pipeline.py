@@ -399,6 +399,7 @@ class VertexForager:
             )
         ]
 
+        order_counter = itertools.count()
         fetch_tasks = [
             asyncio.create_task(
                 self._fetch_worker(
@@ -407,6 +408,7 @@ class VertexForager:
                     pkt_q=pkt_q,
                     result=result,
                     result_lock=result_lock,
+                    order_counter=order_counter,
                     on_progress=on_progress,
                 ),
                 name=f"vertex-forager:fetch:{i}",
@@ -415,7 +417,7 @@ class VertexForager:
         ]
 
         producer_task = asyncio.create_task(
-            self._producer(req_q=req_q, dataset=dataset, symbols=symbols, **kwargs),
+            self._producer(req_q=req_q, dataset=dataset, symbols=symbols, order_counter=order_counter, **kwargs),
             name="vertex-forager:producer",
         )
 
@@ -553,12 +555,12 @@ class VertexForager:
         task = getattr(self, "_stop_task", None)
         if task is not None:
             if not task.done():
-                await task
+                await asyncio.shield(task)
                 return
             self._stop_task = None
         self._stop_task = asyncio.create_task(self._stop_impl())
         try:
-            await self._stop_task
+            await asyncio.shield(self._stop_task)
         finally:
             self._stop_task = None
 
@@ -702,6 +704,7 @@ class VertexForager:
         req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]],
         dataset: str,
         symbols: Symbols | None,
+        order_counter: itertools.count,
         **kwargs: object,
     ) -> None:
         """Generate fetch jobs and push them to the request queue.
@@ -709,14 +712,13 @@ class VertexForager:
         Iterates through the provider's `generate_jobs` generator. Once all jobs are
         enqueued, fetch workers may enqueue additional jobs (e.g., pagination).
         """
-        counter = itertools.count()
         job_count = 0
         logger.debug(
             f"PRODUCER: Starting job generation for dataset={dataset}, symbols={len(symbols) if symbols else 'all'}"
         )
 
         async for job in self._router.generate_jobs(dataset=dataset, symbols=symbols, **kwargs):
-            await req_q.put((self.PRIORITY_NEW_JOB, next(counter), job))
+            await req_q.put((self.PRIORITY_NEW_JOB, next(order_counter), job))
             job_count += 1
             self._inc("jobs_generated", 1)
             if job_count % 100 == 0:
@@ -867,6 +869,7 @@ class VertexForager:
         pkt_q: asyncio.Queue[FramePacket | None],
         result: RunResult,
         result_lock: asyncio.Lock,
+        order_counter: itertools.count,
         on_progress: Callable[..., Any] | None = None,
     ) -> None:
         """Consume jobs, execute HTTP requests, and produce data packets.
@@ -927,7 +930,7 @@ class VertexForager:
             )
             # Apply demotions outside the lock
             for dj in demote_jobs:
-                await req_q.put((self.PRIORITY_NEW_JOB, time.monotonic_ns(), dj))
+                await req_q.put((self.PRIORITY_NEW_JOB, next(order_counter), dj))
                 req_q.task_done()
             if job is None:
                 if already_done and priority == self.PRIORITY_SENTINEL:
