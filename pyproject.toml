@@ -28,6 +28,9 @@ force-sort-within-sections = true
 [tool.ruff.lint.per-file-ignores]
 # Tests: keep S101 and TC002/TC003/TC006 for pytest asserts and type-checking imports
 "packages/vertex-forager/tests/**" = ["S101", "TC002", "TC003", "TC006"]
+# Pydantic v2 resolves field annotations at runtime via get_type_hints();
+# all imports used in model fields must stay at module scope.
+"packages/vertex-forager/src/vertex_forager/core/config.py" = ["TC001", "TC002", "TC003"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
