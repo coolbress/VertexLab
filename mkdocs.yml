@@ -40,6 +40,8 @@ plugins:
             - packages/vertex-forager/src
           options:
             docstring_style: google
+            docstring_options:
+              warn_unknown_params: false
             show_source: false
             merge_init_into_class: true
             warn_unresolved: false

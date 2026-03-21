@@ -30,12 +30,12 @@ from vertex_forager.exceptions import VertexForagerError
 class RetryConfig(BaseModel):
     """Retry configuration for HTTP requests.
 
-    Args:
-        max_attempts: Maximum number of retry attempts (default: 3).
-        base_backoff_s: Initial backoff duration in seconds (default: 1.0).
-        max_backoff_s: Maximum backoff duration in seconds (default: 30.0).
-        enable_http_status_retry: Toggle retry-on-HTTP-status behavior (default: True).
-        retry_status_codes: Tuple of HTTP status codes to trigger retries (default: (429, 503)).
+    Attributes:
+        max_attempts (int): Maximum number of retry attempts (default: 3).
+        base_backoff_s (float): Initial backoff duration in seconds (default: 1.0).
+        max_backoff_s (float): Maximum backoff duration in seconds (default: 30.0).
+        enable_http_status_retry (bool): Toggle retry-on-HTTP-status behavior (default: True).
+        retry_status_codes (tuple[int, ...]): Tuple of HTTP status codes to trigger retries (default: (429, 503)).
 
     Notes:
         - Backoff uses Full Jitter: sleep is drawn uniformly from
@@ -86,11 +86,11 @@ class HttpMethod(str, Enum):
 class RequestAuth(BaseModel):
     """Authentication strategy attached to a request spec.
 
-    Args:
-        kind: Authentication type (e.g., 'none', 'bearer', 'param') (default: 'none').
-        token: Authentication token string if applicable (default: None).
-        header_name: Name of the header to inject the token into (default: None).
-        query_param: Name of the query parameter to inject the token into (default: None).
+    Attributes:
+        kind (str): Authentication type — ``'none'``, ``'bearer'``, ``'header'``, or ``'query'`` (default: ``'none'``).
+        token (str | None): Authentication token string if applicable (default: None).
+        header_name (str | None): Name of the header to inject the token into (default: None).
+        query_param (str | None): Name of the query parameter to inject the token into (default: None).
     """
 
     kind: Literal["none", "bearer", "header", "query"] = "none"
@@ -102,18 +102,18 @@ class RequestAuth(BaseModel):
 class RequestSpec(BaseModel):
     """HTTP request specification for a fetch job.
 
-    Args:
-        method: HTTP method to use (default: HttpMethod.GET).
-        url: Target URL for the request.
-        params: Query parameters as key-value pairs (default: empty dict).
-        headers: HTTP headers as key-value pairs (default: empty dict).
-        json_body: JSON payload for POST/PUT requests (default: None).
-        data: Raw bytes payload for requests (default: None).
-        timeout_s: Request timeout in seconds (default: 30.0).
-        auth: Authentication strategy to apply (default: RequestAuth()).
-        idempotent: Whether the request is safe to retry without side effects.
-            Defaults to True to preserve existing behavior; set to False to disable
-            automatic retries for non-idempotent operations.
+    Attributes:
+        method (HttpMethod): HTTP method to use (default: ``HttpMethod.GET``).
+        url (str): Target URL for the request.
+        params (dict[str, JSONValue]): Query parameters as key-value pairs (default: empty dict).
+        headers (dict[str, str]): HTTP headers as key-value pairs (default: empty dict).
+        json_body (dict[str, JSONValue] | None): JSON payload for POST/PUT requests (default: None).
+        data (bytes | None): Raw bytes payload for requests (default: None).
+        timeout_s (float): Request timeout in seconds (default: 30.0).
+        auth (RequestAuth): Authentication strategy to apply (default: ``RequestAuth()``).
+        idempotent (bool): Whether the request is safe to retry without side effects.
+            Defaults to True; set to False to disable automatic retries for
+            non-idempotent operations.
     """
 
     method: HttpMethod = HttpMethod.GET
@@ -149,12 +149,12 @@ class RequestSpec(BaseModel):
 class FetchJob(BaseModel):
     """Unit of work for the fetch pipeline.
 
-    Args:
-        provider: Data provider name (e.g., 'sharadar').
-        dataset: Dataset identifier (e.g., 'SEP', 'SF1').
-        symbol: Target symbol or ticker if applicable (default: None).
-        spec: HTTP request specification details.
-        context: Additional context for job execution and tracing (default: empty dict).
+    Attributes:
+        provider (str): Data provider name (e.g., ``'sharadar'``).
+        dataset (str): Dataset identifier (e.g., ``'SEP'``, ``'SF1'``).
+        symbol (str | None): Target symbol or ticker if applicable (default: None).
+        spec (RequestSpec): HTTP request specification details.
+        context (Mapping[str, JSONValue]): Additional context for job execution and tracing (default: empty dict).
     """
 
     provider: str
@@ -167,13 +167,13 @@ class FetchJob(BaseModel):
 class FramePacket(BaseModel):
     """Polars frame packet passed from provider to sink.
 
-    Args:
-        provider: Data provider name.
-        table: Target table name for storage.
-        frame: Polars DataFrame containing the data.
-        observed_at: Timestamp when the data was observed/fetched.
-        partition_date: Optional date for partitioning logic (default: None).
-        context: Metadata context passed along with the data (default: empty dict).
+    Attributes:
+        provider (str): Data provider name.
+        table (str): Target table name for storage.
+        frame (pl.DataFrame): Polars DataFrame containing the data.
+        observed_at (datetime): Timestamp when the data was observed/fetched.
+        partition_date (date | None): Optional date for partitioning logic (default: None).
+        context (Mapping[str, JSONValue]): Metadata context passed along with the data (default: empty dict).
     """
 
     provider: str
@@ -331,15 +331,15 @@ class EngineConfig(BaseModel):
 class RunResult(BaseModel):
     """Result summary for a pipeline run.
 
-    Args:
-        provider: Data provider name.
-        tables: Dictionary mapping table names to row counts (default: empty dict).
-        errors: List of error messages encountered (default: empty list).
-        dlq_pending: Packets preserved for post-mortem/dead-letter processing when DLQ spool/dispatch fails.
-            Keys are table names and values are lists of FramePacket instances. Items are appended by
-            writer/rescue logic upon spool errors and can be consumed by operator recovery flows.
-        dlq_counts: Per-table counts for rescued and remaining packets when DLQ is disabled or spooling occurs.
-            Always populated by the pipeline regardless of metrics settings to provide a minimal summary.
+    Attributes:
+        provider (str): Data provider name.
+        tables (dict[str, int]): Dictionary mapping table names to row counts (default: empty dict).
+        errors (list[str]): List of error messages encountered (default: empty list).
+        dlq_pending (dict[str, list[FramePacket]]): Packets preserved for post-mortem/dead-letter
+            processing when DLQ spool/dispatch fails. Items are appended by writer/rescue
+            logic upon spool errors and can be consumed by operator recovery flows.
+        dlq_counts (dict[str, dict[str, int]]): Per-table counts for rescued and remaining packets
+            when DLQ is disabled or spooling occurs. Always populated regardless of metrics settings.
     """
 
     provider: str
@@ -366,9 +366,9 @@ class RunResult(BaseModel):
 class ParseResult:
     """Result of parsing a response.
 
-    Args:
-        packets: List of extracted FramePackets containing data.
-        next_jobs: List of subsequent FetchJobs to be executed.
+    Attributes:
+        packets (list[FramePacket]): List of extracted FramePackets containing data.
+        next_jobs (list[FetchJob]): List of subsequent FetchJobs to be executed.
     """
 
     packets: list[FramePacket]

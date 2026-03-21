@@ -33,7 +33,6 @@ htmlcov/
 
 # Jupyter
 .ipynb_checkpoints/
-*.ipynb
 
 # Vertex specific
 *.parquet

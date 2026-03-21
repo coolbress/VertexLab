@@ -7,6 +7,9 @@ nav:
   - Overview: index.md
   - Tutorials:
       - Quickstart: tutorials/quickstart.md
+  - Guides:
+      - Migration Guide: guides/migration.md
+      - Testing Guide: guides/testing.md
   - How-to:
       - Operate with DLQ disabled: how-to/dlq-disabled.md
       - Tune chunked flush thresholds: how-to/chunked-flush.md
