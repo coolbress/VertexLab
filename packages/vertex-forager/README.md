@@ -2,12 +2,12 @@
 
 Provider-agnostic data collection for financial markets. Centralized transport, schema‑aware normalization with Polars, and resilient writing with DLQ controls.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](../../LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 [![CI](https://github.com/coolbress/vertex-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/coolbress/vertex-lab/actions)
 [![Docs](https://img.shields.io/badge/docs-MkDocs%20Material-blueviolet)](https://coolbress.github.io/vertex-lab/)
 
-Status: Alpha • Python 3.10+ • License: MIT
+Status: Alpha • Python 3.10+ • License: Apache-2.0
 
 ## Table of Contents
 
@@ -300,4 +300,5 @@ spec = RequestSpec(url="https://api.example.com/submit", method="POST", json_bod
 
 ## License
 
-MIT
+Apache-2.0
+Open Core: this repository contains the Apache-2.0 core; proprietary extensions are distributed separately.

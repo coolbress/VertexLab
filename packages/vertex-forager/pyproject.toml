@@ -7,12 +7,13 @@ authors = [
     { name = "coolbress", email = "81678322+coolbress@users.noreply.github.com" }
 ]
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.10",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
     "Typing :: Typed",
 ]

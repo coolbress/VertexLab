@@ -3,6 +3,7 @@ name = "vertex-lab"
 version = "0.1.0"
 description = "Vertex Investment Framework Monorepo"
 requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
 dependencies = []  # 루트에는 코드가 없으므로 의존성 비워둠
 
 [tool.uv]
