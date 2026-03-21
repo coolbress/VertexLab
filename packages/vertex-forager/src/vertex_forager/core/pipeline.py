@@ -812,40 +812,41 @@ class VertexForager:
                         result.tables[wr.table] = result.tables.get(wr.table, 0) + wr.rows
                 self._inc("rows_written_total", int(wr.rows))
             except Exception as e:
-                try:
-                    dlq_dir = get_cache_dir() / "dlq" / pkt.table
-                    dlq_dir.mkdir(parents=True, exist_ok=True)
-                    ts_ns = time.time_ns()
-                    fpath = dlq_dir / f"packet_{ts_ns}.ipc"
-                    tmp_path = fpath.parent / (f"{fpath.name}.tmp")
-                    fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-                    with os.fdopen(fd, "wb") as fh:
-                        pkt.frame.write_ipc(fh)
-                        fh.flush()
-                        os.fsync(fh.fileno())
-                    os.replace(tmp_path, fpath)
-                    with suppress(Exception):
-                        dir_fd = os.open(str(dlq_dir), os.O_RDONLY)
-                        try:
-                            os.fsync(dir_fd)
-                        finally:
-                            os.close(dir_fd)
-                    self._inc("dlq_spooled_files_total", 1)
-                    self._inc(f"dlq_spooled_files.{pkt.table}", 1)
-                    if result is not None and result_lock is not None:
-                        async with result_lock:
-                            entry = result.dlq_counts.get(pkt.table) or {"rescued": 0, "remaining": 0}
-                            entry["remaining"] = entry.get("remaining", 0) + 1
-                            result.dlq_counts[pkt.table] = entry
-                            result.errors.append(f"Writer:Unexpected:{e}")
-                except Exception as e2:
-                    logger.exception(f"PIPELINE: DLQ spool failed for drained packet: {e2}")
-                    if result is not None and result_lock is not None:
-                        async with result_lock:
-                            pending = result.dlq_pending.get(pkt.table, [])
-                            pending.append(pkt)
-                            result.dlq_pending[pkt.table] = pending
-                            result.errors.append(f"Writer:Unexpected:{e}")
+                dlq_enabled = bool(getattr(self._config, "dlq_enabled", True))
+                if dlq_enabled:
+                    try:
+                        dlq_dir = get_cache_dir() / "dlq" / pkt.table
+                        dlq_dir.mkdir(parents=True, exist_ok=True)
+                        ts_ns = time.time_ns()
+                        fpath = dlq_dir / f"packet_{ts_ns}.ipc"
+                        tmp_path = fpath.parent / (f"{fpath.name}.tmp")
+                        fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                        with os.fdopen(fd, "wb") as fh:
+                            pkt.frame.write_ipc(fh)
+                            fh.flush()
+                            os.fsync(fh.fileno())
+                        os.replace(tmp_path, fpath)
+                        with suppress(Exception):
+                            dir_fd = os.open(str(dlq_dir), os.O_RDONLY)
+                            try:
+                                os.fsync(dir_fd)
+                            finally:
+                                os.close(dir_fd)
+                        self._inc("dlq_spooled_files_total", 1)
+                        self._inc(f"dlq_spooled_files.{pkt.table}", 1)
+                    except Exception as e2:
+                        logger.exception(f"PIPELINE: DLQ spool failed for drained packet: {e2}")
+                        if result is not None and result_lock is not None:
+                            async with result_lock:
+                                pending = result.dlq_pending.get(pkt.table, [])
+                                pending.append(pkt)
+                                result.dlq_pending[pkt.table] = pending
+                if result is not None and result_lock is not None:
+                    async with result_lock:
+                        entry = result.dlq_counts.get(pkt.table) or {"rescued": 0, "remaining": 0}
+                        entry["remaining"] = entry.get("remaining", 0) + 1
+                        result.dlq_counts[pkt.table] = entry
+                        result.errors.append(f"Writer:Unexpected:{e}")
 
     async def _pop_next_job_respecting_fairness(
         self,
