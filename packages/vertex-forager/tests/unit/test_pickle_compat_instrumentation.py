@@ -1,8 +1,6 @@
 import logging
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
-
 from vertex_forager.core.config import EngineConfig
 from vertex_forager.core.pipeline import VertexForager
 
@@ -35,8 +33,7 @@ def test_pickle_compat_env_emits_warning_and_metric(monkeypatch, caplog) -> None
 
 
 def test_no_warning_or_metric_without_env(monkeypatch, caplog) -> None:
-    with pytest.raises(KeyError):
-        monkeypatch.delenv("VF_ALLOW_PICKLE_COMPAT")
+    monkeypatch.delenv("VF_ALLOW_PICKLE_COMPAT", raising=False)
     caplog.set_level(logging.WARNING, logger="vertex_forager.debug")
     engine = _make_engine(metrics_enabled=True)
     msgs = [rec.getMessage() for rec in caplog.records if rec.levelno >= logging.WARNING]
