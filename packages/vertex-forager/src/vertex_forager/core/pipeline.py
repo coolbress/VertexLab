@@ -644,6 +644,30 @@ class VertexForager:
                         break
         except Exception as e:
             logger.debug("PIPELINE: Failed to enqueue request sentinels during stop: %s", e, exc_info=True)
+        async def _drain_pending_packets() -> None:
+            """Drain pkt_q and persist remaining FramePackets via DLQ. Idempotent."""
+            pkt_q = getattr(self, "_pkt_q", None)
+            if pkt_q is None:
+                return
+            drained: list[FramePacket] = []
+            while True:
+                try:
+                    pkt = pkt_q.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+                if pkt is None:
+                    with suppress(Exception):
+                        pkt_q.task_done()
+                    continue
+                drained.append(pkt)
+            if drained:
+                res = getattr(self, "_run_result", None)
+                res_lock = getattr(self, "_run_result_lock", None)
+                await self._persist_packets_with_dlq(drained, res, res_lock)
+                for _ in drained:
+                    with suppress(Exception):
+                        pkt_q.task_done()
+
         try:
             pkt_q = getattr(self, "_pkt_q", None)
             active_writers = 0
@@ -671,7 +695,6 @@ class VertexForager:
                             logger.debug("PIPELINE: Failed to schedule pkt_q.put(None) task: %s", e)
         except Exception as e:
             logger.debug("PIPELINE: Failed to enqueue packet sentinels during stop: %s", e, exc_info=True)
-        # First, time-limit only the sentinel put tasks to avoid blocking the shutdown
         if sentinel_put_tasks:
             try:
                 await asyncio.wait_for(asyncio.gather(*sentinel_put_tasks, return_exceptions=True), timeout=10.0)
@@ -680,7 +703,6 @@ class VertexForager:
                     with suppress(Exception):
                         t.cancel()
                 logger.debug("PIPELINE: Timeout awaiting pkt_q sentinel put tasks; cancelled pending puts")
-                # If writers could still be blocked on pkt_q.get(), cancel them to avoid hang
                 if writer_set:
                     for w in list(writer_set):
                         with suppress(Exception):
@@ -688,56 +710,19 @@ class VertexForager:
                     with suppress(Exception):
                         await asyncio.gather(*writer_set, return_exceptions=True)
                     writer_set = set()
-                # After writers have been stopped, drain remaining packets and persist them
-                pkt_q = getattr(self, "_pkt_q", None)
-                if pkt_q is not None:
-                    drained: list[FramePacket] = []
-                    while True:
-                        try:
-                            pkt = pkt_q.get_nowait()
-                        except asyncio.QueueEmpty:
-                            break
-                        if pkt is None:
-                            with suppress(Exception):
-                                pkt_q.task_done()
-                            continue
-                        drained.append(pkt)
-                    res = getattr(self, "_run_result", None)
-                    res_lock = getattr(self, "_run_result_lock", None)
-                    await self._persist_packets_with_dlq(drained, res, res_lock)
-                    for _ in drained:
-                        with suppress(Exception):
-                            pkt_q.task_done()
-        # Then, always await writers without a timeout to let them drain gracefully
+                await _drain_pending_packets()
+        elif active_writers == 0:
+            await _drain_pending_packets()
+        # Await remaining writers to let them drain gracefully
         try:
             if writer_set:
                 await asyncio.gather(*writer_set, return_exceptions=True)
         except Exception:
             logger.debug("PIPELINE: Awaiting writer tasks raised but suppressed", exc_info=True)
         self._active_tasks.clear()
-        # Safety net: drain any remaining packets that writers did not consume
-        # (e.g. active_writers == 0, or normal path left items behind).
+        # Safety net: catch packets left behind by writers that exited without consuming everything
         try:
-            pkt_q_final = getattr(self, "_pkt_q", None)
-            if pkt_q_final is not None:
-                remaining_pkts: list[FramePacket] = []
-                while True:
-                    try:
-                        pkt = pkt_q_final.get_nowait()
-                    except asyncio.QueueEmpty:
-                        break
-                    if pkt is None:
-                        with suppress(Exception):
-                            pkt_q_final.task_done()
-                        continue
-                    remaining_pkts.append(pkt)
-                if remaining_pkts:
-                    res = getattr(self, "_run_result", None)
-                    res_lock = getattr(self, "_run_result_lock", None)
-                    await self._persist_packets_with_dlq(remaining_pkts, res, res_lock)
-                    for _ in remaining_pkts:
-                        with suppress(Exception):
-                            pkt_q_final.task_done()
+            await _drain_pending_packets()
         except Exception:
             logger.debug("PIPELINE: Safety-net pkt_q drain raised but suppressed", exc_info=True)
         # Ensure writer flush on shutdown for DLQ guarantees
