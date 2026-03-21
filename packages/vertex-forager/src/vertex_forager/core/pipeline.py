@@ -845,8 +845,10 @@ class VertexForager:
         """
         demote_jobs: list[FetchJob] = []
         already_done = False
-        assert self._fair_lock is not None, "Fairness lock must be initialized before use"
-        async with self._fair_lock:
+        fair_lock = self._fair_lock
+        if fair_lock is None:
+            raise RuntimeError("Fairness lock must be initialized before use")
+        async with fair_lock:
             while True:
                 priority, _, job = await req_q.get()
                 # Sentinel: consume and return
@@ -963,21 +965,26 @@ class VertexForager:
                 try:
                     req_q.put_nowait(deferred_demotes[0])
                     deferred_demotes.popleft()
+                    req_q.task_done()
                 except asyncio.QueueFull:
                     break
 
             priority, job, demote_jobs, already_done = await self._pop_next_job_respecting_fairness(
                 req_q=req_q, burst_cap=burst_cap
             )
-            # Apply demotions: mark original gets done immediately, defer on QueueFull
+            # Apply demotions: task_done only AFTER successful requeue to prevent
+            # req_q.join() from waking early while items are still in-flight.
             for dj in demote_jobs:
-                req_q.task_done()
                 try:
                     req_q.put_nowait((self.PRIORITY_NEW_JOB, next(order_counter), dj))
+                    req_q.task_done()
                 except asyncio.QueueFull:
                     deferred_demotes.append((self.PRIORITY_NEW_JOB, next(order_counter), dj))
             if job is None:
                 if already_done and priority == self.PRIORITY_SENTINEL:
+                    # Balance task_done for any deferred items that won't be requeued
+                    for _ in deferred_demotes:
+                        req_q.task_done()
                     if deferred_demotes:
                         logger.warning(
                             f"[Worker-{worker_id}] Dropping {len(deferred_demotes)} deferred demoted jobs on shutdown"
