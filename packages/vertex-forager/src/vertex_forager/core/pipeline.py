@@ -715,6 +715,31 @@ class VertexForager:
         except Exception:
             logger.debug("PIPELINE: Awaiting writer tasks raised but suppressed", exc_info=True)
         self._active_tasks.clear()
+        # Safety net: drain any remaining packets that writers did not consume
+        # (e.g. active_writers == 0, or normal path left items behind).
+        try:
+            pkt_q_final = getattr(self, "_pkt_q", None)
+            if pkt_q_final is not None:
+                remaining_pkts: list[FramePacket] = []
+                while True:
+                    try:
+                        pkt = pkt_q_final.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+                    if pkt is None:
+                        with suppress(Exception):
+                            pkt_q_final.task_done()
+                        continue
+                    remaining_pkts.append(pkt)
+                if remaining_pkts:
+                    res = getattr(self, "_run_result", None)
+                    res_lock = getattr(self, "_run_result_lock", None)
+                    await self._persist_packets_with_dlq(remaining_pkts, res, res_lock)
+                    for _ in remaining_pkts:
+                        with suppress(Exception):
+                            pkt_q_final.task_done()
+        except Exception:
+            logger.debug("PIPELINE: Safety-net pkt_q drain raised but suppressed", exc_info=True)
         # Ensure writer flush on shutdown for DLQ guarantees
         try:
             await self._try_flush_once(suppress=True, consume=False)

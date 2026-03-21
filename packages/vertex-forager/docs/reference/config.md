@@ -60,14 +60,32 @@ With `pagination_max_burst=3`, if AAPL has 10 pages, the engine processes pages 
 
 ## Shutdown Semantics
 
-When `stop()` is called (or the pipeline completes normally):
+The pipeline has two shutdown paths. See `_stop_impl()`, `stop()`, `_try_flush_once()`, and `_persist_packets_with_dlq()` in `pipeline.py` for implementation details.
 
-1. **Producer cancellation** — the producer task is cancelled, stopping new job generation.
-2. **Sentinel injection** — one sentinel per fetch worker is pushed to `req_q`, signaling workers to exit.
-3. **Fetch worker drain** — each worker finishes its current job, then exits upon receiving its sentinel. Any deferred demoted jobs are logged and dropped.
-4. **Packet queue drain** — remaining `FramePacket`s in `pkt_q` are persisted via DLQ before writer sentinels are sent.
-5. **Writer flush guarantee** — `_try_flush_once()` is called to ensure all buffered data is written, even if `stop()` was triggered by an error. The flush is serialized (only one concurrent flush is allowed) and idempotent (re-entry is a no-op).
-6. **Lifecycle guard** — `run()` uses a `_running` flag to prevent concurrent pipeline executions on the same instance. A second `run()` call while the pipeline is active raises `RuntimeError`.
+### Normal completion (`run()` → `_pipeline_orchestration()`)
+
+1. Producer finishes generating jobs and completes.
+2. `req_q.join()` waits for all jobs to be processed by fetch workers.
+3. One sentinel per worker is pushed to `req_q`; each fetch worker exits after receiving its sentinel. Deferred demoted jobs are logged and dropped.
+4. `pkt_q.join()` waits for all packets to be consumed by writers.
+5. Writer sentinels are pushed to `pkt_q`; writers exit normally.
+6. `_try_flush_once(consume=True)` flushes any buffered data in the writer.
+7. `run()` calls `stop()` in its `finally` block for cleanup (idempotent).
+
+### Forced stop (`stop()` → `_stop_impl()`)
+
+1. Non-writer tasks (producer, fetch workers) are cancelled via `task.cancel()`.
+2. Best-effort sentinel injection to `req_q` (non-blocking, skips on full queue).
+3. Sentinel injection to `pkt_q` for live writers (async with 10 s timeout).
+4. If the sentinel timeout fires: writers are cancelled, `pkt_q` is drained, and remaining packets are persisted via `_persist_packets_with_dlq()`.
+5. Remaining writer tasks are awaited (`return_exceptions=True`).
+6. Safety-net drain: any packets still in `pkt_q` (e.g. when all writers exited before sentinels) are drained and persisted via DLQ.
+7. `_try_flush_once(consume=False)` ensures the writer is flushed exactly once.
+8. Parse executor is shut down via `asyncio.to_thread(shutdown)`.
+
+### Lifecycle guard
+
+`run()` uses a `_running` flag to prevent concurrent pipeline executions on the same instance. A second `run()` call while the pipeline is active raises `RuntimeError`.
 
 ## Notes
 
