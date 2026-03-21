@@ -555,12 +555,29 @@ class VertexForager:
         task = getattr(self, "_stop_task", None)
         if task is not None:
             if not task.done():
-                await asyncio.shield(task)
-                return
+                try:
+                    await asyncio.shield(task)
+                except asyncio.CancelledError:
+                    # Ensure internal cleanup finishes before propagating cancel
+                    try:
+                        await asyncio.shield(task)
+                    finally:
+                        self._stop_task = None
+                    raise
+                else:
+                    return
             self._stop_task = None
         self._stop_task = asyncio.create_task(self._stop_impl())
         try:
-            await asyncio.shield(self._stop_task)
+            try:
+                await asyncio.shield(self._stop_task)
+            except asyncio.CancelledError:
+                # Ensure internal cleanup completes before re-raising
+                try:
+                    await asyncio.shield(self._stop_task)
+                finally:
+                    self._stop_task = None
+                raise
         finally:
             self._stop_task = None
 
@@ -691,7 +708,7 @@ class VertexForager:
         except Exception:
             logger.debug("PIPELINE: Writer flush on stop raised but suppressed", exc_info=True)
         try:
-            self._parse_executor.shutdown(wait=False)
+            self._parse_executor.shutdown(wait=True)
         except (RuntimeError, ValueError) as e:
             logger.exception(f"PIPELINE: Parse executor shutdown failed: {e}")
         except Exception:
@@ -928,10 +945,14 @@ class VertexForager:
             priority, job, demote_jobs, already_done = await self._pop_next_job_respecting_fairness(
                 req_q=req_q, burst_cap=burst_cap
             )
-            # Apply demotions outside the lock
+            # Apply demotions outside the lock: prefer non-blocking put, then mark original gets done
             for dj in demote_jobs:
-                await req_q.put((self.PRIORITY_NEW_JOB, next(order_counter), dj))
-                req_q.task_done()
+                try:
+                    req_q.put_nowait((self.PRIORITY_NEW_JOB, next(order_counter), dj))
+                except asyncio.QueueFull:
+                    await req_q.put((self.PRIORITY_NEW_JOB, next(order_counter), dj))
+                finally:
+                    req_q.task_done()
             if job is None:
                 if already_done and priority == self.PRIORITY_SENTINEL:
                     logger.debug(
@@ -1019,7 +1040,7 @@ class VertexForager:
                         f"[Worker-{worker_id}] Adding {len(parse_result.next_jobs)} pagination jobs for {job.symbol}"
                     )
                     for next_job in parse_result.next_jobs:
-                        await req_q.put((self.PRIORITY_PAGINATION, time.monotonic_ns(), next_job))
+                        await req_q.put((self.PRIORITY_PAGINATION, next(order_counter), next_job))
 
             except (httpx.HTTPStatusError, httpx.RequestError, ValueError) as exc:
                 worker_exc = exc
