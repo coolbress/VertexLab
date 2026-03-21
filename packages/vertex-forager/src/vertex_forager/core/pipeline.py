@@ -500,7 +500,7 @@ class VertexForager:
 
             # Flush any buffered data in the writer
             logger.debug("PIPELINE: Flushing writer buffer...")
-            await self._try_flush_once()
+            await self._try_flush_once(suppress=False, consume=True)
 
             logger.info(f"PIPELINE: Run completed. Total errors: {len(result.errors)}")
             if self._metrics_enabled:
@@ -622,7 +622,7 @@ class VertexForager:
                     with suppress(Exception):
                         t.cancel()
                 logger.debug("PIPELINE: Timeout awaiting pkt_q sentinel put tasks; cancelled pending puts")
-                await self._try_flush_once()
+                await self._try_flush_once(suppress=True, consume=False)
                 # If writers could still be blocked on pkt_q.get(), cancel them to avoid hang
                 if writer_set:
                     for w in list(writer_set):
@@ -640,7 +640,7 @@ class VertexForager:
         self._active_tasks.clear()
         # Ensure writer flush on shutdown for DLQ guarantees
         try:
-            await self._try_flush_once()
+            await self._try_flush_once(suppress=True, consume=True)
         except Exception:
             logger.debug("PIPELINE: Writer flush on stop raised but suppressed", exc_info=True)
         try:
@@ -679,14 +679,26 @@ class VertexForager:
 
         logger.debug(f"PRODUCER: Completed job generation. Total jobs: {job_count}")
 
-    async def _try_flush_once(self) -> None:
+    async def _try_flush_once(self, *, suppress: bool, consume: bool = True) -> None:
+        if not consume:
+            try:
+                await self._writer.flush()
+            except Exception:
+                if suppress:
+                    logger.debug("PIPELINE: Writer flush attempt suppressed", exc_info=True)
+                    return
+                raise
+            return
         if not getattr(self, "_writer_flush_attempted", False) and not getattr(self, "_writer_flushed", False):
             self._writer_flush_attempted = True
             try:
                 await self._writer.flush()
                 self._writer_flushed = True
             except Exception:
-                logger.debug("PIPELINE: Writer flush attempt suppressed", exc_info=True)
+                if suppress:
+                    logger.debug("PIPELINE: Writer flush attempt suppressed", exc_info=True)
+                else:
+                    raise
 
     async def _pop_next_job_respecting_fairness(
         self,
