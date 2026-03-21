@@ -58,7 +58,7 @@ async def test_duckdb_writer_creates_unique_index_and_upserts(tmp_path: Path) ->
         rows = con.execute("SELECT count(*) FROM yfinance_price").fetchone()[0]
         assert rows == 1
         val = con.execute("SELECT close FROM yfinance_price").fetchone()[0]
-        assert pytest.approx(val) == 111.0
+        assert val == pytest.approx(111.0)
 
         # Verify unique index existence via catalog if available
         try:

@@ -75,6 +75,8 @@ async def test_stop_triggers_writer_flush() -> None:
             task.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await task
+        else:
+            await task
 
     await run_and_cancel()
     assert writer.flush_called >= 1

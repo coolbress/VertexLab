@@ -364,84 +364,84 @@ class VertexForager:
             raise RuntimeError("Pipeline is already running; concurrent run() calls are not supported")
         self._running = True
 
-        # PriorityQueue to prioritize pagination (next jobs) over new jobs
-        # Tuple structure: (priority, order, job)
-        # Priority: 0=NextJob, 10=NewJob, 999=Sentinel
-        req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue(
-            maxsize=self._config.queue_max
-        )
-        pkt_q: asyncio.Queue[FramePacket | None] = asyncio.Queue(maxsize=self._config.queue_max)
-        # Periodic cleanup of stale DLQ temp files
-        if getattr(self._config, "dlq_tmp_periodic_cleanup", False):
-            try:
-                cleanup_dlq_tmp(get_cache_dir() / "dlq", int(getattr(self._config, "dlq_tmp_retention_s", 86400)))
-            except Exception as _e_clean:
-                logger.warning("PIPELINE: DLQ periodic cleanup failed: %s", _e_clean)
-
-        if self._metrics_enabled:
-            self._counters = {}
-            self._hists = {}
-            self._summary = {}
-            self._counters["pipeline_runs"] = 1
-        t_run0 = time.monotonic()
-
-        result = RunResult(provider=self._router.provider)
-        result_lock = asyncio.Lock()
-        self._run_result = result
-        self._run_result_lock = result_lock
-
-        if getattr(self, "_parse_executor", None) is None or getattr(self._parse_executor, "_shutdown", False):
-            try:
-                w_val = int(self.controller.concurrency_limit)
-                w_int = w_val if w_val > 0 else None
-            except Exception:
-                w_int = None
-            self._parse_executor = ThreadPoolExecutor(max_workers=w_int, thread_name_prefix="vertex-forager:parse")
-
-        writer_tasks = [
-            asyncio.create_task(
-                self._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock),
-                name="vertex-forager:writer:0",
-            )
-        ]
-
-        order_counter = itertools.count()
-        fetch_tasks = [
-            asyncio.create_task(
-                self._fetch_worker(
-                    i,
-                    req_q=req_q,
-                    pkt_q=pkt_q,
-                    result=result,
-                    result_lock=result_lock,
-                    order_counter=order_counter,
-                    on_progress=on_progress,
-                ),
-                name=f"vertex-forager:fetch:{i}",
-            )
-            for i in range(self.controller.concurrency_limit)
-        ]
-
-        producer_task = asyncio.create_task(
-            self._producer(req_q=req_q, dataset=dataset, symbols=symbols, order_counter=order_counter, **kwargs),
-            name="vertex-forager:producer",
-        )
-
-        # Register tasks for stop()
-        self._active_tasks = [producer_task, *fetch_tasks, *writer_tasks]
-        # Expose queues and worker references for unified shutdown in stop()
-        self._req_q = req_q
-        self._pkt_q = pkt_q
-        self._writer_tasks = writer_tasks
-        # Initialize global fairness state
-        self._fair_lock = asyncio.Lock()
-        self._fair_last_symbol = None
-        self._fair_burst_count = 0
-        # Reset writer flush guards for a new run
-        self._writer_flush_attempted = False
-        self._writer_flushed = False
-
         try:
+            # PriorityQueue to prioritize pagination (next jobs) over new jobs
+            # Tuple structure: (priority, order, job)
+            # Priority: 0=NextJob, 10=NewJob, 999=Sentinel
+            req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue(
+                maxsize=self._config.queue_max
+            )
+            pkt_q: asyncio.Queue[FramePacket | None] = asyncio.Queue(maxsize=self._config.queue_max)
+            # Periodic cleanup of stale DLQ temp files
+            if getattr(self._config, "dlq_tmp_periodic_cleanup", False):
+                try:
+                    cleanup_dlq_tmp(get_cache_dir() / "dlq", int(getattr(self._config, "dlq_tmp_retention_s", 86400)))
+                except Exception as _e_clean:
+                    logger.warning("PIPELINE: DLQ periodic cleanup failed: %s", _e_clean)
+
+            if self._metrics_enabled:
+                self._counters = {}
+                self._hists = {}
+                self._summary = {}
+                self._counters["pipeline_runs"] = 1
+            t_run0 = time.monotonic()
+
+            result = RunResult(provider=self._router.provider)
+            result_lock = asyncio.Lock()
+            self._run_result = result
+            self._run_result_lock = result_lock
+
+            if getattr(self, "_parse_executor", None) is None or getattr(self._parse_executor, "_shutdown", False):
+                try:
+                    w_val = int(self.controller.concurrency_limit)
+                    w_int = w_val if w_val > 0 else None
+                except Exception:
+                    w_int = None
+                self._parse_executor = ThreadPoolExecutor(max_workers=w_int, thread_name_prefix="vertex-forager:parse")
+
+            writer_tasks = [
+                asyncio.create_task(
+                    self._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock),
+                    name="vertex-forager:writer:0",
+                )
+            ]
+
+            order_counter = itertools.count()
+            fetch_tasks = [
+                asyncio.create_task(
+                    self._fetch_worker(
+                        i,
+                        req_q=req_q,
+                        pkt_q=pkt_q,
+                        result=result,
+                        result_lock=result_lock,
+                        order_counter=order_counter,
+                        on_progress=on_progress,
+                    ),
+                    name=f"vertex-forager:fetch:{i}",
+                )
+                for i in range(self.controller.concurrency_limit)
+            ]
+
+            producer_task = asyncio.create_task(
+                self._producer(req_q=req_q, dataset=dataset, symbols=symbols, order_counter=order_counter, **kwargs),
+                name="vertex-forager:producer",
+            )
+
+            # Register tasks for stop()
+            self._active_tasks = [producer_task, *fetch_tasks, *writer_tasks]
+            # Expose queues and worker references for unified shutdown in stop()
+            self._req_q = req_q
+            self._pkt_q = pkt_q
+            self._writer_tasks = writer_tasks
+            # Initialize global fairness state
+            self._fair_lock = asyncio.Lock()
+            self._fair_last_symbol = None
+            self._fair_burst_count = 0
+            # Reset writer flush guards for a new run
+            self._writer_flush_attempted = False
+            self._writer_flushed = False
+            self._flush_lock = asyncio.Lock()
             # Create a monitor for writer tasks to detect early failures
             writer_monitor = asyncio.gather(*writer_tasks)
             writer_monitor = cast("asyncio.Future[Any]", writer_monitor)
@@ -666,9 +666,7 @@ class VertexForager:
         # First, time-limit only the sentinel put tasks to avoid blocking the shutdown
         if sentinel_put_tasks:
             try:
-                await asyncio.wait_for(
-                    asyncio.gather(*sentinel_put_tasks, return_exceptions=True), timeout=10.0
-                )
+                await asyncio.wait_for(asyncio.gather(*sentinel_put_tasks, return_exceptions=True), timeout=10.0)
             except asyncio.TimeoutError:
                 for t in sentinel_put_tasks:
                     with suppress(Exception):
@@ -696,8 +694,6 @@ class VertexForager:
                                 pkt_q.task_done()
                             continue
                         drained.append(pkt)
-                    for _pkt in drained:
-                        pass
                     res = getattr(self, "_run_result", None)
                     res_lock = getattr(self, "_run_result_lock", None)
                     await self._persist_packets_with_dlq(drained, res, res_lock)
@@ -753,27 +749,35 @@ class VertexForager:
         logger.debug(f"PRODUCER: Completed job generation. Total jobs: {job_count}")
 
     async def _try_flush_once(self, *, suppress: bool, consume: bool = True) -> None:
-        if not consume:
-            if getattr(self, "_writer_flushed", False):
-                return
-            try:
-                await self._writer.flush()
-            except Exception:
-                if suppress:
-                    logger.debug("PIPELINE: Writer flush attempt suppressed", exc_info=True)
+        flush_lock = getattr(self, "_flush_lock", None)
+        if flush_lock is None:
+            flush_lock = asyncio.Lock()
+            self._flush_lock = flush_lock
+
+        async with flush_lock:
+            if not consume:
+                if getattr(self, "_writer_flushed", False):
                     return
-                raise
-            return
-        if not getattr(self, "_writer_flush_attempted", False) and not getattr(self, "_writer_flushed", False):
-            self._writer_flush_attempted = True
-            try:
-                await self._writer.flush()
-                self._writer_flushed = True
-            except Exception:
-                if suppress:
-                    logger.debug("PIPELINE: Writer flush attempt suppressed", exc_info=True)
-                else:
+                try:
+                    await self._writer.flush()
+                    self._writer_flushed = True
+                except Exception:
+                    if suppress:
+                        logger.debug("PIPELINE: Writer flush attempt suppressed", exc_info=True)
+                        return
                     raise
+                return
+            if not getattr(self, "_writer_flush_attempted", False) and not getattr(self, "_writer_flushed", False):
+                self._writer_flush_attempted = True
+                try:
+                    await self._writer.flush()
+                    self._writer_flushed = True
+                except Exception:
+                    if suppress:
+                        logger.debug("PIPELINE: Writer flush attempt suppressed", exc_info=True)
+                    else:
+                        raise
+
     async def _persist_packets_with_dlq(
         self,
         packets: list[FramePacket],
@@ -839,10 +843,6 @@ class VertexForager:
             already_done: True if this method already called task_done on the selected item
                           (only true when consuming a sentinel); caller must NOT call task_done again.
         """
-        if self._fair_lock is None:
-            self._fair_lock = asyncio.Lock()
-            self._fair_last_symbol = None
-            self._fair_burst_count = 0
         demote_jobs: list[FetchJob] = []
         already_done = False
         async with self._fair_lock:
@@ -877,12 +877,17 @@ class VertexForager:
                     if p2 == self.PRIORITY_PAGINATION and cand is not None and cand.symbol == self._fair_last_symbol:
                         demote_jobs.append(cand)
                         continue
+                    # Sentinel found via get_nowait: mark done and signal shutdown
+                    if cand is None:
+                        req_q.task_done()
+                        already_done = True
+                        return p2, None, demote_jobs, already_done
                     # Found a different candidate; update fairness baseline accordingly and return it
-                    if p2 == self.PRIORITY_PAGINATION and cand is not None:
+                    if p2 == self.PRIORITY_PAGINATION:
                         self._fair_last_symbol = cand.symbol
                         self._fair_burst_count = 1
                     else:
-                        self._fair_last_symbol = cand.symbol if cand is not None else None
+                        self._fair_last_symbol = None
                         self._fair_burst_count = 0
                     return p2, cand, demote_jobs, already_done
                 # If we broke due to empty queue, continue the outer loop to await another item under lock
@@ -950,20 +955,32 @@ class VertexForager:
 
         job_count = 0
         burst_cap = getattr(self._config, "pagination_max_burst", None)
+        deferred_demotes: deque[tuple[int, int, FetchJob]] = deque()
         while True:
+            # Drain deferred demotes from previous iterations (non-blocking)
+            while deferred_demotes:
+                try:
+                    req_q.put_nowait(deferred_demotes[0])
+                    deferred_demotes.popleft()
+                except asyncio.QueueFull:
+                    break
+
             priority, job, demote_jobs, already_done = await self._pop_next_job_respecting_fairness(
                 req_q=req_q, burst_cap=burst_cap
             )
-            # Apply demotions outside the lock: prefer non-blocking put, then mark original gets done
+            # Apply demotions: mark original gets done immediately, defer on QueueFull
             for dj in demote_jobs:
+                req_q.task_done()
                 try:
                     req_q.put_nowait((self.PRIORITY_NEW_JOB, next(order_counter), dj))
                 except asyncio.QueueFull:
-                    await req_q.put((self.PRIORITY_NEW_JOB, next(order_counter), dj))
-                finally:
-                    req_q.task_done()
+                    deferred_demotes.append((self.PRIORITY_NEW_JOB, next(order_counter), dj))
             if job is None:
                 if already_done and priority == self.PRIORITY_SENTINEL:
+                    if deferred_demotes:
+                        logger.warning(
+                            f"[Worker-{worker_id}] Dropping {len(deferred_demotes)} deferred demoted jobs on shutdown"
+                        )
                     logger.debug(
                         f"[Worker-{worker_id}] Received sentinel, shutting down. Total jobs processed: {job_count}"
                     )

@@ -230,6 +230,9 @@ class EngineConfig(BaseModel):
         otel_enabled (bool | None): Toggle for OpenTelemetry instrumentation. When True
             and a tracer is provided, spans are created; when False or None, spans are
             not created even if a tracer exists.
+        pagination_max_burst (int | None): Maximum consecutive pagination pages per symbol
+            before yielding to other symbols. When None (default), no burst cap is enforced
+            and existing pagination priority semantics are preserved.
 
     Notes:
         - `model_config = {"arbitrary_types_allowed": True}` permits using `TracerProtocol`

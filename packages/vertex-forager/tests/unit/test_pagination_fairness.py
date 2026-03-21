@@ -27,7 +27,7 @@ class FairnessRouter:
     def parse(self, *, job: FetchJob, payload: bytes) -> ParseResult:
         next_jobs: list[FetchJob] = []
         sym = job.symbol
-        if self._remaining.get(sym, 0) > 0:
+        if sym is not None and self._remaining.get(sym, 0) > 0:
             self._remaining[sym] -= 1
             if self._remaining[sym] > 0:
                 next_jobs.append(FetchJob(provider=self._provider, dataset=job.dataset, symbol=sym, spec=job.spec))
@@ -99,5 +99,6 @@ async def test_pagination_fairness_cap_prevents_long_bursts() -> None:
             current = s
             streak = 1
         max_consec = max(max_consec, streak)
+    assert len(order) >= 2, "Expected progress events from pagination"
     # Allow initial new-job + burst of 2 pages => max 3 in a row
     assert max_consec <= 3
