@@ -166,6 +166,7 @@ class VertexForager:
 
         # Track active tasks for graceful shutdown
         self._active_tasks: list[asyncio.Future[Any]] = []
+        self._running = False
 
         # Validate configuration
         self._config.assert_valid()
@@ -348,7 +349,8 @@ class VertexForager:
             RunResult: Summary of the run including metrics and errors.
 
         Raises:
-            RuntimeError: Orchestration-level failures (e.g., early writer shutdown).
+            RuntimeError: Orchestration-level failures (e.g., early writer shutdown)
+                or if ``run()`` is called while another run is already in progress.
 
         Notes:
             - Exceptions raised during fetch/parse/write (e.g., httpx.RequestError,
@@ -358,6 +360,10 @@ class VertexForager:
             - Callers should inspect `RunResult.errors` for per-task failures and
               only expect orchestration-level issues to raise.
         """
+        if self._running:
+            raise RuntimeError("Pipeline is already running; concurrent run() calls are not supported")
+        self._running = True
+
         # PriorityQueue to prioritize pagination (next jobs) over new jobs
         # Tuple structure: (priority, order, job)
         # Priority: 0=NextJob, 10=NewJob, 999=Sentinel
@@ -549,7 +555,10 @@ class VertexForager:
                         logger.debug(msg_s)
             return result
         finally:
-            await self.stop()
+            try:
+                await self.stop()
+            finally:
+                self._running = False
 
     async def stop(self) -> None:
         task = getattr(self, "_stop_task", None)
@@ -708,7 +717,7 @@ class VertexForager:
         except Exception:
             logger.debug("PIPELINE: Writer flush on stop raised but suppressed", exc_info=True)
         try:
-            self._parse_executor.shutdown(wait=True)
+            await asyncio.to_thread(self._parse_executor.shutdown, wait=True)
         except (RuntimeError, ValueError) as e:
             logger.exception(f"PIPELINE: Parse executor shutdown failed: {e}")
         except Exception:
