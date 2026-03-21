@@ -49,6 +49,9 @@ async def test_duckdb_writer_creates_unique_index_and_upserts(tmp_path: Path) ->
     )
     await writer.write(pkt2)
 
+    # Ensure writer resources are cleaned up before direct DB access
+    await writer.close()
+
     con = duckdb.connect(str(db_path))
     try:
         # Verify single row and updated value
@@ -64,9 +67,11 @@ async def test_duckdb_writer_creates_unique_index_and_upserts(tmp_path: Path) ->
                 "WHERE table_name='yfinance_price' AND index_name='idx_yfinance_price_pk'"
             ).fetchone()[0]
             assert cnt >= 1
-        except duckdb.Error:
-            # If the catalog function is unavailable, skip this assertion
-            pass
+        except duckdb.Error as e:
+            msg = str(e).lower()
+            if "duckdb_indexes" in msg and ("does not exist" in msg or "no function matches" in msg):
+                pytest.skip("duckdb_indexes() not available on this DuckDB build")
+            raise
     finally:
         con.close()
 
@@ -110,6 +115,9 @@ async def test_duckdb_writer_schema_evolution_adds_column(tmp_path: Path) -> Non
     )
     await writer.write(pkt2)
 
+    # Ensure writer is closed before direct inspection
+    await writer.close()
+
     con = duckdb.connect(str(db_path))
     try:
         cols = {r[0] for r in con.execute("DESCRIBE yfinance_price").fetchall()}
@@ -139,6 +147,7 @@ async def test_duckdb_writer_missing_pk_raises(tmp_path: Path) -> None:
     )
     with pytest.raises(PrimaryKeyMissingError):
         await writer.write(pkt)
+    await writer.close()
 
 
 @pytest.mark.asyncio
@@ -163,6 +172,9 @@ async def test_duckdb_writer_upsert_do_nothing_only_pk(tmp_path: Path) -> None:
     await writer.write(pkt)
     # Second write with identical PK and PK-only columns should DO NOTHING on conflict
     await writer.write(pkt)
+
+    # Close writer prior to direct DB readback
+    await writer.close()
 
     con = duckdb.connect(str(db_path))
     try:

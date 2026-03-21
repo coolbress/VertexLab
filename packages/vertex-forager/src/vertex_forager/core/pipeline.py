@@ -202,6 +202,7 @@ class VertexForager:
         self._writer_flush_attempted: bool = False
         self._summary: dict[str, float] = {}
         self._metrics_sink = getattr(config, "metrics_sink", None)
+        self._stop_task: asyncio.Task[None] | None = None
 
     def _inc(self, name: str, amount: int = 1) -> None:
         if not self._metrics_enabled:
@@ -549,6 +550,19 @@ class VertexForager:
             await self.stop()
 
     async def stop(self) -> None:
+        task = getattr(self, "_stop_task", None)
+        if task is not None:
+            if not task.done():
+                await task
+                return
+            self._stop_task = None
+        self._stop_task = asyncio.create_task(self._stop_impl())
+        try:
+            await self._stop_task
+        finally:
+            self._stop_task = None
+
+    async def _stop_impl(self) -> None:
         """Gracefully stop the pipeline.
 
         Cancels all running tasks (producer, fetchers, writers) and awaits their
@@ -1574,8 +1588,10 @@ class VertexForager:
                     return
 
         while True:
+            got_item = False
             try:
                 packet = await pkt_q.get()
+                got_item = True
                 if packet is None:
                     # Flush all remaining buffers
                     logger.debug("WRITER: Received shutdown signal. Flushing remaining buffers...")
@@ -1619,7 +1635,8 @@ class VertexForager:
                 logger.exception("WRITER: Unexpected error")
                 raise
             finally:
-                pkt_q.task_done()
+                if got_item:
+                    pkt_q.task_done()
 
     async def _fetch_with_retry(self, job: FetchJob) -> bytes:
         """Execute a fetch job with rate limiting and exponential backoff retry.

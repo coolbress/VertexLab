@@ -60,9 +60,11 @@ async def test_ensure_table_exists_missing_pk_skips_index(tmp_path: Path) -> Non
             "WHERE table_name='yfinance_price' AND index_name='idx_yfinance_price_pk'"
         ).fetchone()[0]
         assert cnt == 0
-    except duckdb.Error:
-        # Catalog function may be unavailable; skip
-        pass
+    except duckdb.Error as e:
+        msg = str(e).lower()
+        if "duckdb_indexes" in msg and ("does not exist" in msg or "no function matches" in msg):
+            pytest.skip("duckdb_indexes() not available on this DuckDB build")
+        raise
 
 
 @pytest.mark.asyncio
