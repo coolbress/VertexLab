@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.5.0...vertex-forager-v0.5.1) (2026-03-21)
+
+
+### Documentation
+
+* expand API reference, add migration/testing guides and example notebooks ([#172](https://github.com/coolbress/VertexLab/issues/172)) ([187bd99](https://github.com/coolbress/VertexLab/commit/187bd991cdac788e6d532f38205e62fd057a88a1))
+
 ## [0.5.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.4.0...vertex-forager-v0.5.0) (2026-03-21)
 
 
