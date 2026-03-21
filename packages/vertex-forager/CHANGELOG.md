@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.4.0...vertex-forager-v0.5.0) (2026-03-21)
+
+
+### Features
+
+* pagination fairness cap and unified shutdown ([#161](https://github.com/coolbress/VertexLab/issues/161)) ([a1fd63b](https://github.com/coolbress/VertexLab/commit/a1fd63b6bb30e65de8d81c326c6731dc20d6afcf))
+
 ## [0.4.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.3.0...vertex-forager-v0.4.0) (2026-03-20)
 
 
