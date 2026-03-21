@@ -734,7 +734,6 @@ class VertexForager:
                     return priority, job, demote_jobs, already_done
                 # Cap exceeded: demote this job and any consecutive same-symbol paginations at the head
                 demote_jobs.append(job)
-                req_q.task_done()
                 while True:
                     try:
                         p2, _, cand = req_q.get_nowait()
@@ -743,7 +742,6 @@ class VertexForager:
                         break
                     if p2 == self.PRIORITY_PAGINATION and cand is not None and cand.symbol == self._fair_last_symbol:
                         demote_jobs.append(cand)
-                        req_q.task_done()
                         continue
                     # Found a different candidate; update fairness baseline accordingly and return it
                     if p2 == self.PRIORITY_PAGINATION and cand is not None:
@@ -824,6 +822,7 @@ class VertexForager:
             # Apply demotions outside the lock
             for dj in demote_jobs:
                 await req_q.put((self.PRIORITY_NEW_JOB, time.monotonic_ns(), dj))
+                req_q.task_done()
             if job is None:
                 logger.debug(
                     f"[Worker-{worker_id}] Received sentinel, shutting down. Total jobs processed: {job_count}"
@@ -1512,6 +1511,11 @@ class VertexForager:
                     await flush(table)
 
             except asyncio.CancelledError:
+                try:
+                    for table in list(buffers.keys()):
+                        await asyncio.shield(flush(table))
+                except Exception as e:
+                    logger.exception(f"WRITER: Error during cancellation flush: {e}")
                 raise
             except Exception as e:
                 async with result_lock:
