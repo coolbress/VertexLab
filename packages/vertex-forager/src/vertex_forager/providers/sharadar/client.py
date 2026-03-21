@@ -150,6 +150,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         *,
         tickers: list[str] | None = None,
         connect_db: str | Path | None = None,
+        show_progress: bool = True,
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Fetch metadata for all or specific tickers (TICKERS).
@@ -157,6 +158,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         Args:
             tickers: Optional list of ticker symbols to filter. If None, fetches all.
             connect_db: Optional DuckDB connection string/path for persistence.
+            show_progress: Whether to display progress indicators (default: True).
             **kwargs: Additional provider-specific options forwarded to the pipeline.
 
         Returns:
@@ -168,7 +170,12 @@ class SharadarClient(BaseClient[SharadarDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        return await self._get_ticker_info_impl(tickers=tickers, connect_db=connect_db, show_spinner=True, **kwargs)
+        return await self._get_ticker_info_impl(
+            tickers=tickers,
+            connect_db=connect_db,
+            show_spinner=show_progress,
+            **kwargs,
+        )
 
     @jupyter_safe
     async def get_sp500_history(
