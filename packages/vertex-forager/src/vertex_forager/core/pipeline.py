@@ -511,7 +511,9 @@ class VertexForager:
                 exc = fetch_monitor.exception()
                 if exc:
                     raise exc
-                raise RuntimeError("Fetch workers exited prematurely")
+                # No exception: fetch workers exited normally after receiving
+                # sentinels while orchestrator still runs pkt_q.join() / writer
+                # sentinel injection — fall through to await orchestrator.
 
             if writer_monitor in done and orchestrator not in done:
                 exc = writer_monitor.exception()
