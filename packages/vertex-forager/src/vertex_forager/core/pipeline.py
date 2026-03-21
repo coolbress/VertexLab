@@ -391,13 +391,15 @@ class VertexForager:
             self._run_result = result
             self._run_result_lock = result_lock
 
+            try:
+                concurrency = max(1, int(self.controller.concurrency_limit))
+            except (TypeError, ValueError):
+                concurrency = 1
+
             if getattr(self, "_parse_executor", None) is None or getattr(self._parse_executor, "_shutdown", False):
-                try:
-                    w_val = int(self.controller.concurrency_limit)
-                    w_int = w_val if w_val > 0 else None
-                except Exception:
-                    w_int = None
-                self._parse_executor = ThreadPoolExecutor(max_workers=w_int, thread_name_prefix="vertex-forager:parse")
+                self._parse_executor = ThreadPoolExecutor(
+                    max_workers=concurrency, thread_name_prefix="vertex-forager:parse"
+                )
 
             writer_tasks = [
                 asyncio.create_task(
@@ -420,7 +422,7 @@ class VertexForager:
                     ),
                     name=f"vertex-forager:fetch:{i}",
                 )
-                for i in range(self.controller.concurrency_limit)
+                for i in range(concurrency)
             ]
 
             producer_task = asyncio.create_task(
@@ -445,6 +447,8 @@ class VertexForager:
             # Create a monitor for writer tasks to detect early failures
             writer_monitor = asyncio.gather(*writer_tasks)
             writer_monitor = cast("asyncio.Future[Any]", writer_monitor)
+            fetch_monitor = asyncio.gather(*fetch_tasks)
+            fetch_monitor = cast("asyncio.Future[Any]", fetch_monitor)
 
             async def _pipeline_orchestration() -> None:
                 """Orchestrate the producer-fetcher-join sequence."""
@@ -474,7 +478,7 @@ class VertexForager:
                 if self._metrics_enabled:
                     with suppress(Exception):
                         self._summary["req_q_len_after_req_join"] = float(req_q.qsize())
-                for _ in range(self.controller.concurrency_limit):
+                for _ in range(concurrency):
                     # Sentinel with lowest priority (highest number)
                     await req_q.put((self.PRIORITY_SENTINEL, 0, None))
                 logger.info("PIPELINE: Waiting for fetch tasks to complete...")
@@ -493,29 +497,33 @@ class VertexForager:
             orchestrator = cast("asyncio.Task[Any]", orchestrator)
             self._active_tasks.append(orchestrator)
 
-            futures: set[asyncio.Future[Any]] = {writer_monitor, cast("asyncio.Future[Any]", orchestrator)}
+            futures: set[asyncio.Future[Any]] = {
+                writer_monitor,
+                fetch_monitor,
+                cast("asyncio.Future[Any]", orchestrator),
+            }
             done, _pending = await asyncio.wait(
                 futures,
                 return_when=asyncio.FIRST_COMPLETED,
             )
 
-            # Check if writers failed early
+            if fetch_monitor in done and orchestrator not in done:
+                exc = fetch_monitor.exception()
+                if exc:
+                    raise exc
+                raise RuntimeError("Fetch workers exited prematurely")
+
             if writer_monitor in done and orchestrator not in done:
-                # Writer failed while pipeline was running
                 exc = writer_monitor.exception()
                 if exc:
                     raise exc
-                # If it finished without exception but orchestrator is still running,
-                # it means it exited prematurely (e.g. consumed None that wasn't sent?)
-                # This shouldn't happen with correct logic.
                 raise RuntimeError("Writer exited prematurely")
 
-            # Ensure orchestrator completes (if it wasn't the one that finished)
             await orchestrator
 
-            # Wait for writers to complete (graceful shutdown)
             logger.debug("PIPELINE: Waiting for writer tasks to complete...")
             await writer_monitor
+            await fetch_monitor
 
             # Flush any buffered data in the writer
             logger.debug("PIPELINE: Flushing writer buffer...")

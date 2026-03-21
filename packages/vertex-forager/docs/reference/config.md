@@ -33,6 +33,22 @@ Core fields commonly used in production. See inline type hints in code for the f
 - `structured_logs: bool`
 - `tracer: Any` — object with `start_span(name, attributes=...)` for optional spans
 
+## Pagination Fairness
+
+- `pagination_max_burst: int | None` — maximum consecutive same-symbol pagination pages before yielding to other symbols. `None` (default) disables the cap, allowing unlimited consecutive pages. When set (e.g., `2`), after processing *burst* pages for one symbol, the engine demotes remaining same-symbol pages and processes a different symbol first, then resumes. Recommended value: `2–5` for multi-symbol fetches.
+
+### Example
+
+```python
+config = EngineConfig(
+  requests_per_minute=300,
+  concurrency=4,
+  pagination_max_burst=3,
+)
+```
+
+With `pagination_max_burst=3`, if AAPL has 10 pages, the engine processes pages 1–3, then yields to MSFT/GOOG, then resumes AAPL pages 4–6, and so on.
+
 ## Downshift (Rate)
 
 - `downshift_enabled: bool`
@@ -41,6 +57,17 @@ Core fields commonly used in production. See inline type hints in code for the f
 - `rpm_floor: int`
 - `recovery_step: int`
 - `healthy_window_s: int`
+
+## Shutdown Semantics
+
+When `stop()` is called (or the pipeline completes normally):
+
+1. **Producer cancellation** — the producer task is cancelled, stopping new job generation.
+2. **Sentinel injection** — one sentinel per fetch worker is pushed to `req_q`, signaling workers to exit.
+3. **Fetch worker drain** — each worker finishes its current job, then exits upon receiving its sentinel. Any deferred demoted jobs are logged and dropped.
+4. **Packet queue drain** — remaining `FramePacket`s in `pkt_q` are persisted via DLQ before writer sentinels are sent.
+5. **Writer flush guarantee** — `_try_flush_once()` is called to ensure all buffered data is written, even if `stop()` was triggered by an error. The flush is serialized (only one concurrent flush is allowed) and idempotent (re-entry is a no-op).
+6. **Lifecycle guard** — `run()` uses a `_running` flag to prevent concurrent pipeline executions on the same instance. A second `run()` call while the pipeline is active raises `RuntimeError`.
 
 ## Notes
 
