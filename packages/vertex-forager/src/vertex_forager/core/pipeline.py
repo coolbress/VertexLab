@@ -380,6 +380,8 @@ class VertexForager:
 
         result = RunResult(provider=self._router.provider)
         result_lock = asyncio.Lock()
+        self._run_result = result
+        self._run_result_lock = result_lock
 
         if getattr(self, "_parse_executor", None) is None or getattr(self._parse_executor, "_shutdown", False):
             try:
@@ -630,8 +632,18 @@ class VertexForager:
                     with suppress(Exception):
                         t.cancel()
                 logger.debug("PIPELINE: Timeout awaiting pkt_q sentinel put tasks; cancelled pending puts")
+                # If writers could still be blocked on pkt_q.get(), cancel them to avoid hang
+                if writer_set:
+                    for w in list(writer_set):
+                        with suppress(Exception):
+                            w.cancel()
+                    with suppress(Exception):
+                        await asyncio.gather(*writer_set, return_exceptions=True)
+                    writer_set = set()
+                # After writers have been stopped, drain remaining packets and persist them
                 pkt_q = getattr(self, "_pkt_q", None)
                 if pkt_q is not None:
+                    drained: list[FramePacket] = []
                     while True:
                         try:
                             pkt = pkt_q.get_nowait()
@@ -641,21 +653,15 @@ class VertexForager:
                             with suppress(Exception):
                                 pkt_q.task_done()
                             continue
-                        try:
-                            await self._writer.write(pkt)
-                        except Exception as e:
-                            logger.exception(f"PIPELINE: Error writing drained packet: {e}")
-                        finally:
-                            with suppress(Exception):
-                                pkt_q.task_done()
-                # If writers could still be blocked on pkt_q.get(), cancel them to avoid hang
-                if writer_set:
-                    for w in list(writer_set):
+                        drained.append(pkt)
+                    for _pkt in drained:
+                        pass
+                    res = getattr(self, "_run_result", None)
+                    res_lock = getattr(self, "_run_result_lock", None)
+                    await self._persist_packets_with_dlq(drained, res, res_lock)
+                    for _ in drained:
                         with suppress(Exception):
-                            w.cancel()
-                    with suppress(Exception):
-                        await asyncio.gather(*writer_set, return_exceptions=True)
-                    writer_set = set()
+                            pkt_q.task_done()
         # Then, always await writers without a timeout to let them drain gracefully
         try:
             if writer_set:
@@ -726,6 +732,52 @@ class VertexForager:
                     logger.debug("PIPELINE: Writer flush attempt suppressed", exc_info=True)
                 else:
                     raise
+    async def _persist_packets_with_dlq(
+        self,
+        packets: list[FramePacket],
+        result: RunResult | None,
+        result_lock: asyncio.Lock | None,
+    ) -> None:
+        for pkt in packets:
+            try:
+                wr = await self._writer.write(pkt)
+                if result is not None and result_lock is not None:
+                    async with result_lock:
+                        result.tables[wr.table] = result.tables.get(wr.table, 0) + wr.rows
+                self._inc("rows_written_total", int(wr.rows))
+            except Exception as e:
+                try:
+                    dlq_dir = get_cache_dir() / "dlq" / pkt.table
+                    dlq_dir.mkdir(parents=True, exist_ok=True)
+                    ts_ns = time.time_ns()
+                    fpath = dlq_dir / f"packet_{ts_ns}.ipc"
+                    tmp_path = fpath.parent / (f"{fpath.name}.tmp")
+                    fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                    with os.fdopen(fd, "wb") as fh:
+                        pkt.frame.write_ipc(fh)
+                        fh.flush()
+                        os.fsync(fh.fileno())
+                    os.replace(tmp_path, fpath)
+                    with suppress(Exception):
+                        dir_fd = os.open(str(dlq_dir), os.O_RDONLY)
+                        try:
+                            os.fsync(dir_fd)
+                        finally:
+                            os.close(dir_fd)
+                    self._inc("dlq_spooled_files_total", 1)
+                    self._inc(f"dlq_spooled_files.{pkt.table}", 1)
+                    if result is not None and result_lock is not None:
+                        async with result_lock:
+                            entry = result.dlq_counts.get(pkt.table) or {"rescued": 0, "remaining": 0}
+                            entry["rescued"] = entry.get("rescued", 0) + 0
+                            entry["remaining"] = entry.get("remaining", 0) + 1
+                            result.dlq_counts[pkt.table] = entry
+                            result.errors.append(f"Writer:Unexpected:{e}")
+                except Exception as e2:
+                    logger.exception(f"PIPELINE: DLQ spool failed for drained packet: {e2}")
+                    if result is not None and result_lock is not None:
+                        async with result_lock:
+                            result.errors.append(f"Writer:Unexpected:{e}")
 
     async def _pop_next_job_respecting_fairness(
         self,
