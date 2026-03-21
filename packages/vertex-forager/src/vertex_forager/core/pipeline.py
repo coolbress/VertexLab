@@ -687,8 +687,6 @@ class VertexForager:
                 self._writer_flushed = True
             except Exception:
                 logger.debug("PIPELINE: Writer flush attempt suppressed", exc_info=True)
-            finally:
-                self._writer_flush_attempted = True
 
     async def _pop_next_job_respecting_fairness(
         self,
@@ -738,8 +736,8 @@ class VertexForager:
                     try:
                         p2, _, cand = req_q.get_nowait()
                     except asyncio.QueueEmpty:
-                        # Need to wait for another candidate; loop back and get() again under the lock
-                        break
+                        # Release lock and let caller requeue demotes and fetch next outside lock
+                        return self.PRIORITY_NEW_JOB, None, demote_jobs, already_done
                     if p2 == self.PRIORITY_PAGINATION and cand is not None and cand.symbol == self._fair_last_symbol:
                         demote_jobs.append(cand)
                         continue
@@ -824,13 +822,14 @@ class VertexForager:
                 await req_q.put((self.PRIORITY_NEW_JOB, time.monotonic_ns(), dj))
                 req_q.task_done()
             if job is None:
-                logger.debug(
-                    f"[Worker-{worker_id}] Received sentinel, shutting down. Total jobs processed: {job_count}"
-                )
-                # already_done indicates we consumed the sentinel and called task_done
-                if not already_done:
-                    req_q.task_done()
-                return
+                if already_done and priority == self.PRIORITY_SENTINEL:
+                    logger.debug(
+                        f"[Worker-{worker_id}] Received sentinel, shutting down. Total jobs processed: {job_count}"
+                    )
+                    return
+                # No selection after fairness demote draining; wait for next iteration
+                await asyncio.sleep(0)
+                continue
             job_count += 1
             self._inc("jobs_processed", 1)
             if job_count % 100 == 0:
