@@ -988,9 +988,17 @@ class VertexForager:
                 except asyncio.QueueFull:
                     break
 
-            priority, job, demote_jobs, already_done = await self._pop_next_job_respecting_fairness(
-                req_q=req_q, burst_cap=burst_cap
-            )
+            if burst_cap is None:
+                priority, _, job = await req_q.get()
+                demote_jobs: list[FetchJob] = []
+                already_done = False
+                if job is None:
+                    req_q.task_done()
+                    already_done = True
+            else:
+                priority, job, demote_jobs, already_done = await self._pop_next_job_respecting_fairness(
+                    req_q=req_q, burst_cap=burst_cap
+                )
             # Apply demotions: task_done only AFTER successful requeue to prevent
             # req_q.join() from waking early while items are still in-flight.
             for dj in demote_jobs:
