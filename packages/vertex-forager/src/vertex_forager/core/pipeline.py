@@ -815,7 +815,7 @@ class VertexForager:
                     if result is not None and result_lock is not None:
                         async with result_lock:
                             entry = result.dlq_counts.get(pkt.table) or {"rescued": 0, "remaining": 0}
-                            entry["rescued"] = entry.get("rescued", 0) + 0
+                            entry.setdefault("rescued", 0)
                             entry["remaining"] = entry.get("remaining", 0) + 1
                             result.dlq_counts[pkt.table] = entry
                             result.errors.append(f"Writer:Unexpected:{e}")
@@ -893,7 +893,6 @@ class VertexForager:
                         self._fair_last_symbol = None
                         self._fair_burst_count = 0
                     return p2, cand, demote_jobs, already_done
-                # If we broke due to empty queue, continue the outer loop to await another item under lock
 
     async def _fetch_worker(
         self,
