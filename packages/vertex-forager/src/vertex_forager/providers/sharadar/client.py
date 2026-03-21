@@ -150,6 +150,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         *,
         tickers: list[str] | None = None,
         connect_db: str | Path | None = None,
+        show_progress: bool = True,
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Fetch metadata for all or specific tickers (TICKERS).
@@ -157,6 +158,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         Args:
             tickers: Optional list of ticker symbols to filter. If None, fetches all.
             connect_db: Optional DuckDB connection string/path for persistence.
+            show_progress: Whether to display progress indicators (default: True).
             **kwargs: Additional provider-specific options forwarded to the pipeline.
 
         Returns:
@@ -168,19 +170,26 @@ class SharadarClient(BaseClient[SharadarDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        return await self._get_ticker_info_impl(tickers=tickers, connect_db=connect_db, show_spinner=True, **kwargs)
+        return await self._get_ticker_info_impl(
+            tickers=tickers,
+            connect_db=connect_db,
+            show_spinner=show_progress,
+            **kwargs,
+        )
 
     @jupyter_safe
     async def get_sp500_history(
         self,
         *,
         connect_db: str | Path | None = None,
+        show_progress: bool = True,
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Fetch S&P 500 component history.
 
         Args:
             connect_db: Optional DuckDB connection string/path for persistence.
+            show_progress: Whether to display progress indicators (default: True).
             **kwargs: Additional provider-specific options forwarded to the pipeline.
 
         Returns:
@@ -202,7 +211,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             start_date=None,
             end_date=None,
             extra=dict(kwargs),
-            show_progress=True,
+            show_progress=show_progress,
             use_progress_bar=False,
         )
         return await self._fetch_pagination(cfg)
@@ -215,6 +224,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         connect_db: str | Path | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
+        show_progress: bool = True,
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Get price data for specified tickers.
@@ -226,6 +236,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             connect_db: Path to DuckDB database file for storing results.
             start_date: Start date for data fetching (YYYY-MM-DD).
             end_date: End date for data fetching (YYYY-MM-DD).
+            show_progress: Whether to display progress indicators (default: True).
             **kwargs: Additional arguments passed to the fetcher.
 
         Returns:
@@ -250,7 +261,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             start_date=start_date,
             end_date=end_date,
             extra=dict(kwargs),
-            show_progress=True,
+            show_progress=show_progress,
         )
         return await self._fetch_per_ticker(cfg)
 
@@ -263,6 +274,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         start_date: str | None = None,
         end_date: str | None = None,
         dimension: str = "MRT",
+        show_progress: bool = True,
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Fetch fundamental data (SF1).
@@ -273,6 +285,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             start_date: Optional start date filter (YYYY-MM-DD).
             end_date: Optional end date filter (YYYY-MM-DD).
             dimension: SF1 dimension (e.g., 'MRT', 'ARQ', 'ARY').
+            show_progress: Whether to display progress indicators (default: True).
             **kwargs: Additional provider-specific options.
 
         Returns:
@@ -298,7 +311,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             start_date=start_date,
             end_date=end_date,
             extra=extras,
-            show_progress=True,
+            show_progress=show_progress,
         )
         return await self._fetch_per_ticker(cfg)
 
@@ -310,6 +323,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         connect_db: str | Path | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
+        show_progress: bool = True,
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Fetch daily metrics (DAILY).
@@ -319,6 +333,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             connect_db: Optional DuckDB connection string/path.
             start_date: Optional start date (YYYY-MM-DD).
             end_date: Optional end date (YYYY-MM-DD).
+            show_progress: Whether to display progress indicators (default: True).
             **kwargs: Additional provider-specific options.
 
         Returns:
@@ -343,7 +358,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             start_date=start_date,
             end_date=end_date,
             extra=dict(kwargs),
-            show_progress=True,
+            show_progress=show_progress,
         )
         return await self._fetch_per_ticker(cfg)
 
@@ -355,6 +370,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         connect_db: str | Path | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
+        show_progress: bool = True,
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Fetch corporate actions (ACTIONS).
@@ -364,6 +380,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             connect_db: Optional DuckDB connection string/path.
             start_date: Optional start date (YYYY-MM-DD).
             end_date: Optional end date (YYYY-MM-DD).
+            show_progress: Whether to display progress indicators (default: True).
             **kwargs: Additional provider-specific options.
 
         Returns:
@@ -388,7 +405,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             start_date=start_date,
             end_date=end_date,
             extra=dict(kwargs),
-            show_progress=True,
+            show_progress=show_progress,
         )
         return await self._fetch_per_ticker(cfg)
 
@@ -400,6 +417,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         connect_db: str | Path | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
+        show_progress: bool = True,
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Fetch insider trading data (SF2).
@@ -409,6 +427,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             connect_db: Optional DuckDB connection string/path.
             start_date: Optional start date (YYYY-MM-DD).
             end_date: Optional end date (YYYY-MM-DD).
+            show_progress: Whether to display progress indicators (default: True).
             **kwargs: Additional provider-specific options.
 
         Returns:
@@ -433,7 +452,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             start_date=start_date,
             end_date=end_date,
             extra=dict(kwargs),
-            show_progress=True,
+            show_progress=show_progress,
         )
         return await self._fetch_per_ticker(cfg)
 
@@ -445,6 +464,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         connect_db: str | Path | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
+        show_progress: bool = True,
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
         """Fetch institutional ownership data (SF3).
@@ -454,6 +474,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             connect_db: Optional DuckDB connection string/path.
             start_date: Optional start date (YYYY-MM-DD).
             end_date: Optional end date (YYYY-MM-DD).
+            show_progress: Whether to display progress indicators (default: True).
             **kwargs: Additional provider-specific options.
 
         Returns:
@@ -478,7 +499,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             start_date=start_date,
             end_date=end_date,
             extra=dict(kwargs),
-            show_progress=True,
+            show_progress=show_progress,
         )
         return await self._fetch_per_ticker(cfg)
 
@@ -591,7 +612,12 @@ class SharadarClient(BaseClient[SharadarDataset]):
         if self._metadata_cache is None and config.dataset != "tickers":
             logger.info(LOG_META_CACHE_MISS.format(prefix=CLIENT_LOG_PREFIX))
             try:
-                with Spinner("Prefetching metadata for smart batching..."):
+                spinner_ctx = (
+                    Spinner("Prefetching metadata for smart batching...")
+                    if config.show_progress
+                    else nullcontext()
+                )
+                with spinner_ctx:
                     meta_result = await self._get_ticker_info_impl(
                         tickers=None,
                         connect_db=config.connect_db,
