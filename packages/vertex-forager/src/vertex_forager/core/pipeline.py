@@ -205,6 +205,10 @@ class VertexForager:
         self._metrics_sink = getattr(config, "metrics_sink", None)
         self._stop_task: asyncio.Task[None] | None = None
 
+        if str(os.getenv("VF_ALLOW_PICKLE_COMPAT", "")).lower() in {"1", "true", "yes"}:
+            logger.warning("PIPELINE: VF_ALLOW_PICKLE_COMPAT is enabled; pickled payloads may be accepted")
+            self._inc("pickle_compat_enabled", 1)
+
     def _inc(self, name: str, amount: int = 1) -> None:
         if not self._metrics_enabled:
             return
