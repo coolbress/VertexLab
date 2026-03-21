@@ -815,7 +815,6 @@ class VertexForager:
                     if result is not None and result_lock is not None:
                         async with result_lock:
                             entry = result.dlq_counts.get(pkt.table) or {"rescued": 0, "remaining": 0}
-                            entry.setdefault("rescued", 0)
                             entry["remaining"] = entry.get("remaining", 0) + 1
                             result.dlq_counts[pkt.table] = entry
                             result.errors.append(f"Writer:Unexpected:{e}")
