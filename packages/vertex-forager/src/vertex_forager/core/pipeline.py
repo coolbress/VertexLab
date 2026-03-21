@@ -381,6 +381,14 @@ class VertexForager:
         result = RunResult(provider=self._router.provider)
         result_lock = asyncio.Lock()
 
+        if getattr(self, "_parse_executor", None) is None or getattr(self._parse_executor, "_shutdown", False):
+            try:
+                w_val = int(self.controller.concurrency_limit)
+                w_int = w_val if w_val > 0 else None
+            except Exception:
+                w_int = None
+            self._parse_executor = ThreadPoolExecutor(max_workers=w_int, thread_name_prefix="vertex-forager:parse")
+
         writer_tasks = [
             asyncio.create_task(
                 self._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock),
@@ -622,6 +630,24 @@ class VertexForager:
                     with suppress(Exception):
                         t.cancel()
                 logger.debug("PIPELINE: Timeout awaiting pkt_q sentinel put tasks; cancelled pending puts")
+                pkt_q = getattr(self, "_pkt_q", None)
+                if pkt_q is not None:
+                    while True:
+                        try:
+                            pkt = pkt_q.get_nowait()
+                        except asyncio.QueueEmpty:
+                            break
+                        if pkt is None:
+                            with suppress(Exception):
+                                pkt_q.task_done()
+                            continue
+                        try:
+                            await self._writer.write(pkt)
+                        except Exception as e:
+                            logger.exception(f"PIPELINE: Error writing drained packet: {e}")
+                        finally:
+                            with suppress(Exception):
+                                pkt_q.task_done()
                 # If writers could still be blocked on pkt_q.get(), cancel them to avoid hang
                 if writer_set:
                     for w in list(writer_set):
@@ -680,6 +706,8 @@ class VertexForager:
 
     async def _try_flush_once(self, *, suppress: bool, consume: bool = True) -> None:
         if not consume:
+            if getattr(self, "_writer_flushed", False):
+                return
             try:
                 await self._writer.flush()
             except Exception:
