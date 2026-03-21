@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.2](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.5.1...vertex-forager-v0.5.2) (2026-03-21)
+
+
+### Bug Fixes
+
+* respect show_progress in SharadarClient  ([#175](https://github.com/coolbress/VertexLab/issues/175)) ([c838aef](https://github.com/coolbress/VertexLab/commit/c838aef9641b95e05a3807ba608927fba57c72ab))
+
 ## [0.5.1](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.5.0...vertex-forager-v0.5.1) (2026-03-21)
 
 
