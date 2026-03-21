@@ -12,9 +12,14 @@ Industry‑grade ingestion for financial data: transport decoupling, schema‑aw
   - [Troubleshooting](how-to/troubleshooting.md)
   - [CLI equivalents](how-to/cli-equivalents.md)
 - Reference
+  - [API Reference](reference/api.md)
+  - [Module Index](reference/modules.md)
   - [EngineConfig](reference/config.md)
   - [Metrics](reference/metrics.md)
   - [Constants](reference/constants.md)
+- Examples
+  - [YFinance notebook](https://github.com/coolbress/VertexLab/blob/main/packages/vertex-forager/examples/yfinance_examples.ipynb)
+  - [Sharadar notebook](https://github.com/coolbress/VertexLab/blob/main/packages/vertex-forager/examples/sharadar.ipynb)
 - Explanation
   - [Pipeline architecture](explanation/architecture.md)
   - [Router & Client architecture](explanation/router-client.md)

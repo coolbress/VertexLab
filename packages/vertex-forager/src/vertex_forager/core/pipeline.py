@@ -613,8 +613,8 @@ class VertexForager:
               cancelled by the caller while awaiting completion.
 
         Raises:
-            asyncio.CancelledError: Only if this `stop` coroutine is externally cancelled; exceptions
-            from tasks are logged and suppressed via `return_exceptions=True`.
+            asyncio.CancelledError: Only if this `stop` coroutine is externally cancelled;
+                exceptions from tasks are logged and suppressed via ``return_exceptions=True``.
         """
         if not self._active_tasks:
             return

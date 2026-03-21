@@ -325,27 +325,13 @@ class DuckDBWriter(BaseWriter):
         return results
 
     async def flush(self) -> None:
-        """
-        Flush is now no-op as we write immediately.
-
-        Args:
-            None
-
-        Returns:
-            None
-        """
+        """Flush is now no-op as we write immediately."""
         pass
 
     async def compact(self) -> None:
-        """
-        Optimize database storage.
+        """Optimize database storage.
+
         Runs VACUUM and CHECKPOINT to reclaim space and enforce compression.
-
-        Args:
-            None
-
-        Returns:
-            None
 
         Raises:
             duckdb.Error: If VACUUM or CHECKPOINT commands fail.
@@ -377,12 +363,6 @@ class DuckDBWriter(BaseWriter):
 
         Acquires the lock to ensure no write operations are in progress
         before closing the connection.
-
-        Args:
-            None
-
-        Returns:
-            None
 
         Raises:
             duckdb.Error: If the connection close operation fails.
