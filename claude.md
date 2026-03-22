@@ -15,7 +15,8 @@ This document defines repository-level guardrails for using Claude Code CLI. It 
   2) Related file links in file:///ABS/PATH#Lx-Ly form
   3) Next actions (commands to run)
 - Example link (placeholder): [api.py](file:///$REPO_ROOT/packages/vertex-forager/src/vertex_forager/api.py#L10-L35)
-- Always use absolute file:/// paths for links and commands; avoid relative paths.
+- Links must use absolute file:/// URLs.
+- Commands are written to be executed from the repository root; use repo‑root‑relative paths or explicit cd instructions.
 
 ## Exploration Strategy
 
@@ -49,9 +50,10 @@ This document defines repository-level guardrails for using Claude Code CLI. It 
 - PR (English): Use gh pr create and include the eight mandatory sections:
   - Summary, Linked Issue, Type of Change, Changes, Verification, Security Considerations, Risk & Rollback, Checklist
 - Commits (English): Follow Conventional Commits `<type>(<scope>): <desc> (#issue)`; merge via Squash.
-- uv.lock conflicts (monorepo): Prefer deterministic re-lock from repo root — remove the conflicted lock and regenerate, then sync and commit:
+- uv.lock conflicts (monorepo): Prefer deterministic re-lock from repo root — remove the conflicted lock and regenerate the lock file:
   - From repository root: rm uv.lock && uv lock
   - Note: uv sync is not required for resolving lock-file merge conflicts
+- Environment sync (post-merge): uv sync [--group dev]
 
 ## Pre-change Safety Checks
 
@@ -64,9 +66,9 @@ This document defines repository-level guardrails for using Claude Code CLI. It 
 
 ## Quality Gates (Must Pass Locally)
 
-Run from repository root:
-
 - All checks below are required (mandatory).
+- Run location: repository root
+- Command paths: use repo‑root‑relative paths or explicit cd
 - Lint: uv run ruff check packages/ --fix
 - Security lint: uv run ruff check packages/ --select S
 - Types: uv run mypy packages/vertex-forager/src --strict
