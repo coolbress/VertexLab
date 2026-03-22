@@ -31,6 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
@@ -56,11 +57,9 @@ jobs:
           tag_name: ${{ needs.release.outputs.vertex_tag_name }}
           fail_on_unmatched_files: true
 
-      - name: Upload to PyPI (optional)
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
-        if: env.TWINE_PASSWORD != '' && vars.PUBLISH_TO_PYPI == 'true'
-        run: |
-          uv pip install --system -q "twine==6.*"
-          twine upload --skip-existing dist/vertex-forager/*
+      - name: Publish to PyPI via OIDC (optional)
+        if: vars.PUBLISH_TO_PYPI == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/vertex-forager
+          skip-existing: true
