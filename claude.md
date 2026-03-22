@@ -70,11 +70,11 @@ This document defines repository-level guardrails for using Claude Code CLI. It 
 - Run location: repository root
 - Command paths: use repo‑root‑relative paths or explicit cd
 - Lint: uv run ruff check packages/ --fix
-- Security lint: uv run ruff check packages/ --select S
+- Security lint (mandatory): uv run ruff check packages/ --select S
 - Types: uv run mypy packages/vertex-forager/src --strict
 - Tests: uv run pytest packages/ --cov-fail-under=80
 - Cycles: uv run python scripts/check_cycles.py
-- Secrets scan: uv run detect-secrets scan --all-files
+- Secrets scan (mandatory): uv run detect-secrets scan --all-files
 
 ## Security Principles
 
