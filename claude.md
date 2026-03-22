@@ -65,7 +65,7 @@ This document defines repository-level guardrails for using Claude Code CLI. It 
 - Security lint: uv run ruff check packages/ --select S
 - Types: uv run mypy packages/vertex-forager/src --strict
 - Tests: uv run pytest packages/ --cov-fail-under=80
-- Cycles: python3 scripts/check_cycles.py
+- Cycles: uv run python scripts/check_cycles.py
 - Secrets scan: uv run detect-secrets scan --all-files
 
 ## Security Principles
