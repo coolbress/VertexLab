@@ -16,9 +16,13 @@ concurrency:
 
 jobs:
   quality-check:
-    name: 🛡️ Code Quality Check
+    name: 🛡️ Code Quality Check (py${{ matrix.python-version }})
     runs-on: ubuntu-latest  # 최신 리눅스 환경에서 실행
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
     permissions:
       contents: read
       security-events: write
@@ -47,7 +51,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v5 pinned
         with:
-          python-version: "3.10"
+          python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
         run: uv sync  # 라이브러리 설치 테스트
@@ -64,6 +68,7 @@ jobs:
             ${{ runner.os }}-trivy-db-${{ steps.cache_window.outputs.week }}
             ${{ runner.os }}-trivy-db
       - name: Trivy FS Scan (SARIF)
+        if: ${{ matrix.python-version == '3.10' }}
         id: trivy
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # 0.16.1 pinned
         with:
@@ -84,6 +89,7 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
       - name: Enforce Trivy Gate (HIGH/CRITICAL)
+        if: ${{ matrix.python-version == '3.10' }}
         run: |
           if [ ! -f trivy-results.sarif ]; then
             echo "::error::trivy-results.sarif not found"
@@ -113,13 +119,16 @@ jobs:
           echo "::endgroup::"
 
       - name: Check Import Cycles
+        if: ${{ matrix.python-version == '3.10' }}
         run: python3 scripts/check_cycles.py
 
       - name: Lint Code (Ruff)
         # packages 폴더 안에 있는 모든 코드를 검사 (legacy_code 제외)
+        if: ${{ matrix.python-version == '3.10' }}
         run: uv run ruff check packages/ --exclude "legacy_code"
 
       - name: Lint (Ruff Tier-2 Warnings)
+        if: ${{ matrix.python-version == '3.10' }}
         continue-on-error: true
         run: |
           uv run ruff check packages/ \
@@ -127,13 +136,25 @@ jobs:
             --select C4,PT,TCH,SIM,TC
 
       - name: YAML Lint
+        if: ${{ matrix.python-version == '3.10' }}
         run: |
           uv run yamllint -c .yamllint .github/workflows/ \
             && uv run yamllint -c .yamllint packages/vertex-forager/mkdocs.yml
 
       - name: Run Tests (Pytest with Coverage Gate)
+        if: ${{ matrix.python-version == '3.10' }}
         run: uv run pytest packages/ --tb=short --cov=packages/vertex-forager/src/vertex_forager/core --cov=packages/vertex-forager/src/vertex_forager/clients --cov=packages/vertex-forager/src/vertex_forager/writers --cov=packages/vertex-forager/src/vertex_forager/routers --cov-report=term --cov-fail-under=80
+      - name: Run Tests (Pytest)
+        if: ${{ matrix.python-version != '3.10' }}
+        run: uv run pytest packages/vertex-forager/tests -q
+      - name: Benchmark (non-blocking)
+        if: ${{ matrix.python-version == '3.10' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        continue-on-error: true
+        env:
+          VF_PROFILE_OUTPUT_DIR: ${{ github.workspace }}/output/forager-profiles
+        run: uv run python packages/vertex-forager/tests/verification/verify_pipeline_perf.py
       - name: Build sdist and wheel (vertex-forager)
+        if: ${{ matrix.python-version == '3.10' }}
         run: |
           pushd packages/vertex-forager
           OUT="$GITHUB_WORKSPACE/dist/vertex-forager"
@@ -142,6 +163,7 @@ jobs:
           ls -l "$OUT"
           popd
       - name: Smoke install built wheel
+        if: ${{ matrix.python-version == '3.10' }}
         run: |
           pushd packages/vertex-forager
           OUT="$GITHUB_WORKSPACE/dist/vertex-forager"
@@ -161,6 +183,7 @@ jobs:
           PY
           popd
       - name: pip-audit (fails on any vulnerability)
+        if: ${{ matrix.python-version == '3.10' }}
         uses: pypa/gh-action-pip-audit@1220774d901786e6f652ae159f7b6bc8fea6d266  # v1.1.0 pinned
         with:
           virtual-environment: ${{ env.VENV }}
