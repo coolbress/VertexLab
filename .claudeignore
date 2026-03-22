@@ -1,0 +1,86 @@
+# === VCS / Tooling ===
+.git/
+.gitignore
+.gitattributes
+.editorconfig
+.vscode/
+.idea/
+.DS_Store
+.python-version
+
+# === Python Environment (uv) ===
+.venv/
+venv/
+env/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.uv/
+__pypackages__/
+
+# === Build & Distribution ===
+build/
+dist/
+site/
+*.egg-info/
+pip-wheel-metadata/
+.tox/
+.nox/
+
+# === Data & Databases ===
+*.duckdb*
+*.sqlite*
+*.db
+data/
+datasets/
+artifacts/
+.cache/
+cache/
+*.parquet
+*.feather
+*.csv
+*.bin
+*.pickle
+
+# === Analysis & Logs ===
+logs/
+*.log
+htmlcov/
+coverage/
+.coverage
+.coverage.*
+coverage.xml
+.hypothesis/
+reports/
+junit*.xml
+**/profile_metrics.json
+
+# === Node / JS ===
+node_modules/
+
+# === Documentation & Checkpoints ===
+docs/_build/
+**/.ipynb_checkpoints/
+**/.virtual_documents/
+
+# === Binary & Media ===
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.ico
+*.pdf
+*.zip
+*.tar.gz
+
+# === Secrets & Sensitive Info ===
+.env
+.env.*
+.secrets.baseline
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
