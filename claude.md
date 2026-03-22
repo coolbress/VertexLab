@@ -14,7 +14,7 @@ This document defines repository-level guardrails for using Claude Code CLI. It 
   1) Conclusion (summary of changes or decision)
   2) Related file links in file:///ABS/PATH#Lx-Ly form
   3) Next actions (commands to run)
-- Example link: [api.py](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/api.py#L10-L35)
+- Example link (placeholder): [api.py](file:///$REPO_ROOT/packages/vertex-forager/src/vertex_forager/api.py#L10-L35)
 - Always use absolute file:/// paths for links and commands; avoid relative paths.
 
 ## Exploration Strategy
@@ -37,7 +37,9 @@ This document defines repository-level guardrails for using Claude Code CLI. It 
 - Security and license review completed; supply‑chain risks considered.
 - API stability and ecosystem maturity evaluated.
 - Minimal surface-area change with migration and rollback plan.
-- Manage with uv from the package directory; pin versions with upper bounds per repo policy.
+- Manage with uv from the package directory; pin versions with appropriate bounds:
+  - Core/runtime dependencies: apply upper bounds per repo policy.
+  - Dev tools (lint/test/etc.): lower-bound pins are acceptable.
 - All quality gates pass (ruff, mypy, pytest, cycle checks).
 
 ## Industry-Grade Workflow
@@ -61,6 +63,8 @@ This document defines repository-level guardrails for using Claude Code CLI. It 
   - Protect root/home; verify existence and directory type
 
 ## Quality Gates (Must Pass Locally)
+
+Run from repository root:
 
 - Lint: uv run ruff check packages/ --fix
 - Security lint: uv run ruff check packages/ --select S
