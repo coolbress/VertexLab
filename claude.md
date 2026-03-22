@@ -3,10 +3,12 @@
 This document defines repository-level guardrails for using Claude Code CLI. It emphasizes token efficiency, high‑level analysis, and safe, minimal changes aligned with industry standards.
 
 ## Purpose & Scope
+
 - Purpose: Read only what’s necessary, reason at the right abstraction level, and make safe, minimal edits.
 - Scope: Python 3.10+ monorepo using uv workspace under packages/*.
 
 ## Output Contract
+
 - Language: General chat in Korean; code comments (if needed), Issues/PRs, and commit messages in English.
 - Format for all assistant outputs:
   1) Conclusion (summary of changes or decision)
@@ -16,17 +18,20 @@ This document defines repository-level guardrails for using Claude Code CLI. It 
 - Always use absolute file:/// paths for links and commands; avoid relative paths.
 
 ## Exploration Strategy
+
 - No recursive listing (e.g., ls -R). Identify target files first, then read only required line ranges.
 - Never load entire long files unless unavoidable; prefer precise ranges.
 - Start with high-level questions (e.g., “auth flow”, “error handling policy”), then split into focused sub-queries.
 
 ## Change Rules
+
 - Prefer existing style and dependencies; introduce or replace libraries only when they demonstrably improve performance, reliability, security, or maintainability and the dependency checklist is satisfied.
 - Edit only code directly related to the requested feature/bug; avoid opportunistic refactors/renames.
 - PEP 8, Google-style docstrings, strict type hints (Pydantic), and pathlib.Path only.
 - Do not add comments in code unless explicitly requested.
 
 ### Dependency Change Checklist (Required)
+
 - Issue opened and linked with clear rationale and scope.
 - Benchmarks/profiling show material improvement on representative workloads.
 - Security and license review completed; supply‑chain risks considered.
@@ -36,6 +41,7 @@ This document defines repository-level guardrails for using Claude Code CLI. It 
 - All quality gates pass (ruff, mypy, pytest, cycle checks).
 
 ## Industry-Grade Workflow
+
 - Issue (English): Create an issue with gh issue create (Bug/Feature/Docs/Tech template) and capture the issue number.
 - Branching: Work on feat/, fix/, or refactor/ with the issue number; never push to main directly.
 - PR (English): Use gh pr create and include the eight mandatory sections:
@@ -45,6 +51,7 @@ This document defines repository-level guardrails for using Claude Code CLI. It 
   - rm uv.lock && uv lock && uv sync
 
 ## Pre-change Safety Checks
+
 - Always run:
   - git fetch origin
   - git diff origin/main -- <file> (check hotspots before editing)
@@ -53,6 +60,7 @@ This document defines repository-level guardrails for using Claude Code CLI. It 
   - Protect root/home; verify existence and directory type
 
 ## Quality Gates (Must Pass Locally)
+
 - Lint: uv run ruff check packages/ --fix
 - Security lint: uv run ruff check packages/ --select S
 - Types: uv run mypy packages/vertex-forager/src --strict
@@ -61,17 +69,20 @@ This document defines repository-level guardrails for using Claude Code CLI. It 
 - Secrets scan: uv run detect-secrets scan --all-files
 
 ## Security Principles
+
 - Never include secrets (API keys, tokens, credentials) in CLAUDE.md, code, or logs.
 - Manage sensitive configuration via environment variables; do not commit .env files.
 - Avoid printing or storing secrets; scrub logs if accidental exposure occurs.
 - Document only the principle (“manage via environment variables”) rather than concrete secret values.
 
 ## Analysis Ignore Policy
+
 - .claudeignore complements .gitignore to exclude large, non-code artifacts (datasets, logs, reports, media) from AI analysis.
 - Avoid excluding source code needed for understanding or refactoring.
 - Keep rules minimal and project-wide; refine patterns as team policy evolves.
 
 ## Code Evaluation & Optimization
+
 - Evaluate across six areas: correctness, data integrity, security, performance, reliability, and code quality.
 - Architecture: Follow SOLID and protocol-based abstractions for replaceable implementations.
 - Resource guidelines:
@@ -80,6 +91,7 @@ This document defines repository-level guardrails for using Claude Code CLI. It 
   - Concurrency: Respect rate limits and system constraints; avoid event-loop blocking.
 
 ## Benchmarking & Profiling
+
 - Compare against context-appropriate industry references automatically selected by the assistant (e.g., time‑series data sources, dataframe engines, backtesting frameworks), and document the rationale for chosen baselines.
 - Metrics: Latency, Memory Footprint, Throughput. Demonstrate improvements via benchmarks or profiles.
 - Internal profiling example:
@@ -96,7 +108,7 @@ Output:
 - Risk summary with proposals
 - Minimal file links
 - Next actions (commands/edits)
-###
+---
 
 Bug Fix (Minimal Change)
 PlainText
@@ -106,7 +118,7 @@ Verify:
 - ruff/mypy/pytest/cycle checks pass
 Output:
 - Change summary → file links → commands
-###
+---
 
 Performance Tuning (Top-2 Bottlenecks)
 PlainText
@@ -116,4 +128,4 @@ Verify:
 - Compare profiling metrics (p95/rows/memory)
 Output:
 - Summary → links → commands
-###
+---
