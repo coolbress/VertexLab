@@ -1,43 +1,32 @@
-# CI Security Policy
+# CI Security & Publishing
 
-## Code Scanning
+## Objectives
+- Eliminate long‑lived PyPI tokens via Trusted Publishing (OIDC).
+- Enforce Conventional Commits at PR title level (warning first).
 
-- CodeQL analyzes Python code on pushes and PRs.
-- Upload on PRs is enabled when either repository variable `ENABLE_CODEQL_ON_PR == true` is set or the PR has label `security-critical`. Pushes to `main` always upload.
+## Trusted Publishing (PyPI)
+- Publisher: pypa/gh-action-pypi-publish@release/v1
+- Job permissions: contents: write, id-token: write
+- Toggle: set repository variable `PUBLISH_TO_PYPI=true` to enable
+- Build artifacts path: `dist/vertex-forager`
+- Registration: add this repo as a Trusted Publisher on PyPI
+- Rollback: switch back to Twine + PYPI_TOKEN
 
-## Vulnerability Scans (Trivy)
+## PR Title Validation
+- Trigger: pull_request (opened, edited, synchronize, reopened, ready_for_review)
+- Pattern (Conventional Commits + issue):  
+  `^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([^)]+\))?(!)?: .+ \(#\d+\)$`
+- Mode: Warning only (`continue-on-error: true`), later switch to blocking
 
- - Single-run flow:
-   - One Trivy execution runs with severities `MEDIUM,HIGH,CRITICAL`, produces `trivy-results.sarif`, and uses `exit-code: 0` so the Security tab captures all severities.
-   - In the same job run, a SARIF-parsing gate enforces failure only when `HIGH` or `CRITICAL` findings are present (based on parsing the `trivy-results.sarif`), reusing setup/cache within that single execution.
-- Remediation hints are printed on failure; see severity thresholds and SLA below.
+## Validation
+- Publish uses OIDC and succeeds without PYPI_TOKEN
+- Non‑conforming PR titles produce a warning
+- Release Please changelog unaffected
 
-## Severity Policy and SLA
+## Risk & Rollback
+- Trusted Publishing: requires PyPI setup; if misconfigured, publish fails only
+- Commit validation: regex may be strict; start warning → then blocking
 
-- HIGH, CRITICAL: block merges; fix promptly.
-- MEDIUM: reported to Security tab; fix when feasible; does not block.
-- LOW, UNKNOWN: informational; track in backlog.
-
-## Publishing Gate
-
-- PyPI upload requires `vars.PUBLISH_TO_PYPI == 'true'` and `secrets.PYPI_TOKEN`.
-- No other steps use PyPI credentials.
-
-## Release PR CI Trigger (release-please)
-
-- To ensure CI checks run automatically on Release PRs created by release-please, use a fine‑grained PAT:
-  - Create a bot account or use an automation user with minimal scopes (Repository: Contents (R/W), Pull requests (R/W), Issues (R/W), Metadata (R/O)).
-  - Add the token as repository secret: `RELEASE_PLEASE_TOKEN`.
-  - The workflow uses `secrets.RELEASE_PLEASE_TOKEN` with fallback to `github.token`:
-    - If the secret is present, PRs are authored via PAT and standard `pull_request` triggers fire.
-    - If absent, the workflow falls back to `GITHUB_TOKEN` (PRs may not auto‑trigger CI due to chain restrictions).
-
-## Runtime
-
-- Workflows use Node 24‑compatible action versions; Python 3.10 runners.
-
-## Rollback
-
-- Toggle CodeQL PR uploads via `ENABLE_CODEQL_ON_PR`.
-- Disable Trivy gate temporarily by removing the gate step or adjusting severity.
-- Revert specific workflow files via Git history.
+## References
+- `.github/workflows/release-please.yml`
+- `.github/workflows/validate-pr-title.yml`
