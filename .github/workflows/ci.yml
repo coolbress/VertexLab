@@ -56,9 +56,11 @@ jobs:
       - name: Install dependencies
         run: uv sync  # 라이브러리 설치 테스트
       - name: Compute cache window
+        if: ${{ matrix.python-version == '3.10' }}
         id: cache_window
         run: echo "week=$(date +'%G-%V')" >> "$GITHUB_OUTPUT"
       - name: Cache Trivy DB
+        if: ${{ matrix.python-version == '3.10' }}
         uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306  # v5.0.3 pinned
         with:
           path: |
@@ -187,6 +189,8 @@ jobs:
   quality-gate:
     name: Code Quality Check
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     needs: [quality-check]
     if: ${{ always() }}
     steps:
@@ -202,6 +206,8 @@ jobs:
   benchmark-non-blocking:
     name: Benchmark (non-blocking)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     needs: [quality-check]
     continue-on-error: true
     timeout-minutes: 45
