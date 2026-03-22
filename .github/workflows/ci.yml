@@ -187,3 +187,19 @@ jobs:
         uses: pypa/gh-action-pip-audit@1220774d901786e6f652ae159f7b6bc8fea6d266  # v1.1.0 pinned
         with:
           virtual-environment: ${{ env.VENV }}
+
+  # Aggregator job with a stable check name to satisfy branch protection rules.
+  # This job succeeds only if all matrix jobs in "quality-check" succeed.
+  quality-gate:
+    name: Code Quality Check
+    runs-on: ubuntu-latest
+    needs: [quality-check]
+    if: ${{ always() }}
+    steps:
+      - name: Aggregate matrix result
+        run: |
+          echo "Needs quality-check result: ${{ needs.quality-check.result }}"
+          if [ "${{ needs.quality-check.result }}" != "success" ]; then
+            echo "One or more matrix legs failed."
+            exit 1
+          fi
