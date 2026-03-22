@@ -28,7 +28,7 @@ This document defines repository-level guardrails for using Claude Code CLI. It 
 
 - Prefer existing style and dependencies; introduce or replace libraries only when they demonstrably improve performance, reliability, security, or maintainability and the dependency checklist is satisfied.
 - Edit only code directly related to the requested feature/bug; avoid opportunistic refactors/renames.
-- PEP 8, Google-style docstrings, strict type hints (Pydantic), and pathlib.Path only.
+- PEP 8, Google-style docstrings, mypy for strict static type checking and Pydantic for runtime validation, and pathlib.Path only.
 - Do not add comments in code unless explicitly requested.
 
 ### Dependency Change Checklist (Required)
