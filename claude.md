@@ -14,7 +14,7 @@ This document defines repository-level guardrails for using Claude Code CLI. It 
   1) Conclusion (summary of changes or decision)
   2) Related file links in file:///ABS/PATH#Lx-Ly form
   3) Next actions (commands to run)
-- Example link: [utils.py](file:///ABS_PATH/utils.py#L10-L35)
+- Example link: [api.py](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/api.py#L10-L35)
 - Always use absolute file:/// paths for links and commands; avoid relative paths.
 
 ## Exploration Strategy
@@ -48,7 +48,8 @@ This document defines repository-level guardrails for using Claude Code CLI. It 
   - Summary, Linked Issue, Type of Change, Changes, Verification, Security Considerations, Risk & Rollback, Checklist
 - Commits (English): Follow Conventional Commits `<type>(<scope>): <desc> (#issue)`; merge via Squash.
 - uv.lock conflicts (monorepo): Prefer deterministic re-lock from repo root — remove the conflicted lock and regenerate, then sync and commit:
-  - rm uv.lock && uv lock && uv sync
+  - From repository root: rm uv.lock && uv lock
+  - Note: uv sync is not required for resolving lock-file merge conflicts
 
 ## Pre-change Safety Checks
 
