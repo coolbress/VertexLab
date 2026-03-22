@@ -70,8 +70,6 @@ This document defines repository-level guardrails for using Claude Code CLI. It 
 - .claudeignore complements .gitignore to exclude large, non-code artifacts (datasets, logs, reports, media) from AI analysis.
 - Avoid excluding source code needed for understanding or refactoring.
 - Keep rules minimal and project-wide; refine patterns as team policy evolves.
-- Security lint: uv run ruff check packages/ --select S
-- Secrets scan: uv run detect-secrets scan --all-files
 
 ## Code Evaluation & Optimization
 - Evaluate across six areas: correctness, data integrity, security, performance, reliability, and code quality.
