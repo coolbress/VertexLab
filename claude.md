@@ -66,6 +66,7 @@ This document defines repository-level guardrails for using Claude Code CLI. It 
 
 Run from repository root:
 
+- All checks below are required (mandatory).
 - Lint: uv run ruff check packages/ --fix
 - Security lint: uv run ruff check packages/ --select S
 - Types: uv run mypy packages/vertex-forager/src --strict
