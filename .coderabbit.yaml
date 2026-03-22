@@ -22,11 +22,6 @@ reviews:
     - "!**/.pytest_cache/**"
     - "!**/.ipynb_checkpoints/**"
     - "!**/dist/**"
-    # Release Please characteristic changes — skip auto review when PR only touches these:
-    - "!.release-please-manifest.json"
-    - "!packages/vertex-forager/CHANGELOG.md"
-    - "!packages/vertex-forager/src/vertex_forager/__init__.py"
-    - "!packages/vertex-forager/pyproject.toml"
   auto_review:
     enabled: true
     auto_incremental_review: true
@@ -34,7 +29,7 @@ reviews:
     ignore_usernames:
       - "dependabot[bot]"
       - "github-actions[bot]"
-      - "release-please[bot]"
+      - "vertexlab-bot"
 
   path_instructions:
     - path: "**"
