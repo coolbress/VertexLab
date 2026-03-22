@@ -1,3 +1,4 @@
+---
 name: validate-pr-title
 
 on:
@@ -11,9 +12,11 @@ jobs:
       - name: Validate PR title against Conventional Commits (warning-only)
         id: validate
         shell: bash
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          title="${{ github.event.pull_request.title }}"
-          echo "PR title: $title"
+          title="$PR_TITLE"
+          echo "PR title: \"$PR_TITLE\""
           re='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([^)]+\))?(!)?: .+ \(#([0-9]+)\)$'
           if echo "$title" | grep -Eq "$re"; then
             echo "Title OK"

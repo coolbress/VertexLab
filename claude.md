@@ -49,7 +49,11 @@ This document defines repository-level guardrails for using Claude Code CLI. It 
 - Branching: Work on feat/, fix/, or refactor/ with the issue number; never push to main directly.
 - PR (English): Use gh pr create and include the eight mandatory sections:
   - Summary, Linked Issue, Type of Change, Changes, Verification, Security Considerations, Risk & Rollback, Checklist
-- Commits (English): Follow Conventional Commits `<type>(<scope>): <desc> (#issue)`; merge via Squash.
+- Commits (English): Follow Conventional Commits `<type>(<scope>)?: <desc> (#issue)`; merge via Squash.
+  - Type is required; Scope is optional.
+  - PR titles must end with an issue number in the form `(#123)`.
+  - Allowed types: build, chore, ci, docs, feat, fix, perf, refactor, revert, style, test.
+  - Squash Merge uses the PR title as the final commit message.
 - uv.lock conflicts (monorepo): Prefer deterministic re-lock from repo root — remove the conflicted lock and regenerate the lock file:
   - From repository root: rm uv.lock && uv lock
   - Note: uv sync is not required for resolving lock-file merge conflicts

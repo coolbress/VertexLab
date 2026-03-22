@@ -59,7 +59,7 @@ jobs:
 
       - name: Publish to PyPI via OIDC (optional)
         if: vars.PUBLISH_TO_PYPI == 'true'
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e
         with:
           packages-dir: dist/vertex-forager
           skip-existing: true
