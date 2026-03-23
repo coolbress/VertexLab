@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.6.0...vertex-forager-v0.7.0) (2026-03-23)
+
+
+### Features
+
+* **core:** tighten static typing, strict schema validation, and memory dedup ([#184](https://github.com/coolbress/VertexLab/issues/184)) ([691c535](https://github.com/coolbress/VertexLab/commit/691c535bd2e44c02dce77992507f8685f63d83f9))
+
 ## [0.6.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.5.3...vertex-forager-v0.6.0) (2026-03-23)
 
 
