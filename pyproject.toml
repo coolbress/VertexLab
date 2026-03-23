@@ -37,6 +37,8 @@ force-sort-within-sections = true
 asyncio_mode = "auto"
 markers = [
     "integration: integration tests",
+    "manual: opt-in manual verification tests",
+    "smoke: fast smoke tests for imports/entrypoints",
 ]
 
 [tool.mypy]

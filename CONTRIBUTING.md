@@ -2,6 +2,17 @@
 
 Thank you for contributing to Vertex Forager!
 
+## Table of Contents
+- [Development quickstart](#development-quickstart)
+- [Tests](#tests)
+- [Lint rules & quick‑fix cheatsheet](#lint-rules--quickfix-cheatsheet)
+- [Temporary per‑file‑ignores policy](#temporary-perfileignores-policy)
+- [Documentation](#documentation)
+- [Commit/PR guidelines](#commitpr-guidelines)
+- [Security](#security)
+- [CI Policy (Actions Pinning)](#ci-policy-actions-pinning)
+- [Lockfile Policy (uv.lock)](#lockfile-policy-uvlock)
+
 ## Development quickstart
 - Install uv and set up the workspace:
   - `uv sync`
@@ -15,6 +26,14 @@ Thank you for contributing to Vertex Forager!
   - `uv run pytest packages/ -q`
   - Note: pre-commit runs mypy against the same target (`packages/vertex-forager/src`) with `--strict` to ensure local and CI type errors match. Install hooks via `pre-commit install`.
   - Note (tests): keep packages/vertex-forager/tests/** exceptions S101 and TC002/TC003/TC006 for pytest assert ergonomics and type-checking imports.
+  - See `packages/vertex-forager/tests/README.md` for test structure (unit/integration/property/verification) and markers (`smoke`, `manual`), plus commands and CI policy.
+
+## Tests
+- Test layout, markers, and CI policy are documented in `packages/vertex-forager/tests/README.md`.
+- Quick commands:
+  - Default fast suite: `pytest packages/ -m "not manual"`
+  - Manual tests only: `pytest packages/ -m manual`
+  - Coverage gate: `pytest packages/ --cov --cov-fail-under=80`
 
 ## Lint rules & quick‑fix cheatsheet
 

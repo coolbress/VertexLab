@@ -17,6 +17,8 @@ from vertex_forager.core.config import EngineConfig, FramePacket, RunResult
 from vertex_forager.core.pipeline import VertexForager
 from vertex_forager.writers.base import WriteResult
 
+pytestmark = pytest.mark.manual
+
 
 def _child_run_memory_peak(chunk_rows: int, conn: Connection) -> None:
     import asyncio
@@ -27,13 +29,13 @@ def _child_run_memory_peak(chunk_rows: int, conn: Connection) -> None:
     class FakeWriter:
         def __init__(self) -> None:
             self.count = 0
+
         async def write(self, pkt: FramePacket) -> WriteResult:
             self.count += 1
             return WriteResult(table=pkt.table, rows=len(pkt.frame))
 
     async def _run() -> tuple[int, int]:
         writer = FakeWriter()
-        # Build a wider, larger payload to amplify memory differences
         rows_per_frame = 100_000
         num_frames = 6
         frames: list[pl.DataFrame] = []
@@ -52,8 +54,6 @@ def _child_run_memory_peak(chunk_rows: int, conn: Connection) -> None:
             )
             frames.append(frame)
         total_rows = rows_per_frame * num_frames
-        # Ensure baseline vs chunked behavior differs ONLY by writer_chunk_rows,
-        # not by early threshold flushes
         cfg = EngineConfig(
             requests_per_minute=100,
             writer_chunk_rows=chunk_rows if chunk_rows > 0 else None,
@@ -71,15 +71,14 @@ def _child_run_memory_peak(chunk_rows: int, conn: Connection) -> None:
         result = RunResult(provider="test")
         for frame in frames:
             pkt_q.put_nowait(
-                FramePacket(
-                    provider="test", table="t", frame=frame, observed_at=datetime.now()
-                )
+                FramePacket(provider="test", table="t", frame=frame, observed_at=datetime.now())
             )
         pkt_q.put_nowait(None)
 
         stop = threading.Event()
         peak = {"v": 0}
         proc = psutil.Process()
+
         def _sampler() -> None:
             local_peak = 0
             while not stop.is_set():
@@ -89,6 +88,7 @@ def _child_run_memory_peak(chunk_rows: int, conn: Connection) -> None:
                 time.sleep(0.01)
             if peak["v"] < local_peak:
                 peak["v"] = local_peak
+
         t = threading.Thread(target=_sampler, daemon=True)
         t.start()
         await vf._writer_worker(pkt_q=pkt_q, result=result, result_lock=asyncio.Lock())
@@ -99,6 +99,7 @@ def _child_run_memory_peak(chunk_rows: int, conn: Connection) -> None:
     res = asyncio.run(_run())
     conn.send(res)
     conn.close()
+
 
 @pytest.mark.skipif(
     os.getenv("VF_ENABLE_MEMORY_PEAK_TEST") != "1",
@@ -111,9 +112,7 @@ def test_chunked_flush_lower_memory_peak() -> None:
     p_base = ctx.Process(target=_child_run_memory_peak, args=(0, b_child))
     p_chunk = ctx.Process(target=_child_run_memory_peak, args=(50_000, c_child))
     p_base.start()
-    # Close child ends in parent immediately after start to avoid descriptor leaks
     b_child.close()
-    # Ensure child exited successfully before receiving to avoid blocking on crash
     p_base.join(timeout=10)
     assert p_base.exitcode == 0, f"p_base failed with exit code {p_base.exitcode}"
     baseline_peak, baseline_calls = b_parent.recv()
@@ -124,7 +123,6 @@ def test_chunked_flush_lower_memory_peak() -> None:
     assert p_chunk.exitcode == 0, f"p_chunk failed with exit code {p_chunk.exitcode}"
     chunked_peak, chunked_calls = c_parent.recv()
     c_parent.close()
-    # Dynamic margin: require ≥5% drop or 10 MiB, whichever is larger.
     dynamic_margin = max(int(baseline_peak * 0.05), 10 * 1024 * 1024)
     assert chunked_calls > 1
     assert baseline_calls == 1
