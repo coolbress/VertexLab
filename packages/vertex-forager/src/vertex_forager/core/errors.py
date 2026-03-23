@@ -108,13 +108,13 @@ class RunError:
             return True
 
         # Check httpx exceptions if available
-        if httpx is not None:
+        if HAS_HTTPX:
             if isinstance(exc, (httpx.TransportError, httpx.ConnectError, httpx.ConnectTimeout,
                               httpx.ReadTimeout, httpx.PoolTimeout, httpx.NetworkError)):
                 return True
 
         # Check requests exceptions if available
-        if requests is not None:
+        if HAS_REQUESTS:
             if isinstance(exc, (requests.exceptions.ConnectionError, requests.exceptions.Timeout,
                               requests.exceptions.ConnectTimeout, requests.exceptions.ReadTimeout)):
                 return True

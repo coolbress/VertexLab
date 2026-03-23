@@ -1582,31 +1582,38 @@ class VertexForager:
             return {"status": "rescued_only", "rescued": rescued, "remaining": 0, "path": None, "error": None}
 
         def _build_writer_error_summary(*, status: DLQStatus, table: str, prefix: str, exc: Exception) -> RunError:
+            # Build DLQ context string
+            dlq_context_parts = []
+
             match status["status"]:
                 case "spooled":
-                    # path and message variables not used - error message handled by RunError.from_exception
-                    pass
+                    dlq_context_parts.append("DLQ=spooled")
+                    if status.get("remaining"):
+                        dlq_context_parts.append(f"remaining={status['remaining']}")
+                    if status.get("rescued"):
+                        dlq_context_parts.append(f"rescued={status['rescued']}")
+                    if status.get("path"):
+                        dlq_context_parts.append(f"path={status['path']}")
                 case "rescued_only":
-                    # message variable not used - error message handled by RunError.from_exception
-                    pass
-                case "noop":
-                    # message variable not used - error message handled by RunError.from_exception
-                    pass
+                    dlq_context_parts.append("DLQ=rescued_only")
+                    if status.get("rescued"):
+                        dlq_context_parts.append(f"rescued={status['rescued']}")
                 case "spool_failed":
-                    # Built and appended before re-raising the spool exception to the outer handler.
-                    # message variable not used - error message handled by RunError.from_exception
-                    pass
+                    dlq_context_parts.append("DLQ=spool_failed")
                 case "disabled":
-                    # message variable not used - error message handled by RunError.from_exception
-                    pass
+                    dlq_context_parts.append("DLQ=disabled")
+                case "noop":
+                    dlq_context_parts.append("DLQ=noop")
                 case _:
-                    # Fallback if a new status is introduced without updating this function
-                    # message variable not used - error message handled by RunError.from_exception
-                    pass
+                    dlq_context_parts.append(f"DLQ={status['status']}")
 
-            # Create RunError from the exception
+            # Create enhanced exception message with DLQ context
+            dlq_context = " ".join(dlq_context_parts)
+            enhanced_exc = Exception(f"{prefix}:{table}:{exc!s} {dlq_context}")
+
+            # Create RunError from the enhanced exception
             return RunError.from_exception(
-                exc=exc,
+                exc=enhanced_exc,
                 provider="",  # Provider not available in this context
                 dataset=table,
                 symbol=""  # Symbol not available in this context
@@ -1736,6 +1743,9 @@ class VertexForager:
                                 observed_at=first.observed_at,
                                 context=first.context,
                             )
+                            # Validate data quality before writing chunk
+                            await self._validate_data_quality(table=table, df=chunk_df, result=result, result_lock=result_lock)
+
                             t_w0 = time.monotonic()
                             with self._span("write_flush", table=table, rows=len(chunk_df)):
                                 write_result = await self._writer.write(chunk_packet)
