@@ -147,7 +147,7 @@ class StubClient:
         await asyncio.sleep(0.01)
         return R()
     @asynccontextmanager
-    async def _http_client(self):
+    async def _http_client(self) -> AsyncIterator[None]:
         yield None
 
 

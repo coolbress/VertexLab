@@ -152,7 +152,7 @@ jobs:
             && uv run yamllint -c .yamllint packages/vertex-forager/mkdocs.yml
 
       - name: Run Tests (exclude manual) with Coverage Gate
-        if: ${{ matrix.python-version == '3.10' && (github.event_name != 'workflow_dispatch' || github.event.inputs.include_manual != 'true') }}
+        if: ${{ matrix.python-version == '3.10' }}
         run: |
           uv run pytest packages/ \
             --tb=short \
@@ -168,7 +168,7 @@ jobs:
         run: |
           uv run pytest packages/ -m manual -q
       - name: Run Tests (exclude manual) - other versions
-        if: ${{ matrix.python-version != '3.10' && (github.event_name != 'workflow_dispatch' || github.event.inputs.include_manual != 'true') }}
+        if: ${{ matrix.python-version != '3.10' }}
         run: uv run pytest packages/vertex-forager/tests -m "not manual" -q
       - name: Build sdist and wheel (vertex-forager)
         if: ${{ matrix.python-version == '3.10' }}
