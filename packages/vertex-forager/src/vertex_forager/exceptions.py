@@ -45,6 +45,10 @@ class ValidationError(VertexForagerError):
     """Schema or data validation failures."""
 
 
+class SchemaMapError(TransformError):
+    """Raised when an unsupported schema type mapping is encountered in strict mode."""
+
+
 class PrimaryKeyMissingError(ValidationError):
     """Primary key column missing from data.
 

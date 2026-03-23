@@ -85,12 +85,13 @@ class DuckDBWriter(BaseWriter):
         - Thread-safe execution using a single-threaded executor.
     """
 
-    def __init__(self, db_path: str | Path) -> None:
+    def __init__(self, db_path: str | Path, *, strict: bool = False) -> None:
         """
         Initialize DuckDB writer.
 
         Args:
             db_path: Path to the DuckDB database file.
+            strict: If True, unsupported Polars types raise SchemaMapError. If False, fallback to VARCHAR.
         """
         self.db_path = str(db_path)
         self._lock = asyncio.Lock()
@@ -104,6 +105,12 @@ class DuckDBWriter(BaseWriter):
         from vertex_forager.schema.registry import get_table_schema
 
         self._get_table_schema = get_table_schema
+        self._strict = strict
+        self._unresolved_type_count = 0
+
+    @property
+    def unresolved_type_count(self) -> int:
+        return self._unresolved_type_count
 
     def _validate_identifier(self, identifier: str) -> None:
         if not isinstance(identifier, str) or not identifier:
@@ -612,6 +619,10 @@ class DuckDBWriter(BaseWriter):
             fields_str = ", ".join(fields)
             return f"STRUCT({fields_str})"
         else:
+            self._unresolved_type_count += 1
+            if self._strict:
+                from vertex_forager.exceptions import SchemaMapError
+                raise SchemaMapError(f"Unsupported Polars type {dtype} in strict mode.")
             return "VARCHAR"  # Default fallback
 
     def _upsert_data(self, conn: duckdb.DuckDBPyConnection, table_name: str, df: pl.DataFrame) -> int:

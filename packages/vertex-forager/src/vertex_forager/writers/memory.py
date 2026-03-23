@@ -28,15 +28,17 @@ class InMemoryBufferWriter(BaseWriter):
             df = writer.collect_table("price", sort_cols=["ticker", "date"])
     """
 
-    def __init__(self, *, unique_key: list[str] | None = None) -> None:
+    def __init__(self, *, unique_key: list[str] | None = None, upsert_keys: list[str] | None = None) -> None:
         self._lock = threading.Lock()
         self._tables: dict[str, list[pl.DataFrame]] = {}
-        self._unique_key: list[str] | None = list(unique_key) if unique_key else None
+        # Backwards compatibility: accept either unique_key or upsert_keys
+        keys = upsert_keys if upsert_keys is not None else unique_key
+        self._upsert_keys: list[str] | None = list(keys) if keys else None
         self._counters: dict[str, int] = {}
 
     def set_unique_key(self, unique_key: list[str] | None) -> None:
         with self._lock:
-            self._unique_key = list(unique_key) if unique_key else None
+            self._upsert_keys = list(unique_key) if unique_key else None
 
     def get_counters_and_reset(self) -> dict[str, int]:
         with self._lock:
@@ -48,12 +50,37 @@ class InMemoryBufferWriter(BaseWriter):
         """Append packet to the in-memory buffer.
 
         Thread-safe via threading lock.
+        Applies deduplication if upsert_keys is configured, matching DuckDB semantics.
         """
         if packet.frame.is_empty():
             return WriteResult(table=packet.table, rows=0, partitions={})
 
         with self._lock:
-            self._tables.setdefault(packet.table, []).append(packet.frame)
+            # Inline deduplication if upsert keys are set
+            if self._upsert_keys:
+                df = packet.frame
+                subset = [c for c in self._upsert_keys if c in df.columns]
+                if subset:
+                    # Dedup within the new packet itself
+                    df = df.unique(subset=subset, keep="last", maintain_order=True)
+
+                existing_parts = self._tables.get(packet.table, [])
+                if existing_parts and subset:
+                    # Combine existing and new, then dedup
+                    combined = pl.concat([*existing_parts, df], how="vertical", rechunk=False)
+                    before = combined.height
+                    deduped = combined.unique(subset=subset, keep="last", maintain_order=True)
+                    dropped = before - deduped.height
+                    if dropped > 0:
+                        self._counters["inmem_dedup_dropped_rows"] = (
+                            self._counters.get("inmem_dedup_dropped_rows", 0) + dropped
+                        )
+                    # Replace the buffer with the single deduped frame
+                    self._tables[packet.table] = [deduped]
+                else:
+                    self._tables.setdefault(packet.table, []).append(df)
+            else:
+                self._tables.setdefault(packet.table, []).append(packet.frame)
 
         return WriteResult(table=packet.table, rows=packet.frame.height, partitions={})
 
@@ -79,8 +106,8 @@ class InMemoryBufferWriter(BaseWriter):
             df = parts[0] if len(parts) == 1 else pl.concat(parts, how="vertical", rechunk=False)
 
             # Optional in-memory dedup/upsert by unique key
-            if self._unique_key:
-                subset = [c for c in self._unique_key if c in df.columns]
+            if self._upsert_keys:
+                subset = [c for c in self._upsert_keys if c in df.columns]
                 if subset:
                     before = df.height
                     # Keep last occurrence to approximate simple upsert semantics
