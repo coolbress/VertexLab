@@ -15,15 +15,24 @@ from vertex_forager.core.types import JSONValue
 
 def get_cache_dir() -> Path:
     """Get the cache directory following XDG Base Directory spec.
+    
+    If VERTEXFORAGER_ROOT environment variable is set, uses that as the base directory
+    for compatibility with test environments.
 
     Returns:
-        Path: Cache directory path (~/.cache/vertex-forager or XDG_CACHE_HOME/vertex-forager)
+        Path: Cache directory path
     """
-    cache_home = os.environ.get("XDG_CACHE_HOME")
-    if cache_home:
-        cache_dir = Path(cache_home) / "vertex-forager"
+    # Check for VERTEXFORAGER_ROOT first (used in tests)
+    vertex_root = os.environ.get("VERTEXFORAGER_ROOT")
+    if vertex_root:
+        cache_dir = Path(vertex_root) / "cache"
     else:
-        cache_dir = Path.home() / ".cache" / "vertex-forager"
+        # Fall back to XDG Base Directory spec
+        cache_home = os.environ.get("XDG_CACHE_HOME")
+        if cache_home:
+            cache_dir = Path(cache_home) / "vertex-forager"
+        else:
+            cache_dir = Path.home() / ".cache" / "vertex-forager"
 
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir
