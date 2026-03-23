@@ -454,6 +454,9 @@ class VertexForager:
             completed_symbols: set[str] = set()
             # Initialize instance state for consistent usage
             self._run_id = run_id
+            # Always initialize symbol sets for fresh runs
+            self._completed_symbols = set()
+            self._failed_symbols = set()
 
             if resume:
                 # Look for the latest checkpoint for this provider and dataset
