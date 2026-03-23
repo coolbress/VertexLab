@@ -2,6 +2,10 @@
 
 This guide explains how to run tests, understand test structure, and write new tests for vertex-forager.
 
+> Note
+> For the monorepo-wide test layout, markers (smoke/manual), and CI policy, see the repository guide:
+> packages/vertex-forager/tests/README.md (link in repo). The docs here focus on vertex-forager specifics.
+
 ## Prerequisites
 
 ```bash

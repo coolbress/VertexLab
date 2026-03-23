@@ -3,6 +3,8 @@ import sys
 
 import pytest
 
+pytestmark = pytest.mark.smoke
+
 
 class TestCoreInitLazyImport:
     """Tests for vertex_forager.core lazy-import behavior."""

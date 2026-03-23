@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import importlib
 
+import pytest
 
+
+@pytest.mark.smoke
 def test_logging_constants_import() -> None:
     mod = importlib.import_module("vertex_forager.logging.constants")
     assert hasattr(mod, "ROUTER_LOG_PREFIX")
