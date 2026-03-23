@@ -8,7 +8,13 @@ import polars as pl
 import pytest
 
 from vertex_forager.core.config import EngineConfig, FramePacket
-from vertex_forager.exceptions import InputError, PrimaryKeyMissingError, PrimaryKeyNullError, VertexForagerError
+from vertex_forager.exceptions import (
+    InputError,
+    PrimaryKeyMissingError,
+    PrimaryKeyNullError,
+    SchemaMapError,
+    VertexForagerError,
+)
 from vertex_forager.writers.duckdb import DuckDBWriter
 
 
@@ -290,6 +296,29 @@ async def test_write_pk_null_raises(tmp_path: Path) -> None:
             await w.write(pkt)
     finally:
         await w.close()
+
+
+@pytest.mark.asyncio
+async def test_schema_map_strict_mode() -> None:
+    # strict=False (default) -> fallback to VARCHAR, increments counter
+    w_non_strict = DuckDBWriter(":memory:", strict=False)
+    try:
+        assert w_non_strict.unresolved_type_count == 0
+        # Passing an unknown object type
+        assert w_non_strict._map_polars_type_to_sql(pl.Object) == "VARCHAR"
+        assert w_non_strict.unresolved_type_count == 1
+    finally:
+        await w_non_strict.close()
+
+    # strict=True -> raises SchemaMapError
+    w_strict = DuckDBWriter(":memory:", strict=True)
+    try:
+        assert w_strict.unresolved_type_count == 0
+        with pytest.raises(SchemaMapError, match="Unsupported Polars type"):
+            w_strict._map_polars_type_to_sql(pl.Object)
+        assert w_strict.unresolved_type_count == 1
+    finally:
+        await w_strict.close()
 
 
 @pytest.mark.asyncio

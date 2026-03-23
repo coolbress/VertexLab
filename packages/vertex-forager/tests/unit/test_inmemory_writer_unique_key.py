@@ -7,9 +7,8 @@ from vertex_forager.writers.memory import InMemoryBufferWriter
 
 
 @pytest.mark.asyncio
-async def test_inmemory_writer_dedup_with_unique_key(pkt_factory) -> None:
-    writer = InMemoryBufferWriter()
-    writer.set_unique_key(["id"])
+async def test_inmemory_writer_dedup_with_upsert_keys(pkt_factory) -> None:
+    writer = InMemoryBufferWriter(upsert_keys=["id"])
 
     df1 = pl.DataFrame({"id": [1, 2], "val": ["a", "b"]})
     df2 = pl.DataFrame({"id": [2, 3], "val": ["b2", "c"]})
@@ -17,8 +16,10 @@ async def test_inmemory_writer_dedup_with_unique_key(pkt_factory) -> None:
     await writer.write(pkt_factory("tmp_table", df1))
     await writer.write(pkt_factory("tmp_table", df2))
 
-    out = writer.collect_table("tmp_table")
-    # Expect ids {1,2,3} with id=2 keeping last value "b2"
+    # Expect inline dedup: total height should be 3, not 4
+    assert len(writer._tables["tmp_table"]) == 1
+    out = writer._tables["tmp_table"][0]
+
     assert sorted(out["id"].to_list()) == [1, 2, 3]
     assert out.filter(pl.col("id") == 2)["val"][0] == "b2"
 

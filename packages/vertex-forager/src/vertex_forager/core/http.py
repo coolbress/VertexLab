@@ -60,7 +60,7 @@ class HttpExecutor:
         Args:
             client: `BaseClient` (or compatible interface) to use for requests.
         """
-        self._client = client
+        self._client: HttpClientProtocol = client
 
     async def fetch(self, spec: RequestSpec) -> bytes:
         """Execute a request and return response bytes.
