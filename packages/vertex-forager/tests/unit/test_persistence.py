@@ -25,11 +25,10 @@ def test_get_cache_dir() -> None:
         assert cache_dir == Path.home() / ".cache" / "vertex-forager"
 
     # Test with a temporary directory for XDG_CACHE_HOME
-    with tempfile.TemporaryDirectory() as tmpdir:
-        with patch.dict("os.environ", {"XDG_CACHE_HOME": tmpdir}):
-            cache_dir = get_cache_dir()
-            expected_dir = Path(tmpdir) / "vertex-forager"
-            assert cache_dir == expected_dir
+    with tempfile.TemporaryDirectory() as tmpdir, patch.dict("os.environ", {"XDG_CACHE_HOME": tmpdir}):
+        cache_dir = get_cache_dir()
+        expected_dir = Path(tmpdir) / "vertex-forager"
+        assert cache_dir == expected_dir
 
 
 def test_atomic_write_json() -> None:
@@ -70,8 +69,7 @@ def test_checkpoint_model() -> None:
 
 def test_save_and_load_checkpoint() -> None:
     """Test saving and loading checkpoints."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        with patch("vertex_forager.core.checkpoint.get_cache_dir", return_value=Path(tmpdir)):
+    with tempfile.TemporaryDirectory() as tmpdir, patch("vertex_forager.core.checkpoint.get_cache_dir", return_value=Path(tmpdir)):
             checkpoint = Checkpoint(
                 run_id="test_run_123",
                 provider="test_provider",
@@ -99,8 +97,7 @@ def test_save_and_load_checkpoint() -> None:
 
 def test_save_run_history() -> None:
     """Test saving run history."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        with patch("vertex_forager.core.checkpoint.get_cache_dir", return_value=Path(tmpdir)):
+    with tempfile.TemporaryDirectory() as tmpdir, patch("vertex_forager.core.checkpoint.get_cache_dir", return_value=Path(tmpdir)):
             run_result = RunResult(
                 provider="test_provider",
                 run_id="test_run_123",

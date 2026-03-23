@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 import tempfile
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from vertex_forager.core.config import RunResult
 from vertex_forager.core.types import JSONValue
@@ -15,7 +15,7 @@ from vertex_forager.core.types import JSONValue
 
 def get_cache_dir() -> Path:
     """Get the cache directory following XDG Base Directory spec.
-    
+
     If VERTEXFORAGER_ROOT environment variable is set, uses that as the base directory
     for compatibility with test environments.
 
@@ -29,10 +29,7 @@ def get_cache_dir() -> Path:
     else:
         # Fall back to XDG Base Directory spec
         cache_home = os.environ.get("XDG_CACHE_HOME")
-        if cache_home:
-            cache_dir = Path(cache_home) / "vertex-forager"
-        else:
-            cache_dir = Path.home() / ".cache" / "vertex-forager"
+        cache_dir = Path(cache_home) / "vertex-forager" if cache_home else Path.home() / ".cache" / "vertex-forager"
 
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir
@@ -61,15 +58,16 @@ def atomic_write_json(data: JSONValue, file_path: Path) -> None:
         os.fsync(f.fileno())
         temp_path = Path(f.name)
 
-    # Atomic rename
+    # Atomic replace (works cross-platform)
     try:
-        temp_path.rename(file_path)
-        # Ensure directory metadata is flushed
-        dir_fd = os.open(file_path.parent, os.O_RDONLY)
-        try:
-            os.fsync(dir_fd)
-        finally:
-            os.close(dir_fd)
+        os.replace(temp_path, file_path)
+        # Ensure directory metadata is flushed on POSIX systems
+        if hasattr(os, "fsync") and hasattr(os, "open"):
+            dir_fd = os.open(file_path.parent, os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
     except Exception:
         temp_path.unlink(missing_ok=True)
         raise
@@ -117,7 +115,7 @@ def load_checkpoint(run_id: str) -> Checkpoint | None:
         with open(checkpoint_file) as f:
             data = json.load(f)
         return Checkpoint(**data)
-    except (json.JSONDecodeError, FileNotFoundError):
+    except (json.JSONDecodeError, FileNotFoundError, ValidationError):
         return None
 
 
@@ -140,15 +138,13 @@ def save_run_history(run_result: RunResult, run_id: str) -> None:
         "started_at": run_result.started_at,
         "finished_at": run_result.finished_at,
         "duration_s": run_result.duration_s,
-        "tables": {
-            table: count for table, count in run_result.tables.items()
-        },
+        "tables": dict(run_result.tables),
         "error_count": len(run_result.errors),
         "errors": [
             {
-                "type": type(error).__name__,
+                "type": type(error).__name__ if isinstance(error, BaseException) else "str",
                 "message": str(error),
-                "args": getattr(error, "args", []),
+                "args": getattr(error, "args", []) if isinstance(error, BaseException) else [],
             }
             for error in run_result.errors
         ],

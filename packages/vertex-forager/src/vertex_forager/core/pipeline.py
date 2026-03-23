@@ -490,7 +490,7 @@ class VertexForager:
             # Set run metadata for persistence
             result.run_id = run_id
             result.dataset = dataset
-            result.started_at = t_run0
+            result.started_at = time.time()
 
             result_lock = asyncio.Lock()
             self._run_result = result
@@ -677,8 +677,8 @@ class VertexForager:
                         logger.debug(msg_s)
 
             # Update checkpoint and save run history
-            result.finished_at = time.monotonic()
-            result.duration_s = result.finished_at - result.started_at
+            result.finished_at = time.time()
+            result.duration_s = time.monotonic() - t_run0
 
             # Update checkpoint with completed and failed symbols
             async with self._checkpoint_lock:
