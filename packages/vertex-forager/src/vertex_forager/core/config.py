@@ -23,6 +23,7 @@ from vertex_forager.constants import (
     QUEUE_TARGET_RAM_RATIO,
 )
 from vertex_forager.core.contracts import TracerProtocol  # Pydantic v2: requires runtime resolution
+from vertex_forager.core.errors import RunError
 from vertex_forager.core.types import JSONValue  # Pydantic v2: used in field types at runtime
 from vertex_forager.exceptions import VertexForagerError
 
@@ -342,12 +343,14 @@ class RunResult(BaseModel):
         duration_s (float | None): Duration of the run in seconds (default: None).
         coverage_pct (float | None): Coverage percentage for the run (default: None).
         tables (dict[str, int]): Dictionary mapping table names to row counts (default: empty dict).
-        errors (list[str]): List of error messages encountered (default: empty list).
+        errors (list[RunError]): List of structured error information (default: empty list).
         dlq_pending (dict[str, list[FramePacket]]): Packets preserved for post-mortem/dead-letter
             processing when DLQ spool/dispatch fails. Items are appended by writer/rescue
             logic upon spool errors and can be consumed by operator recovery flows.
         dlq_counts (dict[str, dict[str, int]]): Per-table counts for rescued and remaining packets
             when DLQ is disabled or spooling occurs. Always populated regardless of metrics settings.
+        quality_violations (dict[str, int]): Dictionary mapping table names to quality violation counts
+            (default: empty dict).
     """
 
     provider: str
@@ -358,7 +361,7 @@ class RunResult(BaseModel):
     duration_s: float | None = Field(default=None)
     coverage_pct: float | None = Field(default=None)
     tables: dict[str, int] = Field(default_factory=dict)
-    errors: list[str] = Field(default_factory=list)
+    errors: list[RunError] = Field(default_factory=list)
     metrics_counters: dict[str, int] = Field(default_factory=dict)
     metrics_histograms: dict[str, list[float]] = Field(default_factory=dict)
     metrics_summary: dict[str, float] = Field(default_factory=dict)
@@ -371,9 +374,16 @@ class RunResult(BaseModel):
         default_factory=dict,
         description="Per-table DLQ counts: {'rescued': int, 'remaining': int}",
     )
+    quality_violations: dict[str, int] = Field(
+        default_factory=dict,
+        description="Per-table quality violation counts",
+    )
 
     def add_rows(self, *, table: str, rows: int) -> None:
         self.tables[table] = self.tables.get(table, 0) + rows
+
+    def add_quality_violations(self, *, table: str, count: int) -> None:
+        self.quality_violations[table] = self.quality_violations.get(table, 0) + count
 
 
 @dataclass(frozen=True, slots=True)

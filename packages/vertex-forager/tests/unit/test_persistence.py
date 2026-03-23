@@ -16,6 +16,7 @@ from vertex_forager.core.checkpoint import (
     save_run_history,
 )
 from vertex_forager.core.config import EngineConfig, RunResult
+from vertex_forager.core.errors import RunError
 
 
 def test_get_cache_dir() -> None:
@@ -113,7 +114,24 @@ def test_save_run_history() -> None:
             duration_s=100.0,
             coverage_pct=95.5,
             tables={"table1": 100, "table2": 200},
-            errors=["error1", "error2"],
+            errors=[
+                RunError(
+                    provider="test_provider",
+                    dataset="test_dataset",
+                    symbol="",
+                    exc_type="ValueError",
+                    message="error1",
+                    retryable=False,
+                ),
+                RunError(
+                    provider="test_provider",
+                    dataset="test_dataset",
+                    symbol="",
+                    exc_type="ValueError",
+                    message="error2",
+                    retryable=False,
+                ),
+            ],
         )
 
         save_run_history(run_result, "test_run_123")

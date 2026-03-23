@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import polars as pl
 
+    from vertex_forager.core.quality import DataQualityRule
+
 
 @dataclass(frozen=True, slots=True)
 class TableSchema:
@@ -21,6 +23,8 @@ class TableSchema:
             time-based processing. Defaults to None.
         flexible_schema: Whether schema is permissive to extra/unknown
             fields. Defaults to False.
+        quality_rules: Tuple of data quality validation rules to apply
+            to table data. Defaults to empty tuple.
     """
 
     table: str
@@ -28,3 +32,4 @@ class TableSchema:
     unique_key: tuple[str, ...] = ()
     analysis_date_col: str | None = None
     flexible_schema: bool = False
+    quality_rules: tuple[DataQualityRule, ...] = ()

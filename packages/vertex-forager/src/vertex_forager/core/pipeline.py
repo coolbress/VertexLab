@@ -83,6 +83,7 @@ from vertex_forager.core.config import (
     ParseResult,
     RunResult,
 )
+from vertex_forager.core.errors import RunError
 from vertex_forager.core.retry import create_retry_controller
 from vertex_forager.schema.registry import get_table_schema
 from vertex_forager.utils import cleanup_dlq_tmp, sanitize_field
@@ -994,7 +995,7 @@ class VertexForager:
                         entry = result.dlq_counts.get(pkt.table) or {"rescued": 0, "remaining": 0}
                         entry["remaining"] = entry.get("remaining", 0) + 1
                         result.dlq_counts[pkt.table] = entry
-                        result.errors.append(f"Writer:Unexpected:{e}")
+                        result.errors.append(RunError.from_exception(e, pkt.provider, pkt.table, ""))
 
     async def _pop_next_job_respecting_fairness(
         self,
@@ -1254,21 +1255,21 @@ class VertexForager:
             except (httpx.HTTPStatusError, httpx.RequestError, ValueError) as exc:
                 worker_exc = exc
                 async with result_lock:
-                    result.errors.append(f"{job.provider}:{job.dataset}:{job.symbol}:{exc}")
+                    result.errors.append(RunError.from_exception(exc, job.provider, job.dataset, job.symbol))
                 logger.error(f"[Worker-{worker_id}] Error processing {job.symbol}: {exc}")
                 self._inc("errors_total", 1)
                 self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="error")
             except FetchError as exc:
                 worker_exc = exc
                 async with result_lock:
-                    result.errors.append(f"{job.provider}:{job.dataset}:{job.symbol}:{exc}")
+                    result.errors.append(RunError.from_exception(exc, job.provider, job.dataset, job.symbol))
                 logger.error(f"[Worker-{worker_id}] Fetch exhausted for {job.symbol}: {exc}")
                 self._inc("errors_total", 1)
                 self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="error_fetch")
             except Exception as exc:
                 worker_exc = exc
                 async with result_lock:
-                    result.errors.append(f"Unexpected:{job.provider}:{job.dataset}:{job.symbol}:{exc}")
+                    result.errors.append(RunError.from_exception(exc, job.provider, job.dataset, job.symbol))
                 logger.exception(f"[Worker-{worker_id}] Unexpected error processing {job.symbol}: {exc}")
                 self._inc("errors_total", 1)
                 self._log_structured(
@@ -1306,6 +1307,49 @@ class VertexForager:
                         f"[Worker-{worker_id}] Error in result handler for "
                         f"{job.provider}:{job.dataset}:{job.symbol}: {e}"
                     )
+
+    async def _validate_data_quality(
+        self,
+        *,
+        table: str,
+        df: pl.DataFrame,
+        result: RunResult,
+        result_lock: asyncio.Lock,
+    ) -> None:
+        """Validate data quality using table schema rules.
+        
+        Args:
+            table: Table name to validate
+            df: DataFrame to validate
+            result: RunResult to record violations
+            result_lock: Lock for thread-safe result updates
+        """
+        schema = get_table_schema(table)
+        if not schema or not schema.quality_rules:
+            return
+
+        violations_count = 0
+        for rule in schema.quality_rules:
+            try:
+                violation_messages = rule.validate(df)
+                if violation_messages:
+                    violations_count += len(violation_messages)
+                    logger.warning(
+                        "Data quality violations in table %s: %s",
+                        table,
+                        ", ".join(violation_messages),
+                    )
+            except Exception as e:
+                logger.warning(
+                    "Failed to execute quality rule %s for table %s: %s",
+                    type(rule).__name__,
+                    table,
+                    e,
+                )
+
+        if violations_count > 0:
+            async with result_lock:
+                result.add_quality_violations(table=table, count=violations_count)
 
     async def _writer_worker(
         self,
@@ -1793,6 +1837,15 @@ class VertexForager:
                         context=first.context,
                     )
                     logger.debug(f"WRITER: Flushing {len(packets)} packets ({len(merged_frame)} rows) for {table}")
+
+                    # Validate data quality before writing
+                    await self._validate_data_quality(
+                        table=table,
+                        df=merged_frame,
+                        result=result,
+                        result_lock=result_lock,
+                    )
+
                     t_w0 = time.monotonic()
                     with self._span("write_flush", table=table, rows=len(merged_frame)):
                         write_result = await self._writer.write(merged_packet)
