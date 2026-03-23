@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.3](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.5.2...vertex-forager-v0.5.3) (2026-03-23)
+
+
+### Bug Fixes
+
+* **controller:** measure RTT after slot acquisition to exclude queue wait ([#181](https://github.com/coolbress/VertexLab/issues/181))  ([b219240](https://github.com/coolbress/VertexLab/commit/b2192407806eb6aa888d71959595dc9a8195a2f7))
+
 ## [0.5.2](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.5.1...vertex-forager-v0.5.2) (2026-03-21)
 
 
