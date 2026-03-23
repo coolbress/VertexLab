@@ -452,6 +452,8 @@ class VertexForager:
             # For resume mode, try to find the latest checkpoint for this provider+dataset
             run_id = f"{self._router.provider}_{dataset}_{int(time.time())}"
             completed_symbols: set[str] = set()
+            # Initialize instance state for consistent usage
+            self._run_id = run_id
 
             if resume:
                 # Look for the latest checkpoint for this provider and dataset
@@ -464,13 +466,13 @@ class VertexForager:
                     self._completed_symbols = set(latest_checkpoint.completed)
                     self._failed_symbols = set(latest_checkpoint.failed)
                     logger.info("PIPELINE: Resuming from checkpoint %s, skipping %d completed symbols",
-                               run_id, len(completed_symbols))
+                            run_id, len(completed_symbols))
                 else:
                     # Clear any previous state when starting fresh
                     self._completed_symbols = set()
                     self._failed_symbols = set()
                     logger.info("PIPELINE: No checkpoint found for provider %s and dataset %s, starting fresh",
-                               self._router.provider, dataset)
+                            self._router.provider, dataset)
 
             # PriorityQueue to prioritize pagination (next jobs) over new jobs
             # Tuple structure: (priority, order, job)
@@ -690,7 +692,7 @@ class VertexForager:
             # Update checkpoint with completed and failed symbols
             async with self._checkpoint_lock:
                 self._update_checkpoint(run_id, self._router.provider, dataset,
-                                      self._completed_symbols, self._failed_symbols)
+                                    self._completed_symbols, self._failed_symbols)
 
             # Save run history if enabled
             if self._config.persist_run_history:
@@ -1277,7 +1279,7 @@ class VertexForager:
 
                 try:
                     await handler(job, payload, worker_exc, parse_result)
-                    
+
                     # Track completed and failed symbols for checkpointing AFTER handler completes
                     if job.symbol:
                         async with self._checkpoint_lock:
@@ -1285,14 +1287,14 @@ class VertexForager:
                                 self._completed_symbols.add(job.symbol)
                             else:
                                 self._failed_symbols.add(job.symbol)
-                            
+
                             # Update checkpoint immediately after symbol completion
                             if self._run_id and job.dataset:
                                 self._update_checkpoint(
-                                    self._run_id, 
-                                    self._router.provider, 
+                                    self._run_id,
+                                    self._router.provider,
                                     job.dataset,
-                                    self._completed_symbols, 
+                                    self._completed_symbols,
                                     self._failed_symbols
                                 )
                 except Exception as e:

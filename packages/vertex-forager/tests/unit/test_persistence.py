@@ -73,29 +73,29 @@ def test_save_and_load_checkpoint() -> None:
         "vertex_forager.core.checkpoint.get_cache_dir",
         return_value=Path(tmpdir)
     ):
-            checkpoint = Checkpoint(
-                run_id="test_run_123",
-                provider="test_provider",
-                dataset="test_dataset",
-                completed=["AAPL", "MSFT"],
-                failed=["GOOG"]
-            )
+        checkpoint = Checkpoint(
+            run_id="test_run_123",
+            provider="test_provider",
+            dataset="test_dataset",
+            completed=["AAPL", "MSFT"],
+            failed=["GOOG"]
+        )
 
-            save_checkpoint(checkpoint)
+        save_checkpoint(checkpoint)
 
-            # Check that file was created
-            checkpoint_file = Path(tmpdir) / "checkpoints" / "test_run_123" / "progress.json"
-            assert checkpoint_file.exists()
+        # Check that file was created
+        checkpoint_file = Path(tmpdir) / "checkpoints" / "test_run_123" / "progress.json"
+        assert checkpoint_file.exists()
 
-            # Load the checkpoint
-            loaded = load_checkpoint("test_run_123")
-            assert loaded is not None
-            assert loaded.run_id == "test_run_123"
-            assert loaded.completed == ["AAPL", "MSFT"]
-            assert loaded.failed == ["GOOG"]
+        # Load the checkpoint
+        loaded = load_checkpoint("test_run_123")
+        assert loaded is not None
+        assert loaded.run_id == "test_run_123"
+        assert loaded.completed == ["AAPL", "MSFT"]
+        assert loaded.failed == ["GOOG"]
 
-            # Test loading non-existent checkpoint
-            assert load_checkpoint("non_existent") is None
+        # Test loading non-existent checkpoint
+        assert load_checkpoint("non_existent") is None
 
 
 def test_save_run_history() -> None:
@@ -104,35 +104,35 @@ def test_save_run_history() -> None:
         "vertex_forager.core.checkpoint.get_cache_dir",
         return_value=Path(tmpdir)
     ):
-            run_result = RunResult(
-                provider="test_provider",
-                run_id="test_run_123",
-                dataset="test_dataset",
-                started_at=1000.0,
-                finished_at=1100.0,
-                duration_s=100.0,
-                coverage_pct=95.5,
-                tables={"table1": 100, "table2": 200},
-                errors=["error1", "error2"],
-            )
+        run_result = RunResult(
+            provider="test_provider",
+            run_id="test_run_123",
+            dataset="test_dataset",
+            started_at=1000.0,
+            finished_at=1100.0,
+            duration_s=100.0,
+            coverage_pct=95.5,
+            tables={"table1": 100, "table2": 200},
+            errors=["error1", "error2"],
+        )
 
-            save_run_history(run_result, "test_run_123")
+        save_run_history(run_result, "test_run_123")
 
-            # Check that file was created
-            run_file = Path(tmpdir) / "runs" / "test_run_123.json"
-            assert run_file.exists()
+        # Check that file was created
+        run_file = Path(tmpdir) / "runs" / "test_run_123.json"
+        assert run_file.exists()
 
-            # Verify the content
-            with open(run_file) as f:
-                data = json.load(f)
+        # Verify the content
+        with open(run_file) as f:
+            data = json.load(f)
 
-            assert data["run_id"] == "test_run_123"
-            assert data["provider"] == "test_provider"
-            assert data["dataset"] == "test_dataset"
-            assert data["duration_s"] == 100.0
-            assert data["error_count"] == 2
-            assert data["tables"]["table1"] == 100
-            assert data["tables"]["table2"] == 200
+        assert data["run_id"] == "test_run_123"
+        assert data["provider"] == "test_provider"
+        assert data["dataset"] == "test_dataset"
+        assert data["duration_s"] == 100.0
+        assert data["error_count"] == 2
+        assert data["tables"]["table1"] == 100
+        assert data["tables"]["table2"] == 200
 
 
 def test_engine_config_persist_run_history() -> None:
