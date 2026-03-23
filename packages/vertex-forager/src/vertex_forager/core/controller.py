@@ -329,8 +329,8 @@ class FlowController:
         await self._rate_limiter.acquire()
 
         # 2. Acquire Concurrency Slot (may wait)
-        start_time = time.monotonic()
         await self._concurrency_limiter.acquire()
+        start_time = time.monotonic()
 
         try:
             yield
