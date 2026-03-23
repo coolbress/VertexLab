@@ -597,10 +597,20 @@ class DuckDBWriter(BaseWriter):
             return "INTERVAL"
         elif dtype in (pl.String, pl.Categorical):
             return "VARCHAR"
-        elif isinstance(dtype, (pl.Struct, pl.List)):
-            # Complex types fallback to VARCHAR
-            self._logger.warning(f"Coercing complex type {dtype} to VARCHAR. Nested structure may be lost.")
-            return "VARCHAR"
+        elif isinstance(dtype, pl.List):
+            inner_dt = dtype.inner
+            resolved_inner = inner_dt if isinstance(inner_dt, pl.DataType) else inner_dt()
+            inner_type = self._map_polars_type_to_sql(resolved_inner)
+            return f"{inner_type}[]"
+        elif isinstance(dtype, pl.Struct):
+            fields = []
+            for f in dtype.fields:
+                f_dt = f.dtype
+                resolved_f_dt = f_dt if isinstance(f_dt, pl.DataType) else f_dt()
+                mapped_type = self._map_polars_type_to_sql(resolved_f_dt)
+                fields.append(f"{self._quote_identifier(f.name)} {mapped_type}")
+            fields_str = ", ".join(fields)
+            return f"STRUCT({fields_str})"
         else:
             return "VARCHAR"  # Default fallback
 

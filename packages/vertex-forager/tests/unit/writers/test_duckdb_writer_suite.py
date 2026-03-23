@@ -228,8 +228,15 @@ async def test_map_polars_types() -> None:
         assert w._map_polars_type_to_sql(pl.Duration) == "INTERVAL"
         assert w._map_polars_type_to_sql(pl.String) == "VARCHAR"
         assert w._map_polars_type_to_sql(pl.Categorical) == "VARCHAR"
-        assert w._map_polars_type_to_sql(pl.Struct({"a": pl.Int32})) == "VARCHAR"
-        assert w._map_polars_type_to_sql(pl.List(pl.Int32)) == "VARCHAR"
+
+        # Test nested types (List and Struct)
+        assert w._map_polars_type_to_sql(pl.List(pl.Float64)) == "DOUBLE[]"
+        assert w._map_polars_type_to_sql(pl.Struct({"id": pl.Int64, "name": pl.String})) == (
+            'STRUCT("id" BIGINT, "name" VARCHAR)'
+        )
+        # Deeply nested
+        nested_type = pl.List(pl.Struct({"a": pl.Int32, "b": pl.List(pl.String)}))
+        assert w._map_polars_type_to_sql(nested_type) == 'STRUCT("a" INTEGER, "b" VARCHAR[])[]'
     finally:
         await w.close()
 
@@ -283,6 +290,55 @@ async def test_write_pk_null_raises(tmp_path: Path) -> None:
             await w.write(pkt)
     finally:
         await w.close()
+
+
+@pytest.mark.asyncio
+async def test_duckdb_writer_nested_types_roundtrip(tmp_path: Path) -> None:
+    db_path = tmp_path / "nested.duckdb"
+    writer = DuckDBWriter(db_path)
+    try:
+        # Create a DataFrame with nested List and Struct types
+        df = pl.DataFrame(
+            {
+                "provider": ["test"],
+                "ticker": ["NEST"],
+                "date": [date(2023, 1, 1)],
+                "tags": [["tech", "ai"]],
+                "metrics": [{"score": 9.5, "active": True}],
+                "history": [[{"val": 1.0}, {"val": 2.0}]],
+            },
+            schema={
+                "provider": pl.String,
+                "ticker": pl.String,
+                "date": pl.Date,
+                "tags": pl.List(pl.String),
+                "metrics": pl.Struct({"score": pl.Float64, "active": pl.Boolean}),
+                "history": pl.List(pl.Struct({"val": pl.Float64})),
+            }
+        )
+        packet = FramePacket(
+            provider="test",
+            table="nested_data",
+            frame=df,
+            observed_at=datetime.now(timezone.utc)
+        )
+        await writer.write(packet)
+
+        # Read back and verify types
+        with duckdb.connect(str(db_path)) as conn:
+            # Check schema
+            schema_info = conn.execute("DESCRIBE nested_data").fetchall()
+            type_map = {row[0]: row[1] for row in schema_info}
+
+            assert type_map["tags"] == "VARCHAR[]"
+            assert type_map["metrics"] == "STRUCT(score DOUBLE, active BOOLEAN)"
+            assert type_map["history"] == "STRUCT(val DOUBLE)[]"
+
+            # Check data via native SQL
+            res = conn.execute("SELECT metrics.score, tags[1], history[2].val FROM nested_data").fetchone()
+            assert res == (9.5, "tech", 2.0)
+    finally:
+        await writer.close()
 
 
 def test_engine_config_writer_chunk_rows_coercion_and_lower_bound() -> None:
