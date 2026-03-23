@@ -397,7 +397,8 @@ def test_get_app_root_with_env(tmp_path, monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setenv("VERTEXFORAGER_ROOT", str(base))
     root = get_app_root()
     assert root == base
-    assert root.exists() and root.is_dir()
+    assert root.exists()
+    assert root.is_dir()
 
 
 def test_jupyter_safe_sync_and_async_contexts() -> None:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from typing import Any
 
 import pytest
@@ -49,10 +49,8 @@ async def test_stop_with_completed_writer_tasks() -> None:
     await eng.stop()
     # Cleanup pending task
     pending.set()
-    try:
+    with suppress(asyncio.CancelledError):
         await active
-    except asyncio.CancelledError:
-        pass
 
 
 @pytest.mark.asyncio
@@ -77,10 +75,8 @@ async def test_stop_req_q_put_nowait_allows_no_async_schedule() -> None:
     assert all(item[0] == eng.PRIORITY_SENTINEL for item in items)
     assert len(items) <= 2
     # Ensure active task finishes to avoid pending task warnings
-    try:
+    with suppress(asyncio.CancelledError):
         await active_task
-    except asyncio.CancelledError:
-        pass
 
 
 @pytest.mark.asyncio
@@ -110,10 +106,8 @@ async def test_stop_pkt_q_timeout_cancels_writers(monkeypatch: pytest.MonkeyPatc
     assert w.cancelled()
     # Cleanup pending active task
     pending.set()
-    try:
+    with suppress(asyncio.CancelledError):
         await active
-    except asyncio.CancelledError:
-        pass
 
 
 class SlowRouter:
@@ -132,7 +126,7 @@ class FlushCountingWriter:
         self.flush_called = 0
     async def write(self, packet: FramePacket) -> WriteResult:
         return WriteResult(table=packet.table, rows=0)
-    async def write_bulk(self, packets: list[FramePacket]):
+    async def write_bulk(self, packets: list[FramePacket]) -> list[WriteResult]:
         return []
     async def flush(self) -> None:
         self.flush_called += 1

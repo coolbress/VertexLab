@@ -8,11 +8,11 @@ Builds a directed import graph using AST-based import extraction and detects cyc
 from __future__ import annotations
 
 import ast
-import sys
 from collections import defaultdict
 from collections.abc import Iterator
 from fnmatch import fnmatch
 from pathlib import Path
+import sys
 
 PKG = "vertex_forager"
 ROOT = Path(__file__).resolve().parent.parent / "packages" / "vertex-forager" / "src"
