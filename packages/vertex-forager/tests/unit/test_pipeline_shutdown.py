@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -48,7 +49,10 @@ async def test_stop_with_completed_writer_tasks() -> None:
     await eng.stop()
     # Cleanup pending task
     pending.set()
-    await asyncio.sleep(0)
+    try:
+        await active
+    except asyncio.CancelledError:
+        pass
 
 
 @pytest.mark.asyncio
@@ -60,7 +64,8 @@ async def test_stop_req_q_put_nowait_allows_no_async_schedule() -> None:
     )
     q: asyncio.PriorityQueue = asyncio.PriorityQueue(maxsize=10)
     eng._req_q = q  # type: ignore[attr-defined]
-    eng._active_tasks = [asyncio.create_task(asyncio.sleep(0))]  # type: ignore[attr-defined]
+    active_task = asyncio.create_task(asyncio.sleep(0))
+    eng._active_tasks = [active_task]  # type: ignore[attr-defined]
     await eng.stop()
     await asyncio.sleep(0)
     items = []
@@ -71,6 +76,11 @@ async def test_stop_req_q_put_nowait_allows_no_async_schedule() -> None:
         pass
     assert all(item[0] == eng.PRIORITY_SENTINEL for item in items)
     assert len(items) <= 2
+    # Ensure active task finishes to avoid pending task warnings
+    try:
+        await active_task
+    except asyncio.CancelledError:
+        pass
 
 
 @pytest.mark.asyncio
@@ -100,14 +110,17 @@ async def test_stop_pkt_q_timeout_cancels_writers(monkeypatch: pytest.MonkeyPatc
     assert w.cancelled()
     # Cleanup pending active task
     pending.set()
-    await asyncio.sleep(0)
+    try:
+        await active
+    except asyncio.CancelledError:
+        pass
 
 
 class SlowRouter:
     @property
     def provider(self) -> str:
         return "stub"
-    async def generate_jobs(self, *, dataset: str, symbols: list[str] | None, **_: object):
+    async def generate_jobs(self, *, dataset: str, symbols: list[str] | None, **_: object) -> AsyncIterator[FetchJob]:
         while True:
             yield FetchJob(provider="stub", dataset=dataset, symbol="AAPL", spec=RequestSpec(url="https://slow"))
     def parse(self, *, job: FetchJob, payload: bytes) -> ParseResult:

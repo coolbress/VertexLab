@@ -323,7 +323,8 @@ def test_compact_level_formatter_and_list_handler() -> None:
         assert handler.records
         # The first record may be debug, ensure both Debug and Warning are present
         levels = {fmt.format(r).split(":", 1)[0] for r in handler.records}
-        assert "Debug" in levels and "Warning" in levels
+        assert "Debug" in levels
+        assert "Warning" in levels
 
         handler.records.clear()
         logger.info("world")

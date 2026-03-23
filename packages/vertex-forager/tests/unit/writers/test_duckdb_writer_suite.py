@@ -292,7 +292,7 @@ def test_engine_config_writer_chunk_rows_coercion_and_lower_bound() -> None:
     assert isinstance(cfg.writer_chunk_rows, int)
     assert cfg.writer_chunk_rows == 20000
     cfg.writer_chunk_rows = "not-an-int"  # type: ignore[assignment]
-    with pytest.raises(VertexForagerError):
+    with pytest.raises(VertexForagerError, match="writer_chunk_rows must be an integer or None"):
         cfg.assert_valid()
     cfg2 = EngineConfig(requests_per_minute=60, writer_chunk_rows=9_999)
     with pytest.raises(ValueError, match="writer_chunk_rows must be >= 10_000"):
