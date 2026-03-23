@@ -72,7 +72,7 @@ async def run_pipeline_for(
         resume_val = kwargs.get("resume", False)
         resume = bool(resume_val) if isinstance(resume_val, (bool, int, float)) else False
         run_kwargs = filter_reserved_kwargs(kwargs, RESERVED_PIPELINE_KEYS)
-        
+
         with warnings.catch_warnings():
             warnings.filterwarnings(
                 "ignore",
