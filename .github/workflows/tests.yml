@@ -1,9 +1,6 @@
-name: tests
+name: tests (manual/opt-in)
 
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
     inputs:
       include_manual:
