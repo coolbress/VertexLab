@@ -67,6 +67,7 @@ class GradientConcurrencyLimiter:
     async def release(self, rtt: float) -> None:
         """Release a slot and update the concurrency limit based on RTT."""
         async with self._condition:
+            self._rtt_samples.append(rtt)
             self._update_limit(rtt)
             self.inflight -= 1
             self._condition.notify()
