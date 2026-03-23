@@ -121,6 +121,9 @@ async def test_fetch_timeout_and_empty_response(
 ) -> None:
     mock_async_client.run_async.return_value = success_response
     await http_executor.fetch(RequestSpec(method=HttpMethod.GET, url="https://api.example.com/data", timeout_s=10.0))
+    # Assert timeout propagated to client
+    _, kwargs = mock_async_client.run_async.call_args
+    assert kwargs.get("timeout") == 10.0
     empty = MagicMock(spec=Response)
     empty.status_code = 200
     empty.content = b""

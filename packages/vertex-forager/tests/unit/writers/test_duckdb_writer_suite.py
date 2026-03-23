@@ -100,7 +100,7 @@ async def test_schema_evolution_type_mapping_timestamptz_and_hugeint(tmp_path: P
         with duckdb.connect(str(db_path)) as conn:
             rows = conn.execute('DESCRIBE "tmapping"').fetchall()
             types = {r[0]: r[1] for r in rows}
-            assert (types.get("tz") or "").upper().startswith("TIMESTAMP")
+            assert "WITH TIME ZONE" in (types.get("tz") or "").upper()
             t_u64 = str(types.get("u64") or "").upper()
             assert t_u64 in ("HUGEINT", "UBIGINT", "BIGINT")
     finally:

@@ -304,7 +304,9 @@ def test_as_dict_none_and_object() -> None:
             self.errors = []
     d = as_dict(R())
     assert d["counters"]["x"] == 1
-    assert "summary" in d and "tables" in d and "errors" in d
+    assert "summary" in d
+    assert "tables" in d
+    assert "errors" in d
 
 
 def test_compact_level_formatter_and_list_handler() -> None:
@@ -370,7 +372,7 @@ def test_check_memory_safety_invalid_envs(monkeypatch: pytest.MonkeyPatch) -> No
 def test_cleanup_dlq_tmp_negative_retention_raises(tmp_path: Path) -> None:
     base = tmp_path / "dlq"
     base.mkdir()
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="cleanup_dlq_tmp: retention_s must be non-negative"):
         cleanup_dlq_tmp(base=base, retention_s=-1)
 
 

@@ -40,9 +40,15 @@ async def test_stop_with_completed_writer_tasks() -> None:
         return None
     t = asyncio.create_task(_done())
     await t
-    eng._active_tasks = []  # type: ignore[attr-defined]
+    # Have a pending active task to avoid early return and exercise cleanup
+    pending = asyncio.Event()
+    active = asyncio.create_task(pending.wait())
+    eng._active_tasks = [active]  # type: ignore[attr-defined]
     eng._writer_tasks = [t]  # type: ignore[attr-defined]
     await eng.stop()
+    # Cleanup pending task
+    pending.set()
+    await asyncio.sleep(0)
 
 
 @pytest.mark.asyncio
@@ -81,16 +87,20 @@ async def test_stop_pkt_q_timeout_cancels_writers(monkeypatch: pytest.MonkeyPatc
         await asyncio.sleep(3600)
     w = asyncio.create_task(_sleep_forever())
     eng._writer_tasks = [w]  # type: ignore[attr-defined]
-    eng._active_tasks = []  # type: ignore[attr-defined]
+    # Have a pending active task to ensure _stop_impl path executes
+    pending = asyncio.Event()
+    active = asyncio.create_task(pending.wait())
+    eng._active_tasks = [active]  # type: ignore[attr-defined]
     async def _raise_timeout(awaitable, timeout):  # type: ignore[no-untyped-def]
         raise asyncio.TimeoutError
     monkeypatch.setattr(asyncio, "wait_for", _raise_timeout, raising=True)
-    try:
-        await eng.stop()
-        await asyncio.sleep(0)
-    finally:
-        if not w.done():
-            w.cancel()
+    await eng.stop()
+    await asyncio.sleep(0)
+    # Writer task should be cancelled by stop()
+    assert w.cancelled()
+    # Cleanup pending active task
+    pending.set()
+    await asyncio.sleep(0)
 
 
 class SlowRouter:
