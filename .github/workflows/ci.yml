@@ -104,16 +104,17 @@ jobs:
         if: ${{ matrix.python-version == '3.10' }}
         run: |
           if [ ! -f trivy-results.sarif ]; then
-            echo "::warning::trivy-results.sarif not found. The scan might have failed or found no issues. Check Trivy debug logs."
-            exit 0
+            echo "::error::trivy-results.sarif not found"
+            exit 1
           fi
-          # Limit reached soon (You have used 80%) 대응 및 검증 로직 개선
-          # jq를 사용하여 error 레벨의 결과 개수만 정확히 추출
           if command -v jq >/dev/null 2>&1; then
-            ERRORS=$(jq '[.runs[].results[]? | select(.level=="error")] | length' trivy-results.sarif)
+            ERRORS=$(jq '[.runs[].results[] | select(.level=="error")] | length' trivy-results.sarif)
           else
-            # fallback
-            ERRORS=$(grep -oP '"level"\s*:\s*"error"' trivy-results.sarif | wc -l || echo 0)
+            ERRORS=$(
+              (
+                grep -oP '"level"\s*:\s*"error"' trivy-results.sarif || true
+              ) | wc -l | tr -d ' '
+            )
           fi
           echo "Trivy HIGH/CRITICAL findings: $ERRORS"
           if [ "$ERRORS" -gt 0 ]; then
