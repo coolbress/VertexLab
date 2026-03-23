@@ -33,6 +33,7 @@ from vertex_forager.exceptions import (
     InputError,
     PrimaryKeyMissingError,
     PrimaryKeyNullError,
+    SchemaMapError,
     ValidationError,
 )
 from vertex_forager.writers.base import BaseWriter, WriteResult
@@ -621,7 +622,6 @@ class DuckDBWriter(BaseWriter):
         else:
             self._unresolved_type_count += 1
             if self._strict:
-                from vertex_forager.exceptions import SchemaMapError
                 raise SchemaMapError(f"Unsupported Polars type {dtype} in strict mode.")
             return "VARCHAR"  # Default fallback
 

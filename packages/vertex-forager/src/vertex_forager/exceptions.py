@@ -126,6 +126,7 @@ __all__ = [
     "InputError",
     "PrimaryKeyMissingError",
     "PrimaryKeyNullError",
+    "SchemaMapError",
     "TransformError",
     "ValidationError",
     "VertexForagerError",

@@ -8,7 +8,13 @@ import polars as pl
 import pytest
 
 from vertex_forager.core.config import EngineConfig, FramePacket
-from vertex_forager.exceptions import InputError, PrimaryKeyMissingError, PrimaryKeyNullError, VertexForagerError, SchemaMapError
+from vertex_forager.exceptions import (
+    InputError,
+    PrimaryKeyMissingError,
+    PrimaryKeyNullError,
+    SchemaMapError,
+    VertexForagerError,
+)
 from vertex_forager.writers.duckdb import DuckDBWriter
 
 

@@ -106,7 +106,8 @@ class InMemoryBufferWriter(BaseWriter):
             df = parts[0] if len(parts) == 1 else pl.concat(parts, how="vertical", rechunk=False)
 
             # Optional in-memory dedup/upsert by unique key
-            if self._upsert_keys:
+            # Skip dedup if write() already deduplicated everything (parts == 1)
+            if self._upsert_keys and len(parts) > 1:
                 subset = [c for c in self._upsert_keys if c in df.columns]
                 if subset:
                     before = df.height

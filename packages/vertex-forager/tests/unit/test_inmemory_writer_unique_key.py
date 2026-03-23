@@ -19,7 +19,7 @@ async def test_inmemory_writer_dedup_with_upsert_keys(pkt_factory) -> None:
     # Expect inline dedup: total height should be 3, not 4
     assert len(writer._tables["tmp_table"]) == 1
     out = writer._tables["tmp_table"][0]
-    
+
     assert sorted(out["id"].to_list()) == [1, 2, 3]
     assert out.filter(pl.col("id") == 2)["val"][0] == "b2"
 
