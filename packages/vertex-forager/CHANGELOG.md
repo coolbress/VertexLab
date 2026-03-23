@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.5.3...vertex-forager-v0.6.0) (2026-03-23)
+
+
+### Features
+
+* **writers:** map pl.List and pl.Struct to native DuckDB nested types instead of VARCHAR ([#182](https://github.com/coolbress/VertexLab/issues/182))  ([46ddafe](https://github.com/coolbress/VertexLab/commit/46ddafeb1aa50689e2b2a3a912f9ae12064b97c6))
+
 ## [0.5.3](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.5.2...vertex-forager-v0.5.3) (2026-03-23)
 
 
