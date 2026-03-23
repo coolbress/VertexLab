@@ -56,6 +56,13 @@ from vertex_forager.constants import (
 from vertex_forager.constants import (
     PROGRESS_LOG_CHUNK_ROWS,
 )
+from vertex_forager.core.checkpoint import (
+    Checkpoint,
+    get_cache_dir,
+    load_checkpoint,
+    save_checkpoint,
+    save_run_history,
+)
 from vertex_forager.exceptions import (
     DLQSpoolError,
     FetchError,
@@ -78,7 +85,7 @@ from vertex_forager.core.config import (
 )
 from vertex_forager.core.retry import create_retry_controller
 from vertex_forager.schema.registry import get_table_schema
-from vertex_forager.utils import cleanup_dlq_tmp, get_cache_dir, sanitize_field
+from vertex_forager.utils import cleanup_dlq_tmp, sanitize_field
 
 if TYPE_CHECKING:
     from vertex_forager.core.contracts import IMapper, IRouter, IWriter
@@ -205,6 +212,11 @@ class VertexForager:
         self._metrics_sink = getattr(config, "metrics_sink", None)
         self._stop_task: asyncio.Task[None] | None = None
 
+        # For checkpoint tracking
+        self._completed_symbols: set[str] = set()
+        self._failed_symbols: set[str] = set()
+        self._checkpoint_lock = asyncio.Lock()
+
         if str(os.getenv("VF_ALLOW_PICKLE_COMPAT", "")).lower() in {"1", "true", "yes"}:
             logger.warning("PIPELINE: VF_ALLOW_PICKLE_COMPAT is enabled; pickled payloads may be accepted")
             self._inc("pickle_compat_enabled", 1)
@@ -319,12 +331,76 @@ class VertexForager:
         else:
             logger.debug(msg)
 
+    def _update_checkpoint(self, run_id: str, provider: str, dataset: str,
+                          completed_symbols: set[str], failed_symbols: set[str]) -> None:
+        """Update checkpoint with completed and failed symbols."""
+        if not completed_symbols and not failed_symbols:
+            return
+
+        checkpoint = Checkpoint(
+            run_id=run_id,
+            provider=provider,
+            dataset=dataset,
+            completed=list(completed_symbols),
+            failed=list(failed_symbols)
+        )
+
+        try:
+            save_checkpoint(checkpoint)
+            logger.debug("PIPELINE: Checkpoint updated for run %s", run_id)
+        except Exception as e:
+            logger.warning("PIPELINE: Failed to update checkpoint: %s", e)
+
+    def _find_latest_checkpoint(self, provider: str, dataset: str) -> Checkpoint | None:
+        """Find the latest checkpoint for a given provider and dataset.
+
+        Args:
+            provider: The data provider name
+            dataset: The dataset name
+
+        Returns:
+            The latest checkpoint if found, None otherwise
+        """
+        cache_dir = get_cache_dir()
+        checkpoints_dir = cache_dir / "checkpoints"
+
+        if not checkpoints_dir.exists():
+            return None
+
+        latest_checkpoint = None
+        latest_mtime = 0.0
+
+        # Look for checkpoint directories that match the provider and dataset pattern
+        for checkpoint_dir in checkpoints_dir.iterdir():
+            if not checkpoint_dir.is_dir():
+                continue
+
+            # Check if this checkpoint matches our provider and dataset
+            checkpoint_file = checkpoint_dir / "progress.json"
+            if checkpoint_file.exists():
+                try:
+                    checkpoint = load_checkpoint(checkpoint_dir.name)
+                    if (checkpoint and checkpoint.provider == provider
+                        and checkpoint.dataset == dataset):
+                        # Get modification time to find the latest
+                        mtime = checkpoint_file.stat().st_mtime
+                        if mtime > latest_mtime:
+                            latest_mtime = mtime
+                            latest_checkpoint = checkpoint
+                except Exception as e:
+                    # Skip corrupted checkpoint files
+                    logger.debug("PIPELINE: Skipping corrupted checkpoint %s: %s", checkpoint_dir.name, e)
+                    continue
+
+        return latest_checkpoint
+
     async def run(
         self,
         *,
         dataset: str,
         symbols: Symbols | None,
         on_progress: Callable[..., Any] | None = None,
+        resume: bool = False,
         **kwargs: object,
     ) -> RunResult:
         """Execute the pipeline.
@@ -347,6 +423,7 @@ class VertexForager:
             dataset: Name of the dataset to fetch (e.g., "sep").
             symbols: List of symbols to fetch, or None for all.
             on_progress: Optional callback to update progress bar (called on job completion).
+            resume: Whether to resume from existing checkpoint (default: False).
             **kwargs: Additional arguments passed to the router's generate_jobs method.
 
         Returns:
@@ -363,12 +440,43 @@ class VertexForager:
               and are not re-raised by default.
             - Callers should inspect `RunResult.errors` for per-task failures and
               only expect orchestration-level issues to raise.
+            - When `resume=True`, symbols already completed in previous runs will be skipped
+              based on checkpoint files in ~/.cache/vertex-forager/checkpoints/<run_id>/.
         """
         if self._running:
             raise RuntimeError("Pipeline is already running; concurrent run() calls are not supported")
         self._running = True
 
         try:
+            # Generate run_id for checkpointing and run history
+            # For resume mode, try to find the latest checkpoint for this provider+dataset
+            run_id = f"{self._router.provider}_{dataset}_{int(time.time())}"
+            completed_symbols: set[str] = set()
+            # Initialize instance state for consistent usage
+            self._run_id = run_id
+            # Always initialize symbol sets for fresh runs
+            self._completed_symbols = set()
+            self._failed_symbols = set()
+
+            if resume:
+                # Look for the latest checkpoint for this provider and dataset
+                latest_checkpoint = self._find_latest_checkpoint(self._router.provider, dataset)
+                if latest_checkpoint:
+                    run_id = latest_checkpoint.run_id
+                    completed_symbols = set(latest_checkpoint.completed)
+                    # Persist checkpoint data to instance state for consistent usage
+                    self._run_id = run_id
+                    self._completed_symbols = set(latest_checkpoint.completed)
+                    self._failed_symbols = set(latest_checkpoint.failed)
+                    logger.info("PIPELINE: Resuming from checkpoint %s, skipping %d completed symbols",
+                            run_id, len(completed_symbols))
+                else:
+                    # Clear any previous state when starting fresh
+                    self._completed_symbols = set()
+                    self._failed_symbols = set()
+                    logger.info("PIPELINE: No checkpoint found for provider %s and dataset %s, starting fresh",
+                            self._router.provider, dataset)
+
             # PriorityQueue to prioritize pagination (next jobs) over new jobs
             # Tuple structure: (priority, order, job)
             # Priority: 0=NextJob, 10=NewJob, 999=Sentinel
@@ -391,6 +499,11 @@ class VertexForager:
             t_run0 = time.monotonic()
 
             result = RunResult(provider=self._router.provider)
+            # Set run metadata for persistence
+            result.run_id = run_id
+            result.dataset = dataset
+            result.started_at = time.time()
+
             result_lock = asyncio.Lock()
             self._run_result = result
             self._run_result_lock = result_lock
@@ -430,7 +543,14 @@ class VertexForager:
             ]
 
             producer_task = asyncio.create_task(
-                self._producer(req_q=req_q, dataset=dataset, symbols=symbols, order_counter=order_counter, **kwargs),
+                self._producer(
+                    req_q=req_q,
+                    dataset=dataset,
+                    symbols=symbols,
+                    order_counter=order_counter,
+                    completed_symbols=completed_symbols,
+                    **kwargs
+                ),
                 name="vertex-forager:producer",
             )
 
@@ -567,6 +687,24 @@ class VertexForager:
                         logger.info(msg_s)
                     else:
                         logger.debug(msg_s)
+
+            # Update checkpoint and save run history
+            result.finished_at = time.time()
+            result.duration_s = time.monotonic() - t_run0
+
+            # Update checkpoint with completed and failed symbols
+            async with self._checkpoint_lock:
+                self._update_checkpoint(run_id, self._router.provider, dataset,
+                                    self._completed_symbols, self._failed_symbols)
+
+            # Save run history if enabled
+            if self._config.persist_run_history:
+                try:
+                    save_run_history(result, run_id)
+                    logger.debug("PIPELINE: Run history saved for run %s", run_id)
+                except Exception as e:
+                    logger.warning("PIPELINE: Failed to save run history: %s", e)
+
             return result
         finally:
             try:
@@ -751,6 +889,7 @@ class VertexForager:
         dataset: str,
         symbols: Symbols | None,
         order_counter: itertools.count,
+        completed_symbols: set[str] | None = None,
         **kwargs: object,
     ) -> None:
         """Generate fetch jobs and push them to the request queue.
@@ -764,6 +903,11 @@ class VertexForager:
         )
 
         async for job in self._router.generate_jobs(dataset=dataset, symbols=symbols, **kwargs):
+            # Skip already completed symbols if resume is enabled
+            if completed_symbols and job.symbol and job.symbol in completed_symbols:
+                logger.debug(f"PRODUCER: Skipping already completed symbol {job.symbol}")
+                continue
+
             await req_q.put((self.PRIORITY_NEW_JOB, next(order_counter), job))
             job_count += 1
             self._inc("jobs_generated", 1)
@@ -1135,8 +1279,27 @@ class VertexForager:
                 )
             finally:
                 req_q.task_done()
+
                 try:
                     await handler(job, payload, worker_exc, parse_result)
+
+                    # Track completed and failed symbols for checkpointing AFTER handler completes
+                    if job.symbol:
+                        async with self._checkpoint_lock:
+                            if worker_exc is None:
+                                self._completed_symbols.add(job.symbol)
+                            else:
+                                self._failed_symbols.add(job.symbol)
+
+                            # Update checkpoint immediately after symbol completion
+                            if self._run_id and job.dataset:
+                                self._update_checkpoint(
+                                    self._run_id,
+                                    self._router.provider,
+                                    job.dataset,
+                                    self._completed_symbols,
+                                    self._failed_symbols
+                                )
                 except Exception as e:
                     # Swallowing exception from callback to prevent worker crash
                     logger.error(
