@@ -2,6 +2,19 @@
 
 from dataclasses import dataclass
 
+# Import common exception types for retryability checking
+try:
+    import httpx
+    HAS_HTTPX = True
+except ImportError:
+    HAS_HTTPX = False
+
+try:
+    import requests
+    HAS_REQUESTS = True
+except ImportError:
+    HAS_REQUESTS = False
+
 
 @dataclass(frozen=True)
 class RunError:
@@ -42,7 +55,7 @@ class RunError:
         Returns:
             RunError: Structured error information
         """
-        exc_type = type(exc).__name__
+        exc_type = f"{exc.__class__.__module__}.{exc.__class__.__name__}"
         message = str(exc)
 
         # Determine if error is retryable
@@ -88,19 +101,23 @@ class RunError:
             if 400 <= status_code < 500:
                 return False
 
-        # Check for network-related errors
-        error_type = type(exc).__name__
-        retryable_error_types = {
-            'TimeoutError',
-            'ConnectError',
-            'ConnectTimeout',
-            'ReadTimeout',
-            'PoolTimeout',
-            'NetworkError',
-        }
+        # Check for network-related errors using isinstance for proper subclass handling
 
-        if error_type in retryable_error_types:
+        # Check standard Python exceptions
+        if isinstance(exc, TimeoutError):
             return True
+
+        # Check httpx exceptions if available
+        if httpx is not None:
+            if isinstance(exc, (httpx.TransportError, httpx.ConnectError, httpx.ConnectTimeout,
+                              httpx.ReadTimeout, httpx.PoolTimeout, httpx.NetworkError)):
+                return True
+
+        # Check requests exceptions if available
+        if requests is not None:
+            if isinstance(exc, (requests.exceptions.ConnectionError, requests.exceptions.Timeout,
+                              requests.exceptions.ConnectTimeout, requests.exceptions.ReadTimeout)):
+                return True
 
         # Non-retryable by default
         return False

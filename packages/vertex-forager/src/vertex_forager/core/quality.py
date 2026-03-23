@@ -101,7 +101,7 @@ class NoFutureDates:
                     future_count = df.filter(
                         pl.col(col) > pl.lit(current_time.date()).cast(pl.Date)
                     ).height
-                elif col_dtype == pl.Datetime:
+                elif col_dtype.base_type() == pl.Datetime:
                     # For Datetime columns, use timezone-aware comparison
                     future_count = df.filter(
                         pl.col(col) > pl.lit(current_time).cast(pl.Datetime)

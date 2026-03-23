@@ -137,8 +137,8 @@ async def test_writer_failure_propagates_exception(tmp_path, monkeypatch) -> Non
     # Verify exactly one error with DLQ summary
     assert len(result.errors) == 1
     err0 = result.errors[0]
-    assert "UnexpectedWriterError:fail_test:Disk Full" in err0
-    assert "DLQ=" in err0
+    assert "UnexpectedWriterError:fail_test:Disk Full" in err0.message
+    assert "DLQ=" in err0.message
 
 
 @pytest.mark.asyncio
@@ -200,10 +200,10 @@ async def test_dlq_spool_and_per_packet_rescue(tmp_path, monkeypatch) -> None:
     assert len(result.errors) == 1
     err0 = result.errors[0]
     assert (
-        "WriterError:fail_test: Disk Full".replace("  ", " ") in err0
-        or "WriterError:fail_test:Disk Full" in err0
+        "WriterError:fail_test: Disk Full".replace("  ", " ") in err0.message
+        or "WriterError:fail_test:Disk Full" in err0.message
     )
-    assert "DLQ=" in err0
+    assert "DLQ=" in err0.message
     assert result.tables.get("fail_test", 0) == 1
 
 @pytest.mark.asyncio
@@ -249,8 +249,8 @@ async def test_dlq_summary_after_consecutive_failures(tmp_path, monkeypatch) -> 
     # Summarized entry should indicate spooled and remaining count
     assert len(result.errors) == 1
     err0 = result.errors[0]
-    assert "UnexpectedWriterError:fail_test:Disk Full" in err0
-    assert "DLQ=spooled" in err0
+    assert "UnexpectedWriterError:fail_test:Disk Full" in err0.message
+    assert "DLQ=spooled" in err0.message
     # Verify DLQ IPC contains all 4 ids
     dlq_dir = tmp_path / "app" / "cache" / "dlq" / "fail_test"
     files = list(dlq_dir.glob("batch_*.ipc"))

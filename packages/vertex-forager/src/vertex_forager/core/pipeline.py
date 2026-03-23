@@ -1317,7 +1317,7 @@ class VertexForager:
         result_lock: asyncio.Lock,
     ) -> None:
         """Validate data quality using table schema rules.
-        
+
         Args:
             table: Table name to validate
             df: DataFrame to validate
@@ -1581,39 +1581,36 @@ class VertexForager:
             await _update_dlq_counts(table=table, rescued=int(rescued), remaining=0)
             return {"status": "rescued_only", "rescued": rescued, "remaining": 0, "path": None, "error": None}
 
-        def _build_writer_error_summary(*, status: DLQStatus, table: str, prefix: str, exc: Exception) -> str:
+        def _build_writer_error_summary(*, status: DLQStatus, table: str, prefix: str, exc: Exception) -> RunError:
             match status["status"]:
                 case "spooled":
-                    path = status["path"]
-                    summary = (
-                        f"{prefix}:{table}:{exc} "
-                        f"(DLQ=spooled; rescued={status['rescued']}; remaining={status['remaining']}; path={path})"
-                    )
+                    # path and message variables not used - error message handled by RunError.from_exception
+                    pass
                 case "rescued_only":
-                    summary = (
-                        f"{prefix}:{table}:{exc} "
-                        f"(DLQ=rescued_only; rescued={status['rescued']}; remaining={status['remaining']})"
-                    )
+                    # message variable not used - error message handled by RunError.from_exception
+                    pass
                 case "noop":
-                    summary = (
-                        f"{prefix}:{table}:{exc} "
-                        f"(DLQ=noop; rescued={status['rescued']}; remaining={status['remaining']})"
-                    )
+                    # message variable not used - error message handled by RunError.from_exception
+                    pass
                 case "spool_failed":
                     # Built and appended before re-raising the spool exception to the outer handler.
-                    summary = (
-                        f"{prefix}:{table}:{exc} "
-                        f"(DLQ=spool_failed; rescued={status['rescued']}; remaining={status['remaining']})"
-                    )
+                    # message variable not used - error message handled by RunError.from_exception
+                    pass
                 case "disabled":
-                    summary = (
-                        f"{prefix}:{table}:{exc} "
-                        f"(DLQ=disabled; rescued={status['rescued']}; remaining={status['remaining']})"
-                    )
+                    # message variable not used - error message handled by RunError.from_exception
+                    pass
                 case _:
                     # Fallback if a new status is introduced without updating this function
-                    summary = f"{prefix}:{table}:{exc} (DLQ={status['status']})"
-            return summary
+                    # message variable not used - error message handled by RunError.from_exception
+                    pass
+
+            # Create RunError from the exception
+            return RunError.from_exception(
+                exc=exc,
+                provider="",  # Provider not available in this context
+                dataset=table,
+                symbol=""  # Symbol not available in this context
+            )
 
         async def _handle_flush_error(
             *,
@@ -1936,7 +1933,12 @@ class VertexForager:
             except Exception as e:
                 async with result_lock:
                     if not getattr(e, "_already_reported", False):
-                        result.errors.append(f"Writer:Unexpected:{e}")
+                        result.errors.append(RunError.from_exception(
+                            exc=e,
+                            provider="",
+                            dataset="",
+                            symbol=""
+                        ))
                 logger.exception("WRITER: Unexpected error")
                 raise
             finally:
