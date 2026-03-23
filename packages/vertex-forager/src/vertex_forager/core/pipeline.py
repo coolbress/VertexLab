@@ -459,9 +459,16 @@ class VertexForager:
                 if latest_checkpoint:
                     run_id = latest_checkpoint.run_id
                     completed_symbols = set(latest_checkpoint.completed)
+                    # Persist checkpoint data to instance state for consistent usage
+                    self._run_id = run_id
+                    self._completed_symbols = set(latest_checkpoint.completed)
+                    self._failed_symbols = set(latest_checkpoint.failed)
                     logger.info("PIPELINE: Resuming from checkpoint %s, skipping %d completed symbols",
                                run_id, len(completed_symbols))
                 else:
+                    # Clear any previous state when starting fresh
+                    self._completed_symbols = set()
+                    self._failed_symbols = set()
                     logger.info("PIPELINE: No checkpoint found for provider %s and dataset %s, starting fresh",
                                self._router.provider, dataset)
 
@@ -1268,16 +1275,26 @@ class VertexForager:
             finally:
                 req_q.task_done()
 
-                # Track completed and failed symbols for checkpointing
-                if job.symbol:
-                    async with self._checkpoint_lock:
-                        if worker_exc is None:
-                            self._completed_symbols.add(job.symbol)
-                        else:
-                            self._failed_symbols.add(job.symbol)
-
                 try:
                     await handler(job, payload, worker_exc, parse_result)
+                    
+                    # Track completed and failed symbols for checkpointing AFTER handler completes
+                    if job.symbol:
+                        async with self._checkpoint_lock:
+                            if worker_exc is None:
+                                self._completed_symbols.add(job.symbol)
+                            else:
+                                self._failed_symbols.add(job.symbol)
+                            
+                            # Update checkpoint immediately after symbol completion
+                            if self._run_id and job.dataset:
+                                self._update_checkpoint(
+                                    self._run_id, 
+                                    self._router.provider, 
+                                    job.dataset,
+                                    self._completed_symbols, 
+                                    self._failed_symbols
+                                )
                 except Exception as e:
                     # Swallowing exception from callback to prevent worker crash
                     logger.error(

@@ -69,7 +69,10 @@ def test_checkpoint_model() -> None:
 
 def test_save_and_load_checkpoint() -> None:
     """Test saving and loading checkpoints."""
-    with tempfile.TemporaryDirectory() as tmpdir, patch("vertex_forager.core.checkpoint.get_cache_dir", return_value=Path(tmpdir)):
+    with tempfile.TemporaryDirectory() as tmpdir, patch(
+        "vertex_forager.core.checkpoint.get_cache_dir",
+        return_value=Path(tmpdir)
+    ):
             checkpoint = Checkpoint(
                 run_id="test_run_123",
                 provider="test_provider",
@@ -97,7 +100,10 @@ def test_save_and_load_checkpoint() -> None:
 
 def test_save_run_history() -> None:
     """Test saving run history."""
-    with tempfile.TemporaryDirectory() as tmpdir, patch("vertex_forager.core.checkpoint.get_cache_dir", return_value=Path(tmpdir)):
+    with tempfile.TemporaryDirectory() as tmpdir, patch(
+        "vertex_forager.core.checkpoint.get_cache_dir",
+        return_value=Path(tmpdir)
+    ):
             run_result = RunResult(
                 provider="test_provider",
                 run_id="test_run_123",

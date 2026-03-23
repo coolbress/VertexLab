@@ -62,12 +62,16 @@ def atomic_write_json(data: JSONValue, file_path: Path) -> None:
     try:
         os.replace(temp_path, file_path)
         # Ensure directory metadata is flushed on POSIX systems
-        if hasattr(os, "fsync") and hasattr(os, "open"):
-            dir_fd = os.open(file_path.parent, os.O_RDONLY)
+        if hasattr(os, "fsync") and hasattr(os, "open") and os.name == "posix":
             try:
-                os.fsync(dir_fd)
-            finally:
-                os.close(dir_fd)
+                dir_fd = os.open(file_path.parent, os.O_RDONLY)
+                try:
+                    os.fsync(dir_fd)
+                finally:
+                    os.close(dir_fd)
+            except PermissionError:
+                # Ignore permission errors on Windows
+                pass
     except Exception:
         temp_path.unlink(missing_ok=True)
         raise
