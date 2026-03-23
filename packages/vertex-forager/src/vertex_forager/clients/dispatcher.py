@@ -68,7 +68,11 @@ async def run_pipeline_for(
         )
         from vertex_forager.clients.validation import filter_reserved_kwargs
 
+        # Extract resume parameter explicitly since it's now a specific parameter
+        resume_val = kwargs.get("resume", False)
+        resume = bool(resume_val) if isinstance(resume_val, (bool, int, float)) else False
         run_kwargs = filter_reserved_kwargs(kwargs, RESERVED_PIPELINE_KEYS)
+        
         with warnings.catch_warnings():
             warnings.filterwarnings(
                 "ignore",
@@ -81,6 +85,6 @@ async def run_pipeline_for(
                 module=r"yfinance(\.|$)",
             )
             client.last_run = await pipeline.run(
-                dataset=dataset, symbols=symbols, on_progress=on_progress, **run_kwargs
+                dataset=dataset, symbols=symbols, on_progress=on_progress, resume=resume, **run_kwargs
             )
         return cast("RunResult", client.last_run)

@@ -53,6 +53,13 @@ from vertex_forager.constants import (
 from vertex_forager.constants import (
     PRIORITY_SENTINEL as CONST_PRIORITY_SENTINEL,
 )
+from vertex_forager.core.checkpoint import (
+    get_cache_dir,
+    save_checkpoint,
+    load_checkpoint,
+    save_run_history,
+    Checkpoint,
+)
 from vertex_forager.constants import (
     PROGRESS_LOG_CHUNK_ROWS,
 )
@@ -204,6 +211,10 @@ class VertexForager:
         self._summary: dict[str, float] = {}
         self._metrics_sink = getattr(config, "metrics_sink", None)
         self._stop_task: asyncio.Task[None] | None = None
+        
+        # For checkpoint tracking
+        self._completed_symbols: set[str] = set()
+        self._failed_symbols: set[str] = set()
 
         if str(os.getenv("VF_ALLOW_PICKLE_COMPAT", "")).lower() in {"1", "true", "yes"}:
             logger.warning("PIPELINE: VF_ALLOW_PICKLE_COMPAT is enabled; pickled payloads may be accepted")
@@ -319,12 +330,33 @@ class VertexForager:
         else:
             logger.debug(msg)
 
+    def _update_checkpoint(self, run_id: str, provider: str, dataset: str, 
+                          completed_symbols: set[str], failed_symbols: set[str]) -> None:
+        """Update checkpoint with completed and failed symbols."""
+        if not completed_symbols and not failed_symbols:
+            return
+            
+        checkpoint = Checkpoint(
+            run_id=run_id,
+            provider=provider,
+            dataset=dataset,
+            completed=list(completed_symbols),
+            failed=list(failed_symbols)
+        )
+        
+        try:
+            save_checkpoint(checkpoint)
+            logger.debug("PIPELINE: Checkpoint updated for run %s", run_id)
+        except Exception as e:
+            logger.warning("PIPELINE: Failed to update checkpoint: %s", e)
+
     async def run(
         self,
         *,
         dataset: str,
         symbols: Symbols | None,
         on_progress: Callable[..., Any] | None = None,
+        resume: bool = False,
         **kwargs: object,
     ) -> RunResult:
         """Execute the pipeline.
@@ -347,6 +379,7 @@ class VertexForager:
             dataset: Name of the dataset to fetch (e.g., "sep").
             symbols: List of symbols to fetch, or None for all.
             on_progress: Optional callback to update progress bar (called on job completion).
+            resume: Whether to resume from existing checkpoint (default: False).
             **kwargs: Additional arguments passed to the router's generate_jobs method.
 
         Returns:
@@ -363,12 +396,26 @@ class VertexForager:
               and are not re-raised by default.
             - Callers should inspect `RunResult.errors` for per-task failures and
               only expect orchestration-level issues to raise.
+            - When `resume=True`, symbols already completed in previous runs will be skipped
+              based on checkpoint files in ~/.cache/vertex-forager/checkpoints/<run_id>/.
         """
         if self._running:
             raise RuntimeError("Pipeline is already running; concurrent run() calls are not supported")
         self._running = True
 
         try:
+            # Generate run_id for checkpointing and run history
+            run_id = f"{self._router.provider}_{dataset}_{int(time.time())}"
+            
+            # Load checkpoint if resume is enabled
+            completed_symbols: set[str] = set()
+            if resume:
+                checkpoint = load_checkpoint(run_id)
+                if checkpoint:
+                    completed_symbols = set(checkpoint.completed)
+                    logger.info("PIPELINE: Resuming from checkpoint, skipping %d completed symbols", 
+                               len(completed_symbols))
+            
             # PriorityQueue to prioritize pagination (next jobs) over new jobs
             # Tuple structure: (priority, order, job)
             # Priority: 0=NextJob, 10=NewJob, 999=Sentinel
@@ -391,6 +438,11 @@ class VertexForager:
             t_run0 = time.monotonic()
 
             result = RunResult(provider=self._router.provider)
+            # Set run metadata for persistence
+            result.run_id = run_id
+            result.dataset = dataset
+            result.started_at = t_run0
+            
             result_lock = asyncio.Lock()
             self._run_result = result
             self._run_result_lock = result_lock
@@ -430,7 +482,14 @@ class VertexForager:
             ]
 
             producer_task = asyncio.create_task(
-                self._producer(req_q=req_q, dataset=dataset, symbols=symbols, order_counter=order_counter, **kwargs),
+                self._producer(
+                    req_q=req_q, 
+                    dataset=dataset, 
+                    symbols=symbols, 
+                    order_counter=order_counter, 
+                    completed_symbols=completed_symbols,
+                    **kwargs
+                ),
                 name="vertex-forager:producer",
             )
 
@@ -567,6 +626,23 @@ class VertexForager:
                         logger.info(msg_s)
                     else:
                         logger.debug(msg_s)
+            
+            # Update checkpoint and save run history
+            result.finished_at = time.monotonic()
+            result.duration_s = result.finished_at - result.started_at
+            
+            # Update checkpoint with completed and failed symbols
+            self._update_checkpoint(run_id, self._router.provider, dataset, 
+                                  self._completed_symbols, self._failed_symbols)
+            
+            # Save run history if enabled
+            if self._config.persist_run_history:
+                try:
+                    save_run_history(result, run_id)
+                    logger.debug("PIPELINE: Run history saved for run %s", run_id)
+                except Exception as e:
+                    logger.warning("PIPELINE: Failed to save run history: %s", e)
+            
             return result
         finally:
             try:
@@ -751,6 +827,7 @@ class VertexForager:
         dataset: str,
         symbols: Symbols | None,
         order_counter: itertools.count,
+        completed_symbols: set[str] | None = None,
         **kwargs: object,
     ) -> None:
         """Generate fetch jobs and push them to the request queue.
@@ -764,6 +841,11 @@ class VertexForager:
         )
 
         async for job in self._router.generate_jobs(dataset=dataset, symbols=symbols, **kwargs):
+            # Skip already completed symbols if resume is enabled
+            if completed_symbols and job.symbol and job.symbol in completed_symbols:
+                logger.debug(f"PRODUCER: Skipping already completed symbol {job.symbol}")
+                continue
+                
             await req_q.put((self.PRIORITY_NEW_JOB, next(order_counter), job))
             job_count += 1
             self._inc("jobs_generated", 1)
@@ -1135,6 +1217,14 @@ class VertexForager:
                 )
             finally:
                 req_q.task_done()
+                
+                # Track completed and failed symbols for checkpointing
+                if job.symbol:
+                    if worker_exc is None:
+                        self._completed_symbols.add(job.symbol)
+                    else:
+                        self._failed_symbols.add(job.symbol)
+                
                 try:
                     await handler(job, payload, worker_exc, parse_result)
                 except Exception as e:

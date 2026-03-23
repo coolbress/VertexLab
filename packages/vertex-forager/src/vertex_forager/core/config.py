@@ -273,7 +273,9 @@ class EngineConfig(BaseModel):
     # 5. Optional Tracing
     tracer: TracerProtocol | None = None
     otel_enabled: bool | None = None
-    # 6. Pagination Fairness
+    # 6. Run Persistence
+    persist_run_history: bool = Field(default=True)
+    # 7. Pagination Fairness
     pagination_max_burst: int | None = Field(default=None, ge=1)
 
     model_config = {"arbitrary_types_allowed": True}
@@ -333,6 +335,12 @@ class RunResult(BaseModel):
 
     Attributes:
         provider (str): Data provider name.
+        run_id (str | None): Unique identifier for the run (default: None).
+        dataset (str | None): Dataset name for the run (default: None).
+        started_at (float | None): Timestamp when the run started (default: None).
+        finished_at (float | None): Timestamp when the run finished (default: None).
+        duration_s (float | None): Duration of the run in seconds (default: None).
+        coverage_pct (float | None): Coverage percentage for the run (default: None).
         tables (dict[str, int]): Dictionary mapping table names to row counts (default: empty dict).
         errors (list[str]): List of error messages encountered (default: empty list).
         dlq_pending (dict[str, list[FramePacket]]): Packets preserved for post-mortem/dead-letter
@@ -343,6 +351,12 @@ class RunResult(BaseModel):
     """
 
     provider: str
+    run_id: str | None = Field(default=None)
+    dataset: str | None = Field(default=None)
+    started_at: float | None = Field(default=None)
+    finished_at: float | None = Field(default=None)
+    duration_s: float | None = Field(default=None)
+    coverage_pct: float | None = Field(default=None)
     tables: dict[str, int] = Field(default_factory=dict)
     errors: list[str] = Field(default_factory=list)
     metrics_counters: dict[str, int] = Field(default_factory=dict)
