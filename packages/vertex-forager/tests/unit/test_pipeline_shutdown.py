@@ -47,6 +47,9 @@ async def test_stop_with_completed_writer_tasks() -> None:
     eng._active_tasks = [active]  # type: ignore[attr-defined]
     eng._writer_tasks = [t]  # type: ignore[attr-defined]
     await eng.stop()
+    assert t.done()
+    assert not t.cancelled()
+    assert active.cancelled()
     # Cleanup pending task
     pending.set()
     with suppress(asyncio.CancelledError):
@@ -104,6 +107,7 @@ async def test_stop_pkt_q_timeout_cancels_writers(monkeypatch: pytest.MonkeyPatc
     await asyncio.sleep(0)
     # Writer task should be cancelled by stop()
     assert w.cancelled()
+    assert w.done()
     # Cleanup pending active task
     pending.set()
     with suppress(asyncio.CancelledError):
