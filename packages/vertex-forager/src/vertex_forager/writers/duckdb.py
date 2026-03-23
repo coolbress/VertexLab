@@ -598,10 +598,13 @@ class DuckDBWriter(BaseWriter):
         elif dtype in (pl.String, pl.Categorical):
             return "VARCHAR"
         elif isinstance(dtype, pl.List):
-            inner_type = self._map_polars_type_to_sql(dtype.inner)
+            inner_type = self._map_polars_type_to_sql(dtype.inner if isinstance(dtype.inner, pl.DataType) else dtype.inner())
             return f"{inner_type}[]"
         elif isinstance(dtype, pl.Struct):
-            fields = [f"{self._quote_identifier(f.name)} {self._map_polars_type_to_sql(f.dtype)}" for f in dtype.fields]
+            fields = [
+                f"{self._quote_identifier(f.name)} {self._map_polars_type_to_sql(f.dtype if isinstance(f.dtype, pl.DataType) else f.dtype())}"
+                for f in dtype.fields
+            ]
             fields_str = ", ".join(fields)
             return f"STRUCT({fields_str})"
         else:
