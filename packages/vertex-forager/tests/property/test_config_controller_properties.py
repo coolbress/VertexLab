@@ -17,7 +17,7 @@ def test_engineconfig_rpm_floor_constraint(rpm: int, floor: int) -> None:
     if cfg.rpm_floor <= cfg.requests_per_minute:
         cfg.assert_valid()
     else:
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="rpm_floor must be <= requests_per_minute"):
             cfg.assert_valid()
 
 

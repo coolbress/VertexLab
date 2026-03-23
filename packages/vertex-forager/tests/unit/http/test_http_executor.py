@@ -171,7 +171,7 @@ async def test_yfinance_unknown_or_unsupported_scheme_raises(
     mock_async_client: AsyncMock,
 ) -> None:
     mock_async_client.run_sync = AsyncMock(side_effect=lambda func: func())
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Unsupported library call type: unknown"):
         await http_executor.fetch(
             RequestSpec(
                 method=HttpMethod.GET,
@@ -179,7 +179,7 @@ async def test_yfinance_unknown_or_unsupported_scheme_raises(
                 params={"dataset": "price", "lib": {"type": "unknown", "kwargs": {}}},
             )
         )
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Unsupported library scheme: ftp"):
         await http_executor.fetch(
             RequestSpec(
                 method=HttpMethod.GET,
@@ -223,5 +223,7 @@ async def test_executor_handles_concurrent_requests(mock_async_client: AsyncMock
     spec1 = RequestSpec(url="https://api.example.com/data1", method=HttpMethod.GET)
     spec2 = RequestSpec(url="https://api.example.com/data2", method=HttpMethod.GET)
     results = await asyncio.gather(executor.fetch(spec1), executor.fetch(spec2))
-    assert len(results) == 2 and results[0] == results[1] == b'{"data": "success"}'
+    assert len(results) == 2
+    assert results[0] == b'{"data": "success"}'
+    assert results[1] == b'{"data": "success"}'
     assert mock_async_client.run_async.call_count == 2

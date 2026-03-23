@@ -10,6 +10,14 @@ on:
     branches: [main]  # main 브랜치에 코드가 올라올 때
   pull_request:
     branches: [main]  # 누군가(혹은 내가) merge 요청을 보낼 때
+  workflow_dispatch:
+    inputs:
+      include_manual:
+        description: "Run manual tests (opt-in)"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -143,12 +151,25 @@ jobs:
           uv run yamllint -c .yamllint .github/workflows/ \
             && uv run yamllint -c .yamllint packages/vertex-forager/mkdocs.yml
 
-      - name: Run Tests (Pytest with Coverage Gate)
-        if: ${{ matrix.python-version == '3.10' }}
-        run: uv run pytest packages/ --tb=short --cov=packages/vertex-forager/src/vertex_forager/core --cov=packages/vertex-forager/src/vertex_forager/clients --cov=packages/vertex-forager/src/vertex_forager/writers --cov=packages/vertex-forager/src/vertex_forager/routers --cov-report=term --cov-fail-under=80
-      - name: Run Tests (Pytest)
-        if: ${{ matrix.python-version != '3.10' }}
-        run: uv run pytest packages/vertex-forager/tests -q
+      - name: Run Tests (exclude manual) with Coverage Gate
+        if: ${{ matrix.python-version == '3.10' && (github.event_name != 'workflow_dispatch' || inputs.include_manual != 'true') }}
+        run: |
+          uv run pytest packages/ \
+            --tb=short \
+            --cov=packages/vertex-forager/src/vertex_forager/core \
+            --cov=packages/vertex-forager/src/vertex_forager/clients \
+            --cov=packages/vertex-forager/src/vertex_forager/writers \
+            --cov=packages/vertex-forager/src/vertex_forager/routers \
+            --cov-report=term \
+            --cov-fail-under=80 \
+            -m "not manual"
+      - name: Run Tests (manual only)
+        if: ${{ matrix.python-version == '3.10' && github.event_name == 'workflow_dispatch' && inputs.include_manual == 'true' }}
+        run: |
+          uv run pytest packages/ -m manual -q
+      - name: Run Tests (exclude manual) - other versions
+        if: ${{ matrix.python-version != '3.10' && (github.event_name != 'workflow_dispatch' || inputs.include_manual != 'true') }}
+        run: uv run pytest packages/vertex-forager/tests -m "not manual" -q
       - name: Build sdist and wheel (vertex-forager)
         if: ${{ matrix.python-version == '3.10' }}
         run: |

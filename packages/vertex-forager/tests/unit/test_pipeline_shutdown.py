@@ -10,6 +10,7 @@ from vertex_forager.core.config import EngineConfig, FetchJob, FramePacket, Pars
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor
 from vertex_forager.core.pipeline import VertexForager
+from vertex_forager.writers.base import WriteResult
 
 
 class _StubClient:
@@ -84,10 +85,12 @@ async def test_stop_pkt_q_timeout_cancels_writers(monkeypatch: pytest.MonkeyPatc
     async def _raise_timeout(awaitable, timeout):  # type: ignore[no-untyped-def]
         raise asyncio.TimeoutError
     monkeypatch.setattr(asyncio, "wait_for", _raise_timeout, raising=True)
-    await eng.stop()
-    await asyncio.sleep(0)
-    if not w.done():
-        w.cancel()
+    try:
+        await eng.stop()
+        await asyncio.sleep(0)
+    finally:
+        if not w.done():
+            w.cancel()
 
 
 class SlowRouter:
@@ -104,8 +107,8 @@ class SlowRouter:
 class FlushCountingWriter:
     def __init__(self) -> None:
         self.flush_called = 0
-    async def write(self, packet: FramePacket):
-        return {"table": packet.table, "rows": 0}
+    async def write(self, packet: FramePacket) -> WriteResult:
+        return WriteResult(table=packet.table, rows=0)
     async def write_bulk(self, packets: list[FramePacket]):
         return []
     async def flush(self) -> None:

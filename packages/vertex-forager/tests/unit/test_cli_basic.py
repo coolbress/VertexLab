@@ -143,7 +143,8 @@ def test_constants_queue_json() -> None:
     runner = CliRunner()
     res = runner.invoke(cli_mod.main, ["constants", "--section", "queue", "--format", "json"])
     assert res.exit_code == 0
-    assert "\"QUEUE_MIN\"" in res.output and "\"QUEUE_MAX\"" in res.output
+    assert "\"QUEUE_MIN\"" in res.output
+    assert "\"QUEUE_MAX\"" in res.output
 
 
 def test_constants_writers_json() -> None:
@@ -168,7 +169,8 @@ def test_recover_table_specified_but_not_found(tmp_path: Path, monkeypatch: pyte
     )
     assert res.exit_code == 0
     # Fallback summary path when specified tables not found
-    assert "✅ Recover summary:" in res.output and "tables=0" in res.output
+    assert "✅ Recover summary:" in res.output
+    assert "tables=0" in res.output
 
 
 def test_constants_global_env_only_multiple(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -216,7 +218,8 @@ def test_constants_all_json_has_sections() -> None:
     runner = CliRunner()
     res = runner.invoke(cli_mod.main, ["constants", "--section", "all", "--format", "json"])
     assert res.exit_code == 0
-    assert "\"global\"" in res.output and "\"flow\"" in res.output
+    assert "\"global\"" in res.output
+    assert "\"flow\"" in res.output
 
 
 def test_constants_json_env_overrides_included(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -226,7 +229,8 @@ def test_constants_json_env_overrides_included(monkeypatch: pytest.MonkeyPatch) 
     res = runner.invoke(cli_mod.main, ["constants", "--section", "global", "--format", "json"])
     assert res.exit_code == 0
     data = _json.loads(res.output)
-    assert "env_overrides" in data and "VF_HTTP_TIMEOUT_S" in data["env_overrides"]
+    assert "env_overrides" in data
+    assert "VF_HTTP_TIMEOUT_S" in data["env_overrides"]
 
 
 def test_collect_network_error(monkeypatch: pytest.MonkeyPatch) -> None:

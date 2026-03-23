@@ -36,7 +36,8 @@ async def test_reserved_word_identifier_ok(tmp_path: Path) -> None:
         assert res.rows == 1
         with duckdb.connect(str(db_path)) as conn:
             row = conn.execute('SELECT count(*) FROM "select"').fetchone()
-            assert row and row[0] == 1
+            assert row
+            assert row[0] == 1
     finally:
         await writer.close()
 
@@ -63,7 +64,8 @@ async def test_upsert_conflict_updates_value(tmp_path: Path) -> None:
                 'SELECT count(*) FROM "yfinance_price" WHERE provider=? AND ticker=? AND date=?',
                 ["yfinance", "AAPL", today],
             ).fetchone()[0]
-            assert val == 110.0 and cnt == 1
+            assert val == 110.0
+            assert cnt == 1
     finally:
         await writer.close()
 
@@ -287,10 +289,11 @@ def test_engine_config_writer_chunk_rows_coercion_and_lower_bound() -> None:
     cfg = EngineConfig(requests_per_minute=60)
     cfg.writer_chunk_rows = "20000"  # type: ignore[assignment]
     cfg.assert_valid()
-    assert isinstance(cfg.writer_chunk_rows, int) and cfg.writer_chunk_rows == 20000
+    assert isinstance(cfg.writer_chunk_rows, int)
+    assert cfg.writer_chunk_rows == 20000
     cfg.writer_chunk_rows = "not-an-int"  # type: ignore[assignment]
     with pytest.raises(VertexForagerError):
         cfg.assert_valid()
     cfg2 = EngineConfig(requests_per_minute=60, writer_chunk_rows=9_999)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="writer_chunk_rows must be >= 10_000"):
         cfg2.assert_valid()

@@ -45,7 +45,8 @@ async def test_pop_next_job_respecting_fairness_demotes_excess_burst() -> None:
     _p, j, demotes, _done = await eng._pop_next_job_respecting_fairness(  # type: ignore[attr-defined]
         req_q=q, burst_cap=1
     )
-    assert j is not None and j.symbol == "A"
+    assert j is not None
+    assert j.symbol == "A"
     # Requeue demotes at NEW_JOB priority
     for d in demotes:
         await q.put((eng.PRIORITY_NEW_JOB, next(counter), d))
@@ -53,6 +54,7 @@ async def test_pop_next_job_respecting_fairness_demotes_excess_burst() -> None:
     _p2, j2, _demotes2, _done2 = await eng._pop_next_job_respecting_fairness(  # type: ignore[attr-defined]
         req_q=q, burst_cap=1
     )
-    assert j2 is not None and j2.symbol in {"A", "B"}
+    assert j2 is not None
+    assert j2.symbol in {"A", "B"}
     # If fairness enforced, B should appear before the demoted A
     assert j2.symbol == "B"

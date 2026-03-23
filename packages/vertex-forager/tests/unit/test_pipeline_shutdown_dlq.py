@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 from pathlib import Path
 from typing import Any
@@ -51,13 +51,15 @@ async def test_persist_packets_with_dlq_spool_failure(tmp_path: Path, monkeypatc
         provider="x",
         table="t",
         frame=pl.DataFrame({"a": [1]}),
-        observed_at=datetime(2025, 1, 1, 0, 0, 0),
+        observed_at=datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
     )
     res = RunResult(provider="x")
     lock = asyncio.Lock()
 
     # Make DLQ spool fail by raising from os.open
-    monkeypatch.setattr(os, "open", lambda *args, **kwargs: (_ for _ in ()).throw(OSError("nope")) )  # type: ignore[assignment]
+    def fake_open(*args: object, **kwargs: object) -> int:
+        raise OSError("nope")
+    monkeypatch.setattr(os, "open", fake_open)
 
     await eng._persist_packets_with_dlq([pkt], res, lock)
 

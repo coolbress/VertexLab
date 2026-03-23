@@ -149,7 +149,7 @@ def test_cleanup_dlq_tmp_removes_old_files(tmp_path, monkeypatch):
 # ===== Additional utils/redact tests (merged) =====
 
 @pytest.mark.parametrize(
-    "val,expected",
+    ("val", "expected"),
     [
         ("1", True),
         ("true", True),
@@ -172,7 +172,7 @@ def test_env_bool_variants(val: str | None, expected: bool | None, monkeypatch: 
     assert got is expected
 
 
-@pytest.mark.parametrize("val,expected", [("10", 10), (" -7 ", -7), ("x", None), (None, None)])
+@pytest.mark.parametrize(("val", "expected"), [("10", 10), (" -7 ", -7), ("x", None), (None, None)])
 def test_env_int_variants(val: str | None, expected: int | None, monkeypatch: pytest.MonkeyPatch) -> None:
     if val is None:
         monkeypatch.delenv("X_INT", raising=False)
@@ -181,7 +181,7 @@ def test_env_int_variants(val: str | None, expected: int | None, monkeypatch: py
     assert env_int("X_INT") == expected
 
 
-@pytest.mark.parametrize("val,expected", [("3.14", 3.14), (" -2 ", -2.0), ("x", None), (None, None)])
+@pytest.mark.parametrize(("val", "expected"), [("3.14", 3.14), (" -2 ", -2.0), ("x", None), (None, None)])
 def test_env_float_variants(val: str | None, expected: float | None, monkeypatch: pytest.MonkeyPatch) -> None:
     if val is None:
         monkeypatch.delenv("X_FLOAT", raising=False)
@@ -201,7 +201,7 @@ def test_validate_tickers_ok_and_errors() -> None:
 
 
 @pytest.mark.parametrize(
-    "msg,expected",
+    ("msg", "expected"),
     [
         ("fetch https://api.example.com?q=1", "fetch [redacted]"),
         ("no url here", "no url here"),
@@ -267,7 +267,9 @@ def test_validate_memory_usage_invokes_check(monkeypatch: pytest.MonkeyPatch) ->
 
     def _check(estimated_size: int, available_memory: int, num_tickers: int, **_: object) -> None:
         called["ok"] = True
-        assert estimated_size > 0 and available_memory > 0 and num_tickers == 2
+        assert estimated_size > 0
+        assert available_memory > 0
+        assert num_tickers == 2
 
     monkeypatch.setattr("vertex_forager.utils.check_memory_safety", _check, raising=False)
     validate_memory_usage(symbols=["A", "B"], connect_db=None, bytes_per_item=1024)
@@ -275,7 +277,7 @@ def test_validate_memory_usage_invokes_check(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_validate_memory_usage_invalid_bytes_per_item() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="bytes_per_item must be a positive integer"):
         validate_memory_usage(symbols=["A"], connect_db=None, bytes_per_item=0)
 
 
@@ -313,23 +315,27 @@ def test_compact_level_formatter_and_list_handler() -> None:
     fmt = CompactLevelFormatter("%(levelname)s:%(message)s")
     handler.setFormatter(fmt)
     logger.addHandler(handler)
-    logger.debug("dbg")
-    logger.warning("hello")
-    assert handler.records
-    # The first record may be debug, ensure both Debug and Warning are present
-    levels = {fmt.format(r).split(":", 1)[0] for r in handler.records}
-    assert "Debug" in levels and "Warning" in levels
+    try:
+        logger.debug("dbg")
+        logger.warning("hello")
+        assert handler.records
+        # The first record may be debug, ensure both Debug and Warning are present
+        levels = {fmt.format(r).split(":", 1)[0] for r in handler.records}
+        assert "Debug" in levels and "Warning" in levels
 
-    handler.records.clear()
-    logger.info("world")
-    assert handler.records
-    formatted2 = fmt.format(handler.records[0])
-    assert formatted2.startswith("Info:")
-    handler.records.clear()
-    logger.error("boom")
-    assert handler.records
-    formatted3 = fmt.format(handler.records[0])
-    assert formatted3.startswith("Error:")
+        handler.records.clear()
+        logger.info("world")
+        assert handler.records
+        formatted2 = fmt.format(handler.records[0])
+        assert formatted2.startswith("Info:")
+        handler.records.clear()
+        logger.error("boom")
+        assert handler.records
+        formatted3 = fmt.format(handler.records[0])
+        assert formatted3.startswith("Error:")
+    finally:
+        logger.removeHandler(handler)
+        handler.close()
 
 
 def test_check_memory_safety_invalid_envs(monkeypatch: pytest.MonkeyPatch) -> None:

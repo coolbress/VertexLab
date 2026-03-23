@@ -59,7 +59,8 @@ def test_tune_profile_price_writes_metrics(tmp_path: Path, monkeypatch: pytest.M
     res = runner.invoke(cli_mod.main, ["tune", "profile", "--kind", "price", "--output-dir", str(out)])
     assert res.exit_code == 0
     assert "profile_metrics.json" in res.output
-    assert captured and "counters" in captured["payload"]
+    assert captured
+    assert "counters" in captured["payload"]
 
 
 def test_tune_profile_financials_writes_metrics(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -94,7 +95,8 @@ def test_tune_profile_financials_writes_metrics(tmp_path: Path, monkeypatch: pyt
     res = runner.invoke(cli_mod.main, ["tune", "profile", "--kind", "financials", "--output-dir", str(out)])
     assert res.exit_code == 0
     assert "profile_financials_metrics.json" in res.output
-    assert captured and "yfinance_financials" in captured["payload"]
+    assert captured
+    assert "yfinance_financials" in captured["payload"]
 
 
 def test_tune_sweep_sampling_and_writes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -137,8 +139,10 @@ def test_tune_export_best_writes_file(tmp_path: Path, monkeypatch: pytest.Monkey
     out = tmp_path / "out"
     out.mkdir()
     # Monkeypatch Path.exists and read_text for best file
+    original_exists = cli_mod.Path.exists
+    original_read_text = cli_mod.Path.read_text
     def _exists(self: Path) -> bool:  # type: ignore[no-redef]
-        return self.name == "profile_tuning_best.json" or self.exists.__wrapped__(self)  # type: ignore[attr-defined]
+        return self.name == "profile_tuning_best.json" or original_exists(self)
 
     def _read_text(self: Path) -> str:  # type: ignore[no-redef]
         if self.name == "profile_tuning_best.json":
@@ -148,7 +152,7 @@ def test_tune_export_best_writes_file(tmp_path: Path, monkeypatch: pytest.Monkey
                 '"yfinance_financials":{"env":{"VF_HTTP_TIMEOUT_S":30}}'
                 '}'
             )
-        return ""
+        return original_read_text(self)
     monkeypatch.setattr(cli_mod.Path, "exists", _exists, raising=False)
     monkeypatch.setattr(cli_mod.Path, "read_text", _read_text, raising=False)
     captured = {}

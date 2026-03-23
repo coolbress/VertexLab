@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import polars as pl
@@ -48,10 +48,11 @@ async def test_persist_packets_with_dlq_success(tmp_path: Path, monkeypatch: pyt
     import vertex_forager.core.pipeline as pipeline_mod
 
     monkeypatch.setattr(pipeline_mod, "get_cache_dir", lambda: tmp_path, raising=True)
-    pkt = FramePacket(provider="p", table="t", frame=pl.DataFrame({"a": [1]}), observed_at=datetime.utcnow())
+    pkt = FramePacket(provider="p", table="t", frame=pl.DataFrame({"a": [1]}), observed_at=datetime.now(timezone.utc))
     res = RunResult(provider="p")
     lock = asyncio.Lock()
     await eng._persist_packets_with_dlq([pkt], res, lock)
-    assert writer.written and writer.written[0].table == "t"
+    assert writer.written
+    assert writer.written[0].table == "t"
     assert not res.errors
     assert not res.dlq_pending

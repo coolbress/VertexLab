@@ -26,7 +26,7 @@ PROVIDERS = [p.strip() for p in (os.getenv("VF_EXAMPLES_PROVIDER") or "yfinance"
 def test_minimal_inmemory_env_driven(provider: str, monkeypatch: pytest.MonkeyPatch) -> None:
     if provider == "sharadar" and not os.getenv("SHARADAR_API_KEY"):
         pytest.skip("Requires SHARADAR_API_KEY to run Sharadar example")
-    root = Path(__file__).resolve().parents[5]
+    root = Path(__file__).resolve().parents[4]
     example = root / "packages" / "vertex-forager" / "examples" / "minimal_inmemory.py"
     mod = _import_from_file(example)
     monkeypatch.setenv("VF_PROVIDER", provider)
@@ -40,7 +40,7 @@ def test_minimal_inmemory_env_driven(provider: str, monkeypatch: pytest.MonkeyPa
 def test_advanced_duckdb_runs(provider: str, tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     if provider == "sharadar" and not os.getenv("SHARADAR_API_KEY"):
         pytest.skip("Requires SHARADAR_API_KEY for sharadar")
-    root = Path(__file__).resolve().parents[5]
+    root = Path(__file__).resolve().parents[4]
     example = root / "packages" / "vertex-forager" / "examples" / "advanced_duckdb_metrics.py"
     mod = _import_from_file(example)
     db = tmp_path / "forager.duckdb"
@@ -50,4 +50,3 @@ def test_advanced_duckdb_runs(provider: str, tmp_path, monkeypatch: pytest.Monke
     assert hasattr(mod, "main")
     mod.main()  # type: ignore[attr-defined]
     assert db.exists()
-
