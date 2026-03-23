@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.7.0...vertex-forager-v0.8.0) (2026-03-23)
+
+
+### Features
+
+* Implement resumable runs and run history persistence ([#193](https://github.com/coolbress/VertexLab/issues/193))  ([fcd1ab4](https://github.com/coolbress/VertexLab/commit/fcd1ab44f64f4a3bc6c7c4c00c084b3ea2a7de04))
+
 ## [0.7.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.6.0...vertex-forager-v0.7.0) (2026-03-23)
 
 
