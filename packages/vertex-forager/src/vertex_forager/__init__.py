@@ -13,7 +13,7 @@ from vertex_forager.exceptions import (
     WriterError,
 )
 
-__version__ = "0.5.3"
+__version__ = "0.6.0"
 
 __all__ = [
     "BaseClient",
