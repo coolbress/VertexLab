@@ -16,7 +16,6 @@ from typing import Any, Literal
 import warnings
 
 from dotenv import load_dotenv
-import nest_asyncio
 import psutil
 from tqdm.auto import tqdm
 
@@ -728,8 +727,14 @@ def jupyter_safe(async_func: Callable[..., Any]) -> Callable[..., Any]:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             return asyncio.run(async_func(*args, **kwargs))
-
-        nest_asyncio.apply()
+        if _safe_get_ipython() is not None:
+            try:
+                import nest_asyncio
+            except ImportError as exc:
+                raise ImportError(
+                    "Jupyter runtime detected. Install optional dependency: pip install vertex-forager[notebook]"
+                ) from exc
+            nest_asyncio.apply()
         task = loop.create_task(async_func(*args, **kwargs))
         try:
             return loop.run_until_complete(task)

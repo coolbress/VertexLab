@@ -3029,8 +3029,6 @@ dependencies = [
     { name = "click" },
     { name = "duckdb" },
     { name = "httpx" },
-    { name = "nest-asyncio" },
-    { name = "pandas" },
     { name = "polars" },
     { name = "psutil" },
     { name = "pyarrow" },
@@ -3039,7 +3037,6 @@ dependencies = [
     { name = "tenacity" },
     { name = "tqdm" },
     { name = "typing-extensions" },
-    { name = "yfinance" },
 ]
 
 [package.optional-dependencies]
@@ -3052,6 +3049,11 @@ docs = [
 notebook = [
     { name = "ipython" },
     { name = "ipywidgets" },
+    { name = "nest-asyncio" },
+]
+yfinance = [
+    { name = "pandas" },
+    { name = "yfinance" },
 ]
 
 [package.dev-dependencies]
@@ -3060,8 +3062,10 @@ dev = [
     { name = "jupyterlab" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "pandas" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
+    { name = "yfinance" },
 ]
 
 [package.metadata]
@@ -3074,8 +3078,8 @@ requires-dist = [
     { name = "mkdocs", marker = "extra == 'docs'", specifier = ">=1.6.0" },
     { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.5.0" },
     { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=0.25.0" },
-    { name = "nest-asyncio", specifier = ">=1.6.0,<2.0.0" },
-    { name = "pandas", specifier = ">=2.3.3,<3.0.0" },
+    { name = "nest-asyncio", marker = "extra == 'notebook'", specifier = ">=1.6.0,<2.0.0" },
+    { name = "pandas", marker = "extra == 'yfinance'", specifier = ">=2.3.3,<3.0.0" },
     { name = "polars", specifier = ">=1.37.1,<2.0.0" },
     { name = "psutil", specifier = ">=7.2.2,<8.0.0" },
     { name = "pyarrow", specifier = ">=23.0.0,<24.0.0" },
@@ -3085,17 +3089,19 @@ requires-dist = [
     { name = "tenacity", specifier = ">=9.1.4,<10.0.0" },
     { name = "tqdm", specifier = ">=4.67.3,<5.0.0" },
     { name = "typing-extensions", specifier = ">=4.10.0,<5.0.0" },
-    { name = "yfinance", specifier = ">=1.1.0,<2.0.0" },
+    { name = "yfinance", marker = "extra == 'yfinance'", specifier = ">=1.1.0,<2.0.0" },
 ]
-provides-extras = ["notebook", "docs"]
+provides-extras = ["notebook", "yfinance", "docs"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "ipykernel", specifier = ">=7.1.0,<8.0.0" },
     { name = "jupyterlab", specifier = ">=4.5.3,<5.0.0" },
     { name = "numpy", specifier = ">=2.2.6,<3.0.0" },
+    { name = "pandas", specifier = ">=2.3.3,<3.0.0" },
     { name = "pytest", specifier = ">=8.3.4,<10.0.0" },
     { name = "pytest-asyncio", specifier = ">=1.3.0,<2.0.0" },
+    { name = "yfinance", specifier = ">=1.1.0,<2.0.0" },
 ]
 
 [[package]]

@@ -22,6 +22,13 @@ uv pip install "git+https://github.com/coolbress/vertex-lab@main#subdirectory=pa
 uv pip install "git+https://github.com/coolbress/vertex-lab@v0.1.0#subdirectory=packages/vertex-forager"
 ```
 
+- Optional extras:
+
+```bash
+pip install "vertex-forager[yfinance]"
+pip install "vertex-forager[notebook]"
+```
+
 ## Provider‑agnostic: Fetch and Persist (sync‑friendly)
 
 ```python

@@ -8,7 +8,6 @@ import re
 from typing import TYPE_CHECKING, Any
 
 import httpx
-import pandas as pd
 import polars as pl
 from polars.exceptions import ComputeError
 
@@ -163,6 +162,15 @@ class HttpExecutor:
         scheme = spec.url.split("://", 1)[0]
         params = spec.params
         dataset = params.get("dataset", "price")
+        pd: Any | None = None
+        if scheme == "yfinance":
+            try:
+                import pandas as pd
+            except ImportError as exc:
+                raise ImportError(
+                    "yfinance library path requires optional dependencies. "
+                    "Install with: pip install vertex-forager[yfinance]"
+                ) from exc
 
         try:
             # 1. Execute provider-specific library call via registry
@@ -180,7 +188,7 @@ class HttpExecutor:
                 buf = io.BytesIO()
                 data.write_ipc(buf)
                 return b"IPC:" + buf.getvalue()
-            if isinstance(data, (pd.DataFrame, pd.Series)):
+            if pd is not None and isinstance(data, (pd.DataFrame, pd.Series)):
                 df_pd = data.to_frame().reset_index() if isinstance(data, pd.Series) else data.reset_index()
                 try:
                     df_pl = pl.from_pandas(df_pd)
