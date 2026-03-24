@@ -263,14 +263,14 @@ def check_memory_safety(
         if 0 < env_ratio <= 1:
             threshold_ratio = env_ratio
         else:
-            logger.debug(f"Ignoring invalid VF_MEM_THRESHOLD_RATIO={env_ratio} (must be 0 < x <= 1)")
+            logger.debug("Ignoring invalid VF_MEM_THRESHOLD_RATIO=%s (must be 0 < x <= 1)", env_ratio)
     with contextlib.suppress(TypeError, ValueError, OverflowError):
         _abs_str = os.getenv("VF_MEM_THRESHOLD_ABS_MB", "").strip()
         env_abs_mb = float(_abs_str or (threshold_absolute / 1024 / 1024))
         if env_abs_mb > 0 and math.isfinite(env_abs_mb):
             threshold_absolute = int(env_abs_mb * 1024 * 1024)
         else:
-            logger.debug(f"Ignoring invalid VF_MEM_THRESHOLD_ABS_MB={_abs_str}")
+            logger.debug("Ignoring invalid VF_MEM_THRESHOLD_ABS_MB=%s", _abs_str)
     if estimated_size > available_memory * threshold_ratio:
         warnings.warn(
             f"High memory usage warning: Requesting data for {num_tickers} symbols "
@@ -638,19 +638,19 @@ def clear_app_cache() -> None:
     if not cache_dir.exists():
         return
     if not cache_dir.is_dir():
-        logging.error(f"Cache path exists but is not a directory: {cache_dir}")
+        logging.error("Cache path exists but is not a directory: %s", cache_dir)
         return
 
     # 2. Safety check: ensure cache_dir is a descendant of app_root
     try:
         cache_dir.relative_to(app_root)
     except ValueError:
-        logging.error(f"Safety check failed: Cache dir {cache_dir} is not inside app root {app_root}")
+        logging.error("Safety check failed: Cache dir %s is not inside app root %s", cache_dir, app_root)
         return
 
     # 3. Safety check: prevent deleting root or home
     if cache_dir == Path("/").resolve() or cache_dir == Path.home().resolve():
-        logging.error(f"Safety check failed: Attempting to delete root or home directory: {cache_dir}")
+        logging.error("Safety check failed: Attempting to delete root or home directory: %s", cache_dir)
         return
 
     # Safe to delete

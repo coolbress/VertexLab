@@ -90,7 +90,8 @@ async def main_async() -> None:
             except (OSError, asyncio.TimeoutError, ValueError, VertexForagerError) as e:
                 # Catch expected errors (network, timeout, config, custom app errors)
                 logger.warning(
-                    f"Sharadar verification skipped due to error: {e}",
+                    "Sharadar verification skipped due to error: %s",
+                    e,
                     exc_info=True,
                 )
                 sh_run = None
@@ -116,7 +117,7 @@ async def main_async() -> None:
             try:
                 db_path.unlink()
             except OSError as e:
-                logger.warning(f"Failed to cleanup temp DB {db_path}: {e}")
+                logger.warning("Failed to cleanup temp DB %s: %s", db_path, e)
 
 
 def main() -> None:
