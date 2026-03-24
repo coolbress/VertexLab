@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.9.4...vertex-forager-v0.10.0) (2026-03-24)
+
+
+### Features
+
+* add benchmark baseline gating and configurable writer concurrency ([#197](https://github.com/coolbress/VertexLab/issues/197))   ([350bbbe](https://github.com/coolbress/VertexLab/commit/350bbbe3da3c9a997fcd6f43c2ea6010e04579e4))
+
 ## [0.9.4](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.9.3...vertex-forager-v0.9.4) (2026-03-24)
 
 

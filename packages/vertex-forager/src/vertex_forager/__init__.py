@@ -20,7 +20,7 @@ from vertex_forager.exceptions import (
     WriterError,
 )
 
-__version__ = "0.9.4"
+__version__ = "0.10.0"
 
 __all__ = [
     "BaseClient",
