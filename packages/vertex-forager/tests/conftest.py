@@ -18,7 +18,6 @@ from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock
 
 from httpx import AsyncClient
-import pandas as pd
 import polars as pl
 import pytest
 
@@ -29,7 +28,17 @@ from vertex_forager.providers.yfinance.router import YFinanceRouter
 
 if TYPE_CHECKING:
     # Type-only import for annotations; avoid runtime import to satisfy Ruff TC001
+    import pandas as pd
+
     from vertex_forager.providers.sharadar.client import SharadarClient
+
+
+def _require_pandas():
+    try:
+        import pandas as pd
+    except ImportError:
+        pytest.skip("pandas is required for yfinance-related test fixtures")
+    return pd
 
 
 @pytest.fixture
@@ -242,6 +251,7 @@ def yf_price_df() -> pd.DataFrame:
     Returns:
         pandas.DataFrame: Columns include date, open, high, low, close, volume, ticker.
     """
+    pd = _require_pandas()
     return pd.DataFrame(
         {
             "date": pd.to_datetime(["2024-01-02", "2024-01-03"]),
