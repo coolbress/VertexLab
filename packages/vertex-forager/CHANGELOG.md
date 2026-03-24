@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.8.0...vertex-forager-v0.9.0) (2026-03-24)
+
+
+### Features
+
+* Implement structured errors and data quality validation ([#194](https://github.com/coolbress/VertexLab/issues/194))  ([b20778b](https://github.com/coolbress/VertexLab/commit/b20778bc92835d2686fbcbf65ee5d5f8696f1831))
+
 ## [0.8.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.7.0...vertex-forager-v0.8.0) (2026-03-23)
 
 
