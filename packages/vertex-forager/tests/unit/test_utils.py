@@ -338,6 +338,28 @@ def test_as_dict_serializes_runerror() -> None:
     assert d["errors"][0]["retryable"] is False
 
 
+@pytest.mark.parametrize(
+    ("raw_errors", "expected"),
+    [
+        (None, []),
+        ("single-error", ["single-error"]),
+        ({"code": "E1"}, ["{'code': 'E1'}"]),
+        (123, ["123"]),
+    ],
+)
+def test_as_dict_normalizes_errors_input(raw_errors: object, expected: list[str]) -> None:
+    class R:
+        def __init__(self, errors_value: object) -> None:
+            self.metrics_counters = {}
+            self.metrics_histograms = {}
+            self.metrics_summary = {}
+            self.tables = {}
+            self.errors = errors_value
+
+    d = as_dict(R(raw_errors))
+    assert d["errors"] == expected
+
+
 def test_compact_level_formatter_and_list_handler() -> None:
     import logging
     logger = logging.getLogger("vf-test")
