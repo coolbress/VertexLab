@@ -167,6 +167,10 @@ def save_run_history(run_result: RunResult, run_id: str) -> None:
             )
             for error in run_result.errors
         ],
+        "quality_violations": {
+            str(table): int(count)
+            for table, count in run_result.quality_violations.items()
+        },
         "coverage_pct": run_result.coverage_pct,
     }
 

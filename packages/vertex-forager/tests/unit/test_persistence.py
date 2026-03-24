@@ -114,6 +114,7 @@ def test_save_run_history() -> None:
             duration_s=100.0,
             coverage_pct=95.5,
             tables={"table1": 100, "table2": 200},
+            quality_violations={"table1": 3},
             errors=[
                 RunError(
                     provider="test_provider",
@@ -151,6 +152,7 @@ def test_save_run_history() -> None:
         assert data["error_count"] == 2
         assert data["tables"]["table1"] == 100
         assert data["tables"]["table2"] == 200
+        assert data["quality_violations"]["table1"] == 3
         assert data["errors"][0]["provider"] == "test_provider"
         assert data["errors"][0]["dataset"] == "test_dataset"
         assert data["errors"][0]["symbol"] == ""
