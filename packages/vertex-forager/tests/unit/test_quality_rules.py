@@ -37,8 +37,9 @@ def test_no_negative_prices_detects_and_ignores_missing_columns() -> None:
 
 
 def test_no_future_dates_handles_date_and_datetime_columns() -> None:
-    today = datetime.now(timezone.utc).date()
-    now = datetime.now(timezone.utc).replace(microsecond=0)
+    dt = datetime.now(timezone.utc).replace(microsecond=0)
+    today = dt.date()
+    now = dt
     df = pl.DataFrame(
         {
             "date": [today, today + timedelta(days=1)],
