@@ -107,10 +107,7 @@ class NoFutureDates:
                         pl.col(col) > pl.lit(current_time).cast(pl.Datetime)
                     ).height
                 else:
-                    # For other types, use naive comparison (fallback)
-                    future_count = df.filter(
-                        pl.col(col) > pl.lit(current_time)
-                    ).height
+                    continue
 
                 if future_count > 0:
                     violations.append(

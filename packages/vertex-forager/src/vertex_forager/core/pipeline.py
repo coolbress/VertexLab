@@ -31,6 +31,7 @@ import inspect
 import itertools
 import logging
 import os
+import re
 import time
 from typing import TYPE_CHECKING, Any, cast
 
@@ -1329,11 +1330,22 @@ class VertexForager:
             return
 
         violations_count = 0
+
+        def _parse_violation_count(message: str) -> int:
+            contains_match = re.search(r"\bcontains\s+(\d+)\b", message, flags=re.IGNORECASE)
+            if contains_match is not None:
+                return int(contains_match.group(1))
+            found_match = re.search(r"\bfound\s+(\d+)\b", message, flags=re.IGNORECASE)
+            if found_match is not None:
+                return int(found_match.group(1))
+            return 1
+
         for rule in schema.quality_rules:
             try:
                 violation_messages = rule.validate(df)
                 if violation_messages:
-                    violations_count += len(violation_messages)
+                    for violation_message in violation_messages:
+                        violations_count += _parse_violation_count(violation_message)
                     logger.warning(
                         "Data quality violations in table %s: %s",
                         table,
@@ -1581,7 +1593,15 @@ class VertexForager:
             await _update_dlq_counts(table=table, rescued=int(rescued), remaining=0)
             return {"status": "rescued_only", "rescued": rescued, "remaining": 0, "path": None, "error": None}
 
-        def _build_writer_error_summary(*, status: DLQStatus, table: str, prefix: str, exc: Exception) -> RunError:
+        def _build_writer_error_summary(
+            *,
+            status: DLQStatus,
+            table: str,
+            prefix: str,
+            exc: Exception,
+            provider: str,
+            symbol: str,
+        ) -> RunError:
             # Build DLQ context string
             dlq_context_parts = []
 
@@ -1593,7 +1613,7 @@ class VertexForager:
                     if status.get("rescued"):
                         dlq_context_parts.append(f"rescued={status['rescued']}")
                     if status.get("path"):
-                        dlq_context_parts.append(f"path={status['path']}")
+                        dlq_context_parts.append(f"path={os.path.basename(str(status['path']))}")
                 case "rescued_only":
                     dlq_context_parts.append("DLQ=rescued_only")
                     if status.get("rescued"):
@@ -1607,16 +1627,23 @@ class VertexForager:
                 case _:
                     dlq_context_parts.append(f"DLQ={status['status']}")
 
-            # Create enhanced exception message with DLQ context
             dlq_context = " ".join(dlq_context_parts)
-            enhanced_exc = Exception(f"{prefix}:{table}:{exc!s} {dlq_context}")
-
-            # Create RunError from the enhanced exception
-            return RunError.from_exception(
-                exc=enhanced_exc,
-                provider="",  # Provider not available in this context
+            message = f"{prefix}:{table}:{exc!s}"
+            if dlq_context:
+                message = f"{message} {dlq_context}"
+            original_error = RunError.from_exception(
+                exc=exc,
+                provider=provider,
                 dataset=table,
-                symbol=""  # Symbol not available in this context
+                symbol=symbol,
+            )
+            return RunError(
+                provider=original_error.provider,
+                dataset=original_error.dataset,
+                symbol=original_error.symbol,
+                exc_type=original_error.exc_type,
+                message=message,
+                retryable=original_error.retryable,
             )
 
         async def _handle_flush_error(
@@ -1627,6 +1654,17 @@ class VertexForager:
             prefix: str,
         ) -> None:
             self._inc("errors_total", 1)
+            first_packet = packets[0] if packets else None
+            provider = first_packet.provider if first_packet is not None else ""
+            symbol = ""
+            if first_packet is not None:
+                context_symbol = first_packet.context.get("symbol")
+                if isinstance(context_symbol, str):
+                    symbol = context_symbol
+                else:
+                    context_ticker = first_packet.context.get("ticker")
+                    if isinstance(context_ticker, str):
+                        symbol = context_ticker
             try:
                 status = await _spool_to_dlq_and_rescue(table, packets, exc)
             except Exception as spool_exc:
@@ -1646,7 +1684,14 @@ class VertexForager:
                         "error": spool_exc,
                     },
                 )
-                summary = _build_writer_error_summary(status=status, table=table, prefix=prefix, exc=exc)
+                summary = _build_writer_error_summary(
+                    status=status,
+                    table=table,
+                    prefix=prefix,
+                    exc=exc,
+                    provider=provider,
+                    symbol=symbol,
+                )
                 async with result_lock:
                     result.errors.append(summary)
                 buffers[table] = []
@@ -1656,7 +1701,14 @@ class VertexForager:
                     _attr = "_already_reported"
                     setattr(spool_exc, _attr, True)
                 raise
-            summary = _build_writer_error_summary(status=status, table=table, prefix=prefix, exc=exc)
+            summary = _build_writer_error_summary(
+                status=status,
+                table=table,
+                prefix=prefix,
+                exc=exc,
+                provider=provider,
+                symbol=symbol,
+            )
             async with result_lock:
                 result.errors.append(summary)
             buffers[table] = []
@@ -1678,6 +1730,27 @@ class VertexForager:
 
                 chunk_size = getattr(self._config, "writer_chunk_rows", None)
                 if isinstance(chunk_size, int) and chunk_size > 0:
+                    validation_frames = [p.frame for p in packets]
+                    try:
+                        quality_df = pl.concat(validation_frames, how="vertical", rechunk=False)
+                    except pl.exceptions.PolarsError as e:
+                        is_flexible = getattr(self._router, "flexible_schema", False) or (
+                            schema is not None and getattr(schema, "flexible_schema", False)
+                        )
+                        if not is_flexible:
+                            raise
+                        logger.warning(
+                            "WRITER: Schema mismatch for %s: %s. Falling back to diagonal concat",
+                            first.table,
+                            e,
+                        )
+                        quality_df = pl.concat(validation_frames, how="diagonal")
+                    await self._validate_data_quality(
+                        table=table,
+                        df=quality_df,
+                        result=result,
+                        result_lock=result_lock,
+                    )
                     # Streaming chunked merge/write to minimize memory peak
                     total_rows_est = 0
                     try:
@@ -1742,13 +1815,6 @@ class VertexForager:
                                 frame=chunk_df,
                                 observed_at=first.observed_at,
                                 context=first.context,
-                            )
-                            # Validate data quality before writing chunk
-                            await self._validate_data_quality(
-                                table=table,
-                                df=chunk_df,
-                                result=result,
-                                result_lock=result_lock,
                             )
 
                             t_w0 = time.monotonic()
