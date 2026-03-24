@@ -35,8 +35,13 @@ class _Router:
             )
 
     def parse(self, *, job: FetchJob, payload: bytes) -> ParseResult:
-        row = int((job.symbol or "0").split("-")[1])
-        frame = pl.DataFrame({"ticker": [job.symbol], "value": [row]})
+        symbol = str(job.symbol) if job.symbol is not None else "0-0"
+        row_text = symbol.split("-", 1)[1] if "-" in symbol else "0"
+        try:
+            row = int(row_text)
+        except ValueError:
+            row = 0
+        frame = pl.DataFrame({"ticker": [symbol], "value": [row]})
         packet = FramePacket(
             provider="inmem",
             table="price",

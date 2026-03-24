@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 from pathlib import Path
 
@@ -12,6 +13,15 @@ def _get_metric(data: dict[str, object], metric_path: str) -> float:
             raise KeyError(metric_path)
         current = current[part]
     return float(current)
+
+
+def _validate_metric(*, metric_path: str, name: str, value: float) -> float:
+    if not math.isfinite(value) or value <= 0:
+        raise RuntimeError(
+            f"Invalid {name} metric value for {metric_path}: {value}. "
+            "Expected a finite positive number."
+        )
+    return value
 
 
 def main() -> None:
@@ -29,12 +39,16 @@ def main() -> None:
 
     current_data = json.loads(current_path.read_text())
     baseline_data = json.loads(baseline_path.read_text())
-    current_value = _get_metric(current_data, metric_path)
-    baseline_value = _get_metric(baseline_data, metric_path)
-
-    if baseline_value <= 0:
-        print(f"Invalid baseline metric value for {metric_path}: {baseline_value}. Skip regression check.")
-        return
+    current_value = _validate_metric(
+        metric_path=metric_path,
+        name="current",
+        value=_get_metric(current_data, metric_path),
+    )
+    baseline_value = _validate_metric(
+        metric_path=metric_path,
+        name="baseline",
+        value=_get_metric(baseline_data, metric_path),
+    )
 
     regression = (current_value - baseline_value) / baseline_value
     regression_pct = regression * 100.0

@@ -37,6 +37,7 @@ Thank you for contributing to Vertex Forager!
   - Coverage gate: `pytest packages/ --cov --cov-fail-under=80`
 
 ## Benchmark baseline policy
+
 - CI benchmark job uploads `profile_metrics.json` as artifact `benchmark-profile-metrics` on every `main` push.
 - CI compares the current run against the latest stored baseline artifact using `duration_s`.
 - Default regression gate fails the benchmark job when regression exceeds 20%.

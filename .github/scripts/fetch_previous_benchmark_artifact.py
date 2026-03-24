@@ -21,6 +21,68 @@ def _download(client: httpx.Client, url: str, target: Path) -> None:
     target.write_bytes(resp.content)
 
 
+def _is_successful_workflow_run(
+    *,
+    client: httpx.Client,
+    repo: str,
+    workflow_run: dict[str, object],
+) -> bool:
+    conclusion = workflow_run.get("conclusion")
+    if isinstance(conclusion, str):
+        return conclusion == "success"
+    run_id = workflow_run.get("id")
+    if run_id is None:
+        return False
+    run_payload = _request_json(client, f"https://api.github.com/repos/{repo}/actions/runs/{run_id}")
+    return str(run_payload.get("conclusion", "")) == "success"
+
+
+def _select_baseline_artifact(
+    *,
+    client: httpx.Client,
+    repo: str,
+    run_id: str,
+    artifacts: list[object],
+) -> dict[str, object] | None:
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            continue
+        if bool(artifact.get("expired", True)):
+            continue
+        workflow_run = artifact.get("workflow_run")
+        if not isinstance(workflow_run, dict):
+            continue
+        if str(workflow_run.get("head_branch", "")) != "main":
+            continue
+        if str(workflow_run.get("id", "")) == run_id:
+            continue
+        if not _is_successful_workflow_run(
+            client=client,
+            repo=repo,
+            workflow_run=workflow_run,
+        ):
+            continue
+        return artifact
+    return None
+
+
+def _download_and_extract(
+    *,
+    client: httpx.Client,
+    download_url: str,
+    baseline_dir: Path,
+) -> Path:
+    archive_path = baseline_dir / "baseline_artifact.zip"
+    extract_dir = baseline_dir / "extracted"
+    if extract_dir.exists():
+        shutil.rmtree(extract_dir)
+    extract_dir.mkdir(parents=True, exist_ok=True)
+    _download(client, download_url, archive_path)
+    with zipfile.ZipFile(archive_path, "r") as zf:
+        zf.extractall(extract_dir)
+    return extract_dir
+
+
 def main() -> None:
     token = os.getenv("GITHUB_TOKEN", "")
     repo = os.getenv("GITHUB_REPOSITORY", "")
@@ -46,22 +108,12 @@ def main() -> None:
             print("No artifacts payload; skip baseline download.")
             return
 
-        selected: dict[str, object] | None = None
-        for artifact in artifacts:
-            if not isinstance(artifact, dict):
-                continue
-            if bool(artifact.get("expired", True)):
-                continue
-            workflow_run = artifact.get("workflow_run")
-            if not isinstance(workflow_run, dict):
-                continue
-            if str(workflow_run.get("head_branch", "")) != "main":
-                continue
-            if str(workflow_run.get("id", "")) == run_id:
-                continue
-            selected = artifact
-            break
-
+        selected = _select_baseline_artifact(
+            client=client,
+            repo=repo,
+            run_id=run_id,
+            artifacts=artifacts,
+        )
         if selected is None:
             print("No previous benchmark baseline artifact found on main.")
             return
@@ -71,15 +123,11 @@ def main() -> None:
             print("Selected artifact has no download URL.")
             return
 
-        archive_path = baseline_dir / "baseline_artifact.zip"
-        extract_dir = baseline_dir / "extracted"
-        if extract_dir.exists():
-            shutil.rmtree(extract_dir)
-        extract_dir.mkdir(parents=True, exist_ok=True)
-
-        _download(client, download_url, archive_path)
-    with zipfile.ZipFile(archive_path, "r") as zf:
-        zf.extractall(extract_dir)
+        extract_dir = _download_and_extract(
+            client=client,
+            download_url=download_url,
+            baseline_dir=baseline_dir,
+        )
 
     candidates = list(extract_dir.rglob("profile_metrics.json"))
     if not candidates:
