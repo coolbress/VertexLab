@@ -5,6 +5,11 @@ import pytest
 from vertex_forager.core.config import RequestSpec
 from vertex_forager.core.http import HttpExecutor
 
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
+
 
 class DummyYF:
     class Ticker:
@@ -19,6 +24,7 @@ class DummyYF:
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(pd is None, reason="requires optional dependency: vertex-forager[yfinance]")
 async def test_core_http_dispatch_library(monkeypatch):
     import vertex_forager.core.http as http_mod
     import vertex_forager.providers.yfinance.fetcher as _yf_fetcher  # noqa: F401

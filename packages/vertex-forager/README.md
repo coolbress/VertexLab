@@ -52,6 +52,10 @@ pip install vertex-forager
 # Using uv
 uv pip install vertex-forager
 
+# Optional extras
+pip install "vertex-forager[notebook]"
+pip install "vertex-forager[yfinance]"
+
 # Install from GitHub release asset (specific tag)
 pip install https://github.com/coolbress/VertexLab/releases/download/vertex-forager-v0.2.0/vertex_forager-0.2.0-py3-none-any.whl
 ```

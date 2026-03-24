@@ -14,22 +14,50 @@ from collections.abc import Generator
 from datetime import datetime, timezone
 import importlib
 import json
+import types
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock
 
 from httpx import AsyncClient
-import pandas as pd
 import polars as pl
 import pytest
 
 from vertex_forager.core.config import FetchJob, FramePacket, RequestSpec
 from vertex_forager.core.http import HttpExecutor
 from vertex_forager.providers.sharadar.router import SharadarRouter
-from vertex_forager.providers.yfinance.router import YFinanceRouter
 
 if TYPE_CHECKING:
     # Type-only import for annotations; avoid runtime import to satisfy Ruff TC001
+    import pandas as pd
+
     from vertex_forager.providers.sharadar.client import SharadarClient
+    from vertex_forager.providers.yfinance.router import YFinanceRouter
+
+
+def _require_pandas() -> types.ModuleType:
+    """Return the pandas module or skip when optional yfinance deps are missing."""
+    try:
+        import pandas as pd
+    except ImportError as err:
+        if err.name == "pandas":
+            pytest.skip("pandas is required for yfinance-related test fixtures")
+        raise
+    return pd
+
+
+def _require_yfinance_router() -> Any:
+    """Return YFinanceRouter class or skip when optional yfinance deps are missing."""
+    try:
+        from vertex_forager.providers.yfinance.router import YFinanceRouter
+    except ImportError as err:
+        optional_missing = {
+            "pandas",
+            "yfinance",
+        }
+        if err.name in optional_missing:
+            pytest.skip("yfinance router fixtures require optional dependencies: vertex-forager[yfinance]")
+        raise
+    return YFinanceRouter
 
 
 @pytest.fixture
@@ -221,7 +249,8 @@ def yfinance_router() -> YFinanceRouter:
     Returns:
         YFinanceRouter: Router instance configured with rate_limit=500 (requests/min).
     """
-    return YFinanceRouter(rate_limit=500, allow_pickle_compat=False)
+    router_cls = _require_yfinance_router()
+    return router_cls(rate_limit=500, allow_pickle_compat=False)
 
 @pytest.fixture
 def yfinance_router_allow_pickle(monkeypatch: pytest.MonkeyPatch) -> YFinanceRouter:
@@ -233,7 +262,8 @@ def yfinance_router_allow_pickle(monkeypatch: pytest.MonkeyPatch) -> YFinanceRou
         "VF_PICKLE_ALLOWED_DATASETS",
         "price,financials,news,calendar,insider_purchases,recommendations",
     )
-    return YFinanceRouter(rate_limit=500, allow_pickle_compat=True)
+    router_cls = _require_yfinance_router()
+    return router_cls(rate_limit=500, allow_pickle_compat=True)
 
 @pytest.fixture
 def yf_price_df() -> pd.DataFrame:
@@ -242,6 +272,7 @@ def yf_price_df() -> pd.DataFrame:
     Returns:
         pandas.DataFrame: Columns include date, open, high, low, close, volume, ticker.
     """
+    pd = _require_pandas()
     return pd.DataFrame(
         {
             "date": pd.to_datetime(["2024-01-02", "2024-01-03"]),

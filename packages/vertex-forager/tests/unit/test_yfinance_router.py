@@ -6,7 +6,6 @@ import json
 import pickle
 from typing import TYPE_CHECKING
 
-import pandas as pd
 import polars as pl
 import pytest
 
@@ -15,6 +14,13 @@ from vertex_forager.exceptions import TransformError
 
 if TYPE_CHECKING:
     from vertex_forager.providers.yfinance.router import YFinanceRouter
+
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
+pytestmark = pytest.mark.skipif(pd is None, reason="pandas is required for yfinance router unit tests")
+
 
 
 class TestYFinanceRouterUnit:

@@ -7,9 +7,18 @@ from typing import Any, cast
 import pytest
 
 from vertex_forager.clients import create_client
-from vertex_forager.providers.yfinance.client import YFinanceClient
-from vertex_forager.providers.yfinance.router import YFinanceRouter
 
+try:
+    from vertex_forager.providers.yfinance.client import YFinanceClient
+    from vertex_forager.providers.yfinance.router import YFinanceRouter
+except ImportError:
+    YFinanceClient = None
+    YFinanceRouter = None
+
+pytestmark = pytest.mark.skipif(
+    YFinanceClient is None or YFinanceRouter is None,
+    reason="requires optional dependency: vertex-forager[yfinance]",
+)
 
 class TestYFinanceClientDefaults:
     """Verify default configuration and client creation behavior."""
