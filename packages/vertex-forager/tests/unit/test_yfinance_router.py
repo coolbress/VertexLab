@@ -22,7 +22,10 @@ class TestYFinanceRouterUnit:
             provider="yfinance",
             dataset=dataset,
             symbol=symbol,
-            spec=RequestSpec(url=f"yfinance://{symbol}", params={"dataset": dataset}),
+            spec=RequestSpec(
+                url=f"yfinance://{symbol}",
+                params={"dataset": dataset, "lib": {"type": "ticker_attr"}},
+            ),
             context={"symbol": symbol},
         )
 

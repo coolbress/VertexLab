@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 import contextlib
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 from pathlib import Path
 from typing import Any
@@ -83,7 +83,7 @@ async def scan_table(
                 provider="dlq",
                 table=table,
                 frame=df,
-                observed_at=datetime.now(),
+                observed_at=datetime.now(timezone.utc),
             )
             if writer is None:
                 raise RuntimeError("recover: writer is not initialized")

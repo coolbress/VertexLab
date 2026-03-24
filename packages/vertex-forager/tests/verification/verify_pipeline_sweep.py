@@ -131,8 +131,19 @@ def _measure_sharadar(*, db_path: Path, inputs: dict[str, Any]) -> dict[str, Any
 
 def _run_single_combo(*, cfg: dict[str, Any], db_path: Path, inputs: dict[str, Any]) -> dict[str, Any]:
     run_entry: dict[str, Any] = {"env": dict(cfg), "measurements": {}}
-    run_entry["measurements"]["yfinance_price"] = _measure_yfinance_price(db_path=db_path, inputs=inputs)
-    run_entry["measurements"]["yfinance_financials"] = _measure_yfinance_financials(db_path=db_path, inputs=inputs)
+    try:
+        run_entry["measurements"]["yfinance_price"] = _measure_yfinance_price(db_path=db_path, inputs=inputs)
+    except Exception as e:
+        print(f"yfinance_price verification failed: {e}")
+        run_entry["measurements"]["yfinance_price"] = {"error": str(e)}
+    try:
+        run_entry["measurements"]["yfinance_financials"] = _measure_yfinance_financials(
+            db_path=db_path,
+            inputs=inputs,
+        )
+    except Exception as e:
+        print(f"yfinance_financials verification failed: {e}")
+        run_entry["measurements"]["yfinance_financials"] = {"error": str(e)}
     if inputs["sh_key"]:
         try:
             run_entry["measurements"]["sharadar_sf1_mrt"] = _measure_sharadar(db_path=db_path, inputs=inputs)
@@ -140,6 +151,14 @@ def _run_single_combo(*, cfg: dict[str, Any], db_path: Path, inputs: dict[str, A
             print(f"Sharadar verification skipped due to error: {e}")
             run_entry["measurements"]["sharadar_sf1_mrt"] = {"error": str(e)}
     return run_entry
+
+
+def _restore_environment(original_env: dict[str, str]) -> None:
+    current_env = dict(os.environ)
+    for key in current_env.keys() - original_env.keys():
+        os.environ.pop(key, None)
+    for key, value in original_env.items():
+        os.environ[key] = value
 
 
 def _best_run(results: dict[str, Any], run_key: str) -> dict[str, Any]:
@@ -175,8 +194,7 @@ def run_sweep() -> dict[str, Any]:
             set_env(cfg)
             results["runs"].append(_run_single_combo(cfg=cfg, db_path=db_path, inputs=inputs))
         finally:
-            os.environ.clear()
-            os.environ.update(original_env)
+            _restore_environment(original_env)
     _finalize_reports(results=results, out_dir=out_dir, report_path=report_path)
     if db_path.exists():
         db_path.unlink()

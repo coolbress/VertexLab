@@ -4,9 +4,11 @@ import asyncio
 import hashlib
 import itertools
 import os
-from pathlib import Path
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _parse_positive_int_list(value: str | None, default: list[int], field_name: str) -> list[int]:

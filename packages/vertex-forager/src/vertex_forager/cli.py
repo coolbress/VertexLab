@@ -22,7 +22,6 @@ from vertex_forager.constants_view import (
     build_constants_preview,
     render_constants_preview,
 )
-from vertex_forager.core.config import RunResult
 from vertex_forager.core.recover import build_summary_message, execute_recovery
 from vertex_forager.core.sweep import (
     build_sweep_combinations,
@@ -33,6 +32,7 @@ from vertex_forager.core.sweep import (
 from .utils import cleanup_dlq_tmp, clear_app_cache, get_app_root, get_cache_dir
 
 if TYPE_CHECKING:
+    from vertex_forager.core.config import RunResult
     from vertex_forager.providers.sharadar.client import SharadarClient
 
 logger = logging.getLogger(__name__)

@@ -106,7 +106,7 @@ async def _handle_dlq_disabled(
     return {"status": "disabled", "rescued": rescued, "remaining": remaining, "path": None, "error": None}
 
 
-async def _spool_failed_packets(
+def _spool_failed_packets(
     *,
     table: str,
     failed_packets: list[FramePacket],
@@ -215,7 +215,7 @@ async def spool_to_dlq_and_rescue(
             result_lock=result_lock,
         )
     try:
-        path = await _spool_failed_packets(table=table, failed_packets=failed_packets)
+        path = _spool_failed_packets(table=table, failed_packets=failed_packets)
     except Exception as exc:
         await _on_spool_failed(
             table=table,
@@ -227,7 +227,6 @@ async def spool_to_dlq_and_rescue(
             result=result,
             result_lock=result_lock,
         )
-        raise
     if rescued:
         inc("dlq_rescued_total", int(rescued))
         inc(f"dlq_rescued.{table}", int(rescued))

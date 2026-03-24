@@ -365,9 +365,6 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         return pickle_mod.loads(payload)
 
     def _pickle_fallback_policy(self, *, job: FetchJob) -> tuple[str | None, bool]:
-        test_gate = os.getenv("PYTEST_CURRENT_TEST")
-        if test_gate:
-            return None, True
         src: dict[str, Any] = {}
         try:
             val = job.spec.params.get("lib")
