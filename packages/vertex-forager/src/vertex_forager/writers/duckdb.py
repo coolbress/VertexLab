@@ -200,19 +200,12 @@ class DuckDBWriter(BaseWriter):
             loop = asyncio.get_running_loop()
             return await loop.run_in_executor(self._executor, functools.partial(self._write_sync, packets))
 
-    def _write_sync(self, packets: Sequence[FramePacket]) -> list[WriteResult]:
-        """Synchronous implementation of write logic for offloading."""
-        # Log start
-        total_rows = sum(len(p.frame) for p in packets)
-        self._logger.debug(LOG_START_SYNC_WRITE.format(prefix=DK_LOG_PREFIX, packets=len(packets), rows=total_rows))
-        t0 = time.monotonic()
-
-        # Correlation summary (trace_id/request_id counts)
+    def _log_correlation_context(self, packets: Sequence[FramePacket]) -> None:
         with contextlib.suppress(Exception):
             trace_ids = set()
             request_ids = set()
-            for p in packets:
-                ctx = getattr(p, "context", None)
+            for packet in packets:
+                ctx = getattr(packet, "context", None)
                 if isinstance(ctx, dict):
                     tid = ctx.get("trace_id")
                     rid = ctx.get("request_id")
@@ -237,96 +230,104 @@ class DuckDBWriter(BaseWriter):
                         request_ids=request_samples,
                     )
                 )
-        # Group by table but keep track of original indices to return ordered results
+
+    def _group_packets_by_table(
+        self,
+        packets: Sequence[FramePacket],
+    ) -> tuple[dict[str, list[tuple[int, FramePacket]]], list[WriteResult | None]]:
         by_table: dict[str, list[tuple[int, FramePacket]]] = {}
         final_results: list[WriteResult | None] = [None] * len(packets)
-
-        for i, p in enumerate(packets):
-            if p.frame.is_empty():
-                final_results[i] = WriteResult(table=p.table, rows=0)
+        for i, packet in enumerate(packets):
+            if packet.frame.is_empty():
+                final_results[i] = WriteResult(table=packet.table, rows=0)
                 continue
+            by_table.setdefault(packet.table, []).append((i, packet))
+        return by_table, final_results
 
-            if p.table not in by_table:
-                by_table[p.table] = []
-            by_table[p.table].append((i, p))
+    def _merge_table_frames(self, table_name: str, entries: list[tuple[int, FramePacket]]) -> pl.DataFrame:
+        frames = [packet.frame for _, packet in entries]
+        try:
+            return pl.concat(frames, how="vertical")
+        except pl.exceptions.PolarsError as e:
+            schema = self._get_table_schema(table_name) if hasattr(self, "_get_table_schema") else None
+            is_flexible = bool(schema and getattr(schema, "flexible_schema", False))
+            if not is_flexible:
+                raise
+            self._logger.warning(LOG_SCHEMA_MISMATCH.format(prefix=WR_LOG_PREFIX, table=table_name, error=e))
+            return pl.concat(frames, how="diagonal")
 
+    def _validate_pk_columns(self, table_name: str, merged_df: pl.DataFrame, pk_cols: tuple[str, ...]) -> None:
+        for column in pk_cols:
+            if column not in merged_df.columns:
+                self._logger.error(
+                    LOG_MISSING_PK_COL.format(
+                        prefix=WR_LOG_PREFIX,
+                        col=column,
+                        table=table_name,
+                        columns=merged_df.columns,
+                    )
+                )
+                raise PrimaryKeyMissingError(table=table_name, column=column)
+            nulls = merged_df.get_column(column).null_count()
+            if nulls > 0:
+                self._logger.error(
+                    LOG_NULLS_PK_COL.format(
+                        prefix=WR_LOG_PREFIX,
+                        col=column,
+                        table=table_name,
+                        rows=len(merged_df),
+                        columns=merged_df.columns,
+                    )
+                )
+                raise PrimaryKeyNullError(table=table_name, column=column, null_count=nulls)
+
+    def _write_table_entries(
+        self,
+        *,
+        conn: duckdb.DuckDBPyConnection,
+        table_name: str,
+        entries: list[tuple[int, FramePacket]],
+        final_results: list[WriteResult | None],
+    ) -> None:
+        merged_df = self._merge_table_frames(table_name, entries)
+        pk_cols = self._get_primary_keys(table_name)
+        if pk_cols:
+            self._validate_pk_columns(table_name, merged_df, pk_cols)
+        rows = len(merged_df)
+        if rows > 0:
+            self._ensure_table_exists(conn, table_name, merged_df)
+            self._upsert_data(conn, table_name, merged_df)
+        for idx, packet in entries:
+            final_results[idx] = WriteResult(table=table_name, rows=len(packet.frame))
+
+    def _finalize_sync_results(self, final_results: list[WriteResult | None]) -> list[WriteResult]:
+        return [res for res in final_results if res is not None]
+
+    def _write_sync(self, packets: Sequence[FramePacket]) -> list[WriteResult]:
+        total_rows = sum(len(p.frame) for p in packets)
+        self._logger.debug(LOG_START_SYNC_WRITE.format(prefix=DK_LOG_PREFIX, packets=len(packets), rows=total_rows))
+        t0 = time.monotonic()
+        self._log_correlation_context(packets)
+        by_table, final_results = self._group_packets_by_table(packets)
         if not by_table:
-            # All packets were empty
-            return [res for res in final_results if res is not None]  # Should be all
-
-        # In sync mode, we assume exclusive access provided by caller (async lock)
-        # or single-threaded execution context.
+            return self._finalize_sync_results(final_results)
         conn = self._get_connection()
 
         for table_name, entries in by_table.items():
             try:
-                frames = [p.frame for _, p in entries]
-                try:
-                    merged_df = pl.concat(frames, how="vertical")
-                except pl.exceptions.PolarsError as e:
-                    # Use schema flexible flag to decide diagonal fallback
-                    schema = self._get_table_schema(table_name) if hasattr(self, "_get_table_schema") else None
-                    is_flexible = bool(schema and getattr(schema, "flexible_schema", False))
-                    if not is_flexible:
-                        raise
-                    self._logger.warning(LOG_SCHEMA_MISMATCH.format(prefix=WR_LOG_PREFIX, table=table_name, error=e))
-                    merged_df = pl.concat(frames, how="diagonal")
-                pk_cols = self._get_primary_keys(table_name)
-                if pk_cols:
-                    for c in pk_cols:
-                        if c not in merged_df.columns:
-                            self._logger.error(
-                                LOG_MISSING_PK_COL.format(
-                                    prefix=WR_LOG_PREFIX,
-                                    col=c,
-                                    table=table_name,
-                                    columns=merged_df.columns,
-                                )
-                            )
-                            raise PrimaryKeyMissingError(table=table_name, column=c)
-                        else:
-                            nulls = merged_df.get_column(c).null_count()
-                            if nulls > 0:
-                                self._logger.error(
-                                    LOG_NULLS_PK_COL.format(
-                                        prefix=WR_LOG_PREFIX,
-                                        col=c,
-                                        table=table_name,
-                                        rows=len(merged_df),
-                                        columns=merged_df.columns,
-                                    )
-                                )
-                                raise PrimaryKeyNullError(table=table_name, column=c, null_count=nulls)
-                rows = len(merged_df)
-
-                if rows > 0:
-                    self._ensure_table_exists(conn, table_name, merged_df)
-                    # We upsert the whole batch.
-                    # Note: This assumes _upsert_data succeeds for the whole batch.
-                    # If partial failure is possible, this logic would need refinement,
-                    # but DuckDB operations are typically transactional per statement.
-                    self._upsert_data(conn, table_name, merged_df)
-
-                # Assign results back to their original positions
-                for idx, p in entries:
-                    final_results[idx] = WriteResult(table=table_name, rows=len(p.frame))
-
+                self._write_table_entries(
+                    conn=conn,
+                    table_name=table_name,
+                    entries=entries,
+                    final_results=final_results,
+                )
             except duckdb.Error as e:
                 self._logger.error(LOG_FAILED_BATCH.format(prefix=WR_LOG_PREFIX, table=table_name, error=e))
                 raise
             except ValidationError as e:
                 self._logger.debug(LOG_VALIDATION_ERROR.format(prefix=WR_LOG_PREFIX, table=table_name, error=e))
                 raise
-
-        # Fill any remaining None (should be covered by empty check or loop, but safe guard)
-        # Actually my type hint says list[WriteResult | None] but return is list[WriteResult]
-        # I need to ensure no None remains.
-        # Logic above:
-        # 1. Empty packets -> filled immediately.
-        # 2. Non-empty packets -> added to by_table -> filled in loop.
-        # So all should be filled.
-
-        results = [res for res in final_results if res is not None]
+        results = self._finalize_sync_results(final_results)
 
         t1 = time.monotonic()
         self._logger.debug(LOG_FINISH_SYNC_WRITE.format(prefix=DK_LOG_PREFIX, seconds=(t1 - t0), results=len(results)))
@@ -552,78 +553,58 @@ class DuckDBWriter(BaseWriter):
                 # Fail fast to prevent data integrity issues
                 raise
 
-    def _map_polars_type_to_sql(self, dtype: pl.DataType) -> str:
-        """Map Polars DataType to DuckDB SQL type string."""
-        # Precise integer mapping
-        if dtype == pl.Int8:
-            return "TINYINT"
-        elif dtype == pl.Int16:
-            return "SMALLINT"
-        elif dtype == pl.Int32:
-            return "INTEGER"
-        elif dtype == pl.Int64:
-            return "BIGINT"
-        # Unsigned integer mapping (DuckDB has UTINYINT etc but safest to map to next signed up if unsure,
-        # but DuckDB supports USMALLINT/UINTEGER/UBIGINT.
-        # However, user requested "map unsigned widths to the smallest safe signed type if DuckDB lacks unsigned types".
-        # DuckDB DOES support unsigned, but we'll follow the instruction to map to
-        # signed types as a safety/compatibility choice if that was the implication.
-        # Actually user said "if DuckDB lacks unsigned types (e.g., pl.UInt8->SMALLINT)".
-        # DuckDB has UTINYINT, USMALLINT, UINTEGER, UBIGINT.
-        # But to be safe and strictly follow "map unsigned widths to the smallest safe signed type":
-        elif dtype == pl.UInt8:
-            return "SMALLINT"
-        elif dtype == pl.UInt16:
-            return "INTEGER"
-        elif dtype == pl.UInt32:
-            return "BIGINT"
-        elif dtype == pl.UInt64:
-            # UBIGINT fits in HUGEINT (128-bit) in DuckDB, or just UBIGINT.
-            # If we MUST map to signed, we need HUGEINT.
-            # Let's use UBIGINT if available or HUGEINT. DuckDB has HUGEINT.
-            # But "BIGINT" is signed 64-bit.
-            # Let's assume standard DuckDB types are fine, but following the "smallest safe signed type" rule:
-            return "HUGEINT"
+    def _map_basic_polars_type(self, dtype: pl.DataType) -> str | None:
+        mapping: dict[object, str] = {
+            pl.Int8: "TINYINT",
+            pl.Int16: "SMALLINT",
+            pl.Int32: "INTEGER",
+            pl.Int64: "BIGINT",
+            pl.UInt8: "SMALLINT",
+            pl.UInt16: "INTEGER",
+            pl.UInt32: "BIGINT",
+            pl.UInt64: "HUGEINT",
+            pl.Float32: "FLOAT",
+            pl.Float64: "DOUBLE",
+            pl.Boolean: "BOOLEAN",
+            pl.Date: "DATE",
+        }
+        return mapping.get(dtype)
 
-        # Floating point mapping
-        elif dtype == pl.Float32:
-            return "FLOAT"
-        elif dtype == pl.Float64:
-            return "DOUBLE"
-
-        # Other types
-        elif dtype == pl.Boolean:
-            return "BOOLEAN"
-        elif dtype == pl.Date:
-            return "DATE"
-        elif dtype.base_type() == pl.Datetime:
-            # Check for timezone information
-            if getattr(dtype, "time_zone", None):
-                return "TIMESTAMPTZ"
-            return "TIMESTAMP"
-        elif dtype.base_type() == pl.Duration:
-            return "INTERVAL"
-        elif dtype in (pl.String, pl.Categorical):
-            return "VARCHAR"
-        elif isinstance(dtype, pl.List):
+    def _map_nested_polars_type(self, dtype: pl.DataType) -> str | None:
+        if isinstance(dtype, pl.List):
             inner_dt = dtype.inner
             resolved_inner = inner_dt if isinstance(inner_dt, pl.DataType) else inner_dt()
             inner_type = self._map_polars_type_to_sql(resolved_inner)
             return f"{inner_type}[]"
-        elif isinstance(dtype, pl.Struct):
+        if isinstance(dtype, pl.Struct):
             fields = []
             for f in dtype.fields:
                 f_dt = f.dtype
                 resolved_f_dt = f_dt if isinstance(f_dt, pl.DataType) else f_dt()
                 mapped_type = self._map_polars_type_to_sql(resolved_f_dt)
                 fields.append(f"{self._quote_identifier(f.name)} {mapped_type}")
-            fields_str = ", ".join(fields)
-            return f"STRUCT({fields_str})"
-        else:
-            self._unresolved_type_count += 1
-            if self._strict:
-                raise SchemaMapError(f"Unsupported Polars type {dtype} in strict mode.")
-            return "VARCHAR"  # Default fallback
+            return f"STRUCT({', '.join(fields)})"
+        return None
+
+    def _map_polars_type_to_sql(self, dtype: pl.DataType) -> str:
+        basic = self._map_basic_polars_type(dtype)
+        if basic is not None:
+            return basic
+        if dtype.base_type() == pl.Datetime:
+            if getattr(dtype, "time_zone", None):
+                return "TIMESTAMPTZ"
+            return "TIMESTAMP"
+        if dtype.base_type() == pl.Duration:
+            return "INTERVAL"
+        if dtype in (pl.String, pl.Categorical):
+            return "VARCHAR"
+        nested = self._map_nested_polars_type(dtype)
+        if nested is not None:
+            return nested
+        self._unresolved_type_count += 1
+        if self._strict:
+            raise SchemaMapError(f"Unsupported Polars type {dtype} in strict mode.")
+        return "VARCHAR"
 
     def _upsert_data(self, conn: duckdb.DuckDBPyConnection, table_name: str, df: pl.DataFrame) -> int:
         """

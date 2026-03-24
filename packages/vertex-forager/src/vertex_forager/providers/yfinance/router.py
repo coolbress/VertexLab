@@ -257,171 +257,36 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             )
 
     def parse(self, *, job: FetchJob, payload: bytes) -> ParseResult:
-        """Parse raw pickled payload into structured packets.
-
-        Args:
-            job: Fetch job that produced this payload.
-            payload: Raw response bytes (pickle-serialized).
-
-        Returns:
-            ParseResult: Normalized packets and any next jobs.
-
-        Raises:
-            Exception: Unexpected errors are re-raised after logging.
-        """
         try:
-            # Check empty payload using BaseRouter helper
             empty_result = self._check_empty_response(payload=payload)
             if empty_result:
                 return empty_result
-
-            # -------- Decode Payload --------
-            data_obj: Any | None = None
-            df_pl: pl.DataFrame | None = None
-            read_ipc_err: Exception | None = None
-            json_err: Exception | None = None
-            if payload.startswith(b"IPC:"):
-                df_pl = pl.read_ipc(io.BytesIO(payload[4:]))
-            elif payload.startswith(b"JSON:"):
-                data_obj = json.loads(payload[5:].decode("utf-8"))
-            else:
-                try:
-                    df_pl = pl.read_ipc(io.BytesIO(payload))
-                except (PolarsError, ValueError, TypeError) as e:
-                    read_ipc_err = e
-                    try:
-                        data_obj = json.loads(payload.decode("utf-8"))
-                    except (json.JSONDecodeError, UnicodeDecodeError) as je:
-                        json_err = je
-                        if self._allow_pickle_compat:
-                            lib_type_val: str | None = None
-                            test_gate = os.getenv("PYTEST_CURRENT_TEST")
-                            if test_gate:
-                                allowed = True
-                            else:
-                                allowed = False
-                                src: dict[str, Any] = {}
-                                try:
-                                    val = job.spec.params.get("lib")
-                                    if isinstance(val, dict):
-                                        src = val
-                                except Exception:
-                                    src = {}
-                                lib_ok = False
-                                if isinstance(src, dict):
-                                    t = src.get("type")
-                                    if isinstance(t, str):
-                                        lib_type_val = t
-                                        lib_ok = t in {"ticker_attr", "download"}
-                                ds_env = os.getenv("VF_PICKLE_ALLOWED_DATASETS", "")
-                                allowed_ds = {s.strip() for s in ds_env.split(",") if s.strip()}
-                                ds_ok = bool(allowed_ds) and (job.dataset in allowed_ds)
-                                allowed = lib_ok and ds_ok
-                            if allowed:
-                                logger.warning(
-                                    "YFinance pickle fallback used: dataset=%s symbol=%s lib_type=%s",
-                                    job.dataset,
-                                    sanitize_field(job.context.get("symbol")),
-                                    lib_type_val,
-                                )
-                                _p = importlib.import_module("pickle")
-                                data_obj = _p.loads(payload)
-                            else:
-                                msg = (
-                                    f"IPC decode failed: {read_ipc_err}; JSON decode failed: {json_err}; "
-                                    "pickle fallback disallowed or untrusted context"
-                                )
-                                raise ValueError(msg) from None
-                        else:
-                            msg = f"IPC decode failed: {read_ipc_err}; JSON decode failed: {json_err}"
-                            raise ValueError(msg) from None
-            # -------- Convert to Polars --------
-
+            data_obj, df_pl = self._decode_payload_to_data_or_frame(job=job, payload=payload)
             is_batch = bool(job.context.get("is_batch", False))
             if df_pl is None:
                 df_pl = self._convert_to_polars(data_obj, is_batch=is_batch)
-
-            # Check empty DataFrame using BaseRouter helper
             empty_result = self._check_empty_response(frame=df_pl)
             if empty_result:
                 return empty_result
-
-            # -------- Normalize Columns --------
-
-            # Standardize column names using BaseRouter helper
             df_pl = self._normalize_columns(df_pl)
-
-            # -------- Transform Dataset Structure --------
-
-            # Apply dataset-specific transformations
             dataset = job.dataset
             observed_at = datetime.now(timezone.utc)
-            if self._structured_logs:
-                sym0 = job.context.get("symbol")
-                att0 = 0
-                try:
-                    att0 = int(job.context.get("attempt", 0))  # type: ignore[arg-type]
-                except (TypeError, ValueError):
-                    logger.debug("bad attempt value: %s", job.context.get("attempt", 0))
-                    att0 = 0
-                msg0 = (
-                    f"OBS provider={sanitize_field(self.provider)} "
-                    f"dataset={sanitize_field(dataset)} "
-                    f"symbol={sanitize_field(sym0)} "
-                    f"stage=router_parse_enter attempt={att0} duration=0.000s"
-                )
-                if self._log_verbose:
-                    logger.info(msg0)
-                else:
-                    logger.debug(msg0)
+            self._emit_structured_parse_log(
+                stage="router_parse_enter",
+                dataset=dataset,
+                symbol=job.context.get("symbol"),
+                attempt=job.context.get("attempt", 0),
+                duration=0.0,
+                rows=None,
+            )
             t0 = time.monotonic()
-            if dataset == "price":
-                df_pl = self._transform_price(df_pl)
-            elif dataset in (
-                "financials",
-                "quarterly_financials",
-                "balance_sheet",
-                "quarterly_balance_sheet",
-                "cashflow",
-                "quarterly_cashflow",
-                "income_stmt",
-                "earnings",
-                "quarterly_earnings",
-            ):
-                df_pl = self._transform_financials(df_pl, dataset)
-            elif dataset == "major_holders":
-                df_pl = self._transform_major_holders(df_pl)
-            elif dataset in ("institutional_holders", "mutualfund_holders"):
-                df_pl = self._transform_holders_detailed(df_pl)
-            elif dataset == "insider_roster_holders":
-                df_pl = self._transform_insider_roster(df_pl)
-            elif dataset == "insider_purchases":
-                df_pl = self._transform_insider_purchases(df_pl)
-            elif dataset == "calendar":
-                df_pl = self._transform_calendar(df_pl)
-            elif dataset == "news":
-                df_pl = self._transform_news(df_pl)
-            elif dataset in ("info", "fast_info"):
-                pass
-            else:
-                if "index" in df_pl.columns:
-                    df_pl = df_pl.drop(["index"])
-
-            # -------- Inject Metadata --------
-
-            # Inject essential columns (ticker)
+            df_pl = self._transform_dataset_frame(df_pl=df_pl, dataset=dataset)
             symbol = job.context.get("symbol")
             if symbol and "ticker" not in df_pl.columns:
                 df_pl = df_pl.with_columns(pl.lit(symbol).alias("ticker"))
-
-            # Add provider metadata
             df_pl = self._add_provider_metadata(frame=df_pl, observed_at=observed_at)
-
             if df_pl.is_empty():
                 return ParseResult(packets=[], next_jobs=[])
-
-            # -------- Build Frame Packet --------
-
             packet: FramePacket = FramePacket(
                 provider=self.provider,
                 table=DATASET_TABLE.get(job.dataset, f"yfinance_{job.dataset}"),
@@ -429,28 +294,14 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
                 observed_at=observed_at,
                 context=job.context,
             )
-
-            if self._structured_logs:
-                sym1 = job.context.get("symbol")
-                att1 = 0
-                try:
-                    att1 = int(job.context.get("attempt", 0))  # type: ignore[arg-type]
-                except (TypeError, ValueError):
-                    logger.debug("bad attempt value: %s", job.context.get("attempt", 0))
-                    att1 = 0
-                dur1 = time.monotonic() - t0
-                msg1 = (
-                    f"OBS provider={sanitize_field(self.provider)} "
-                    f"dataset={sanitize_field(job.dataset)} "
-                    f"symbol={sanitize_field(sym1)} "
-                    f"stage=router_parse_exit attempt={att1} "
-                    f"duration={dur1:.3f}s packets=1 rows={len(df_pl)}"
-                )
-                if self._log_verbose:
-                    logger.info(msg1)
-                else:
-                    logger.debug(msg1)
-
+            self._emit_structured_parse_log(
+                stage="router_parse_exit",
+                dataset=job.dataset,
+                symbol=job.context.get("symbol"),
+                attempt=job.context.get("attempt", 0),
+                duration=time.monotonic() - t0,
+                rows=len(df_pl),
+            )
             return ParseResult(packets=[packet], next_jobs=[])
 
         except (ValueError, TypeError) as e:
@@ -461,6 +312,142 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             job_id = f"{job.provider}:{job.dataset}:{job.symbol or ''}"
             logger.exception(LOG_PARSE_UNEXPECTED_ERROR.format(prefix=ROUTER_LOG_PREFIX, job_id=job_id))
             raise_yfinance_parse_error(e, dataset=job.dataset)
+
+    def _decode_payload_to_data_or_frame(
+        self,
+        *,
+        job: FetchJob,
+        payload: bytes,
+    ) -> tuple[Any | None, pl.DataFrame | None]:
+        if payload.startswith(b"IPC:"):
+            return None, pl.read_ipc(io.BytesIO(payload[4:]))
+        if payload.startswith(b"JSON:"):
+            return json.loads(payload[5:].decode("utf-8")), None
+        try:
+            return None, pl.read_ipc(io.BytesIO(payload))
+        except (PolarsError, ValueError, TypeError) as read_ipc_err:
+            try:
+                return json.loads(payload.decode("utf-8")), None
+            except (json.JSONDecodeError, UnicodeDecodeError) as json_err:
+                data_obj = self._decode_with_optional_pickle_fallback(
+                    job=job,
+                    payload=payload,
+                    read_ipc_err=read_ipc_err,
+                    json_err=json_err,
+                )
+                return data_obj, None
+
+    def _decode_with_optional_pickle_fallback(
+        self,
+        *,
+        job: FetchJob,
+        payload: bytes,
+        read_ipc_err: Exception,
+        json_err: Exception,
+    ) -> Any:
+        if not self._allow_pickle_compat:
+            msg = f"IPC decode failed: {read_ipc_err}; JSON decode failed: {json_err}"
+            raise ValueError(msg) from None
+        lib_type_val, allowed = self._pickle_fallback_policy(job=job)
+        if not allowed:
+            msg = (
+                f"IPC decode failed: {read_ipc_err}; JSON decode failed: {json_err}; "
+                "pickle fallback disallowed or untrusted context"
+            )
+            raise ValueError(msg) from None
+        logger.warning(
+            "YFinance pickle fallback used: dataset=%s symbol=%s lib_type=%s",
+            job.dataset,
+            sanitize_field(job.context.get("symbol")),
+            lib_type_val,
+        )
+        pickle_mod = importlib.import_module("pickle")
+        return pickle_mod.loads(payload)
+
+    def _pickle_fallback_policy(self, *, job: FetchJob) -> tuple[str | None, bool]:
+        test_gate = os.getenv("PYTEST_CURRENT_TEST")
+        if test_gate:
+            return None, True
+        src: dict[str, Any] = {}
+        try:
+            val = job.spec.params.get("lib")
+            if isinstance(val, dict):
+                src = val
+        except Exception:
+            src = {}
+        lib_type_val: str | None = None
+        lib_ok = False
+        t = src.get("type")
+        if isinstance(t, str):
+            lib_type_val = t
+            lib_ok = t in {"ticker_attr", "download"}
+        ds_env = os.getenv("VF_PICKLE_ALLOWED_DATASETS", "")
+        allowed_ds = {s.strip() for s in ds_env.split(",") if s.strip()}
+        ds_ok = bool(allowed_ds) and (job.dataset in allowed_ds)
+        return lib_type_val, lib_ok and ds_ok
+
+    def _transform_dataset_frame(self, *, df_pl: pl.DataFrame, dataset: str) -> pl.DataFrame:
+        if dataset == "price":
+            return self._transform_price(df_pl)
+        if dataset in {
+            "financials",
+            "quarterly_financials",
+            "balance_sheet",
+            "quarterly_balance_sheet",
+            "cashflow",
+            "quarterly_cashflow",
+            "income_stmt",
+            "earnings",
+            "quarterly_earnings",
+        }:
+            return self._transform_financials(df_pl, dataset)
+        if dataset == "major_holders":
+            return self._transform_major_holders(df_pl)
+        if dataset in {"institutional_holders", "mutualfund_holders"}:
+            return self._transform_holders_detailed(df_pl)
+        if dataset == "insider_roster_holders":
+            return self._transform_insider_roster(df_pl)
+        if dataset == "insider_purchases":
+            return self._transform_insider_purchases(df_pl)
+        if dataset == "calendar":
+            return self._transform_calendar(df_pl)
+        if dataset == "news":
+            return self._transform_news(df_pl)
+        if dataset in {"info", "fast_info"}:
+            return df_pl
+        if "index" in df_pl.columns:
+            return df_pl.drop(["index"])
+        return df_pl
+
+    def _emit_structured_parse_log(
+        self,
+        *,
+        stage: str,
+        dataset: str,
+        symbol: object,
+        attempt: object,
+        duration: float,
+        rows: int | None,
+    ) -> None:
+        if not self._structured_logs:
+            return
+        attempt_num = 0
+        try:
+            if isinstance(attempt, (int, str)):
+                attempt_num = int(attempt)
+        except (TypeError, ValueError):
+            logger.debug("bad attempt value: %s", attempt)
+        rows_part = "" if rows is None else f" packets=1 rows={rows}"
+        msg = (
+            f"OBS provider={sanitize_field(self.provider)} "
+            f"dataset={sanitize_field(dataset)} "
+            f"symbol={sanitize_field(symbol)} "
+            f"stage={stage} attempt={attempt_num} duration={duration:.3f}s{rows_part}"
+        )
+        if self._log_verbose:
+            logger.info(msg)
+        else:
+            logger.debug(msg)
 
     # --------------------------------------
     # Generate Jobs Helpers

@@ -34,13 +34,6 @@ force-sort-within-sections = true
 "packages/vertex-forager/tests/**" = ["S101", "TC002", "TC003", "TC006"]
 # Pydantic v2 resolves field annotations at runtime via get_type_hints();
 # all imports used in model fields must stay at module scope.
-"packages/vertex-forager/src/vertex_forager/core/config.py" = ["TC001", "TC002", "TC003"]
-"packages/vertex-forager/src/vertex_forager/core/pipeline.py" = ["C901", "PLR0912", "PLR0915"]
-"packages/vertex-forager/src/vertex_forager/providers/sharadar/router.py" = ["C901", "PLR0912", "PLR0915"]
-"packages/vertex-forager/src/vertex_forager/providers/yfinance/router.py" = ["C901", "PLR0912", "PLR0915"]
-"packages/vertex-forager/src/vertex_forager/writers/duckdb.py" = ["C901", "PLR0912", "PLR0915"]
-"packages/vertex-forager/src/vertex_forager/cli.py" = ["C901", "PLR0912", "PLR0915"]
-"packages/vertex-forager/tests/verification/verify_pipeline_sweep.py" = ["PLR0915"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

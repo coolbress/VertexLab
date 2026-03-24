@@ -212,37 +212,10 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
     async def generate_jobs(
         self, *, dataset: SharadarDataset, symbols: Sequence[str] | None, **kwargs: object
     ) -> AsyncIterator[FetchJob]:
-        """Generate fetch jobs based on dataset and symbols.
-
-        For 'tickers' dataset, generates a single job with pagination context.
-        For other datasets, generates jobs per symbol or in bulks if supported.
-
-        Args:
-            dataset: Target dataset name (e.g., 'price', 'tickers').
-            symbols: List of ticker symbols to fetch.
-            **kwargs: Additional arguments:
-                - per_page (int): Number of records per page (for tickers).
-                - dimension (str): Dimension filter (e.g., 'MRT').
-                - bulk_size (int): Bulk size for bulk datasets.
-
-        Yields:
-            FetchJob: A job object containing the request specification.
-        """
-        # -------- Build Pagination Jobs --------
-
-        # Unified pagination handling:
-        # - tickers: paginated only when symbols not provided
-        # - sp500: paginated only when symbols not provided
         trace_id = uuid.uuid4().hex
         req_id = 0
-        if (dataset == "tickers" and symbols is None) or (dataset == "sp500" and symbols is None):
-            # Sharadar API limit: maximum 10,000 rows per response
-            per_page_obj = kwargs.get("per_page", MAX_ROWS_PER_REQUEST)
-            try:
-                per_page = int(per_page_obj) if isinstance(per_page_obj, (int, str)) else MAX_ROWS_PER_REQUEST
-            except (TypeError, ValueError):
-                per_page = MAX_ROWS_PER_REQUEST
-            per_page = max(1, min(MAX_ROWS_PER_REQUEST, per_page))
+        if self._should_paginate_without_symbols(dataset=dataset, symbols=symbols):
+            per_page = self._resolve_per_page(kwargs.get("per_page", MAX_ROWS_PER_REQUEST))
             logger.debug(
                 LOG_PAGINATION_START.format(
                     prefix=ROUTER_LOG_PREFIX,
@@ -268,228 +241,43 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
                 context=page_ctx,
             )
             return
-
         if not symbols:
             return
-
-        # -------- Build Per-Symbol Jobs --------
-
-        symbol_list = [s.strip() for s in symbols if isinstance(s, str) and s.strip()]
+        symbol_list = self._normalize_symbol_list(symbols)
         if not symbol_list:
             raise ValueError(f"SharadarRouter: no valid symbols provided from input={symbols!r}")
-
-        raw_dimension = kwargs.get("dimension")
-        dimension = "MRT" if not raw_dimension or str(raw_dimension).strip() == "" else str(raw_dimension)
-
-        # Refactored Strategy: Router-driven Batching with Dynamic Sizing
-        # Two modes:
-        # 1. Smart Batching (if metadata available): Pack based on exact row counts.
-        # 2. Heuristic Batching (fallback): Fixed batch size based on date range.
-
+        dimension = self._resolve_dimension(kwargs.get("dimension"))
         if self._ticker_ranges:
-            # -------- Smart Batching Mode --------
-
-            # Smart Batching Mode
-            current_batch: list[str] = []
-            current_rows = 0
-            max_rows = MAX_ROWS_PER_REQUEST
-            max_batch_size = DEFAULT_BATCH_SIZE  # API URL length safety
-
-            for symbol in symbol_list:
-                est_rows = self._estimate_ticker_rows(symbol, dataset)
-
-                if est_rows > max_rows:
-                    logger.debug(
-                        LOG_BATCH_FORCE_SINGLE.format(
-                            prefix=ROUTER_LOG_PREFIX,
-                            symbol=symbol,
-                            est_rows=est_rows,
-                            max_rows=max_rows,
-                        )
-                    )
-                    yield self._build_per_symbol_job(
-                        dataset=dataset,
-                        symbol=symbol,
-                        dimension=dimension,
-                        extra_context={"trace_id": trace_id, "request_id": req_id},
-                    )
-                    req_id += 1
-                    continue
-
-                if (current_rows + est_rows > max_rows) or (len(current_batch) >= max_batch_size):
-                    if current_batch:
-                        logger.debug(
-                            LOG_BATCH_FLUSH.format(
-                                prefix=ROUTER_LOG_PREFIX,
-                                size=len(current_batch),
-                                rows=current_rows,
-                            )
-                        )
-                        sym = ",".join(current_batch)
-                        yield self._build_per_symbol_job(
-                            dataset=dataset,
-                            symbol=sym,
-                            dimension=dimension,
-                            extra_context={"trace_id": trace_id, "request_id": req_id},
-                        )
-                        req_id += 1
-                    current_batch = []
-                    current_rows = 0
-
-                current_batch.append(symbol)
-                current_rows += est_rows
-                logger.debug(
-                    LOG_BATCH_ADD.format(
-                        prefix=ROUTER_LOG_PREFIX,
-                        symbol=symbol,
-                        est_rows=est_rows,
-                        current_rows=current_rows,
-                    )
-                )
-
-            # Flush remaining
-            if current_batch:
-                logger.debug(
-                    LOG_BATCH_FLUSH.format(
-                        prefix=ROUTER_LOG_PREFIX,
-                        size=len(current_batch),
-                        rows=current_rows,
-                    )
-                )
-                sym = ",".join(current_batch)
-                yield self._build_per_symbol_job(
-                    dataset=dataset,
-                    symbol=sym,
-                    dimension=dimension,
-                    extra_context={"trace_id": trace_id, "request_id": req_id},
-                )
+            async for job in self._generate_smart_batched_jobs(
+                dataset=dataset,
+                symbol_list=symbol_list,
+                dimension=dimension,
+                trace_id=trace_id,
+                start_request_id=req_id,
+            ):
                 req_id += 1
-
-        else:
-            # -------- Heuristic Batching Mode --------
-
-            # Heuristic Batching Mode (Original Refactor)
-            batch_size = self._calculate_batch_size(dataset)
-            logger.debug(
-                LOG_HEURISTIC_BATCH_SIZE.format(
-                    prefix=ROUTER_LOG_PREFIX,
-                    dataset=dataset,
-                    batch_size=batch_size,
-                )
-            )
-
-            for chunk in self._iter_symbol_batches(symbol_list, batch_size):
-                if not chunk:
-                    continue
-                batch_symbol_str = ",".join(chunk)
-
-                logger.debug(
-                    LOG_BUILD_JOB.format(
-                        prefix=ROUTER_LOG_PREFIX,
-                        dataset=dataset,
-                        symbols=batch_symbol_str,
-                    )
-                )
-                yield self._build_per_symbol_job(
-                    dataset=dataset,
-                    symbol=batch_symbol_str,
-                    dimension=dimension,
-                    extra_context={"trace_id": trace_id, "request_id": req_id},
-                )
-                req_id += 1
+                yield job
+            return
+        async for job in self._generate_heuristic_batched_jobs(
+            dataset=dataset,
+            symbol_list=symbol_list,
+            dimension=dimension,
+            trace_id=trace_id,
+            start_request_id=req_id,
+        ):
+            req_id += 1
+            yield job
 
     def parse(self, *, job: FetchJob, payload: bytes) -> ParseResult:
-        """Parse the API response payload into structured data.
-
-        Decodes the JSON payload, converts it to a Polars DataFrame, validates columns,
-        and handles pagination for 'tickers' dataset.
-
-        Args:
-            job: The fetch job associated with the response.
-            payload: Raw bytes of the API response.
-
-        Returns:
-            ParseResult: Result containing data packets and any subsequent jobs.
-        """
-        # -------- Parse Response Payload --------
-
-        # OPTIMIZATION: Try Polars native JSON parsing first (Release GIL, Zero-Copy)
-        frame = pl.DataFrame()
-        meta: dict[str, object] = {}
-
-        try:
-            # pl.read_json is significantly faster than json.loads for large data
-            json_df = pl.read_json(io.BytesIO(payload))
-
-            # -------- Handle API Errors --------
-
-            if "quandl_error" in json_df.columns:
-                err = json_df.select(pl.col("quandl_error")).item(0)
-                if err:
-                    raise_quandl_error(self.provider, err)
-
-            # -------- Extract & Transform Data --------
-
-            # Extract Metadata
-            if "meta" in json_df.columns and not json_df.is_empty():
-                meta_col = json_df.select(pl.col("meta"))
-                if not meta_col.is_empty():
-                    try:
-                        val = meta_col.item(0, 0)
-                        meta = val if isinstance(val, dict) else {}
-                    except (ValueError, TypeError):
-                        meta = {}
-
-            # Extract column names from datatable structure
-            if "datatable" not in json_df.columns:
-                raise ValueError("Missing datatable in Sharadar response")
-            dt_col = json_df.get_column("datatable")
-            if dt_col.is_null().all():
-                raise ValueError("Missing datatable in Sharadar response")
-            cols_val = json_df.select(pl.col("datatable").struct.field("columns")).item(0, 0)
-            cols_list = cols_val.to_list() if isinstance(cols_val, pl.Series) else cols_val
-            cols_list = cols_list or []
-
-            col_names = []
-            for i, c in enumerate(cols_list):
-                name = c.get("name")
-                col_names.append(name if isinstance(name, str) and name else f"column_{i}")
-
-            # Convert nested data to flat DataFrame
-            frame = (
-                json_df.select(pl.col("datatable").struct.field("data").alias("row"))
-                .explode("row")
-                .select(pl.col("row").list.to_struct(fields=col_names).struct.unnest())
-            )
-
-        except (pl.exceptions.PolarsError, ValueError, TypeError, json.JSONDecodeError) as e:
-            # Fallback to standard JSON parsing if Polars fails
-            logger.warning(
-                "Polars JSON parse failed for %s, falling back to json.loads. Error: %s",
-                job.dataset,
-                e,
-                exc_info=True,
-            )
-            decoded = self._decode_payload(payload)
-            frame = self._datatable_to_frame(decoded, dataset=job.dataset)
-            meta = decoded.get("meta") or {}
-
-        # -------- Validate & Standardize Frame --------
-
-        # Validate non-empty frame
+        frame, meta = self._parse_payload_frame_and_meta(payload=payload, dataset=job.dataset)
         empty_result = self._check_empty_response(frame=frame)
         if empty_result:
             return empty_result
-
-        # Map dataset to table name
         observed_at = datetime.now(tz=timezone.utc)
         table = DATASET_TABLE.get(job.dataset)
         if table is None:
             raise NotImplementedError(f"Unsupported dataset: {job.dataset}")
-
-        # Add provider metadata
         frame = self._add_provider_metadata(frame=frame, observed_at=observed_at)
-
         pkt_ctx: dict[str, object] = {"dataset": job.dataset}
         if isinstance(job.context, dict):
             for k in ("symbol", "trace_id", "request_id"):
@@ -504,46 +292,219 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
                 context=cast("Mapping[str, JSONValue]", pkt_ctx),
             )
         ]
-
-        # -------- Handle Pagination --------
-
-        next_jobs = []
-        if meta and isinstance(meta, dict):
-            pagination = cast("dict[str, object] | None", job.context.get("pagination"))
-            if pagination:
-                meta_key_obj = pagination.get("meta_key")
-                cursor_param_obj = pagination.get("cursor_param")
-                meta_key = None if meta_key_obj is None else str(meta_key_obj)
-                cursor_param = None if cursor_param_obj is None else str(cursor_param_obj)
-                next_cursor = meta.get(meta_key) if meta_key is not None else None
-
-                if next_cursor is not None and cursor_param and next_cursor != job.spec.params.get(cursor_param):
-                    new_job = job.model_copy(deep=True)
-                    if isinstance(cursor_param, str):
-                        new_job.spec.params[cursor_param] = cast("JSONValue", next_cursor)
-                        # Update per-request correlation id for pagination follow-ups (use int consistently)
-                        try:
-                            ctx_dict = dict(cast("dict[str, JSONValue]", new_job.context))
-                            old_req = ctx_dict.get("request_id")
-                            new_req: int
-                            new_req = old_req + 1 if isinstance(old_req, int) else 1
-                            ctx_dict["request_id"] = new_req
-                            new_job.context = ctx_dict
-                        except (TypeError, ValueError, AttributeError) as exc:
-                            logger.warning(
-                                "%s: Failed to update request_id in pagination follow-up: %s",
-                                ROUTER_LOG_PREFIX,
-                                exc,
-                            )
-                        except Exception:
-                            logger.exception(
-                                "%s: Unexpected error updating request_id in pagination follow-up",
-                                ROUTER_LOG_PREFIX,
-                            )
-                            raise
-                        next_jobs.append(new_job)
-
+        next_jobs = self._build_pagination_followups(job=job, meta=meta)
         return ParseResult(packets=packets, next_jobs=next_jobs)
+
+    def _should_paginate_without_symbols(self, *, dataset: SharadarDataset, symbols: Sequence[str] | None) -> bool:
+        return (dataset == "tickers" and symbols is None) or (dataset == "sp500" and symbols is None)
+
+    def _resolve_per_page(self, per_page_obj: object) -> int:
+        try:
+            per_page = int(per_page_obj) if isinstance(per_page_obj, (int, str)) else MAX_ROWS_PER_REQUEST
+        except (TypeError, ValueError):
+            per_page = MAX_ROWS_PER_REQUEST
+        return max(1, min(MAX_ROWS_PER_REQUEST, per_page))
+
+    def _normalize_symbol_list(self, symbols: Sequence[str]) -> list[str]:
+        return [s.strip() for s in symbols if isinstance(s, str) and s.strip()]
+
+    def _resolve_dimension(self, raw_dimension: object) -> str:
+        if not raw_dimension or str(raw_dimension).strip() == "":
+            return "MRT"
+        return str(raw_dimension)
+
+    async def _generate_smart_batched_jobs(
+        self,
+        *,
+        dataset: SharadarDataset,
+        symbol_list: list[str],
+        dimension: str,
+        trace_id: str,
+        start_request_id: int,
+    ) -> AsyncIterator[FetchJob]:
+        req_id = start_request_id
+        current_batch: list[str] = []
+        current_rows = 0
+        max_rows = MAX_ROWS_PER_REQUEST
+        max_batch_size = DEFAULT_BATCH_SIZE
+        for symbol in symbol_list:
+            est_rows = self._estimate_ticker_rows(symbol, dataset)
+            if est_rows > max_rows:
+                logger.debug(
+                    LOG_BATCH_FORCE_SINGLE.format(
+                        prefix=ROUTER_LOG_PREFIX,
+                        symbol=symbol,
+                        est_rows=est_rows,
+                        max_rows=max_rows,
+                    )
+                )
+                yield self._build_per_symbol_job(
+                    dataset=dataset,
+                    symbol=symbol,
+                    dimension=dimension,
+                    extra_context={"trace_id": trace_id, "request_id": req_id},
+                )
+                req_id += 1
+                continue
+            if (current_rows + est_rows > max_rows) or (len(current_batch) >= max_batch_size):
+                if current_batch:
+                    logger.debug(
+                        LOG_BATCH_FLUSH.format(
+                            prefix=ROUTER_LOG_PREFIX,
+                            size=len(current_batch),
+                            rows=current_rows,
+                        )
+                    )
+                    yield self._build_per_symbol_job(
+                        dataset=dataset,
+                        symbol=",".join(current_batch),
+                        dimension=dimension,
+                        extra_context={"trace_id": trace_id, "request_id": req_id},
+                    )
+                    req_id += 1
+                current_batch = []
+                current_rows = 0
+            current_batch.append(symbol)
+            current_rows += est_rows
+            logger.debug(
+                LOG_BATCH_ADD.format(
+                    prefix=ROUTER_LOG_PREFIX,
+                    symbol=symbol,
+                    est_rows=est_rows,
+                    current_rows=current_rows,
+                )
+            )
+        if current_batch:
+            logger.debug(
+                LOG_BATCH_FLUSH.format(
+                    prefix=ROUTER_LOG_PREFIX,
+                    size=len(current_batch),
+                    rows=current_rows,
+                )
+            )
+            yield self._build_per_symbol_job(
+                dataset=dataset,
+                symbol=",".join(current_batch),
+                dimension=dimension,
+                extra_context={"trace_id": trace_id, "request_id": req_id},
+            )
+
+    async def _generate_heuristic_batched_jobs(
+        self,
+        *,
+        dataset: SharadarDataset,
+        symbol_list: list[str],
+        dimension: str,
+        trace_id: str,
+        start_request_id: int,
+    ) -> AsyncIterator[FetchJob]:
+        batch_size = self._calculate_batch_size(dataset)
+        logger.debug(
+            LOG_HEURISTIC_BATCH_SIZE.format(
+                prefix=ROUTER_LOG_PREFIX,
+                dataset=dataset,
+                batch_size=batch_size,
+            )
+        )
+        req_id = start_request_id
+        for chunk in self._iter_symbol_batches(symbol_list, batch_size):
+            if not chunk:
+                continue
+            batch_symbol_str = ",".join(chunk)
+            logger.debug(
+                LOG_BUILD_JOB.format(
+                    prefix=ROUTER_LOG_PREFIX,
+                    dataset=dataset,
+                    symbols=batch_symbol_str,
+                )
+            )
+            yield self._build_per_symbol_job(
+                dataset=dataset,
+                symbol=batch_symbol_str,
+                dimension=dimension,
+                extra_context={"trace_id": trace_id, "request_id": req_id},
+            )
+            req_id += 1
+
+    def _parse_payload_frame_and_meta(self, *, payload: bytes, dataset: str) -> tuple[pl.DataFrame, dict[str, object]]:
+        try:
+            json_df = pl.read_json(io.BytesIO(payload))
+            if "quandl_error" in json_df.columns:
+                err = json_df.select(pl.col("quandl_error")).item(0)
+                if err:
+                    raise_quandl_error(self.provider, err)
+            meta = self._extract_meta_from_json_df(json_df)
+            frame = self._extract_frame_from_json_df(json_df)
+            return frame, meta
+        except (pl.exceptions.PolarsError, ValueError, TypeError, json.JSONDecodeError) as e:
+            logger.warning(
+                "Polars JSON parse failed for %s, falling back to json.loads. Error: %s",
+                dataset,
+                e,
+                exc_info=True,
+            )
+            decoded = self._decode_payload(payload)
+            frame = self._datatable_to_frame(decoded, dataset=dataset)
+            meta = decoded.get("meta") or {}
+            return frame, meta if isinstance(meta, dict) else {}
+
+    def _extract_meta_from_json_df(self, json_df: pl.DataFrame) -> dict[str, object]:
+        if "meta" not in json_df.columns or json_df.is_empty():
+            return {}
+        meta_col = json_df.select(pl.col("meta"))
+        if meta_col.is_empty():
+            return {}
+        try:
+            val = meta_col.item(0, 0)
+            return val if isinstance(val, dict) else {}
+        except (ValueError, TypeError):
+            return {}
+
+    def _extract_frame_from_json_df(self, json_df: pl.DataFrame) -> pl.DataFrame:
+        if "datatable" not in json_df.columns:
+            raise ValueError("Missing datatable in Sharadar response")
+        dt_col = json_df.get_column("datatable")
+        if dt_col.is_null().all():
+            raise ValueError("Missing datatable in Sharadar response")
+        cols_val = json_df.select(pl.col("datatable").struct.field("columns")).item(0, 0)
+        cols_list = cols_val.to_list() if isinstance(cols_val, pl.Series) else cols_val
+        cols_list = cols_list or []
+        col_names = []
+        for i, c in enumerate(cols_list):
+            name = c.get("name")
+            col_names.append(name if isinstance(name, str) and name else f"column_{i}")
+        return (
+            json_df.select(pl.col("datatable").struct.field("data").alias("row"))
+            .explode("row")
+            .select(pl.col("row").list.to_struct(fields=col_names).struct.unnest())
+        )
+
+    def _build_pagination_followups(self, *, job: FetchJob, meta: dict[str, object]) -> list[FetchJob]:
+        if not meta or not isinstance(job.context, dict):
+            return []
+        pagination = cast("dict[str, object] | None", job.context.get("pagination"))
+        if not pagination:
+            return []
+        meta_key_obj = pagination.get("meta_key")
+        cursor_param_obj = pagination.get("cursor_param")
+        meta_key = None if meta_key_obj is None else str(meta_key_obj)
+        cursor_param = None if cursor_param_obj is None else str(cursor_param_obj)
+        next_cursor = meta.get(meta_key) if meta_key is not None else None
+        if next_cursor is None or not cursor_param or next_cursor == job.spec.params.get(cursor_param):
+            return []
+        new_job = job.model_copy(deep=True)
+        new_job.spec.params[cursor_param] = cast("JSONValue", next_cursor)
+        try:
+            ctx_dict = dict(cast("dict[str, JSONValue]", new_job.context))
+            old_req = ctx_dict.get("request_id")
+            ctx_dict["request_id"] = old_req + 1 if isinstance(old_req, int) else 1
+            new_job.context = ctx_dict
+        except (TypeError, ValueError, AttributeError) as exc:
+            logger.warning("%s: Failed to update request_id in pagination follow-up: %s", ROUTER_LOG_PREFIX, exc)
+        except Exception:
+            logger.exception("%s: Unexpected error updating request_id in pagination follow-up", ROUTER_LOG_PREFIX)
+            raise
+        return [new_job]
 
     # --------------------------------------
     # Generate Jobs Helpers

@@ -27,6 +27,8 @@ from vertex_forager.core.errors import RunError
 from vertex_forager.core.types import JSONValue  # Pydantic v2: used in field types at runtime
 from vertex_forager.exceptions import VertexForagerError
 
+_RUNTIME_TYPE_REFERENCES = (Mapping, date, datetime, pl.DataFrame, TracerProtocol, JSONValue)
+
 
 class RetryConfig(BaseModel):
     """Retry configuration for HTTP requests.
