@@ -53,8 +53,6 @@ def _require_yfinance_router() -> Any:
         optional_missing = {
             "pandas",
             "yfinance",
-            "vertex_forager.providers.yfinance",
-            "vertex_forager.providers.yfinance.router",
         }
         if err.name in optional_missing:
             pytest.skip("yfinance router fixtures require optional dependencies: vertex-forager[yfinance]")
