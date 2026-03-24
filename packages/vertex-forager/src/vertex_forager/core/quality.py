@@ -153,10 +153,14 @@ class NoDuplicateRows:
 
         if self.subset:
             # Check duplicates on specific columns using groupby
-            duplicate_result = df.group_by(self.subset).agg(pl.len().alias("count"))\
-                .filter(pl.col("count") > 1)\
-                .select((pl.col("count") - 1).sum())
-            duplicate_count = duplicate_result.item() if not duplicate_result.is_empty() else 0
+            existing_subset = [column for column in self.subset if column in df.columns]
+            if not existing_subset:
+                duplicate_count = 0
+            else:
+                duplicate_result = df.group_by(existing_subset).agg(pl.len().alias("count"))\
+                    .filter(pl.col("count") > 1)\
+                    .select((pl.col("count") - 1).sum())
+                duplicate_count = duplicate_result.item() if not duplicate_result.is_empty() else 0
         else:
             # Check exact duplicates across all columns
             duplicate_result = df.group_by(df.columns).agg(pl.len().alias("count"))\
