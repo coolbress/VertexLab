@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import os.path
 from pathlib import Path
 import shutil
 import zipfile
@@ -16,7 +17,7 @@ def _request_json(client: httpx.Client, url: str) -> dict[str, object]:
 
 
 def _download(client: httpx.Client, url: str, target: Path) -> None:
-    resp = client.get(url)
+    resp = client.get(url, follow_redirects=True)
     resp.raise_for_status()
     target.write_bytes(resp.content)
 
@@ -79,8 +80,46 @@ def _download_and_extract(
     extract_dir.mkdir(parents=True, exist_ok=True)
     _download(client, download_url, archive_path)
     with zipfile.ZipFile(archive_path, "r") as zf:
-        zf.extractall(extract_dir)
+        safe_members: list[str] = []
+        base_dir = str(extract_dir.resolve())
+        for member in zf.infolist():
+            candidate = str((extract_dir / member.filename).resolve())
+            if os.path.commonpath([base_dir, candidate]) != base_dir:
+                raise RuntimeError(
+                    f"Unsafe zip entry detected in {archive_path}: {member.filename}"
+                )
+            safe_members.append(member.filename)
+        zf.extractall(extract_dir, members=safe_members)
     return extract_dir
+
+
+def _fetch_all_artifacts(
+    *,
+    client: httpx.Client,
+    repo: str,
+    artifact_name: str,
+    per_page: int = 100,
+) -> list[object]:
+    all_artifacts: list[object] = []
+    page = 1
+    while True:
+        api = (
+            f"https://api.github.com/repos/{repo}/actions/artifacts"
+            f"?name={artifact_name}&per_page={per_page}&page={page}"
+        )
+        payload = _request_json(client, api)
+        artifacts = payload.get("artifacts", [])
+        if not isinstance(artifacts, list):
+            break
+        if not artifacts:
+            break
+        all_artifacts.extend(artifacts)
+        page += 1
+    all_artifacts.sort(
+        key=lambda a: str(a.get("created_at", "")) if isinstance(a, dict) else "",
+        reverse=True,
+    )
+    return all_artifacts
 
 
 def main() -> None:
@@ -101,10 +140,13 @@ def main() -> None:
         "Authorization": f"Bearer {token}",
     }
     with httpx.Client(headers=headers, timeout=30.0) as client:
-        api = f"https://api.github.com/repos/{repo}/actions/artifacts?name={artifact_name}&per_page=100"
-        payload = _request_json(client, api)
-        artifacts = payload.get("artifacts", [])
-        if not isinstance(artifacts, list):
+        artifacts = _fetch_all_artifacts(
+            client=client,
+            repo=repo,
+            artifact_name=artifact_name,
+            per_page=100,
+        )
+        if not artifacts:
             print("No artifacts payload; skip baseline download.")
             return
 

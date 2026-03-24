@@ -24,12 +24,26 @@ def _validate_metric(*, metric_path: str, name: str, value: float) -> float:
     return value
 
 
+def _validate_threshold(raw: str) -> float:
+    try:
+        threshold = float(raw)
+    except ValueError as err:
+        raise RuntimeError(
+            f"Invalid BENCHMARK_MAX_REGRESSION value: {raw}. Expected a finite number >= 0."
+        ) from err
+    if not math.isfinite(threshold) or threshold < 0:
+        raise RuntimeError(
+            f"Invalid BENCHMARK_MAX_REGRESSION value: {raw}. Expected a finite number >= 0."
+        )
+    return threshold
+
+
 def main() -> None:
     out_dir = Path(os.getenv("VF_PROFILE_OUTPUT_DIR", str(Path.cwd() / "output" / "forager-profiles")))
     current_path = out_dir / "profile_metrics.json"
     baseline_path = out_dir / "baseline" / "profile_metrics.json"
     metric_path = os.getenv("BENCHMARK_METRIC_PATH", "duration_s")
-    threshold = float(os.getenv("BENCHMARK_MAX_REGRESSION", "0.20"))
+    threshold = _validate_threshold(os.getenv("BENCHMARK_MAX_REGRESSION", "0.20"))
 
     if not current_path.exists():
         raise FileNotFoundError(f"Current benchmark result missing: {current_path}")
