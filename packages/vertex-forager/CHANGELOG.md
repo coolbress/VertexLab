@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.2](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.9.1...vertex-forager-v0.9.2) (2026-03-24)
+
+
+### Bug Fixes
+
+* **verification:** guard yfinance perf script for optional deps ([#207](https://github.com/coolbress/VertexLab/issues/207)) ([bc38dfd](https://github.com/coolbress/VertexLab/commit/bc38dfdb27c110232e3796f85bf8f5846a508074))
+
 ## [0.9.1](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.9.0...vertex-forager-v0.9.1) (2026-03-24)
 
 
