@@ -38,8 +38,10 @@ def _require_pandas() -> types.ModuleType:
     """Return the pandas module or skip when optional yfinance deps are missing."""
     try:
         import pandas as pd
-    except ImportError:
-        pytest.skip("pandas is required for yfinance-related test fixtures")
+    except ImportError as err:
+        if err.name == "pandas":
+            pytest.skip("pandas is required for yfinance-related test fixtures")
+        raise
     return pd
 
 
@@ -47,8 +49,16 @@ def _require_yfinance_router() -> Any:
     """Return YFinanceRouter class or skip when optional yfinance deps are missing."""
     try:
         from vertex_forager.providers.yfinance.router import YFinanceRouter
-    except ImportError:
-        pytest.skip("yfinance router fixtures require optional dependencies: vertex-forager[yfinance]")
+    except ImportError as err:
+        optional_missing = {
+            "pandas",
+            "yfinance",
+            "vertex_forager.providers.yfinance",
+            "vertex_forager.providers.yfinance.router",
+        }
+        if err.name in optional_missing:
+            pytest.skip("yfinance router fixtures require optional dependencies: vertex-forager[yfinance]")
+        raise
     return YFinanceRouter
 
 
