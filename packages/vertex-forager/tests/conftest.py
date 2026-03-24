@@ -24,13 +24,13 @@ import pytest
 from vertex_forager.core.config import FetchJob, FramePacket, RequestSpec
 from vertex_forager.core.http import HttpExecutor
 from vertex_forager.providers.sharadar.router import SharadarRouter
-from vertex_forager.providers.yfinance.router import YFinanceRouter
 
 if TYPE_CHECKING:
     # Type-only import for annotations; avoid runtime import to satisfy Ruff TC001
     import pandas as pd
 
     from vertex_forager.providers.sharadar.client import SharadarClient
+    from vertex_forager.providers.yfinance.router import YFinanceRouter
 
 
 def _require_pandas():
@@ -39,6 +39,14 @@ def _require_pandas():
     except ImportError:
         pytest.skip("pandas is required for yfinance-related test fixtures")
     return pd
+
+
+def _require_yfinance_router():
+    try:
+        from vertex_forager.providers.yfinance.router import YFinanceRouter
+    except ImportError:
+        pytest.skip("yfinance router fixtures require optional dependencies: vertex-forager[yfinance]")
+    return YFinanceRouter
 
 
 @pytest.fixture
@@ -230,7 +238,8 @@ def yfinance_router() -> YFinanceRouter:
     Returns:
         YFinanceRouter: Router instance configured with rate_limit=500 (requests/min).
     """
-    return YFinanceRouter(rate_limit=500, allow_pickle_compat=False)
+    router_cls = _require_yfinance_router()
+    return router_cls(rate_limit=500, allow_pickle_compat=False)
 
 @pytest.fixture
 def yfinance_router_allow_pickle(monkeypatch: pytest.MonkeyPatch) -> YFinanceRouter:
@@ -242,7 +251,8 @@ def yfinance_router_allow_pickle(monkeypatch: pytest.MonkeyPatch) -> YFinanceRou
         "VF_PICKLE_ALLOWED_DATASETS",
         "price,financials,news,calendar,insider_purchases,recommendations",
     )
-    return YFinanceRouter(rate_limit=500, allow_pickle_compat=True)
+    router_cls = _require_yfinance_router()
+    return router_cls(rate_limit=500, allow_pickle_compat=True)
 
 @pytest.fixture
 def yf_price_df() -> pd.DataFrame:
