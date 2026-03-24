@@ -5,6 +5,7 @@ Thank you for contributing to Vertex Forager!
 ## Table of Contents
 - [Development quickstart](#development-quickstart)
 - [Tests](#tests)
+- [Benchmark baseline policy](#benchmark-baseline-policy)
 - [Lint rules & quick‑fix cheatsheet](#lint-rules--quickfix-cheatsheet)
 - [Temporary per‑file‑ignores policy](#temporary-perfileignores-policy)
 - [Documentation](#documentation)
@@ -34,6 +35,19 @@ Thank you for contributing to Vertex Forager!
   - Default fast suite: `pytest packages/ -m "not manual"`
   - Manual tests only: `pytest packages/ -m manual`
   - Coverage gate: `pytest packages/ --cov --cov-fail-under=80`
+
+## Benchmark baseline policy
+
+- CI benchmark job uploads `profile_metrics.json` as artifact `benchmark-profile-metrics` on every `main` push.
+- CI compares the current run against the latest stored baseline artifact using `duration_s`.
+- Default regression gate fails the benchmark job when regression exceeds 20%.
+- Baseline refresh process:
+  - Merge the intended performance change to `main`.
+  - Re-run the benchmark workflow on that `main` commit if needed.
+  - Confirm the latest artifact reflects the new expected baseline.
+- Baseline reset process when artifact history is stale:
+  - Delete old `benchmark-profile-metrics` artifacts in the repository Actions artifacts page.
+  - Trigger a new `main` benchmark run to seed a fresh baseline artifact.
 
 ## Lint rules & quick‑fix cheatsheet
 

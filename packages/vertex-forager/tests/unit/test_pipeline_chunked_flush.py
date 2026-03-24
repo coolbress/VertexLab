@@ -166,6 +166,22 @@ def test_engine_config_writer_chunk_rows_lower_bound() -> None:
         cfg.assert_valid()
 
 
+def test_engine_config_writer_concurrency_coercion() -> None:
+    cfg = EngineConfig(requests_per_minute=60)
+    cfg.writer_concurrency = "2"  # type: ignore[assignment]
+    cfg.assert_valid()
+    assert isinstance(cfg.writer_concurrency, int)
+    assert cfg.writer_concurrency == 2
+    cfg.writer_concurrency = "bad"  # type: ignore[assignment]
+    with pytest.raises(VertexForagerError):
+        cfg.assert_valid()
+
+
+def test_engine_config_writer_concurrency_lower_bound() -> None:
+    with pytest.raises(ValueError, match=r".*"):
+        EngineConfig(requests_per_minute=60, writer_concurrency=0)
+
+
 def test_compute_summary_percentiles_and_counters() -> None:
     mock_writer = AsyncMock(spec=BaseWriter)
     mock_router = MagicMock()

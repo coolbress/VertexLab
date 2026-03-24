@@ -211,6 +211,7 @@ class EngineConfig(BaseModel):
         retry (RetryConfig): Retry/backoff policy (attempts, backoff window, status codes).
         flush_threshold_rows (int): Rows buffered per table before flush; higher = fewer large flushes.
         writer_chunk_rows (int | None): Target per-chunk rows during flush; when set must be >= 10_000.
+        writer_concurrency (int): Number of writer worker tasks to run in parallel (default: 1).
         metrics_enabled (bool): Emit counters/histograms when True.
         structured_logs (bool): Emit structured stage logs when True.
         log_verbose (bool): Increase logging verbosity when True.
@@ -257,6 +258,7 @@ class EngineConfig(BaseModel):
     # 3. Advanced Tuning (Internal Defaults)
     flush_threshold_rows: int = FLUSH_THRESHOLD_ROWS
     writer_chunk_rows: int | None = None
+    writer_concurrency: int = Field(default=1, ge=1)
     metrics_enabled: bool = False
     structured_logs: bool = False
     log_verbose: bool = False
@@ -329,6 +331,13 @@ class EngineConfig(BaseModel):
                 raise ValueError("writer_chunk_rows must be >= 10_000 when specified")
             # Coerce to int for downstream isinstance checks and consistent typing
             self.writer_chunk_rows = v
+        try:
+            wc = int(self.writer_concurrency)
+        except (TypeError, ValueError) as e:
+            raise VertexForagerError(f"writer_concurrency must be an integer >= 1: {e}") from e
+        if wc <= 0:
+            raise ValueError("writer_concurrency must be >= 1")
+        self.writer_concurrency = wc
         if self.rpm_floor > self.requests_per_minute:
             raise ValueError("rpm_floor must be <= requests_per_minute")
 
