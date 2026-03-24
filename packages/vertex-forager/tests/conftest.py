@@ -35,6 +35,7 @@ if TYPE_CHECKING:
 
 
 def _require_pandas() -> types.ModuleType:
+    """Return the pandas module or skip when optional yfinance deps are missing."""
     try:
         import pandas as pd
     except ImportError:
@@ -43,6 +44,7 @@ def _require_pandas() -> types.ModuleType:
 
 
 def _require_yfinance_router() -> Any:
+    """Return YFinanceRouter class or skip when optional yfinance deps are missing."""
     try:
         from vertex_forager.providers.yfinance.router import YFinanceRouter
     except ImportError:
