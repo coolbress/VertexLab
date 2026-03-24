@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 
 import polars as pl
 
@@ -23,7 +23,7 @@ def test_no_negative_prices_detects_and_ignores_missing_columns() -> None:
 
 
 def test_no_future_dates_handles_date_and_datetime_columns() -> None:
-    today = date.today()
+    today = datetime.now(timezone.utc).date()
     now = datetime.now(timezone.utc).replace(microsecond=0)
     df = pl.DataFrame(
         {

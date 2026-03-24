@@ -4,6 +4,7 @@ from __future__ import annotations
 import io
 import json
 import pickle
+from typing import TYPE_CHECKING
 
 import pandas as pd
 import polars as pl
@@ -11,7 +12,9 @@ import pytest
 
 from vertex_forager.core.config import FetchJob, ParseResult, RequestSpec
 from vertex_forager.exceptions import TransformError
-from vertex_forager.providers.yfinance.router import YFinanceRouter
+
+if TYPE_CHECKING:
+    from vertex_forager.providers.yfinance.router import YFinanceRouter
 
 
 class TestYFinanceRouterUnit:
