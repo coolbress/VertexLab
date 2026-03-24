@@ -139,7 +139,7 @@ class DuckDBWriter(BaseWriter):
             try:
                 self._conn.execute(f"PRAGMA wal_autocheckpoint='{WAL_AUTOCHECKPOINT_LIMIT}'")
             except duckdb.Error as e:
-                self._logger.warning(f"Failed to set wal_autocheckpoint: {e}")
+                self._logger.warning("Failed to set wal_autocheckpoint: %s", e)
         return self._conn
 
     async def write(self, packet: FramePacket) -> WriteResult:
@@ -363,7 +363,7 @@ class DuckDBWriter(BaseWriter):
             self._conn.execute("CHECKPOINT")
         except duckdb.Error as e:
             # Environments may not support CHECKPOINT (unlikely) or DB not in WAL mode
-            self._logger.warning(f"{DK_LOG_PREFIX}: CHECKPOINT failed or unsupported: {e}")
+            self._logger.warning("%s: CHECKPOINT failed or unsupported: %s", DK_LOG_PREFIX, e)
         self._logger.info(LOG_COMPACT_DONE.format(prefix=DK_LOG_PREFIX))
 
     async def close(self) -> None:

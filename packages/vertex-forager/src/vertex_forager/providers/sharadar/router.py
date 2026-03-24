@@ -558,7 +558,7 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         """
         token = self._api_key
         if token:
-            logger.debug(f"{ROUTER_LOG_PREFIX}: Auth token configured")
+            logger.debug("%s: Auth token configured", ROUTER_LOG_PREFIX)
         return RequestAuth(kind="query", token=token, query_param=API_KEY_QUERY_PARAM)
 
     # ------ URL resolution: build dataset-specific endpoint ------

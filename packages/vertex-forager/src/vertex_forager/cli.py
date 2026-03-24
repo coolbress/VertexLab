@@ -470,7 +470,7 @@ def tune_profile(
                     )
                 )
             except Exception as e:
-                logger.warning(f"Sharadar verification skipped due to error: {e}")
+                logger.warning("Sharadar verification skipped due to error: %s", e)
                 sh_run = None
         data = {
             "yfinance_financials": as_dict(yf_run),
@@ -628,7 +628,7 @@ def _run_sweep_measurements(
                         },
                     }
                 except Exception as e:
-                    logger.warning(f"YFinance Price sweep error: {e}")
+                    logger.warning("YFinance Price sweep error: %s", e)
                     entry["measurements"]["yfinance_price"] = {"error": str(e)}
 
                 # YFinance Financials
@@ -654,7 +654,7 @@ def _run_sweep_measurements(
                         },
                     }
                 except Exception as e:
-                    logger.warning(f"YFinance Financials sweep error: {e}")
+                    logger.warning("YFinance Financials sweep error: %s", e)
                     entry["measurements"]["yfinance_financials"] = {"error": str(e)}
 
                 # Sharadar
@@ -681,7 +681,7 @@ def _run_sweep_measurements(
                             },
                         }
                     except Exception as e:
-                        logger.warning(f"Sharadar sweep error: {e}")
+                        logger.warning("Sharadar sweep error: %s", e)
                         entry["measurements"]["sharadar_sf1_mrt"] = {"error": str(e)}
 
                 results["runs"].append(entry)
@@ -692,7 +692,7 @@ def _run_sweep_measurements(
                     try:
                         combo_db_path.unlink()
                     except OSError as e:
-                        logger.warning(f"Failed to cleanup temp DB {combo_db_path}: {e}")
+                        logger.warning("Failed to cleanup temp DB %s: %s", combo_db_path, e)
 
                 # Restore environment safely
                 current_env = dict(os.environ)
@@ -753,14 +753,22 @@ def _score_and_rank_results(
             try:
                 score += float(rank_alpha) * float(p95)
             except (ValueError, TypeError) as e:
-                logger.warning(f"Error computing p95 score: {e}, inputs: alpha={rank_alpha}, p95={p95}")
+                logger.warning(
+                    "Error computing p95 score: %s, inputs: alpha=%s, p95=%s",
+                    e,
+                    rank_alpha,
+                    p95,
+                )
 
         if err_cnt > 0:
             try:
                 score += float(err_cnt) * float(rank_error_penalty)
             except (ValueError, TypeError) as e:
                 logger.warning(
-                    f"Error computing penalty score: {e}, inputs: err_cnt={err_cnt}, penalty={rank_error_penalty}"
+                    "Error computing penalty score: %s, inputs: err_cnt=%s, penalty=%s",
+                    e,
+                    err_cnt,
+                    rank_error_penalty,
                 )
                 score += float(err_cnt) * 5.0  # Fallback penalty
 
@@ -1173,7 +1181,7 @@ def recover(
                     except Exception as e_close:
                         closed_ok = False
                         summary["errors"].append(f"CloseFail:writer:{e_close}")
-                        logger.warning(f"Recover: writer close failed: {e_close}")
+                        logger.warning("Recover: writer close failed: %s", e_close)
                 _process_deletions(delete_candidates, summary, delete_on_success, dry_run, closed_ok)
             _aggregate_errors(summary)
 

@@ -20,7 +20,10 @@ target-version = "py310"
 
 [tool.ruff.lint]
 # Tier‑1 (blocking): core correctness/safety; Tier‑2 runs in CI for C4/PT/TCH/SIM/TC
-select = ["E", "F", "W", "I", "UP", "B", "S", "RUF"]
+select = ["E", "F", "W", "I", "UP", "B", "S", "RUF", "G", "C901", "PLR0912", "PLR0915"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 15
 
 [tool.ruff.lint.isort]
 known-first-party = ["vertex_forager"]
@@ -32,6 +35,12 @@ force-sort-within-sections = true
 # Pydantic v2 resolves field annotations at runtime via get_type_hints();
 # all imports used in model fields must stay at module scope.
 "packages/vertex-forager/src/vertex_forager/core/config.py" = ["TC001", "TC002", "TC003"]
+"packages/vertex-forager/src/vertex_forager/core/pipeline.py" = ["C901", "PLR0912", "PLR0915"]
+"packages/vertex-forager/src/vertex_forager/providers/sharadar/router.py" = ["C901", "PLR0912", "PLR0915"]
+"packages/vertex-forager/src/vertex_forager/providers/yfinance/router.py" = ["C901", "PLR0912", "PLR0915"]
+"packages/vertex-forager/src/vertex_forager/writers/duckdb.py" = ["C901", "PLR0912", "PLR0915"]
+"packages/vertex-forager/src/vertex_forager/cli.py" = ["C901", "PLR0912", "PLR0915"]
+"packages/vertex-forager/tests/verification/verify_pipeline_sweep.py" = ["PLR0915"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

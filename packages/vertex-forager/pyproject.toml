@@ -43,6 +43,8 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [
     "integration: integration tests",
+    "manual: opt-in manual verification tests",
+    "smoke: fast smoke tests for imports/entrypoints",
 ]
 
 [build-system]
@@ -76,7 +78,10 @@ source = [
     "packages/vertex-forager/src/vertex_forager/core",
     "packages/vertex-forager/src/vertex_forager/clients",
     "packages/vertex-forager/src/vertex_forager/writers",
-    "packages/vertex-forager/src/vertex_forager/routers"
+    "packages/vertex-forager/src/vertex_forager/routers",
+    "packages/vertex-forager/src/vertex_forager/schema",
+    "packages/vertex-forager/src/vertex_forager/providers",
+    "packages/vertex-forager/src/vertex_forager/utils.py",
 ]
 
 [tool.coverage.report]

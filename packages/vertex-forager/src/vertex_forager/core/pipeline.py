@@ -657,7 +657,7 @@ class VertexForager:
             logger.debug("PIPELINE: Flushing writer buffer...")
             await self._try_flush_once(suppress=False, consume=True)
 
-            logger.info(f"PIPELINE: Run completed. Total errors: {len(result.errors)}")
+            logger.info("PIPELINE: Run completed. Total errors: %s", len(result.errors))
             if self._metrics_enabled:
                 # Merge counters from mapper/writer if they expose them
                 with suppress(Exception):
@@ -879,7 +879,7 @@ class VertexForager:
         try:
             await asyncio.to_thread(self._parse_executor.shutdown, wait=True)
         except (RuntimeError, ValueError) as e:
-            logger.exception(f"PIPELINE: Parse executor shutdown failed: {e}")
+            logger.exception("PIPELINE: Parse executor shutdown failed: %s", e)
         except Exception:
             logger.exception("PIPELINE: Unexpected error during parse executor shutdown")
         logger.debug("PIPELINE: Pipeline stopped.")
@@ -901,22 +901,24 @@ class VertexForager:
         """
         job_count = 0
         logger.debug(
-            f"PRODUCER: Starting job generation for dataset={dataset}, symbols={len(symbols) if symbols else 'all'}"
+            "PRODUCER: Starting job generation for dataset=%s, symbols=%s",
+            dataset,
+            len(symbols) if symbols else "all",
         )
 
         async for job in self._router.generate_jobs(dataset=dataset, symbols=symbols, **kwargs):
             # Skip already completed symbols if resume is enabled
             if completed_symbols and job.symbol and job.symbol in completed_symbols:
-                logger.debug(f"PRODUCER: Skipping already completed symbol {job.symbol}")
+                logger.debug("PRODUCER: Skipping already completed symbol %s", job.symbol)
                 continue
 
             await req_q.put((self.PRIORITY_NEW_JOB, next(order_counter), job))
             job_count += 1
             self._inc("jobs_generated", 1)
             if job_count % 100 == 0:
-                logger.debug(f"PRODUCER: Generated {job_count} jobs so far...")
+                logger.debug("PRODUCER: Generated %s jobs so far...", job_count)
 
-        logger.debug(f"PRODUCER: Completed job generation. Total jobs: {job_count}")
+        logger.debug("PRODUCER: Completed job generation. Total jobs: %s", job_count)
 
     async def _try_flush_once(self, *, suppress: bool, consume: bool = True) -> None:
         flush_lock = getattr(self, "_flush_lock", None)
@@ -985,7 +987,7 @@ class VertexForager:
                         self._inc("dlq_spooled_files_total", 1)
                         self._inc(f"dlq_spooled_files.{pkt.table}", 1)
                     except Exception as e2:
-                        logger.exception(f"PIPELINE: DLQ spool failed for drained packet: {e2}")
+                        logger.exception("PIPELINE: DLQ spool failed for drained packet: %s", e2)
                         if result is not None and result_lock is not None:
                             async with result_lock:
                                 pending = result.dlq_pending.get(pkt.table, [])
@@ -1118,12 +1120,12 @@ class VertexForager:
                         else:
                             on_progress(**kwargs)
                     except Exception as e:
-                        logger.error(f"Error in on_progress callback: {e}")
+                        logger.error("Error in on_progress callback: %s", e)
                         # Don't re-raise to keep worker alive
 
                 handler = _progress_wrapper
             except Exception as e:
-                logger.warning(f"Failed to bind on_progress handler: {e}")
+                logger.warning("Failed to bind on_progress handler: %s", e)
 
         job_count = 0
         burst_cap = getattr(self._config, "pagination_max_burst", None)
@@ -1164,10 +1166,14 @@ class VertexForager:
                         req_q.task_done()
                     if deferred_demotes:
                         logger.warning(
-                            f"[Worker-{worker_id}] Dropping {len(deferred_demotes)} deferred demoted jobs on shutdown"
+                            "[Worker-%s] Dropping %s deferred demoted jobs on shutdown",
+                            worker_id,
+                            len(deferred_demotes),
                         )
                     logger.debug(
-                        f"[Worker-{worker_id}] Received sentinel, shutting down. Total jobs processed: {job_count}"
+                        "[Worker-%s] Received sentinel, shutting down. Total jobs processed: %s",
+                        worker_id,
+                        job_count,
                     )
                     return
                 # No selection after fairness demote draining; wait for next iteration
@@ -1176,14 +1182,14 @@ class VertexForager:
             job_count += 1
             self._inc("jobs_processed", 1)
             if job_count % 100 == 0:
-                logger.debug(f"[Worker-{worker_id}] Processed {job_count} jobs so far...")
+                logger.debug("[Worker-%s] Processed %s jobs so far...", worker_id, job_count)
 
             payload: bytes | None = None
             worker_exc: Exception | None = None
             parse_result: ParseResult | None = None
             try:
                 # Log Fetch Start
-                logger.debug(f"[Worker-{worker_id}] Processing job: {job.symbol} (priority: {priority})")
+                logger.debug("[Worker-%s] Processing job: %s (priority: %s)", worker_id, job.symbol, priority)
                 self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="fetch_start")
 
                 t_fetch_start = time.monotonic()
@@ -1202,9 +1208,11 @@ class VertexForager:
 
                 t1 = time.monotonic()
                 logger.debug(
-                    f"[Worker-{worker_id}] Fetched {job.symbol} "
-                    f"({len(payload) if payload else 0} bytes) "
-                    f"in {fetch_latency:.3f}s"
+                    "[Worker-%s] Fetched %s (%s bytes) in %.3fs",
+                    worker_id,
+                    job.symbol,
+                    len(payload) if payload else 0,
+                    fetch_latency,
                 )
                 self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="parse_start")
 
@@ -1224,10 +1232,12 @@ class VertexForager:
                 parse_latency = t2 - t1
                 self._observe("parse_duration_s", parse_latency)
                 logger.debug(
-                    f"[Worker-{worker_id}] Parsed {job.symbol} "
-                    f"in {parse_latency:.3f}s. "
-                    f"Packets: {len(parse_result.packets)}, "
-                    f"Next Jobs: {len(parse_result.next_jobs)}"
+                    "[Worker-%s] Parsed %s in %.3fs. Packets: %s, Next Jobs: %s",
+                    worker_id,
+                    job.symbol,
+                    parse_latency,
+                    len(parse_result.packets),
+                    len(parse_result.next_jobs),
                 )
                 self._log_structured(
                     provider=job.provider,
@@ -1248,7 +1258,10 @@ class VertexForager:
 
                 if parse_result.next_jobs:
                     logger.debug(
-                        f"[Worker-{worker_id}] Adding {len(parse_result.next_jobs)} pagination jobs for {job.symbol}"
+                        "[Worker-%s] Adding %s pagination jobs for %s",
+                        worker_id,
+                        len(parse_result.next_jobs),
+                        job.symbol,
                     )
                     for next_job in parse_result.next_jobs:
                         await req_q.put((self.PRIORITY_PAGINATION, next(order_counter), next_job))
@@ -1257,21 +1270,21 @@ class VertexForager:
                 worker_exc = exc
                 async with result_lock:
                     result.errors.append(RunError.from_exception(exc, job.provider, job.dataset, job.symbol))
-                logger.error(f"[Worker-{worker_id}] Error processing {job.symbol}: {exc}")
+                logger.error("[Worker-%s] Error processing %s: %s", worker_id, job.symbol, exc)
                 self._inc("errors_total", 1)
                 self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="error")
             except FetchError as exc:
                 worker_exc = exc
                 async with result_lock:
                     result.errors.append(RunError.from_exception(exc, job.provider, job.dataset, job.symbol))
-                logger.error(f"[Worker-{worker_id}] Fetch exhausted for {job.symbol}: {exc}")
+                logger.error("[Worker-%s] Fetch exhausted for %s: %s", worker_id, job.symbol, exc)
                 self._inc("errors_total", 1)
                 self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="error_fetch")
             except Exception as exc:
                 worker_exc = exc
                 async with result_lock:
                     result.errors.append(RunError.from_exception(exc, job.provider, job.dataset, job.symbol))
-                logger.exception(f"[Worker-{worker_id}] Unexpected error processing {job.symbol}: {exc}")
+                logger.exception("[Worker-%s] Unexpected error processing %s: %s", worker_id, job.symbol, exc)
                 self._inc("errors_total", 1)
                 self._log_structured(
                     provider=job.provider,
@@ -1305,8 +1318,12 @@ class VertexForager:
                 except Exception as e:
                     # Swallowing exception from callback to prevent worker crash
                     logger.error(
-                        f"[Worker-{worker_id}] Error in result handler for "
-                        f"{job.provider}:{job.dataset}:{job.symbol}: {e}"
+                        "[Worker-%s] Error in result handler for %s:%s:%s: %s",
+                        worker_id,
+                        job.provider,
+                        job.dataset,
+                        job.symbol,
+                        e,
                     )
 
     async def _validate_data_quality(
@@ -1384,7 +1401,7 @@ class VertexForager:
 
         # Use config value
         threshold = self._flush_threshold
-        logger.debug(f"WRITER: Adaptive bulk writing enabled. Threshold={threshold} rows")
+        logger.debug("WRITER: Adaptive bulk writing enabled. Threshold=%s rows", threshold)
 
         async def _update_dlq_counts(*, table: str, rescued: int, remaining: int) -> None:
             async with result_lock:
@@ -1696,7 +1713,7 @@ class VertexForager:
                     result.errors.append(summary)
                 buffers[table] = []
                 buffer_rows[table] = 0
-                logger.exception(f"WRITER: Spool failed after {prefix} for {table}: {spool_exc}")
+                logger.exception("WRITER: Spool failed after %s for %s: %s", prefix, table, spool_exc)
                 with suppress(Exception):
                     _attr = "_already_reported"
                     setattr(spool_exc, _attr, True)
@@ -1760,10 +1777,11 @@ class VertexForager:
                     if total_rows_est > 0:
                         est_chunks = (total_rows_est + chunk_size - 1) // chunk_size
                         logger.debug(
-                            f"WRITER: Chunking flush for {table} "
-                            f"rows~={total_rows_est} "
-                            f"chunk_size={chunk_size} "
-                            f"chunks~={est_chunks}"
+                            "WRITER: Chunking flush for %s rows~=%s chunk_size=%s chunks~=%s",
+                            table,
+                            total_rows_est,
+                            chunk_size,
+                            est_chunks,
                         )
                         self._log_structured(
                             provider=first.provider,
@@ -1873,7 +1891,7 @@ class VertexForager:
                                     exc=e,
                                     prefix="DuckDBError",
                                 )
-                                logger.exception(f"WRITER: DuckDB error for {table}: {e}")
+                                logger.exception("WRITER: DuckDB error for %s: %s", table, e)
                             else:
                                 await _handle_flush_error(
                                     table=table,
@@ -1881,7 +1899,7 @@ class VertexForager:
                                     exc=e,
                                     prefix="UnexpectedWriterError",
                                 )
-                                logger.exception(f"WRITER: Unexpected error writing chunk for {table}: {e}")
+                                logger.exception("WRITER: Unexpected error writing chunk for %s: %s", table, e)
                             return
                 else:
                     # Legacy path: merge all then write once
@@ -1914,7 +1932,12 @@ class VertexForager:
                         observed_at=first.observed_at,
                         context=first.context,
                     )
-                    logger.debug(f"WRITER: Flushing {len(packets)} packets ({len(merged_frame)} rows) for {table}")
+                    logger.debug(
+                        "WRITER: Flushing %s packets (%s rows) for %s",
+                        len(packets),
+                        len(merged_frame),
+                        table,
+                    )
 
                     # Validate data quality before writing
                     await self._validate_data_quality(
@@ -1963,10 +1986,10 @@ class VertexForager:
                 # Check for DuckDB Error if available
                 if _duckdb is not None and isinstance(e, _duckdb.Error):
                     await _handle_flush_error(table=table, packets=packets, exc=e, prefix="DuckDBError")
-                    logger.exception(f"WRITER: DuckDB error for {table}: {e}")
+                    logger.exception("WRITER: DuckDB error for %s: %s", table, e)
                 else:
                     await _handle_flush_error(table=table, packets=packets, exc=e, prefix="UnexpectedWriterError")
-                    logger.exception(f"WRITER: Unexpected error writing batch for {table}: {e}")
+                    logger.exception("WRITER: Unexpected error writing batch for %s: %s", table, e)
                     # Do not re-raise to avoid outer handler adding duplicate Writer:Unexpected
                     return
 
@@ -1982,7 +2005,7 @@ class VertexForager:
                         for table in list(buffers.keys()):
                             await flush(table)
                     except Exception as e:
-                        logger.exception(f"WRITER: Error during shutdown flush: {e}")
+                        logger.exception("WRITER: Error during shutdown flush: %s", e)
                         raise
                     return
 
@@ -1997,7 +2020,7 @@ class VertexForager:
                 # Log progress every chunk to assure user it's working
                 chunk_rows = max(1, int(PROGRESS_LOG_CHUNK_ROWS))
                 if (current_rows // chunk_rows) > (previous_rows // chunk_rows):
-                    logger.debug(f"WRITER: Buffering {table}... {current_rows:,} / {threshold:,} rows")
+                    logger.debug("WRITER: Buffering %s... %d / %d rows", table, current_rows, threshold)
 
                 if current_rows >= threshold:
                     await flush(table)
@@ -2008,7 +2031,7 @@ class VertexForager:
                     try:
                         await asyncio.shield(flush(table))
                     except Exception as e:
-                        logger.exception(f"WRITER: Error during cancellation flush for {table}: {e}")
+                        logger.exception("WRITER: Error during cancellation flush for %s: %s", table, e)
                         errs.append(e)
                 raise
             except Exception as e:
