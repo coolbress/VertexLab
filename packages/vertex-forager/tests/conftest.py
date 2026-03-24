@@ -14,6 +14,7 @@ from collections.abc import Generator
 from datetime import datetime, timezone
 import importlib
 import json
+import types
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock
 
@@ -33,7 +34,7 @@ if TYPE_CHECKING:
     from vertex_forager.providers.yfinance.router import YFinanceRouter
 
 
-def _require_pandas():
+def _require_pandas() -> types.ModuleType:
     try:
         import pandas as pd
     except ImportError:
@@ -41,7 +42,7 @@ def _require_pandas():
     return pd
 
 
-def _require_yfinance_router():
+def _require_yfinance_router() -> Any:
     try:
         from vertex_forager.providers.yfinance.router import YFinanceRouter
     except ImportError:

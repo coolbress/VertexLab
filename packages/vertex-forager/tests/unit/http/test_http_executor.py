@@ -13,6 +13,11 @@ import pytest
 from vertex_forager.core.config import HttpMethod, RequestAuth, RequestSpec
 from vertex_forager.core.http import HttpExecutor
 
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
+
 
 @pytest.fixture
 def http_executor(mock_async_client: AsyncMock) -> HttpExecutor:
@@ -134,6 +139,7 @@ async def test_fetch_timeout_and_empty_response(
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(pd is None, reason="requires optional dependency: vertex-forager[yfinance]")
 async def test_yfinance_dispatch_ticker_attr_and_download(
     http_executor: HttpExecutor,
     mock_async_client: AsyncMock,
@@ -169,6 +175,7 @@ async def test_yfinance_dispatch_ticker_attr_and_download(
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(pd is None, reason="requires optional dependency: vertex-forager[yfinance]")
 async def test_yfinance_unknown_or_unsupported_scheme_raises(
     http_executor: HttpExecutor,
     mock_async_client: AsyncMock,
