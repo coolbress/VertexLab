@@ -2,7 +2,6 @@ import json
 import os
 from pathlib import Path
 
-from vertex_forager.providers.yfinance.client import YFinanceClient
 from vertex_forager.utils import as_dict
 
 
@@ -29,14 +28,28 @@ def main() -> None:
     if db_path.exists():
         db_path.unlink()
 
+    try:
+        from vertex_forager.providers.yfinance.client import YFinanceClient
+    except ImportError as err:
+        if err.name in {"pandas", "yfinance"}:
+            print("Skipping verification: install optional deps with `pip install vertex-forager[yfinance]`")
+            return
+        raise
+
     client = YFinanceClient(rate_limit=60, metrics_enabled=True, structured_logs=False)
     tickers = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN"]
 
-    run = client.get_price_data(
-        tickers=tickers,
-        connect_db=db_path,
-        show_progress=False,
-    )
+    try:
+        run = client.get_price_data(
+            tickers=tickers,
+            connect_db=db_path,
+            show_progress=False,
+        )
+    except ImportError as err:
+        if err.name in {"pandas", "yfinance"}:
+            print("Skipping verification: install optional deps with `pip install vertex-forager[yfinance]`")
+            return
+        raise
 
     data = as_dict(run)
     metrics_path.write_text(json.dumps(data, indent=2))
