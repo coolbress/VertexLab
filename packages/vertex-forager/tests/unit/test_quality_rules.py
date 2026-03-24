@@ -7,6 +7,20 @@ import polars as pl
 from vertex_forager.core.quality import NoDuplicateRows, NoFutureDates, NoNegativePrices
 
 
+def test_no_negative_prices_all_valid() -> None:
+    df = pl.DataFrame(
+        {
+            "open": [10.0, 1.0, 3.0],
+            "high": [11.0, 2.0, 4.0],
+            "low": [9.0, 0.5, 2.5],
+            "close": [10.5, 1.5, 3.5],
+        }
+    )
+    rule = NoNegativePrices()
+    violations = rule.validate(df)
+    assert violations == []
+
+
 def test_no_negative_prices_detects_and_ignores_missing_columns() -> None:
     df = pl.DataFrame(
         {
@@ -38,6 +52,21 @@ def test_no_future_dates_handles_date_and_datetime_columns() -> None:
     assert len(violations) == 2
     assert any("date" in v for v in violations)
     assert any("observed_at" in v for v in violations)
+
+
+def test_no_future_dates_boundary_equal_to_now() -> None:
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    df = pl.DataFrame(
+        {
+            "date": [now.date()],
+            "observed_at": [now],
+        }
+    ).with_columns(
+        pl.col("observed_at").cast(pl.Datetime(time_unit="us", time_zone="UTC"))
+    )
+    rule = NoFutureDates(date_columns=["date", "observed_at"])
+    violations = rule.validate(df)
+    assert violations == []
 
 
 def test_no_future_dates_skips_non_date_columns() -> None:
