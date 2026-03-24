@@ -229,8 +229,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      actions: read
     needs: [quality-check]
-    continue-on-error: true
     timeout-minutes: 45
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     steps:
@@ -243,8 +243,31 @@ jobs:
         with:
           python-version: "3.10"
       - name: Install dependencies
-        run: uv sync
+        run: |
+          uv sync
+          uv pip install -e "packages/vertex-forager[yfinance]"
+      - name: Download previous benchmark baseline artifact
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          BASELINE_ARTIFACT_NAME: benchmark-profile-metrics
+          VF_PROFILE_OUTPUT_DIR: ${{ github.workspace }}/output/forager-profiles
+        run: uv run python .github/scripts/fetch_previous_benchmark_artifact.py
       - name: Benchmark (non-blocking)
         env:
           VF_PROFILE_OUTPUT_DIR: ${{ github.workspace }}/output/forager-profiles
         run: uv run python packages/vertex-forager/tests/verification/verify_pipeline_perf.py
+      - name: Compare benchmark against baseline
+        env:
+          VF_PROFILE_OUTPUT_DIR: ${{ github.workspace }}/output/forager-profiles
+          BENCHMARK_METRIC_PATH: duration_s
+          BENCHMARK_MAX_REGRESSION: "0.20"
+        run: uv run python .github/scripts/compare_benchmark_metrics.py
+      - name: Upload benchmark metrics artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808  # v4 pinned
+        with:
+          name: benchmark-profile-metrics
+          path: ${{ github.workspace }}/output/forager-profiles/profile_metrics.json
+          if-no-files-found: error

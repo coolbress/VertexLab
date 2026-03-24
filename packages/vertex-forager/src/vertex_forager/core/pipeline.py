@@ -108,6 +108,14 @@ try:
 except (ImportError, ModuleNotFoundError):
     InMemoryBufferWriterType = None
 
+DuckDBWriterType: type | None
+try:
+    import vertex_forager.writers.duckdb as _duckdb_writer
+
+    DuckDBWriterType = _duckdb_writer.DuckDBWriter
+except (ImportError, ModuleNotFoundError):
+    DuckDBWriterType = None
+
 logger = logging.getLogger("vertex_forager.debug")
 
 Symbols = Sequence[str]
@@ -196,6 +204,15 @@ class VertexForager:
             # We treat 1 billion rows as effectively infinite for memory buffer
             self._flush_threshold = self.FLUSH_THRESHOLD_INFINITE
             logger.debug("PIPELINE: Detected InMemoryBufferWriter. Disabled intermediate flushing.")
+        if (
+            DuckDBWriterType is not None
+            and isinstance(writer, DuckDBWriterType)
+            and int(config.writer_concurrency) > 1
+        ):
+            logger.warning(
+                "PIPELINE: writer_concurrency=%s requested with DuckDBWriter; DuckDB writes remain serialized.",
+                config.writer_concurrency,
+            )
 
         workers = getattr(self.controller, "concurrency_limit", None)
         try:
@@ -521,8 +538,9 @@ class VertexForager:
         writer_tasks = [
             asyncio.create_task(
                 self._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock),
-                name="vertex-forager:writer:0",
+                name=f"vertex-forager:writer:{i}",
             )
+            for i in range(self._config.writer_concurrency)
         ]
         order_counter = itertools.count()
         fetch_tasks = [
