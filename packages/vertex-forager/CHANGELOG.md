@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.4](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.9.3...vertex-forager-v0.9.4) (2026-03-24)
+
+
+### Dependencies
+
+* update uv-build requirement in /packages/vertex-forager ([#213](https://github.com/coolbress/VertexLab/issues/213)) ([5bbfb8e](https://github.com/coolbress/VertexLab/commit/5bbfb8e9db45ad69e531efdcf3bcb87403b72fcc))
+
 ## [0.9.3](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.9.2...vertex-forager-v0.9.3) (2026-03-24)
 
 
