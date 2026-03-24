@@ -6,7 +6,6 @@ from pathlib import Path
 
 from vertex_forager.exceptions import VertexForagerError
 from vertex_forager.providers.sharadar.client import SharadarClient
-from vertex_forager.providers.yfinance.client import YFinanceClient
 from vertex_forager.utils import as_dict, load_tickers_env
 
 logger = logging.getLogger(__name__)
@@ -48,6 +47,13 @@ async def main_async() -> None:
     os.environ.setdefault("VF_METRICS_ENABLED", "1")
 
     try:
+        try:
+            from vertex_forager.providers.yfinance.client import YFinanceClient
+        except ImportError as err:
+            if err.name in {"pandas", "yfinance"}:
+                print("Skipping verification: install optional deps with `pip install vertex-forager[yfinance]`")
+                return
+            raise
         # ---------- YFinance Financials ----------
         yf_tickers = load_tickers_env(
             "YF_TICKERS",
@@ -65,13 +71,19 @@ async def main_async() -> None:
             ],
         )
         yfc = YFinanceClient(rate_limit=60, structured_logs=False)
-        yf_run = yfc.get_financials(
-            kind="income_stmt",
-            period="annual",
-            tickers=yf_tickers,
-            connect_db=db_path,
-            show_progress=False,
-        )
+        try:
+            yf_run = yfc.get_financials(
+                kind="income_stmt",
+                period="annual",
+                tickers=yf_tickers,
+                connect_db=db_path,
+                show_progress=False,
+            )
+        except ImportError as err:
+            if err.name in {"pandas", "yfinance"}:
+                print("Skipping verification: install optional deps with `pip install vertex-forager[yfinance]`")
+                return
+            raise
 
         # ---------- Optional: Sharadar (requires SHARADAR_API_KEY) ----------
         sh_key = os.getenv("SHARADAR_API_KEY")

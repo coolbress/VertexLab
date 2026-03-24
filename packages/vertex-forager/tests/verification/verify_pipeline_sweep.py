@@ -5,7 +5,6 @@ import time
 from typing import Any
 
 from vertex_forager.providers.sharadar.client import SharadarClient
-from vertex_forager.providers.yfinance.client import YFinanceClient
 from vertex_forager.utils import load_tickers_env, set_env
 
 
@@ -70,6 +69,8 @@ def _collect_env_inputs() -> dict[str, Any]:
 
 
 def _measure_yfinance_price(*, db_path: Path, inputs: dict[str, Any]) -> dict[str, Any]:
+    from vertex_forager.providers.yfinance.client import YFinanceClient
+
     yfc = YFinanceClient(rate_limit=60, structured_logs=False)
     t0 = time.monotonic()
     yf_price = yfc.get_price_data(
@@ -90,6 +91,8 @@ def _measure_yfinance_price(*, db_path: Path, inputs: dict[str, Any]) -> dict[st
 
 
 def _measure_yfinance_financials(*, db_path: Path, inputs: dict[str, Any]) -> dict[str, Any]:
+    from vertex_forager.providers.yfinance.client import YFinanceClient
+
     yfc = YFinanceClient(rate_limit=60, structured_logs=False)
     t0 = time.monotonic()
     yf_fin = yfc.get_financials(
