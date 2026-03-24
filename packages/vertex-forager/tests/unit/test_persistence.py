@@ -151,6 +151,28 @@ def test_save_run_history() -> None:
         assert data["error_count"] == 2
         assert data["tables"]["table1"] == 100
         assert data["tables"]["table2"] == 200
+        assert data["errors"][0]["provider"] == "test_provider"
+        assert data["errors"][0]["dataset"] == "test_dataset"
+        assert data["errors"][0]["symbol"] == ""
+        assert data["errors"][0]["exc_type"] == "ValueError"
+        assert data["errors"][0]["message"] == "error1"
+        assert data["errors"][0]["retryable"] is False
+
+
+def test_run_result_coerces_legacy_string_errors() -> None:
+    run_result = RunResult(
+        provider="test_provider",
+        errors=["legacy-error"],
+    )
+
+    assert len(run_result.errors) == 1
+    assert isinstance(run_result.errors[0], RunError)
+    assert run_result.errors[0].provider == ""
+    assert run_result.errors[0].dataset == ""
+    assert run_result.errors[0].symbol == ""
+    assert run_result.errors[0].exc_type == "builtins.str"
+    assert run_result.errors[0].message == "legacy-error"
+    assert run_result.errors[0].retryable is False
 
 
 def test_engine_config_persist_run_history() -> None:

@@ -379,6 +379,28 @@ class RunResult(BaseModel):
         description="Per-table quality violation counts",
     )
 
+    @field_validator("errors", mode="before")
+    @classmethod
+    def _coerce_string_errors(cls, v: Any) -> Any:
+        if not isinstance(v, (list, tuple)):
+            return v
+        result: list[Any] = []
+        for item in v:
+            if isinstance(item, str):
+                result.append(
+                    RunError(
+                        provider="",
+                        dataset="",
+                        symbol="",
+                        exc_type="builtins.str",
+                        message=item,
+                        retryable=False,
+                    )
+                )
+            else:
+                result.append(item)
+        return result
+
     def add_rows(self, *, table: str, rows: int) -> None:
         self.tables[table] = self.tables.get(table, 0) + rows
 

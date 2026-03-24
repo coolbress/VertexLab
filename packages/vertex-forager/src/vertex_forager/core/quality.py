@@ -1,6 +1,6 @@
 """Data quality validation rules and utilities."""
 
-from typing import Protocol
+from typing import Literal, Protocol, cast
 
 import polars as pl
 
@@ -87,6 +87,7 @@ class NoFutureDates:
             list[str]: Violation messages for future dates found
         """
         import datetime
+        from zoneinfo import ZoneInfo
 
         violations = []
         current_time = datetime.datetime.now(datetime.timezone.utc)
@@ -102,9 +103,19 @@ class NoFutureDates:
                         pl.col(col) > pl.lit(current_time.date()).cast(pl.Date)
                     ).height
                 elif col_dtype.base_type() == pl.Datetime:
-                    # For Datetime columns, use timezone-aware comparison
+                    raw_time_unit = getattr(col_dtype, "time_unit", "us")
+                    time_unit: Literal["ns", "us", "ms"] = "us"
+                    if raw_time_unit in {"ns", "us", "ms"}:
+                        time_unit = cast("Literal['ns', 'us', 'ms']", raw_time_unit)
+                    time_zone = getattr(col_dtype, "time_zone", None)
+                    if isinstance(time_zone, str) and time_zone:
+                        now_value = current_time.astimezone(ZoneInfo(time_zone))
+                        cast_dtype = pl.Datetime(time_unit=time_unit, time_zone=time_zone)
+                    else:
+                        now_value = current_time.replace(tzinfo=None)
+                        cast_dtype = pl.Datetime(time_unit=time_unit)
                     future_count = df.filter(
-                        pl.col(col) > pl.lit(current_time).cast(pl.Datetime)
+                        pl.col(col) > pl.lit(now_value).cast(cast_dtype)
                     ).height
                 else:
                     continue
@@ -142,13 +153,13 @@ class NoDuplicateRows:
 
         if self.subset:
             # Check duplicates on specific columns using groupby
-            duplicate_result = df.group_by(self.subset).agg(pl.count())\
+            duplicate_result = df.group_by(self.subset).agg(pl.len())\
                 .filter(pl.col("count") > 1)\
                 .select((pl.col("count") - 1).sum())
             duplicate_count = duplicate_result.item() if not duplicate_result.is_empty() else 0
         else:
             # Check exact duplicates across all columns
-            duplicate_result = df.group_by(df.columns).agg(pl.count())\
+            duplicate_result = df.group_by(df.columns).agg(pl.len())\
                 .filter(pl.col("count") > 1)\
                 .select((pl.col("count") - 1).sum())
             duplicate_count = duplicate_result.item() if not duplicate_result.is_empty() else 0

@@ -10,6 +10,7 @@ import tempfile
 from pydantic import BaseModel, Field, ValidationError
 
 from vertex_forager.core.config import RunResult
+from vertex_forager.core.errors import RunError
 from vertex_forager.core.types import JSONValue
 
 
@@ -145,11 +146,25 @@ def save_run_history(run_result: RunResult, run_id: str) -> None:
         "tables": dict(run_result.tables),
         "error_count": len(run_result.errors),
         "errors": [
-            {
-                "type": type(error).__name__ if isinstance(error, BaseException) else "str",
-                "message": str(error),
-                "args": getattr(error, "args", []) if isinstance(error, BaseException) else [],
-            }
+            (
+                {
+                    "provider": error.provider,
+                    "dataset": error.dataset,
+                    "symbol": error.symbol,
+                    "exc_type": error.exc_type,
+                    "message": error.message,
+                    "retryable": error.retryable,
+                }
+                if isinstance(error, RunError)
+                else {
+                    "provider": "",
+                    "dataset": "",
+                    "symbol": "",
+                    "exc_type": f"{type(error).__module__}.{type(error).__name__}",
+                    "message": str(error),
+                    "retryable": False,
+                }
+            )
             for error in run_result.errors
         ],
         "coverage_pct": run_result.coverage_pct,
