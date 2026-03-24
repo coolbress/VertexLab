@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.9.0...vertex-forager-v0.9.1) (2026-03-24)
+
+
+### Bug Fixes
+
+* serialize RunError in benchmark profile output ([#194](https://github.com/coolbress/VertexLab/issues/194))  ([dd91e9c](https://github.com/coolbress/VertexLab/commit/dd91e9c79784ca18c38ee6a454dafba0babbb716))
+
 ## [0.9.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.8.0...vertex-forager-v0.9.0) (2026-03-24)
 
 
