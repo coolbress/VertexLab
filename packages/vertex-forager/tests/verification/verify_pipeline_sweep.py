@@ -5,8 +5,19 @@ import time
 from typing import Any
 
 from vertex_forager.providers.sharadar.client import SharadarClient
-from vertex_forager.providers.yfinance.client import YFinanceClient
 from vertex_forager.utils import load_tickers_env, set_env
+
+_YF_OPTIONAL_DEPS_MSG = "install optional deps with `pip install vertex-forager[yfinance]`"
+
+
+def _get_yfinance_client() -> Any:
+    try:
+        from vertex_forager.providers.yfinance.client import YFinanceClient
+    except ImportError as err:
+        if err.name in {"pandas", "yfinance"}:
+            raise RuntimeError(f"Skipping verification: {_YF_OPTIONAL_DEPS_MSG}") from err
+        raise
+    return YFinanceClient(rate_limit=60, structured_logs=False)
 
 
 def _resolve_paths() -> tuple[Path, Path, Path]:
@@ -70,15 +81,20 @@ def _collect_env_inputs() -> dict[str, Any]:
 
 
 def _measure_yfinance_price(*, db_path: Path, inputs: dict[str, Any]) -> dict[str, Any]:
-    yfc = YFinanceClient(rate_limit=60, structured_logs=False)
+    yfc = _get_yfinance_client()
     t0 = time.monotonic()
-    yf_price = yfc.get_price_data(
-        tickers=inputs["yf_tickers_price"],
-        connect_db=db_path,
-        show_progress=False,
-        start_date=inputs["yf_start"],
-        end_date=inputs["yf_end"],
-    )
+    try:
+        yf_price = yfc.get_price_data(
+            tickers=inputs["yf_tickers_price"],
+            connect_db=db_path,
+            show_progress=False,
+            start_date=inputs["yf_start"],
+            end_date=inputs["yf_end"],
+        )
+    except ImportError as err:
+        if err.name in {"pandas", "yfinance"}:
+            raise RuntimeError(f"Skipping verification: {_YF_OPTIONAL_DEPS_MSG}") from err
+        raise
     t1 = time.monotonic()
     return {
         "duration_s": round(t1 - t0, 3),
@@ -90,15 +106,20 @@ def _measure_yfinance_price(*, db_path: Path, inputs: dict[str, Any]) -> dict[st
 
 
 def _measure_yfinance_financials(*, db_path: Path, inputs: dict[str, Any]) -> dict[str, Any]:
-    yfc = YFinanceClient(rate_limit=60, structured_logs=False)
+    yfc = _get_yfinance_client()
     t0 = time.monotonic()
-    yf_fin = yfc.get_financials(
-        kind="income_stmt",
-        period="annual",
-        tickers=inputs["yf_tickers_fin"],
-        connect_db=db_path,
-        show_progress=False,
-    )
+    try:
+        yf_fin = yfc.get_financials(
+            kind="income_stmt",
+            period="annual",
+            tickers=inputs["yf_tickers_fin"],
+            connect_db=db_path,
+            show_progress=False,
+        )
+    except ImportError as err:
+        if err.name in {"pandas", "yfinance"}:
+            raise RuntimeError(f"Skipping verification: {_YF_OPTIONAL_DEPS_MSG}") from err
+        raise
     t1 = time.monotonic()
     return {
         "duration_s": round(t1 - t0, 3),
