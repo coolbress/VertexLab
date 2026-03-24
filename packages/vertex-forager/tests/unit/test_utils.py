@@ -8,6 +8,7 @@ import warnings
 import pytest
 from tqdm import tqdm
 
+from vertex_forager.core.errors import RunError
 from vertex_forager.core.http import _redact_urls
 from vertex_forager.exceptions import InputError
 from vertex_forager.utils import (  # type: ignore[attr-defined]
@@ -307,6 +308,34 @@ def test_as_dict_none_and_object() -> None:
     assert "summary" in d
     assert "tables" in d
     assert "errors" in d
+
+
+def test_as_dict_serializes_runerror() -> None:
+    class R:
+        def __init__(self) -> None:
+            self.metrics_counters = {}
+            self.metrics_histograms = {}
+            self.metrics_summary = {}
+            self.tables = {}
+            self.errors = [
+                RunError(
+                    provider="yfinance",
+                    dataset="price",
+                    symbol="AAPL",
+                    exc_type="peewee.OperationalError",
+                    message="database is locked",
+                    retryable=False,
+                )
+            ]
+
+    d = as_dict(R())
+    assert isinstance(d["errors"][0], dict)
+    assert d["errors"][0]["provider"] == "yfinance"
+    assert d["errors"][0]["dataset"] == "price"
+    assert d["errors"][0]["symbol"] == "AAPL"
+    assert d["errors"][0]["exc_type"] == "peewee.OperationalError"
+    assert d["errors"][0]["message"] == "database is locked"
+    assert d["errors"][0]["retryable"] is False
 
 
 def test_compact_level_formatter_and_list_handler() -> None:
