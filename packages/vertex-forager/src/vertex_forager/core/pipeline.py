@@ -1744,7 +1744,12 @@ class VertexForager:
                                 context=first.context,
                             )
                             # Validate data quality before writing chunk
-                            await self._validate_data_quality(table=table, df=chunk_df, result=result, result_lock=result_lock)
+                            await self._validate_data_quality(
+                                table=table,
+                                df=chunk_df,
+                                result=result,
+                                result_lock=result_lock,
+                            )
 
                             t_w0 = time.monotonic()
                             with self._span("write_flush", table=table, rows=len(chunk_df)):
