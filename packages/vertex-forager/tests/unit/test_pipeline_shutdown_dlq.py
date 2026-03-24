@@ -64,5 +64,6 @@ async def test_persist_packets_with_dlq_spool_failure(tmp_path: Path, monkeypatc
     await eng._persist_packets_with_dlq([pkt], res, lock)
 
     # When spool fails, packet should be accounted in dlq_pending and error list updated
-    assert "Writer:Unexpected:" in "".join(res.errors)
+    error_messages = "".join([e.message for e in res.errors])
+    assert "writer blew up" in error_messages
     assert res.dlq_pending.get("t")

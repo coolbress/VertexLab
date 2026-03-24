@@ -16,6 +16,7 @@ from vertex_forager.core.checkpoint import (
     save_run_history,
 )
 from vertex_forager.core.config import EngineConfig, RunResult
+from vertex_forager.core.errors import RunError
 
 
 def test_get_cache_dir() -> None:
@@ -113,7 +114,25 @@ def test_save_run_history() -> None:
             duration_s=100.0,
             coverage_pct=95.5,
             tables={"table1": 100, "table2": 200},
-            errors=["error1", "error2"],
+            quality_violations={"table1": 3},
+            errors=[
+                RunError(
+                    provider="test_provider",
+                    dataset="test_dataset",
+                    symbol="",
+                    exc_type="ValueError",
+                    message="error1",
+                    retryable=False,
+                ),
+                RunError(
+                    provider="test_provider",
+                    dataset="test_dataset",
+                    symbol="",
+                    exc_type="ValueError",
+                    message="error2",
+                    retryable=False,
+                ),
+            ],
         )
 
         save_run_history(run_result, "test_run_123")
@@ -133,6 +152,29 @@ def test_save_run_history() -> None:
         assert data["error_count"] == 2
         assert data["tables"]["table1"] == 100
         assert data["tables"]["table2"] == 200
+        assert data["quality_violations"]["table1"] == 3
+        assert data["errors"][0]["provider"] == "test_provider"
+        assert data["errors"][0]["dataset"] == "test_dataset"
+        assert data["errors"][0]["symbol"] == ""
+        assert data["errors"][0]["exc_type"] == "ValueError"
+        assert data["errors"][0]["message"] == "error1"
+        assert data["errors"][0]["retryable"] is False
+
+
+def test_run_result_coerces_legacy_string_errors() -> None:
+    run_result = RunResult(
+        provider="test_provider",
+        errors=["legacy-error"],
+    )
+
+    assert len(run_result.errors) == 1
+    assert isinstance(run_result.errors[0], RunError)
+    assert run_result.errors[0].provider == ""
+    assert run_result.errors[0].dataset == ""
+    assert run_result.errors[0].symbol == ""
+    assert run_result.errors[0].exc_type == "builtins.str"
+    assert run_result.errors[0].message == "legacy-error"
+    assert run_result.errors[0].retryable is False
 
 
 def test_engine_config_persist_run_history() -> None:

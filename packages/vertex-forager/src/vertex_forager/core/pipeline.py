@@ -31,6 +31,7 @@ import inspect
 import itertools
 import logging
 import os
+import re
 import time
 from typing import TYPE_CHECKING, Any, cast
 
@@ -83,6 +84,7 @@ from vertex_forager.core.config import (
     ParseResult,
     RunResult,
 )
+from vertex_forager.core.errors import RunError
 from vertex_forager.core.retry import create_retry_controller
 from vertex_forager.schema.registry import get_table_schema
 from vertex_forager.utils import cleanup_dlq_tmp, sanitize_field
@@ -994,7 +996,7 @@ class VertexForager:
                         entry = result.dlq_counts.get(pkt.table) or {"rescued": 0, "remaining": 0}
                         entry["remaining"] = entry.get("remaining", 0) + 1
                         result.dlq_counts[pkt.table] = entry
-                        result.errors.append(f"Writer:Unexpected:{e}")
+                        result.errors.append(RunError.from_exception(e, pkt.provider, pkt.table, ""))
 
     async def _pop_next_job_respecting_fairness(
         self,
@@ -1254,21 +1256,21 @@ class VertexForager:
             except (httpx.HTTPStatusError, httpx.RequestError, ValueError) as exc:
                 worker_exc = exc
                 async with result_lock:
-                    result.errors.append(f"{job.provider}:{job.dataset}:{job.symbol}:{exc}")
+                    result.errors.append(RunError.from_exception(exc, job.provider, job.dataset, job.symbol))
                 logger.error(f"[Worker-{worker_id}] Error processing {job.symbol}: {exc}")
                 self._inc("errors_total", 1)
                 self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="error")
             except FetchError as exc:
                 worker_exc = exc
                 async with result_lock:
-                    result.errors.append(f"{job.provider}:{job.dataset}:{job.symbol}:{exc}")
+                    result.errors.append(RunError.from_exception(exc, job.provider, job.dataset, job.symbol))
                 logger.error(f"[Worker-{worker_id}] Fetch exhausted for {job.symbol}: {exc}")
                 self._inc("errors_total", 1)
                 self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="error_fetch")
             except Exception as exc:
                 worker_exc = exc
                 async with result_lock:
-                    result.errors.append(f"Unexpected:{job.provider}:{job.dataset}:{job.symbol}:{exc}")
+                    result.errors.append(RunError.from_exception(exc, job.provider, job.dataset, job.symbol))
                 logger.exception(f"[Worker-{worker_id}] Unexpected error processing {job.symbol}: {exc}")
                 self._inc("errors_total", 1)
                 self._log_structured(
@@ -1306,6 +1308,60 @@ class VertexForager:
                         f"[Worker-{worker_id}] Error in result handler for "
                         f"{job.provider}:{job.dataset}:{job.symbol}: {e}"
                     )
+
+    async def _validate_data_quality(
+        self,
+        *,
+        table: str,
+        df: pl.DataFrame,
+        result: RunResult,
+        result_lock: asyncio.Lock,
+    ) -> None:
+        """Validate data quality using table schema rules.
+
+        Args:
+            table: Table name to validate
+            df: DataFrame to validate
+            result: RunResult to record violations
+            result_lock: Lock for thread-safe result updates
+        """
+        schema = get_table_schema(table)
+        if not schema or not schema.quality_rules:
+            return
+
+        violations_count = 0
+
+        def _parse_violation_count(message: str) -> int:
+            contains_match = re.search(r"\bcontains\s+(\d+)\b", message, flags=re.IGNORECASE)
+            if contains_match is not None:
+                return int(contains_match.group(1))
+            found_match = re.search(r"\bfound\s+(\d+)\b", message, flags=re.IGNORECASE)
+            if found_match is not None:
+                return int(found_match.group(1))
+            return 1
+
+        for rule in schema.quality_rules:
+            try:
+                violation_messages = rule.validate(df)
+                if violation_messages:
+                    for violation_message in violation_messages:
+                        violations_count += _parse_violation_count(violation_message)
+                    logger.warning(
+                        "Data quality violations in table %s: %s",
+                        table,
+                        ", ".join(violation_messages),
+                    )
+            except Exception as e:
+                logger.warning(
+                    "Failed to execute quality rule %s for table %s: %s",
+                    type(rule).__name__,
+                    table,
+                    e,
+                )
+
+        if violations_count > 0:
+            async with result_lock:
+                result.add_quality_violations(table=table, count=violations_count)
 
     async def _writer_worker(
         self,
@@ -1537,39 +1593,58 @@ class VertexForager:
             await _update_dlq_counts(table=table, rescued=int(rescued), remaining=0)
             return {"status": "rescued_only", "rescued": rescued, "remaining": 0, "path": None, "error": None}
 
-        def _build_writer_error_summary(*, status: DLQStatus, table: str, prefix: str, exc: Exception) -> str:
+        def _build_writer_error_summary(
+            *,
+            status: DLQStatus,
+            table: str,
+            prefix: str,
+            exc: Exception,
+            provider: str,
+            symbol: str,
+        ) -> RunError:
+            # Build DLQ context string
+            dlq_context_parts = []
+
             match status["status"]:
                 case "spooled":
-                    path = status["path"]
-                    summary = (
-                        f"{prefix}:{table}:{exc} "
-                        f"(DLQ=spooled; rescued={status['rescued']}; remaining={status['remaining']}; path={path})"
-                    )
+                    dlq_context_parts.append("DLQ=spooled")
+                    if status.get("remaining"):
+                        dlq_context_parts.append(f"remaining={status['remaining']}")
+                    if status.get("rescued"):
+                        dlq_context_parts.append(f"rescued={status['rescued']}")
+                    if status.get("path"):
+                        dlq_context_parts.append(f"path={os.path.basename(str(status['path']))}")
                 case "rescued_only":
-                    summary = (
-                        f"{prefix}:{table}:{exc} "
-                        f"(DLQ=rescued_only; rescued={status['rescued']}; remaining={status['remaining']})"
-                    )
-                case "noop":
-                    summary = (
-                        f"{prefix}:{table}:{exc} "
-                        f"(DLQ=noop; rescued={status['rescued']}; remaining={status['remaining']})"
-                    )
+                    dlq_context_parts.append("DLQ=rescued_only")
+                    if status.get("rescued"):
+                        dlq_context_parts.append(f"rescued={status['rescued']}")
                 case "spool_failed":
-                    # Built and appended before re-raising the spool exception to the outer handler.
-                    summary = (
-                        f"{prefix}:{table}:{exc} "
-                        f"(DLQ=spool_failed; rescued={status['rescued']}; remaining={status['remaining']})"
-                    )
+                    dlq_context_parts.append("DLQ=spool_failed")
                 case "disabled":
-                    summary = (
-                        f"{prefix}:{table}:{exc} "
-                        f"(DLQ=disabled; rescued={status['rescued']}; remaining={status['remaining']})"
-                    )
+                    dlq_context_parts.append("DLQ=disabled")
+                case "noop":
+                    dlq_context_parts.append("DLQ=noop")
                 case _:
-                    # Fallback if a new status is introduced without updating this function
-                    summary = f"{prefix}:{table}:{exc} (DLQ={status['status']})"
-            return summary
+                    dlq_context_parts.append(f"DLQ={status['status']}")
+
+            dlq_context = " ".join(dlq_context_parts)
+            message = f"{prefix}:{table}:{exc!s}"
+            if dlq_context:
+                message = f"{message} {dlq_context}"
+            original_error = RunError.from_exception(
+                exc=exc,
+                provider=provider,
+                dataset=table,
+                symbol=symbol,
+            )
+            return RunError(
+                provider=original_error.provider,
+                dataset=original_error.dataset,
+                symbol=original_error.symbol,
+                exc_type=original_error.exc_type,
+                message=message,
+                retryable=original_error.retryable,
+            )
 
         async def _handle_flush_error(
             *,
@@ -1579,6 +1654,17 @@ class VertexForager:
             prefix: str,
         ) -> None:
             self._inc("errors_total", 1)
+            first_packet = packets[0] if packets else None
+            provider = first_packet.provider if first_packet is not None else ""
+            symbol = ""
+            if first_packet is not None:
+                context_symbol = first_packet.context.get("symbol")
+                if isinstance(context_symbol, str):
+                    symbol = context_symbol
+                else:
+                    context_ticker = first_packet.context.get("ticker")
+                    if isinstance(context_ticker, str):
+                        symbol = context_ticker
             try:
                 status = await _spool_to_dlq_and_rescue(table, packets, exc)
             except Exception as spool_exc:
@@ -1598,7 +1684,14 @@ class VertexForager:
                         "error": spool_exc,
                     },
                 )
-                summary = _build_writer_error_summary(status=status, table=table, prefix=prefix, exc=exc)
+                summary = _build_writer_error_summary(
+                    status=status,
+                    table=table,
+                    prefix=prefix,
+                    exc=exc,
+                    provider=provider,
+                    symbol=symbol,
+                )
                 async with result_lock:
                     result.errors.append(summary)
                 buffers[table] = []
@@ -1608,7 +1701,14 @@ class VertexForager:
                     _attr = "_already_reported"
                     setattr(spool_exc, _attr, True)
                 raise
-            summary = _build_writer_error_summary(status=status, table=table, prefix=prefix, exc=exc)
+            summary = _build_writer_error_summary(
+                status=status,
+                table=table,
+                prefix=prefix,
+                exc=exc,
+                provider=provider,
+                symbol=symbol,
+            )
             async with result_lock:
                 result.errors.append(summary)
             buffers[table] = []
@@ -1630,6 +1730,27 @@ class VertexForager:
 
                 chunk_size = getattr(self._config, "writer_chunk_rows", None)
                 if isinstance(chunk_size, int) and chunk_size > 0:
+                    validation_frames = [p.frame for p in packets]
+                    try:
+                        quality_df = pl.concat(validation_frames, how="vertical", rechunk=False)
+                    except pl.exceptions.PolarsError as e:
+                        is_flexible = getattr(self._router, "flexible_schema", False) or (
+                            schema is not None and getattr(schema, "flexible_schema", False)
+                        )
+                        if not is_flexible:
+                            raise
+                        logger.warning(
+                            "WRITER: Schema mismatch for %s: %s. Falling back to diagonal concat",
+                            first.table,
+                            e,
+                        )
+                        quality_df = pl.concat(validation_frames, how="diagonal")
+                    await self._validate_data_quality(
+                        table=table,
+                        df=quality_df,
+                        result=result,
+                        result_lock=result_lock,
+                    )
                     # Streaming chunked merge/write to minimize memory peak
                     total_rows_est = 0
                     try:
@@ -1695,6 +1816,7 @@ class VertexForager:
                                 observed_at=first.observed_at,
                                 context=first.context,
                             )
+
                             t_w0 = time.monotonic()
                             with self._span("write_flush", table=table, rows=len(chunk_df)):
                                 write_result = await self._writer.write(chunk_packet)
@@ -1793,6 +1915,15 @@ class VertexForager:
                         context=first.context,
                     )
                     logger.debug(f"WRITER: Flushing {len(packets)} packets ({len(merged_frame)} rows) for {table}")
+
+                    # Validate data quality before writing
+                    await self._validate_data_quality(
+                        table=table,
+                        df=merged_frame,
+                        result=result,
+                        result_lock=result_lock,
+                    )
+
                     t_w0 = time.monotonic()
                     with self._span("write_flush", table=table, rows=len(merged_frame)):
                         write_result = await self._writer.write(merged_packet)
@@ -1883,7 +2014,12 @@ class VertexForager:
             except Exception as e:
                 async with result_lock:
                     if not getattr(e, "_already_reported", False):
-                        result.errors.append(f"Writer:Unexpected:{e}")
+                        result.errors.append(RunError.from_exception(
+                            exc=e,
+                            provider="",
+                            dataset="",
+                            symbol=""
+                        ))
                 logger.exception("WRITER: Unexpected error")
                 raise
             finally:

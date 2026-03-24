@@ -109,5 +109,5 @@ async def test_pk_missing_raises_and_spools(tmp_path, monkeypatch) -> None:
     )
     pkt_q.put_nowait(None)
     await vf._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock)
-    assert any("Missing PK column" in e for e in result.errors)
+    assert any("Missing PK column" in e.message for e in result.errors)
     assert result.dlq_counts.get("yfinance_price", {}).get("remaining", 0) >= 1

@@ -51,7 +51,7 @@ async def test_dlq_disabled_skips_spooling(tmp_path: Path, monkeypatch) -> None:
     dlq_dir = tmp_path / "app" / "cache" / "dlq" / "t_fail"
     files = list(dlq_dir.glob("batch_*.ipc"))
     assert files == []
-    assert any("DLQ=disabled" in e for e in result.errors)
+    assert any("DLQ=disabled" in e.message for e in result.errors)
     assert result.dlq_counts.get("t_fail", {}).get("remaining", 0) >= 1
     assert result.dlq_counts.get("t_fail", {}).get("rescued", 0) == 0
 
@@ -98,6 +98,6 @@ async def test_dlq_disabled_flush_by_threshold(tmp_path: Path, monkeypatch) -> N
     dlq_dir = tmp_path / "app" / "cache" / "dlq" / "t_fail"
     files = list(dlq_dir.glob("batch_*.ipc"))
     assert files == []
-    assert any("DLQ=disabled" in e for e in result.errors)
+    assert any("DLQ=disabled" in e.message for e in result.errors)
     assert result.dlq_counts.get("t_fail", {}).get("remaining", 0) >= 1
     assert result.dlq_counts.get("t_fail", {}).get("rescued", 0) == 0

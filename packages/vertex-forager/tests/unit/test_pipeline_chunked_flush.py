@@ -157,7 +157,7 @@ async def test_chunked_flush_partial_error(tmp_path, monkeypatch) -> None:
     df = pl.read_ipc(files[0])
     assert df.shape[0] == 2
     assert set(df.get_column("id").to_list()) == {10000, 10001}
-    assert any("DLQ=spooled" in e and "remaining=2" in e for e in result.errors)
+    assert any("DLQ=spooled" in e.message and "remaining=2" in e.message for e in result.errors)
 
 
 def test_engine_config_writer_chunk_rows_lower_bound() -> None:
