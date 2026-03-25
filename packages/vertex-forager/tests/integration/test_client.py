@@ -10,6 +10,7 @@ Integration tests for vertex-forager client functionality.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -107,6 +108,27 @@ class TestClientVisualization:
 
 class TestClientIntegration:
     """Integration tests for client functionality."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.skipif(importlib.util.find_spec("nest_asyncio") is None, reason="requires nest_asyncio")
+    async def test_get_price_data_sync_facade_smoke_in_async_context(
+        self,
+        sharadar_client,
+        mock_http_executor,
+        sample_price_data,
+    ) -> None:
+        mock_response: bytes = json.dumps(sample_price_data).encode()
+        mock_http_executor.fetch.return_value = mock_response
+        result = sharadar_client.get_price_data(
+            tickers=["AAPL"],
+            start_date="2024-01-01",
+            end_date="2024-01-31",
+            connect_db=None,
+        )
+        assert isinstance(result, pl.DataFrame)
+        assert result.height == 2
+        assert "ticker" in result.columns
+        assert "close" in result.columns
 
     @pytest.mark.asyncio
     async def test_get_price_data_returns_dataframe_with_correct_structure(
