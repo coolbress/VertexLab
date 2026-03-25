@@ -74,6 +74,7 @@ class _FakeHttpClient:
 
 
 def test_writer_concurrency_with_inmemory_writer() -> None:
+    rpm = 100_000
     writer = InMemoryBufferWriter()
     symbols = [f"T-{i}" for i in range(120)]
     engine = VertexForager(
@@ -82,11 +83,11 @@ def test_writer_concurrency_with_inmemory_writer() -> None:
         writer=writer,
         mapper=SchemaMapper(),
         config=EngineConfig(
-            requests_per_minute=120,
+            requests_per_minute=rpm,
             concurrency=6,
             writer_concurrency=2,
         ),
-        controller=FlowController(requests_per_minute=120, concurrency_limit=6),
+        controller=FlowController(requests_per_minute=rpm, concurrency_limit=6),
     )
     result = asyncio.run(engine.run(dataset="price", symbols=symbols))
     assert len(getattr(engine, "_writer_tasks", [])) == 2

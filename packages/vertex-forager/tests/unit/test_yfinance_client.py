@@ -7,6 +7,7 @@ from typing import Any, cast
 import pytest
 
 from vertex_forager.clients import create_client
+from vertex_forager.exceptions import InputError
 
 try:
     from vertex_forager.providers.yfinance.client import YFinanceClient
@@ -75,3 +76,188 @@ class TestYFinanceRouterDateParams:
                     dataset="price", symbols=["", "   ", "@@"]
                 )
             ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method_name", "kwargs", "expected_dataset", "expected_table"),
+    [
+        ("get_info", {"tickers": ["AAPL"]}, "info", "yfinance_info"),
+        ("get_price_data", {"tickers": ["AAPL"]}, "price", "yfinance_price"),
+        ("get_actions", {"kind": "dividends", "tickers": ["AAPL"]}, "dividends", "yfinance_dividends"),
+        (
+            "get_holders",
+            {"kind": "institutional", "tickers": ["AAPL"]},
+            "institutional_holders",
+            "yfinance_holders",
+        ),
+        ("get_major_holders", {"tickers": ["AAPL"]}, "major_holders", "yfinance_major_holders"),
+        (
+            "get_insider_roster_holders",
+            {"tickers": ["AAPL"]},
+            "insider_roster_holders",
+            "yfinance_insider_roster_holders",
+        ),
+        ("get_insider_purchases", {"tickers": ["AAPL"]}, "insider_purchases", "yfinance_insider_purchases"),
+        ("get_calendar", {"tickers": ["AAPL"]}, "calendar", "yfinance_calendar"),
+        ("get_recommendations", {"tickers": ["AAPL"]}, "recommendations", "yfinance_recommendations"),
+        ("get_news", {"tickers": ["AAPL"]}, "news", "yfinance_news"),
+    ],
+)
+async def test_public_methods_dispatch_to_expected_dataset_unwrapped_async(
+    method_name: str,
+    kwargs: dict[str, Any],
+    expected_dataset: str,
+    expected_table: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = YFinanceClient()
+    captured: dict[str, Any] = {}
+
+    async def _fake_dispatch_fetch(**dispatch_kwargs: Any) -> dict[str, Any]:
+        captured.update(dispatch_kwargs)
+        return {"ok": True}
+
+    monkeypatch.setattr(client, "_dispatch_fetch", _fake_dispatch_fetch)
+    wrapped_method = getattr(client, method_name)
+    raw_method = wrapped_method.__wrapped__
+    result = await raw_method(client, connect_db=None, show_progress=False, **kwargs)
+    assert result == {"ok": True}
+    assert captured["dataset"] == expected_dataset
+    assert captured["table_name"] == expected_table
+    assert captured["tickers"] == ["AAPL"]
+
+
+@pytest.mark.asyncio
+async def test_get_financials_maps_earnings_to_financials_unwrapped_async(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = YFinanceClient()
+    captured: dict[str, Any] = {}
+
+    async def _fake_dispatch_fetch(**dispatch_kwargs: Any) -> dict[str, Any]:
+        captured.update(dispatch_kwargs)
+        return {"ok": True}
+
+    monkeypatch.setattr(client, "_dispatch_fetch", _fake_dispatch_fetch)
+    result = await client.get_financials.__wrapped__(
+        client,
+        kind="earnings",
+        period="annual",
+        tickers=["AAPL"],
+        connect_db=None,
+        show_progress=False,
+    )
+    assert result == {"ok": True}
+    assert captured["dataset"] == "financials"
+    assert captured["table_name"] == "yfinance_financials"
+
+
+@pytest.mark.asyncio
+async def test_get_financials_quarterly_income_stmt_dataset_unwrapped_async(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = YFinanceClient()
+    captured: dict[str, Any] = {}
+
+    async def _fake_dispatch_fetch(**dispatch_kwargs: Any) -> dict[str, Any]:
+        captured.update(dispatch_kwargs)
+        return {"ok": True}
+
+    monkeypatch.setattr(client, "_dispatch_fetch", _fake_dispatch_fetch)
+    result = await client.get_financials.__wrapped__(
+        client,
+        kind="income_stmt",
+        period="quarterly",
+        tickers=["AAPL"],
+        connect_db=None,
+        show_progress=False,
+    )
+    assert result == {"ok": True}
+    assert captured["dataset"] == "quarterly_financials"
+
+
+@pytest.mark.asyncio
+async def test_get_financials_rejects_quarterly_earnings_unwrapped_async() -> None:
+    client = YFinanceClient()
+    with pytest.raises(InputError, match="quarterly_earnings"):
+        await client.get_financials.__wrapped__(
+            client,
+            kind="earnings",
+            period="quarterly",
+            tickers=["AAPL"],
+            connect_db=None,
+            show_progress=False,
+        )
+
+
+@pytest.mark.asyncio
+async def test_fetch_per_ticker_filters_pipeline_kwargs(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = YFinanceClient()
+    captured: dict[str, Any] = {}
+
+    class _Ctx:
+        async def __aenter__(self) -> object:
+            return object()
+
+        async def __aexit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+    class _Pbar:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    pbar = _Pbar()
+
+    monkeypatch.setattr(client, "managed_writer", lambda connect_db, show_progress=True: _Ctx())
+    monkeypatch.setattr(client, "create_progress_tracker", lambda **kwargs: (pbar, None))
+    monkeypatch.setattr(
+        "vertex_forager.providers.yfinance.client.validate_tickers",
+        lambda symbols: None,
+    )
+    monkeypatch.setattr(
+        "vertex_forager.providers.yfinance.client.validate_memory_usage",
+        lambda **kwargs: None,
+    )
+
+    async def _fake_run_pipeline(**kwargs: Any) -> None:
+        captured["run_pipeline_kwargs"] = kwargs
+
+    async def _fake_collect_results(**kwargs: Any) -> dict[str, Any]:
+        captured["collect_results_kwargs"] = kwargs
+        return {"done": True}
+
+    def _fake_create_router(provider: str, **kwargs: Any) -> object:
+        captured["router_provider"] = provider
+        captured["router_kwargs"] = kwargs
+        return object()
+
+    monkeypatch.setattr(client, "run_pipeline", _fake_run_pipeline)
+    monkeypatch.setattr(client, "collect_results", _fake_collect_results)
+    monkeypatch.setattr("vertex_forager.providers.yfinance.client.create_router", _fake_create_router)
+
+    result = await client._fetch_per_ticker(
+        dataset="price",
+        symbols=["AAPL"],
+        connect_db=None,
+        desc="test",
+        table_name="yfinance_price",
+        show_progress=True,
+        total_items=1,
+        unit="tickers",
+        price_batch_size=123,
+        custom_flag=True,
+    )
+
+    assert result == {"done": True}
+    assert captured["router_provider"] == "yfinance"
+    assert captured["router_kwargs"]["price_batch_size"] == 123
+    assert "custom_flag" not in captured["router_kwargs"]
+    assert captured["run_pipeline_kwargs"]["dataset"] == "price"
+    assert captured["run_pipeline_kwargs"]["symbols"] == ["AAPL"]
+    assert captured["run_pipeline_kwargs"]["custom_flag"] is True
+    assert "price_batch_size" not in captured["run_pipeline_kwargs"]
+    assert pbar.closed

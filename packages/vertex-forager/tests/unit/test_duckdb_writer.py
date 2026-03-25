@@ -177,6 +177,39 @@ class TestDuckDBWriter:
         assert count == 2
         conn.close()
 
+    @pytest.mark.asyncio
+    async def test_unsigned_integer_columns_map_to_duckdb_unsigned_types(
+        self, tmp_path: Path
+    ) -> None:
+        db_path = tmp_path / "uint_types.duckdb"
+        async with DuckDBWriter(db_path) as writer:
+            df = pl.DataFrame(
+                {
+                    "provider": ["test"],
+                    "ticker": ["UINT"],
+                    "date": [datetime(2024, 1, 1).date()],
+                    "u8": pl.Series([1], dtype=pl.UInt8),
+                    "u16": pl.Series([2], dtype=pl.UInt16),
+                    "u32": pl.Series([3], dtype=pl.UInt32),
+                    "u64": pl.Series([4], dtype=pl.UInt64),
+                }
+            )
+            await writer.write(
+                FramePacket(
+                    provider="test",
+                    table="unsigned_types",
+                    frame=df,
+                    observed_at=datetime.now(),
+                )
+            )
+        with duckdb.connect(str(db_path)) as conn:
+            rows = conn.execute('DESCRIBE "unsigned_types"').fetchall()
+            type_map = {r[0]: str(r[1]).upper() for r in rows}
+            assert type_map["u8"] == "UTINYINT"
+            assert type_map["u16"] == "USMALLINT"
+            assert type_map["u32"] == "UINTEGER"
+            assert type_map["u64"] == "UBIGINT"
+
 
 def test_compact_sync_checkpoint_warning_on_error(
     tmp_path: Path, caplog: pytest.LogCaptureFixture

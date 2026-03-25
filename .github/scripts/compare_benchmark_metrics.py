@@ -5,6 +5,8 @@ import math
 import os
 from pathlib import Path
 
+DURATION_PATHS = ("duration_s", "summary.duration_s", "metrics_summary.duration_s")
+
 
 def _get_metric(data: dict[str, object], metric_path: str) -> float:
     current: object = data
@@ -38,6 +40,28 @@ def _validate_threshold(raw: str) -> float:
     return threshold
 
 
+def _resolve_metric(data: dict[str, object], metric_path: str) -> float:
+    try:
+        return _get_metric(data, metric_path)
+    except KeyError:
+        if metric_path not in DURATION_PATHS:
+            raise
+        for fallback_path in DURATION_PATHS:
+            if fallback_path == metric_path:
+                continue
+            try:
+                return _get_metric(data, fallback_path)
+            except KeyError:
+                continue
+        started_at = data.get("started_at")
+        finished_at = data.get("finished_at")
+        if isinstance(started_at, (int, float)) and isinstance(finished_at, (int, float)):
+            duration = float(finished_at) - float(started_at)
+            if math.isfinite(duration):
+                return duration
+        raise
+
+
 def main() -> None:
     out_dir = Path(os.getenv("VF_PROFILE_OUTPUT_DIR", str(Path.cwd() / "output" / "forager-profiles")))
     current_path = out_dir / "profile_metrics.json"
@@ -53,15 +77,30 @@ def main() -> None:
 
     current_data = json.loads(current_path.read_text())
     baseline_data = json.loads(baseline_path.read_text())
+    try:
+        current_raw = _resolve_metric(current_data, metric_path)
+    except KeyError as err:
+        raise RuntimeError(
+            f"Current benchmark metric missing: {metric_path}. "
+            f"Tried duration aliases: {', '.join(DURATION_PATHS)}"
+        ) from err
     current_value = _validate_metric(
         metric_path=metric_path,
         name="current",
-        value=_get_metric(current_data, metric_path),
+        value=current_raw,
     )
+    try:
+        baseline_raw = _resolve_metric(baseline_data, metric_path)
+    except KeyError:
+        print(
+            f"Baseline metric missing for {metric_path}; "
+            "skip regression check and reseed baseline with current artifact."
+        )
+        return
     baseline_value = _validate_metric(
         metric_path=metric_path,
         name="baseline",
-        value=_get_metric(baseline_data, metric_path),
+        value=baseline_raw,
     )
 
     regression = (current_value - baseline_value) / baseline_value

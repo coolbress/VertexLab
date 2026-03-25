@@ -52,6 +52,9 @@ def main() -> None:
         raise
 
     data = as_dict(run)
+    data["duration_s"] = getattr(run, "duration_s", None)
+    data["started_at"] = getattr(run, "started_at", None)
+    data["finished_at"] = getattr(run, "finished_at", None)
     metrics_path.write_text(json.dumps(data, indent=2))
     print(f"Wrote metrics: {metrics_path}")
 
