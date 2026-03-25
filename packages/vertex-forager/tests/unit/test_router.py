@@ -14,14 +14,17 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import date
 import json
+from typing import TYPE_CHECKING
 
 import polars as pl
 import pytest
 
 from vertex_forager.core.config import FetchJob, ParseResult, RequestSpec
-from vertex_forager.core.types import JSONValue
 from vertex_forager.providers.sharadar.constants import MAX_ROWS_PER_REQUEST
 from vertex_forager.providers.sharadar.router import SharadarRouter
+
+if TYPE_CHECKING:
+    from vertex_forager.core.types import JSONValue
 
 
 @pytest.fixture
