@@ -208,7 +208,7 @@ class TestDuckDBWriter:
             assert type_map["u8"] == "UTINYINT"
             assert type_map["u16"] == "USMALLINT"
             assert type_map["u32"] == "UINTEGER"
-            assert type_map["u64"] in {"UBIGINT", "UHUGEINT"}
+            assert type_map["u64"] == "UBIGINT"
 
 
 def test_compact_sync_checkpoint_warning_on_error(

@@ -79,7 +79,7 @@ class TestYFinanceRouterDateParams:
 
 
 @pytest.mark.parametrize(
-    "method_name, kwargs, expected_dataset, expected_table",
+    ("method_name", "kwargs", "expected_dataset", "expected_table"),
     [
         ("get_info", {"tickers": ["AAPL"]}, "info", "yfinance_info"),
         ("get_price_data", {"tickers": ["AAPL"]}, "price", "yfinance_price"),
