@@ -68,6 +68,21 @@ from vertex_forager.core.dlq import (
     build_writer_error_summary,
     spool_to_dlq_and_rescue,
 )
+from vertex_forager.core.orchestration import (
+    await_packet_sentinel_tasks as await_packet_sentinel_tasks_impl,
+)
+from vertex_forager.core.orchestration import (
+    await_writer_tasks as await_writer_tasks_impl,
+)
+from vertex_forager.core.orchestration import (
+    cancel_non_writer_tasks as cancel_non_writer_tasks_impl,
+)
+from vertex_forager.core.orchestration import (
+    enqueue_request_sentinels as enqueue_request_sentinels_impl,
+)
+from vertex_forager.core.orchestration import (
+    schedule_packet_sentinels as schedule_packet_sentinels_impl,
+)
 from vertex_forager.exceptions import (
     DLQSpoolError,
     FetchError,
@@ -922,61 +937,28 @@ class VertexForager:
         logger.debug("PIPELINE: Pipeline stopped.")
 
     async def _cancel_non_writer_tasks(self, writer_set: set[asyncio.Task[Any]]) -> None:
-        other_tasks: list[asyncio.Task[Any]] = [
-            t for t in cast("list[asyncio.Task[Any]]", self._active_tasks) if t not in writer_set
-        ]
-        for task in other_tasks:
-            if not task.done():
-                task.cancel()
-        if other_tasks:
-            await asyncio.gather(*other_tasks, return_exceptions=True)
+        await cancel_non_writer_tasks_impl(
+            active_tasks=cast("list[asyncio.Task[Any]]", self._active_tasks),
+            writer_set=writer_set,
+        )
 
     async def _enqueue_request_sentinels(self) -> None:
-        try:
-            req_q = getattr(self, "_req_q", None)
-            fetch_n = int(getattr(self.controller, "concurrency_limit", 0) or 0)
-            if req_q is None or fetch_n <= 0:
-                return
-            for _ in range(fetch_n):
-                try:
-                    req_q.put_nowait((self.PRIORITY_SENTINEL, 0, None))
-                except Exception as e:
-                    logger.debug("PIPELINE: Skipping req_q sentinel (%s)", e)
-                    break
-        except Exception as e:
-            logger.debug("PIPELINE: Failed to enqueue request sentinels during stop: %s", e, exc_info=True)
+        req_q = cast("asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] | None", getattr(self, "_req_q", None))
+        fetch_n = int(getattr(self.controller, "concurrency_limit", 0) or 0)
+        await enqueue_request_sentinels_impl(
+            req_q=cast("asyncio.PriorityQueue[tuple[int, int, object | None]] | None", req_q),
+            fetch_n=fetch_n,
+            priority_sentinel=self.PRIORITY_SENTINEL,
+            logger=logger,
+        )
 
     def _schedule_packet_sentinels(self, writer_tasks: object) -> tuple[int, list[asyncio.Task[Any]]]:
-        try:
-            pkt_q = getattr(self, "_pkt_q", None)
-            if pkt_q is None:
-                return 0, []
-            active_writers = 0
-            if isinstance(writer_tasks, list):
-                try:
-                    active_writers = sum(1 for t in writer_tasks if isinstance(t, asyncio.Task) and not t.done())
-                except Exception:
-                    active_writers = len(writer_tasks)
-            sentinel_put_tasks: list[asyncio.Task[Any]] = []
-            if active_writers <= 0:
-                return 0, []
-            remaining = active_writers
-            for _ in range(active_writers):
-                try:
-                    pkt_q.put_nowait(None)
-                    remaining -= 1
-                except Exception as e:
-                    logger.debug("PIPELINE: pkt_q full when enqueuing sentinel (%s), scheduling async puts", e)
-                    break
-            for _ in range(remaining):
-                try:
-                    sentinel_put_tasks.append(asyncio.create_task(pkt_q.put(None)))
-                except Exception as e:
-                    logger.debug("PIPELINE: Failed to schedule pkt_q.put(None) task: %s", e)
-            return active_writers, sentinel_put_tasks
-        except Exception as e:
-            logger.debug("PIPELINE: Failed to enqueue packet sentinels during stop: %s", e, exc_info=True)
-            return 0, []
+        pkt_q = cast("asyncio.Queue[FramePacket | None] | None", getattr(self, "_pkt_q", None))
+        return schedule_packet_sentinels_impl(
+            pkt_q=cast("asyncio.Queue[object | None] | None", pkt_q),
+            writer_tasks=writer_tasks,
+            logger=logger,
+        )
 
     async def _await_packet_sentinel_tasks(
         self,
@@ -984,23 +966,11 @@ class VertexForager:
         writer_set: set[asyncio.Task[Any]],
         sentinel_put_tasks: list[asyncio.Task[Any]],
     ) -> bool:
-        if not sentinel_put_tasks:
-            return False
-        try:
-            await asyncio.wait_for(asyncio.gather(*sentinel_put_tasks, return_exceptions=True), timeout=10.0)
-            return False
-        except asyncio.TimeoutError:
-            for t in sentinel_put_tasks:
-                with suppress(Exception):
-                    t.cancel()
-            logger.debug("PIPELINE: Timeout awaiting pkt_q sentinel put tasks; cancelled pending puts")
-            if writer_set:
-                for w in list(writer_set):
-                    with suppress(Exception):
-                        w.cancel()
-                with suppress(Exception):
-                    await asyncio.gather(*writer_set, return_exceptions=True)
-            return True
+        return await await_packet_sentinel_tasks_impl(
+            writer_set=writer_set,
+            sentinel_put_tasks=sentinel_put_tasks,
+            logger=logger,
+        )
 
     async def _drain_pending_packets(self) -> None:
         pkt_q = getattr(self, "_pkt_q", None)
@@ -1027,12 +997,10 @@ class VertexForager:
                 pkt_q.task_done()
 
     async def _await_writer_tasks(self, writer_set: set[asyncio.Task[Any]]) -> None:
-        if not writer_set:
-            return
-        try:
-            await asyncio.gather(*writer_set, return_exceptions=True)
-        except Exception:
-            logger.debug("PIPELINE: Awaiting writer tasks raised but suppressed", exc_info=True)
+        await await_writer_tasks_impl(
+            writer_set=writer_set,
+            logger=logger,
+        )
 
     async def _producer(
         self,
