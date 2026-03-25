@@ -219,7 +219,7 @@ async def test_fairness_burst_cap_queue_empty_after_demotes() -> None:
 
 @pytest.mark.asyncio
 async def test_fairness_sentinel_found_during_demote_drain() -> None:
-    """Sentinel encountered during consecutive-symbol drain returns immediately."""
+    """Sentinel is deferred when demoted jobs exist so requeue can happen first."""
     router = _PaginatingRouter(pages=0)
     engine, _ = _make_engine(router)
     engine._fair_lock = asyncio.Lock()
@@ -236,9 +236,12 @@ async def test_fairness_sentinel_found_during_demote_drain() -> None:
         req_q=req_q, burst_cap=2
     )
     assert job is None
-    assert already_done is True
+    assert already_done is False
     assert len(demote_jobs) == 1
     assert demote_jobs[0].symbol == "AAPL"
+    p2, _ord, sentinel = req_q.get_nowait()
+    assert p2 == VertexForager.PRIORITY_SENTINEL
+    assert sentinel is None
 
 
 # ─── Test 3: _try_flush_once idempotency ───────────────────────────────

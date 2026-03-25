@@ -103,6 +103,9 @@ from vertex_forager.core.retry import (
     RetryExecutor,
 )
 from vertex_forager.core.scheduler import (
+    FairnessState,
+)
+from vertex_forager.core.scheduler import (
     pop_next_job_respecting_fairness as pop_next_job_respecting_fairness_impl,
 )
 from vertex_forager.core.workerio import (
@@ -276,6 +279,7 @@ class VertexForager:
         self._fair_lock: asyncio.Lock | None = None
         self._fair_last_symbol: str | None = None
         self._fair_burst_count: int = 0
+        self._fair_state = FairnessState()
         # Writer flush idempotence
         self._writer_flushed: bool = False
         self._writer_flush_attempted: bool = False
@@ -670,6 +674,7 @@ class VertexForager:
         self._fair_lock = asyncio.Lock()
         self._fair_last_symbol = None
         self._fair_burst_count = 0
+        self._fair_state = FairnessState()
         self._writer_flush_attempted = False
         self._writer_flushed = False
         self._flush_lock = asyncio.Lock()
@@ -1181,6 +1186,7 @@ class VertexForager:
                 burst_cap=burst_cap,
                 priority_pagination=self.PRIORITY_PAGINATION,
                 priority_new_job=self.PRIORITY_NEW_JOB,
+                fairness_state=self._fair_state,
                 fair_last_symbol=self._fair_last_symbol,
                 fair_burst_count=self._fair_burst_count,
             )

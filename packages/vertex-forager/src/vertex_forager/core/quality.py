@@ -183,6 +183,15 @@ class NoDuplicateRows:
 
 
 def parse_violation_count(message: str) -> int:
+    """Extract violation counts from rule messages.
+
+    Accepted patterns are case-insensitive:
+    - "contains <N>"
+    - "found <N>"
+
+    If no pattern matches, this falls back to 1 so each violation message still
+    contributes at least one unit to aggregated counts.
+    """
     contains_match = re.search(r"\bcontains\s+(\d+)\b", message, flags=re.IGNORECASE)
     if contains_match is not None:
         return int(contains_match.group(1))
