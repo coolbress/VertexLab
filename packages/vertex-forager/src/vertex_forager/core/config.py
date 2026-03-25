@@ -23,9 +23,8 @@ from vertex_forager.constants import (
     QUEUE_TARGET_RAM_RATIO,
 )
 from vertex_forager.core.contracts import TracerProtocol  # Pydantic v2: requires runtime resolution
-from vertex_forager.core.errors import RunError
+from vertex_forager.core.errors import RunError, VertexForagerError
 from vertex_forager.core.types import JSONValue  # Pydantic v2: used in field types at runtime
-from vertex_forager.exceptions import VertexForagerError
 
 _RUNTIME_TYPE_REFERENCES = (Mapping, date, datetime, pl.DataFrame, TracerProtocol, JSONValue)
 

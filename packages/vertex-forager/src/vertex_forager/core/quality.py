@@ -1,8 +1,13 @@
 """Data quality validation rules and utilities."""
 
-from typing import Literal, Protocol, cast
+import asyncio
+import re
+from typing import Any, Literal, Protocol, cast
 
 import polars as pl
+
+from vertex_forager.core.config import RunResult
+from vertex_forager.schema.registry import get_table_schema
 
 
 class DataQualityRule(Protocol):
@@ -175,3 +180,50 @@ class NoDuplicateRows:
             )
 
         return violations
+
+
+def parse_violation_count(message: str) -> int:
+    contains_match = re.search(r"\bcontains\s+(\d+)\b", message, flags=re.IGNORECASE)
+    if contains_match is not None:
+        return int(contains_match.group(1))
+    found_match = re.search(r"\bfound\s+(\d+)\b", message, flags=re.IGNORECASE)
+    if found_match is not None:
+        return int(found_match.group(1))
+    return 1
+
+
+async def validate_data_quality(
+    *,
+    table: str,
+    df: pl.DataFrame,
+    result: RunResult,
+    result_lock: asyncio.Lock,
+    logger: Any,
+) -> None:
+    schema = get_table_schema(table)
+    if not schema or not schema.quality_rules:
+        return
+
+    violations_count = 0
+    for rule in schema.quality_rules:
+        try:
+            violation_messages = rule.validate(df)
+            if violation_messages:
+                for violation_message in violation_messages:
+                    violations_count += parse_violation_count(violation_message)
+                logger.warning(
+                    "Data quality violations in table %s: %s",
+                    table,
+                    ", ".join(violation_messages),
+                )
+        except Exception as exc:
+            logger.warning(
+                "Failed to execute quality rule %s for table %s: %s",
+                type(rule).__name__,
+                table,
+                exc,
+            )
+
+    if violations_count > 0:
+        async with result_lock:
+            result.add_quality_violations(table=table, count=violations_count)

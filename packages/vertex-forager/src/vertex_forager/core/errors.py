@@ -2,6 +2,15 @@
 
 from dataclasses import dataclass
 
+from vertex_forager.exceptions import (
+    DLQSpoolError,
+    FetchError,
+    PrimaryKeyMissingError,
+    PrimaryKeyNullError,
+    ValidationError,
+    VertexForagerError,
+)
+
 # Import common exception types for retryability checking
 try:
     import httpx
@@ -121,3 +130,14 @@ class RunError:
 
         # Non-retryable by default
         return False
+
+
+__all__ = [
+    "DLQSpoolError",
+    "FetchError",
+    "PrimaryKeyMissingError",
+    "PrimaryKeyNullError",
+    "RunError",
+    "ValidationError",
+    "VertexForagerError",
+]
