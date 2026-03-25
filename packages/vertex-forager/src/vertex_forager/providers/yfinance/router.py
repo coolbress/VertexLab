@@ -13,6 +13,7 @@ import uuid
 import pandas as pd
 import polars as pl
 from polars.exceptions import ComputeError, PolarsError
+from typing_extensions import NotRequired, TypedDict
 
 from vertex_forager.constants import DEFAULT_TIME_ZONE, ISO8601_Z_SUFFIX
 from vertex_forager.core.config import FetchJob, FramePacket, ParseResult
@@ -54,6 +55,12 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Sequence
 
 logger = logging.getLogger("vertex_forager.providers.yfinance.router")
+
+
+class YFinanceJobContext(TypedDict):
+    symbol: NotRequired[str]
+    attempt: NotRequired[int | None]
+    is_batch: NotRequired[bool]
 
 
 def _parse_bool(value: Any) -> bool:
@@ -258,11 +265,12 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
 
     def parse(self, *, job: FetchJob, payload: bytes) -> ParseResult:
         try:
+            context = self._typed_job_context(job=job)
             empty_result = self._check_empty_response(payload=payload)
             if empty_result:
                 return empty_result
             data_obj, df_pl = self._decode_payload_to_data_or_frame(job=job, payload=payload)
-            is_batch = bool(job.context.get("is_batch", False))
+            is_batch = bool(context.get("is_batch", False))
             if df_pl is None:
                 df_pl = self._convert_to_polars(data_obj, is_batch=is_batch)
             empty_result = self._check_empty_response(frame=df_pl)
@@ -274,14 +282,14 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             self._emit_structured_parse_log(
                 stage="router_parse_enter",
                 dataset=dataset,
-                symbol=job.context.get("symbol"),
-                attempt=job.context.get("attempt", 0),
+                symbol=context.get("symbol"),
+                attempt=context.get("attempt"),
                 duration=0.0,
                 rows=None,
             )
             t0 = time.monotonic()
             df_pl = self._transform_dataset_frame(df_pl=df_pl, dataset=dataset)
-            symbol = job.context.get("symbol")
+            symbol = context.get("symbol")
             if symbol and "ticker" not in df_pl.columns:
                 df_pl = df_pl.with_columns(pl.lit(symbol).alias("ticker"))
             df_pl = self._add_provider_metadata(frame=df_pl, observed_at=observed_at)
@@ -297,8 +305,8 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             self._emit_structured_parse_log(
                 stage="router_parse_exit",
                 dataset=job.dataset,
-                symbol=job.context.get("symbol"),
-                attempt=job.context.get("attempt", 0),
+                symbol=context.get("symbol"),
+                attempt=context.get("attempt"),
                 duration=time.monotonic() - t0,
                 rows=len(df_pl),
             )
@@ -312,6 +320,24 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             job_id = f"{job.provider}:{job.dataset}:{job.symbol or ''}"
             logger.exception(LOG_PARSE_UNEXPECTED_ERROR.format(prefix=ROUTER_LOG_PREFIX, job_id=job_id))
             raise_yfinance_parse_error(e, dataset=job.dataset)
+
+    def _typed_job_context(self, *, job: FetchJob) -> YFinanceJobContext:
+        typed: YFinanceJobContext = {}
+        symbol = job.context.get("symbol")
+        if isinstance(symbol, str):
+            typed["symbol"] = symbol
+        attempt = job.context.get("attempt")
+        if isinstance(attempt, int):
+            typed["attempt"] = attempt
+        elif isinstance(attempt, str):
+            try:
+                typed["attempt"] = int(attempt)
+            except ValueError:
+                typed["attempt"] = None
+        is_batch = job.context.get("is_batch")
+        if isinstance(is_batch, bool):
+            typed["is_batch"] = is_batch
+        return typed
 
     def _decode_payload_to_data_or_frame(
         self,
@@ -421,19 +447,14 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         *,
         stage: str,
         dataset: str,
-        symbol: object,
-        attempt: object,
+        symbol: str | None,
+        attempt: int | None,
         duration: float,
         rows: int | None,
     ) -> None:
         if not self._structured_logs:
             return
-        attempt_num = 0
-        try:
-            if isinstance(attempt, (int, str)):
-                attempt_num = int(attempt)
-        except (TypeError, ValueError):
-            logger.debug("bad attempt value: %s", attempt)
+        attempt_num = attempt or 0
         rows_part = "" if rows is None else f" packets=1 rows={rows}"
         msg = (
             f"OBS provider={sanitize_field(self.provider)} "

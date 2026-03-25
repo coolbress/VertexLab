@@ -38,6 +38,21 @@ def _validate_threshold(raw: str) -> float:
     return threshold
 
 
+def _resolve_metric(data: dict[str, object], metric_path: str) -> float:
+    try:
+        return _get_metric(data, metric_path)
+    except KeyError:
+        if metric_path != "duration_s":
+            raise
+        started_at = data.get("started_at")
+        finished_at = data.get("finished_at")
+        if isinstance(started_at, (int, float)) and isinstance(finished_at, (int, float)):
+            duration = float(finished_at) - float(started_at)
+            if math.isfinite(duration):
+                return duration
+        raise
+
+
 def main() -> None:
     out_dir = Path(os.getenv("VF_PROFILE_OUTPUT_DIR", str(Path.cwd() / "output" / "forager-profiles")))
     current_path = out_dir / "profile_metrics.json"
@@ -56,12 +71,12 @@ def main() -> None:
     current_value = _validate_metric(
         metric_path=metric_path,
         name="current",
-        value=_get_metric(current_data, metric_path),
+        value=_resolve_metric(current_data, metric_path),
     )
     baseline_value = _validate_metric(
         metric_path=metric_path,
         name="baseline",
-        value=_get_metric(baseline_data, metric_path),
+        value=_resolve_metric(baseline_data, metric_path),
     )
 
     regression = (current_value - baseline_value) / baseline_value

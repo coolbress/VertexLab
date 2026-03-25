@@ -108,7 +108,7 @@ async def test_schema_evolution_type_mapping_timestamptz_and_hugeint(tmp_path: P
             types = {r[0]: r[1] for r in rows}
             assert "WITH TIME ZONE" in (types.get("tz") or "").upper()
             t_u64 = str(types.get("u64") or "").upper()
-            assert t_u64 in ("HUGEINT", "UBIGINT", "BIGINT")
+            assert t_u64 in ("UBIGINT", "HUGEINT")
     finally:
         await writer.close()
 
@@ -220,10 +220,10 @@ async def test_map_polars_types() -> None:
         assert w._map_polars_type_to_sql(pl.Int16) == "SMALLINT"
         assert w._map_polars_type_to_sql(pl.Int32) == "INTEGER"
         assert w._map_polars_type_to_sql(pl.Int64) == "BIGINT"
-        assert w._map_polars_type_to_sql(pl.UInt8) == "SMALLINT"
-        assert w._map_polars_type_to_sql(pl.UInt16) == "INTEGER"
-        assert w._map_polars_type_to_sql(pl.UInt32) == "BIGINT"
-        assert w._map_polars_type_to_sql(pl.UInt64) == "HUGEINT"
+        assert w._map_polars_type_to_sql(pl.UInt8) == "UTINYINT"
+        assert w._map_polars_type_to_sql(pl.UInt16) == "USMALLINT"
+        assert w._map_polars_type_to_sql(pl.UInt32) == "UINTEGER"
+        assert w._map_polars_type_to_sql(pl.UInt64) == "UBIGINT"
         assert w._map_polars_type_to_sql(pl.Float32) == "FLOAT"
         assert w._map_polars_type_to_sql(pl.Float64) == "DOUBLE"
         assert w._map_polars_type_to_sql(pl.Boolean) == "BOOLEAN"
