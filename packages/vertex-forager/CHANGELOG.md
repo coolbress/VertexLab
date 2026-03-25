@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.10.0...vertex-forager-v0.11.0) (2026-03-25)
+
+
+### Features
+
+* improve type precision, benchmark metric robustness, and yfinance parsing coverage ([#198](https://github.com/coolbress/VertexLab/issues/198)) ([c50d861](https://github.com/coolbress/VertexLab/commit/c50d861dbb378a4f709995041c277aab4b11e2e1))
+
 ## [0.10.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.9.4...vertex-forager-v0.10.0) (2026-03-24)
 
 
