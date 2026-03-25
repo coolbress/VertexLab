@@ -12,7 +12,7 @@ import shutil
 import sys
 import threading
 import time
-from typing import Any, Literal, TypeVar
+from typing import Any, Literal, ParamSpec, TypeVar
 import warnings
 
 from dotenv import load_dotenv
@@ -24,6 +24,7 @@ from vertex_forager.exceptions import InputError
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
+_P = ParamSpec("_P")
 
 
 def _safe_get_ipython() -> Any:
@@ -291,7 +292,7 @@ def check_memory_safety(
         )
 
 
-def create_pbar_updater(pbar: tqdm) -> Callable[..., None]:
+def create_pbar_updater(pbar: tqdm) -> Callable[_P, None]:
     """Create a progress bar update callback.
 
     Args:
@@ -301,7 +302,7 @@ def create_pbar_updater(pbar: tqdm) -> Callable[..., None]:
         Callable to update the progress bar.
     """
 
-    def _update_pbar(*args: Any, **kwargs: Any) -> None:
+    def _update_pbar(*args: _P.args, **kwargs: _P.kwargs) -> None:
         """Update progress bar based on fully processed ticker count.
 
         With Smart Batching, we expect most requests to complete in a single fetch.
