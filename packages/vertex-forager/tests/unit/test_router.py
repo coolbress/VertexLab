@@ -12,6 +12,7 @@ Notes:
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import date
 import json
 
 import polars as pl
@@ -92,6 +93,13 @@ class TestSharadarRouterUnit:
         assert len(jobs) == 0
 
     @pytest.mark.asyncio
+    async def test_generate_jobs_rejects_blank_symbols(
+        self, router: SharadarRouter
+    ) -> None:
+        with pytest.raises(ValueError, match="no valid symbols provided"):
+            _ = [job async for job in router.generate_jobs(dataset="price", symbols=["", "   "])]
+
+    @pytest.mark.asyncio
     async def test_generate_jobs_respects_per_page_with_max_cap_for_tickers_dataset(
         self, router: SharadarRouter
     ) -> None:
@@ -120,6 +128,12 @@ class TestSharadarRouterUnit:
         assert job2.dataset == "tickers"
         assert job2.spec.params.get("qopts.per_page") == str(MAX_ROWS_PER_REQUEST)
 
+        jobs3 = [
+            job async for job in router.generate_jobs(dataset="tickers", symbols=None, per_page="invalid-number")
+        ]
+        assert len(jobs3) == 1
+        assert jobs3[0].spec.params.get("qopts.per_page") == str(MAX_ROWS_PER_REQUEST)
+
     @pytest.mark.asyncio
     async def test_generate_jobs_passes_kwargs_for_fundamental_dataset(
         self, router: SharadarRouter
@@ -136,6 +150,52 @@ class TestSharadarRouterUnit:
         job = jobs[0]
         assert job.dataset == "fundamental"
         assert job.spec.params.get("dimension") == "ARQ"
+
+        jobs_default = [
+            job
+            async for job in router.generate_jobs(
+                dataset="fundamental", symbols=["AAPL"], dimension="   "
+            )
+        ]
+        assert jobs_default[0].spec.params.get("dimension") == "MRT"
+
+    def test_process_ticker_metadata_missing_required_columns_keeps_lookup_none(
+        self, router: SharadarRouter
+    ) -> None:
+        router._process_ticker_metadata(pl.DataFrame({"ticker": ["AAPL"]}))
+        assert router._ticker_ranges is None
+
+    @pytest.mark.asyncio
+    async def test_generate_jobs_uses_smart_batching_with_metadata(
+        self, router: SharadarRouter
+    ) -> None:
+        meta = pl.DataFrame(
+            {
+                "ticker": ["AAPL", "MSFT"],
+                "firstpricedate": ["2020-01-01", "2020-01-01"],
+                "lastpricedate": ["2024-01-01", "2024-01-01"],
+            }
+        )
+        router._process_ticker_metadata(meta)
+        assert router._ticker_ranges is not None
+
+        jobs = [job async for job in router.generate_jobs(dataset="price", symbols=["AAPL", "MSFT"])]
+        assert len(jobs) >= 1
+        assert all("trace_id" in (job.context or {}) for job in jobs)
+
+    def test_estimate_ticker_rows_returns_zero_when_no_overlap(
+        self, router: SharadarRouter
+    ) -> None:
+        router._ticker_ranges = {"AAPL": (date(2020, 1, 1), date(2020, 1, 31))}
+        router._start_date = "2024-01-01"
+        router._end_date = "2024-01-31"
+        assert router._estimate_ticker_rows("AAPL", "price") == 0
+
+    def test_build_per_symbol_job_rejects_invalid_symbol(
+        self, router: SharadarRouter
+    ) -> None:
+        with pytest.raises(ValueError, match="Invalid symbol"):
+            router._build_per_symbol_job(dataset="price", symbol="   ")
 
     @pytest.mark.asyncio
     async def test_generate_jobs_does_not_batch_by_default(
