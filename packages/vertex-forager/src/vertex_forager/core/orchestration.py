@@ -12,6 +12,25 @@ async def enqueue_request_sentinels(
     priority_sentinel: int,
     logger: Any,
 ) -> None:
+    """Enqueue shutdown sentinels into the request queue.
+
+    Adds `(priority_sentinel, 0, None)` up to `fetch_n` times so fetch workers
+    can observe shutdown signaling and exit cleanly.
+
+    Args:
+        req_q: Target request priority queue or ``None`` when unavailable.
+        fetch_n: Number of fetch workers/sentinels to enqueue.
+        priority_sentinel: Priority value used for sentinel queue entries.
+        logger: Logger used for best-effort debug diagnostics.
+
+    Returns:
+        None.
+
+    Notes:
+        - Uses non-blocking ``put_nowait`` in a loop.
+        - Suppresses queue/operational errors and emits debug logs instead.
+        - Stops early if queue insertion fails during the loop.
+    """
     try:
         if req_q is None or fetch_n <= 0:
             return
@@ -28,18 +47,14 @@ async def enqueue_request_sentinels(
 def schedule_packet_sentinels(
     *,
     pkt_q: asyncio.Queue[object | None] | None,
-    writer_tasks: object,
+    writer_tasks: list[asyncio.Task[Any]] | None,
     logger: Any,
 ) -> tuple[int, list[asyncio.Task[Any]]]:
     try:
         if pkt_q is None:
             return 0, []
-        active_writers = 0
-        if isinstance(writer_tasks, list):
-            try:
-                active_writers = sum(1 for t in writer_tasks if isinstance(t, asyncio.Task) and not t.done())
-            except Exception:
-                active_writers = len(writer_tasks)
+        task_list = writer_tasks or []
+        active_writers = sum(1 for t in task_list if not t.done())
         sentinel_put_tasks: list[asyncio.Task[Any]] = []
         if active_writers <= 0:
             return 0, []

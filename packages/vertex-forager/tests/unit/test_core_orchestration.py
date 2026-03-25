@@ -60,6 +60,37 @@ async def test_await_packet_sentinel_tasks_no_tasks_returns_false() -> None:
 
 
 @pytest.mark.asyncio
+async def test_await_packet_sentinel_tasks_timeout_cancels_pending_tasks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pkt_q: asyncio.Queue[object | None] = asyncio.Queue(maxsize=1)
+    pkt_q.put_nowait("occupied")
+    sentinel_put_task = asyncio.create_task(pkt_q.put(None))
+    writer = asyncio.create_task(asyncio.sleep(10))
+    writer_set = {writer}
+
+    async def _raise_timeout(awaitable: object, timeout: float) -> object:
+        raise asyncio.TimeoutError
+
+    monkeypatch.setattr(asyncio, "wait_for", _raise_timeout)
+
+    try:
+        timed_out = await await_packet_sentinel_tasks(
+            writer_set=writer_set,
+            sentinel_put_tasks=[sentinel_put_task],
+            logger=logging.getLogger("test"),
+        )
+        assert timed_out is True
+        assert writer.cancelled() is True
+    finally:
+        for task in (sentinel_put_task, writer):
+            if not task.done():
+                task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+
+@pytest.mark.asyncio
 async def test_cancel_non_writer_tasks_cancels_only_non_writers() -> None:
     writer = asyncio.create_task(asyncio.sleep(10))
     worker = asyncio.create_task(asyncio.sleep(10))

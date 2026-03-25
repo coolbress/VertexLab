@@ -902,10 +902,8 @@ class VertexForager:
             return
 
         logger.debug("PIPELINE: Stopping pipeline...")
-        writer_tasks = getattr(self, "_writer_tasks", None)
-        writer_set: set[asyncio.Task[Any]] = (
-            set(cast("list[asyncio.Task[Any]]", writer_tasks)) if isinstance(writer_tasks, list) else set()
-        )
+        writer_tasks = cast("list[asyncio.Task[Any]] | None", getattr(self, "_writer_tasks", None))
+        writer_set: set[asyncio.Task[Any]] = set(writer_tasks) if writer_tasks else set()
         await self._cancel_non_writer_tasks(writer_set)
         await self._enqueue_request_sentinels()
         active_writers, sentinel_put_tasks = self._schedule_packet_sentinels(writer_tasks)
@@ -952,7 +950,9 @@ class VertexForager:
             logger=logger,
         )
 
-    def _schedule_packet_sentinels(self, writer_tasks: object) -> tuple[int, list[asyncio.Task[Any]]]:
+    def _schedule_packet_sentinels(
+        self, writer_tasks: list[asyncio.Task[Any]] | None
+    ) -> tuple[int, list[asyncio.Task[Any]]]:
         pkt_q = cast("asyncio.Queue[FramePacket | None] | None", getattr(self, "_pkt_q", None))
         return schedule_packet_sentinels_impl(
             pkt_q=cast("asyncio.Queue[object | None] | None", pkt_q),
