@@ -10,6 +10,13 @@ if TYPE_CHECKING:
 
 @dataclass
 class FairnessState:
+    """Mutable pagination fairness state.
+
+    last_symbol stores the symbol selected most recently from the pagination
+    priority lane. burst_count stores how many consecutive selections were made
+    for last_symbol from that same lane.
+    """
+
     last_symbol: str | None = None
     burst_count: int = 0
 
@@ -25,6 +32,40 @@ async def pop_next_job_respecting_fairness(
     fair_last_symbol: str | None = None,
     fair_burst_count: int = 0,
 ) -> tuple[int, FetchJob | None, list[FetchJob], bool, str | None, int]:
+    """Select the next queue item while enforcing pagination burst fairness.
+
+    Args:
+        req_q: PriorityQueue of (priority:int, seq:int, FetchJob|None). None is
+            treated as a sentinel.
+        fair_lock: Async lock guarding fair state updates and fairness dequeue
+            logic.
+        burst_cap: Maximum consecutive picks allowed for the same symbol from
+            the pagination priority lane.
+        priority_pagination: Priority value used for paginated follow-up jobs.
+        priority_new_job: Priority value used when demoted jobs should be
+            requeued as normal jobs.
+        fairness_state: Shared mutable fairness state. When provided, this
+            object is updated in-place under fair_lock.
+        fair_last_symbol: Backward-compatible seed value for last symbol when no
+            shared fairness_state is provided.
+        fair_burst_count: Backward-compatible seed value for burst count when no
+            shared fairness_state is provided.
+
+    Returns:
+        A tuple of:
+        - selected priority
+        - selected FetchJob or None (sentinel/defer path)
+        - demoted jobs that caller should requeue at priority_new_job
+        - already_done flag indicating task_done was already called for selected
+          sentinel
+        - updated fair_last_symbol
+        - updated fair_burst_count
+
+    Side effects:
+        - Reads/removes items from req_q.
+        - Updates fairness_state when provided.
+        - Calls req_q.task_done() for consumed sentinels.
+    """
     demote_jobs: list[FetchJob] = []
     already_done = False
     state = fairness_state if fairness_state is not None else FairnessState(

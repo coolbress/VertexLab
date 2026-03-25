@@ -1520,6 +1520,7 @@ class VertexForager:
             return
         async with self._checkpoint_lock:
             if worker_exc is None:
+                self._failed_symbols.discard(job.symbol)
                 self._completed_symbols.add(job.symbol)
             else:
                 self._failed_symbols.add(job.symbol)
