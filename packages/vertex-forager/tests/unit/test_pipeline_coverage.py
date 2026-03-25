@@ -19,6 +19,7 @@ from vertex_forager.core.config import EngineConfig, FetchJob, FramePacket, Pars
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor
 from vertex_forager.core.pipeline import VertexForager
+from vertex_forager.core.scheduler import FairnessState
 
 # ─── Stubs ──────────────────────────────────────────────────────────────
 
@@ -153,8 +154,7 @@ async def test_fairness_sentinel_returns_already_done() -> None:
     router = _PaginatingRouter(pages=0)
     engine, _ = _make_engine(router)
     engine._fair_lock = asyncio.Lock()
-    engine._fair_last_symbol = None
-    engine._fair_burst_count = 0
+    engine._fair_state = FairnessState(last_symbol=None, burst_count=0)
 
     req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
     await req_q.put((VertexForager.PRIORITY_SENTINEL, 0, None))
@@ -174,8 +174,7 @@ async def test_fairness_burst_cap_demotes_and_finds_different_candidate() -> Non
     router = _PaginatingRouter(pages=0)
     engine, _ = _make_engine(router)
     engine._fair_lock = asyncio.Lock()
-    engine._fair_last_symbol = "AAPL"
-    engine._fair_burst_count = 2
+    engine._fair_state = FairnessState(last_symbol="AAPL", burst_count=2)
 
     req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
     aapl_job = FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x"))
@@ -200,8 +199,7 @@ async def test_fairness_burst_cap_queue_empty_after_demotes() -> None:
     router = _PaginatingRouter(pages=0)
     engine, _ = _make_engine(router)
     engine._fair_lock = asyncio.Lock()
-    engine._fair_last_symbol = "AAPL"
-    engine._fair_burst_count = 2
+    engine._fair_state = FairnessState(last_symbol="AAPL", burst_count=2)
 
     req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
     aapl_job = FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x"))
@@ -223,8 +221,7 @@ async def test_fairness_sentinel_found_during_demote_drain() -> None:
     router = _PaginatingRouter(pages=0)
     engine, _ = _make_engine(router)
     engine._fair_lock = asyncio.Lock()
-    engine._fair_last_symbol = "AAPL"
-    engine._fair_burst_count = 2
+    engine._fair_state = FairnessState(last_symbol="AAPL", burst_count=2)
 
     req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
     aapl_job = FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x"))

@@ -34,7 +34,6 @@ import time
 from typing import TYPE_CHECKING, Any, cast
 
 import httpx
-import polars as pl
 from polars.exceptions import ComputeError
 
 from vertex_forager.constants import (
@@ -146,6 +145,8 @@ from vertex_forager.schema.registry import get_table_schema
 from vertex_forager.utils import sanitize_field
 
 if TYPE_CHECKING:
+    import polars as pl
+
     from vertex_forager.core.contracts import IMapper, IRouter, IWriter
     from vertex_forager.core.controller import FlowController
     from vertex_forager.core.http import HttpExecutor
@@ -277,8 +278,6 @@ class VertexForager:
         )
         # Global pagination fairness bookkeeping
         self._fair_lock: asyncio.Lock | None = None
-        self._fair_last_symbol: str | None = None
-        self._fair_burst_count: int = 0
         self._fair_state = FairnessState()
         # Writer flush idempotence
         self._writer_flushed: bool = False
@@ -672,8 +671,6 @@ class VertexForager:
         self._pkt_q = pkt_q
         self._writer_tasks = writer_tasks
         self._fair_lock = asyncio.Lock()
-        self._fair_last_symbol = None
-        self._fair_burst_count = 0
         self._fair_state = FairnessState()
         self._writer_flush_attempted = False
         self._writer_flushed = False
@@ -1179,7 +1176,7 @@ class VertexForager:
         fair_lock = self._fair_lock
         if fair_lock is None:
             raise RuntimeError("Fairness lock must be initialized before use")
-        priority, job, demote_jobs, already_done, fair_last_symbol, fair_burst_count = (
+        priority, job, demote_jobs, already_done, _, _ = (
             await pop_next_job_respecting_fairness_impl(
                 req_q=req_q,
                 fair_lock=fair_lock,
@@ -1187,12 +1184,8 @@ class VertexForager:
                 priority_pagination=self.PRIORITY_PAGINATION,
                 priority_new_job=self.PRIORITY_NEW_JOB,
                 fairness_state=self._fair_state,
-                fair_last_symbol=self._fair_last_symbol,
-                fair_burst_count=self._fair_burst_count,
             )
         )
-        self._fair_last_symbol = fair_last_symbol
-        self._fair_burst_count = fair_burst_count
         return priority, job, demote_jobs, already_done
 
     async def _fetch_worker(

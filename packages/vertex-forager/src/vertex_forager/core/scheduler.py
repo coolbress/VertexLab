@@ -27,10 +27,10 @@ async def pop_next_job_respecting_fairness(
 ) -> tuple[int, FetchJob | None, list[FetchJob], bool, str | None, int]:
     demote_jobs: list[FetchJob] = []
     already_done = False
-    state = fairness_state or FairnessState(last_symbol=fair_last_symbol, burst_count=fair_burst_count)
-    if fairness_state is not None:
-        state.last_symbol = fair_last_symbol
-        state.burst_count = fair_burst_count
+    state = fairness_state if fairness_state is not None else FairnessState(
+        last_symbol=fair_last_symbol,
+        burst_count=fair_burst_count,
+    )
     async with fair_lock:
         priority, _, job = await req_q.get()
         if job is None:
