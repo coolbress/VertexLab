@@ -8,7 +8,7 @@ import time
 import polars as pl
 import pytest
 
-from vertex_forager.core.config import FetchJob, RequestSpec, RetryConfig, RunResult
+from vertex_forager.core.config import FetchJob, FramePacket, RequestSpec, RetryConfig, RunResult
 from vertex_forager.core.retry import RetryExecutor
 from vertex_forager.core.writerflush import flush_chunked_table
 
@@ -110,9 +110,7 @@ async def test_retry_and_writer_chunk_perf_budget() -> None:
     assert writer_elapsed <= writer_budget_s
 
 
-def _packet(*, rows: int, offset: int):
-    from vertex_forager.core.config import FramePacket
-
+def _packet(*, rows: int, offset: int) -> FramePacket:
     return FramePacket(
         provider="test",
         table="t",

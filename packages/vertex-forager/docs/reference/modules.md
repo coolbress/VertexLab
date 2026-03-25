@@ -6,26 +6,38 @@ Overview of the `vertex_forager` package structure. See [API Reference](api.md) 
 
 ```
 vertex_forager/
-├── api.py              # Factories (create_client, create_router) and base classes
+├── api.py              # Public API helpers (client/router/writer factories)
+├── cli.py              # CLI entrypoint
 ├── constants.py        # Provider datasets, rate limits, default values
 ├── exceptions.py       # Exception hierarchy (VertexForagerError → leaf errors)
 ├── utils.py            # Env helpers, validation, progress bar utilities
 ├── core/
+│   ├── pipeline.py     # VertexForager (main async pipeline engine)
+│   ├── lifecycle.py    # Run setup/finalize lifecycle helpers
+│   ├── scheduler.py    # Fair scheduling helpers
+│   ├── workerio.py     # Worker fetch/parse/emit helpers
+│   ├── writerflush.py  # Writer buffering/flush/error handling
+│   ├── retry.py        # Retry policy + runtime retry executor
+│   ├── quality.py      # Data quality rules + validation runtime
+│   ├── dlq.py          # DLQ spool/recovery helpers
+│   ├── errors.py       # Core-facing error exports + RunError
 │   ├── config.py       # EngineConfig, RetryConfig, RequestSpec, FetchJob, FramePacket, RunResult
 │   ├── controller.py   # FlowController, GradientConcurrencyLimiter, GCRARateLimiter
 │   ├── http.py         # HttpExecutor (async httpx wrapper)
-│   ├── pipeline.py     # VertexForager (main async pipeline engine)
-│   ├── retry.py        # Tenacity retry controller factory
 │   ├── contracts.py    # Protocol types (TracerProtocol, etc.)
 │   └── types.py        # TypedDicts and type aliases (JSONValue, DLQStatus, etc.)
 ├── clients/
-│   ├── base.py         # BaseClient (provider-agnostic sync/async interface)
-│   ├── sharadar.py     # SharadarClient
-│   └── yfinance.py     # YFinanceClient
+│   ├── base.py         # Base client contract/helpers
+│   ├── dispatcher.py   # Provider client dispatch
+│   └── validation.py   # Client argument/config validation
+├── providers/
+│   ├── sharadar/       # Sharadar provider implementation (client/router/schema)
+│   └── yfinance/       # YFinance provider implementation (client/router/schema)
 ├── routers/
-│   ├── base.py         # BaseRouter (job generation and response parsing)
-│   ├── sharadar.py     # SharadarRouter
-│   └── yfinance.py     # YFinanceRouter
+│   ├── base.py         # Router base protocols/helpers
+│   ├── errors.py       # Router-level exceptions
+│   ├── jobs.py         # Router job utilities
+│   └── transforms.py   # Router transform helpers
 ├── writers/
 │   ├── base.py         # BaseWriter, WriteResult
 │   ├── duckdb.py       # DuckDBWriter (async Polars → DuckDB)
@@ -44,5 +56,8 @@ vertex_forager/
 | Pipeline engine | `from vertex_forager.core import VertexForager` | [API Reference → Pipeline Engine](api.md#pipeline-engine) |
 | Configuration | `from vertex_forager import EngineConfig` | [API Reference → Configuration](api.md#configuration) |
 | Flow control | `from vertex_forager.core.controller import FlowController` | [API Reference → Flow Control](api.md#flow-control) |
+| Retry runtime | `from vertex_forager.core.retry import RetryExecutor` | [API Reference → Retry](api.md#retry) |
+| Lifecycle helpers | `from vertex_forager.core.lifecycle import RunFinalizer` | [API Reference → Lifecycle](api.md#lifecycle) |
 | Writers | `from vertex_forager.writers import create_writer` | [API Reference → Writers](api.md#writers) |
+| Core structured error | `from vertex_forager.core.errors import RunError` | [API Reference → Core Errors](api.md#core-errors) |
 | Exceptions | `from vertex_forager import FetchError, WriterError` | [API Reference → Exceptions](api.md#exceptions) |

@@ -151,6 +151,18 @@ async def fetch_with_retry(
                     rf = getattr(controller, "record_feedback", None)
                     if callable(rf):
                         rf(status_code=200, retried=bool(att_no and att_no > 1))
+                    t1 = time.monotonic()
+                    dur = t1 - t0
+                    observe("http_duration_s", dur)
+                    log_structured(
+                        provider=job.provider,
+                        dataset=job.dataset,
+                        symbol=job.symbol,
+                        stage="http_end",
+                        attempt=att_no,
+                        duration_s=dur,
+                    )
+                    return resp
                 except Exception as exc:
                     reason = "error"
                     if isinstance(exc, httpx.HTTPStatusError):
@@ -175,16 +187,4 @@ async def fetch_with_retry(
                         attempt=att_no,
                     )
                     raise
-            t1 = time.monotonic()
-            dur = t1 - t0
-            observe("http_duration_s", dur)
-            log_structured(
-                provider=job.provider,
-                dataset=job.dataset,
-                symbol=job.symbol,
-                stage="http_end",
-                attempt=att_no,
-                duration_s=dur,
-            )
-            return resp
     raise FetchError("Fetch failed after all retry attempts")

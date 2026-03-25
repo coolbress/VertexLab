@@ -59,14 +59,20 @@ async def test_writer_worker_flushes_on_shutdown_sentinel() -> None:
     async def _flush_all_writer_buffers(**kwargs: object) -> None:
         called["flush_all"] += 1
 
+    async def _buffer_or_flush_packet(**kwargs: object) -> None:
+        return None
+
+    async def _flush_on_writer_cancel(**kwargs: object) -> None:
+        return None
+
     await writer_worker(
         pkt_q=q,
         result=RunResult(provider="sharadar"),
         result_lock=asyncio.Lock(),
         flush_threshold=10,
         flush_all_writer_buffers=_flush_all_writer_buffers,
-        buffer_or_flush_packet=lambda **kwargs: None,
-        flush_on_writer_cancel=lambda **kwargs: None,
+        buffer_or_flush_packet=_buffer_or_flush_packet,
+        flush_on_writer_cancel=_flush_on_writer_cancel,
         logger=type("L", (), {"debug": lambda *args, **kwargs: None, "exception": lambda *args, **kwargs: None})(),
     )
     assert called["flush_all"] == 1

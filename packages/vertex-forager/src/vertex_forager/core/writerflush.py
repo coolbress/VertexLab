@@ -411,8 +411,9 @@ async def flush_all_writer_buffers(
     flush_writer_table: AsyncFunc,
     logger: LoggerLike,
 ) -> None:
-    try:
-        for table in list(buffers.keys()):
+    first_exc: Exception | None = None
+    for table in list(buffers.keys()):
+        try:
             await flush_writer_table(
                 table=table,
                 buffers=buffers,
@@ -420,9 +421,12 @@ async def flush_all_writer_buffers(
                 result=result,
                 result_lock=result_lock,
             )
-    except Exception as exc:
-        logger.exception("WRITER: Error during shutdown flush: %s", exc)
-        raise
+        except Exception as exc:
+            logger.exception("WRITER: Error during shutdown flush for %s: %s", table, exc)
+            if first_exc is None:
+                first_exc = exc
+    if first_exc is not None:
+        raise first_exc
 
 
 async def buffer_or_flush_packet(
@@ -641,13 +645,6 @@ async def flush_chunked_table(
     logger: LoggerLike,
 ) -> None:
     first = packets[0]
-    quality_df = concat_frames_with_flex(
-        frames=[p.frame for p in packets],
-        table_name=first.table,
-        schema=schema,
-        rechunk=False,
-    )
-    await validate_data_quality(table=table, df=quality_df, result=result, result_lock=result_lock)
     total_rows_est = sum(len(p.frame) for p in packets)
     if total_rows_est > 0:
         est_chunks = (total_rows_est + chunk_size - 1) // chunk_size
@@ -682,6 +679,7 @@ async def flush_chunked_table(
                 schema=schema,
                 rechunk=False,
             )
+            await validate_data_quality(table=table, df=chunk_df, result=result, result_lock=result_lock)
             validate_unique_key(schema=schema, table=table, frame=chunk_df)
             chunk_packet = FramePacket(
                 provider=first.provider,

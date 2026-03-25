@@ -50,6 +50,12 @@
 
 ::: vertex_forager.core.http.HttpExecutor
 
+## Retry
+
+::: vertex_forager.core.retry.create_retry_controller
+
+::: vertex_forager.core.retry.RetryExecutor
+
 ## Writers
 
 ::: vertex_forager.writers.create_writer
@@ -61,6 +67,16 @@
 ::: vertex_forager.writers.memory.InMemoryBufferWriter
 
 ::: vertex_forager.writers.base.WriteResult
+
+## Lifecycle
+
+::: vertex_forager.core.lifecycle.initialize_run_state
+
+::: vertex_forager.core.lifecycle.create_run_queues
+
+::: vertex_forager.core.lifecycle.create_run_result
+
+::: vertex_forager.core.lifecycle.RunFinalizer
 
 ## Exceptions
 
@@ -83,6 +99,10 @@
 ::: vertex_forager.exceptions.PrimaryKeyNullError
 
 ::: vertex_forager.exceptions.DLQSpoolError
+
+## Core Errors
+
+::: vertex_forager.core.errors.RunError
 
 ## Utilities
 
