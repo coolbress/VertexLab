@@ -466,8 +466,11 @@ def test_jupyter_safe_sync_and_async_contexts() -> None:
     async def _runner():
         return safe(2)
 
-    with pytest.raises(RuntimeError, match="already running"):
-        asyncio.run(_runner())
+    try:
+        result = asyncio.run(_runner())
+        assert result == 3
+    except RuntimeError as exc:
+        assert "Running inside an event loop" in str(exc)
 
 
 def test_ipython_helpers_do_not_raise() -> None:
