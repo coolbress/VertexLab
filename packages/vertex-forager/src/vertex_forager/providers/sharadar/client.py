@@ -35,7 +35,7 @@ from vertex_forager.routers import create_router
 from vertex_forager.schema.mapper import SchemaMapper
 from vertex_forager.utils import (
     Spinner,
-    jupyter_safe,
+    run_sync_compat,
     validate_memory_usage,
     validate_tickers,
 )
@@ -144,8 +144,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
     # ----------------------------------------------------------------
     # Public User Methods
     # ----------------------------------------------------------------
-    @jupyter_safe
-    async def get_ticker_info(
+    def get_ticker_info(
         self,
         *,
         tickers: list[str] | None = None,
@@ -170,6 +169,23 @@ class SharadarClient(BaseClient[SharadarDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
+        return run_sync_compat(
+            self._get_ticker_info_async(
+                tickers=tickers,
+                connect_db=connect_db,
+                show_progress=show_progress,
+                **kwargs,
+            )
+        )
+
+    async def _get_ticker_info_async(
+        self,
+        *,
+        tickers: list[str] | None = None,
+        connect_db: str | Path | None = None,
+        show_progress: bool = True,
+        **kwargs: object,
+    ) -> pl.DataFrame | RunResult:
         return await self._get_ticker_info_impl(
             tickers=tickers,
             connect_db=connect_db,
@@ -177,8 +193,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             **kwargs,
         )
 
-    @jupyter_safe
-    async def get_sp500_history(
+    def get_sp500_history(
         self,
         *,
         connect_db: str | Path | None = None,
@@ -200,6 +215,21 @@ class SharadarClient(BaseClient[SharadarDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
+        return run_sync_compat(
+            self._get_sp500_history_async(
+                connect_db=connect_db,
+                show_progress=show_progress,
+                **kwargs,
+            )
+        )
+
+    async def _get_sp500_history_async(
+        self,
+        *,
+        connect_db: str | Path | None = None,
+        show_progress: bool = True,
+        **kwargs: object,
+    ) -> pl.DataFrame | RunResult:
         cfg = self._build_fetch_config(
             dataset="sp500",
             symbols=None,
@@ -216,8 +246,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         )
         return await self._fetch_pagination(cfg)
 
-    @jupyter_safe
-    async def get_price_data(
+    def get_price_data(
         self,
         *,
         tickers: list[str],
@@ -249,6 +278,27 @@ class SharadarClient(BaseClient[SharadarDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
+        return run_sync_compat(
+            self._get_price_data_async(
+                tickers=tickers,
+                connect_db=connect_db,
+                start_date=start_date,
+                end_date=end_date,
+                show_progress=show_progress,
+                **kwargs,
+            )
+        )
+
+    async def _get_price_data_async(
+        self,
+        *,
+        tickers: list[str],
+        connect_db: str | Path | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        show_progress: bool = True,
+        **kwargs: object,
+    ) -> pl.DataFrame | RunResult:
         self._require_valid_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="price",
@@ -265,8 +315,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         )
         return await self._fetch_per_ticker(cfg)
 
-    @jupyter_safe
-    async def get_fundamental_data(
+    def get_fundamental_data(
         self,
         *,
         tickers: list[str],
@@ -298,6 +347,29 @@ class SharadarClient(BaseClient[SharadarDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
+        return run_sync_compat(
+            self._get_fundamental_data_async(
+                tickers=tickers,
+                connect_db=connect_db,
+                start_date=start_date,
+                end_date=end_date,
+                dimension=dimension,
+                show_progress=show_progress,
+                **kwargs,
+            )
+        )
+
+    async def _get_fundamental_data_async(
+        self,
+        *,
+        tickers: list[str],
+        connect_db: str | Path | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        dimension: str = "MRT",
+        show_progress: bool = True,
+        **kwargs: object,
+    ) -> pl.DataFrame | RunResult:
         self._require_valid_tickers(tickers)
         extras = {**dict(kwargs), "dimension": dimension}
         cfg = self._build_fetch_config(
@@ -315,8 +387,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         )
         return await self._fetch_per_ticker(cfg)
 
-    @jupyter_safe
-    async def get_daily_metrics(
+    def get_daily_metrics(
         self,
         *,
         tickers: list[str],
@@ -346,6 +417,27 @@ class SharadarClient(BaseClient[SharadarDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
+        return run_sync_compat(
+            self._get_daily_metrics_async(
+                tickers=tickers,
+                connect_db=connect_db,
+                start_date=start_date,
+                end_date=end_date,
+                show_progress=show_progress,
+                **kwargs,
+            )
+        )
+
+    async def _get_daily_metrics_async(
+        self,
+        *,
+        tickers: list[str],
+        connect_db: str | Path | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        show_progress: bool = True,
+        **kwargs: object,
+    ) -> pl.DataFrame | RunResult:
         self._require_valid_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="daily",
@@ -362,8 +454,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         )
         return await self._fetch_per_ticker(cfg)
 
-    @jupyter_safe
-    async def get_corporate_actions(
+    def get_corporate_actions(
         self,
         *,
         tickers: list[str],
@@ -393,6 +484,27 @@ class SharadarClient(BaseClient[SharadarDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
+        return run_sync_compat(
+            self._get_corporate_actions_async(
+                tickers=tickers,
+                connect_db=connect_db,
+                start_date=start_date,
+                end_date=end_date,
+                show_progress=show_progress,
+                **kwargs,
+            )
+        )
+
+    async def _get_corporate_actions_async(
+        self,
+        *,
+        tickers: list[str],
+        connect_db: str | Path | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        show_progress: bool = True,
+        **kwargs: object,
+    ) -> pl.DataFrame | RunResult:
         self._require_valid_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="actions",
@@ -409,8 +521,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         )
         return await self._fetch_per_ticker(cfg)
 
-    @jupyter_safe
-    async def get_insider_trading(
+    def get_insider_trading(
         self,
         *,
         tickers: list[str],
@@ -440,6 +551,27 @@ class SharadarClient(BaseClient[SharadarDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
+        return run_sync_compat(
+            self._get_insider_trading_async(
+                tickers=tickers,
+                connect_db=connect_db,
+                start_date=start_date,
+                end_date=end_date,
+                show_progress=show_progress,
+                **kwargs,
+            )
+        )
+
+    async def _get_insider_trading_async(
+        self,
+        *,
+        tickers: list[str],
+        connect_db: str | Path | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        show_progress: bool = True,
+        **kwargs: object,
+    ) -> pl.DataFrame | RunResult:
         self._require_valid_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="insider",
@@ -456,8 +588,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         )
         return await self._fetch_per_ticker(cfg)
 
-    @jupyter_safe
-    async def get_institutional_ownership(
+    def get_institutional_ownership(
         self,
         *,
         tickers: list[str],
@@ -487,6 +618,27 @@ class SharadarClient(BaseClient[SharadarDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
+        return run_sync_compat(
+            self._get_institutional_ownership_async(
+                tickers=tickers,
+                connect_db=connect_db,
+                start_date=start_date,
+                end_date=end_date,
+                show_progress=show_progress,
+                **kwargs,
+            )
+        )
+
+    async def _get_institutional_ownership_async(
+        self,
+        *,
+        tickers: list[str],
+        connect_db: str | Path | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        show_progress: bool = True,
+        **kwargs: object,
+    ) -> pl.DataFrame | RunResult:
         self._require_valid_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="institutional",

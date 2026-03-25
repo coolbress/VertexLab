@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Coroutine, Iterable
 import contextlib
 import functools
 import itertools
@@ -12,7 +12,7 @@ import shutil
 import sys
 import threading
 import time
-from typing import Any, Literal
+from typing import Any, Literal, TypeVar
 import warnings
 
 from dotenv import load_dotenv
@@ -23,6 +23,7 @@ from vertex_forager.core.errors import RunError
 from vertex_forager.exceptions import InputError
 
 logger = logging.getLogger(__name__)
+T = TypeVar("T")
 
 
 def _safe_get_ipython() -> Any:
@@ -723,26 +724,30 @@ def jupyter_safe(async_func: Callable[..., Any]) -> Callable[..., Any]:
 
     @functools.wraps(async_func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            return asyncio.run(async_func(*args, **kwargs))
-        if _safe_get_ipython() is not None:
-            try:
-                import nest_asyncio
-            except ImportError as exc:
-                raise ImportError(
-                    "Jupyter runtime detected. Install optional dependency: pip install vertex-forager[notebook]"
-                ) from exc
-            nest_asyncio.apply()
-        task = loop.create_task(async_func(*args, **kwargs))
-        try:
-            return loop.run_until_complete(task)
-        except KeyboardInterrupt:
-            if not task.done():
-                task.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    loop.run_until_complete(task)
-            raise
+        return run_sync_compat(async_func(*args, **kwargs))
 
     return wrapper
+
+
+def run_sync_compat(coro: Coroutine[Any, Any, T]) -> T:
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    try:
+        import nest_asyncio
+    except ImportError as exc:
+        coro.close()
+        raise RuntimeError(
+            "Running inside an event loop. Install optional dependency: pip install vertex-forager[notebook]"
+        ) from exc
+    nest_asyncio.apply(loop)
+    task = loop.create_task(coro)
+    try:
+        return loop.run_until_complete(task)
+    except KeyboardInterrupt:
+        if not task.done():
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                loop.run_until_complete(task)
+        raise

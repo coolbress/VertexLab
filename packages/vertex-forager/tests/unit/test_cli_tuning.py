@@ -39,7 +39,7 @@ def test_tune_profile_price_writes_metrics(tmp_path: Path, monkeypatch: pytest.M
         def __init__(self, *args, **kwargs) -> None:
             pass
 
-        async def get_price_data(self, **kwargs):  # pragma: no cover - executed via asyncio.run
+        def get_price_data(self, **kwargs):  # pragma: no cover
             return DummyRun()
 
     # Patch client factory and writer
@@ -76,7 +76,7 @@ def test_tune_profile_financials_writes_metrics(tmp_path: Path, monkeypatch: pyt
         def __init__(self, *args, **kwargs) -> None:
             pass
 
-        async def get_financials(self, **kwargs):  # pragma: no cover
+        def get_financials(self, **kwargs):  # pragma: no cover
             return DummyRun()
 
     import vertex_forager.providers.yfinance.client as yf_client

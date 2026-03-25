@@ -104,7 +104,7 @@ class TestYFinanceRouterDateParams:
         ("get_news", {"tickers": ["AAPL"]}, "news", "yfinance_news"),
     ],
 )
-async def test_public_methods_dispatch_to_expected_dataset_unwrapped_async(
+async def test_public_methods_dispatch_to_expected_dataset_async(
     method_name: str,
     kwargs: dict[str, Any],
     expected_dataset: str,
@@ -119,17 +119,32 @@ async def test_public_methods_dispatch_to_expected_dataset_unwrapped_async(
         return {"ok": True}
 
     monkeypatch.setattr(client, "_dispatch_fetch", _fake_dispatch_fetch)
-    wrapped_method = getattr(client, method_name)
-    raw_method = wrapped_method.__wrapped__
-    result = await raw_method(client, connect_db=None, show_progress=False, **kwargs)
+    raw_method = getattr(client, f"_{method_name}_async")
+    result = await raw_method(connect_db=None, show_progress=False, **kwargs)
     assert result == {"ok": True}
     assert captured["dataset"] == expected_dataset
     assert captured["table_name"] == expected_table
     assert captured["tickers"] == ["AAPL"]
 
 
+def test_get_info_sync_facade_dispatches(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = YFinanceClient()
+    captured: dict[str, Any] = {}
+
+    async def _fake_dispatch_fetch(**dispatch_kwargs: Any) -> dict[str, Any]:
+        captured.update(dispatch_kwargs)
+        return {"ok": True}
+
+    monkeypatch.setattr(client, "_dispatch_fetch", _fake_dispatch_fetch)
+    result = client.get_info(tickers=["AAPL"], connect_db=None, show_progress=False)
+    assert result == {"ok": True}
+    assert captured["dataset"] == "info"
+    assert captured["table_name"] == "yfinance_info"
+    assert captured["tickers"] == ["AAPL"]
+
+
 @pytest.mark.asyncio
-async def test_get_financials_maps_earnings_to_financials_unwrapped_async(
+async def test_get_financials_maps_earnings_to_financials_async(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client = YFinanceClient()
@@ -140,8 +155,7 @@ async def test_get_financials_maps_earnings_to_financials_unwrapped_async(
         return {"ok": True}
 
     monkeypatch.setattr(client, "_dispatch_fetch", _fake_dispatch_fetch)
-    result = await client.get_financials.__wrapped__(
-        client,
+    result = await client._get_financials_async(
         kind="earnings",
         period="annual",
         tickers=["AAPL"],
@@ -154,7 +168,7 @@ async def test_get_financials_maps_earnings_to_financials_unwrapped_async(
 
 
 @pytest.mark.asyncio
-async def test_get_financials_quarterly_income_stmt_dataset_unwrapped_async(
+async def test_get_financials_quarterly_income_stmt_dataset_async(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client = YFinanceClient()
@@ -165,8 +179,7 @@ async def test_get_financials_quarterly_income_stmt_dataset_unwrapped_async(
         return {"ok": True}
 
     monkeypatch.setattr(client, "_dispatch_fetch", _fake_dispatch_fetch)
-    result = await client.get_financials.__wrapped__(
-        client,
+    result = await client._get_financials_async(
         kind="income_stmt",
         period="quarterly",
         tickers=["AAPL"],
@@ -178,11 +191,10 @@ async def test_get_financials_quarterly_income_stmt_dataset_unwrapped_async(
 
 
 @pytest.mark.asyncio
-async def test_get_financials_rejects_quarterly_earnings_unwrapped_async() -> None:
+async def test_get_financials_rejects_quarterly_earnings_async() -> None:
     client = YFinanceClient()
     with pytest.raises(InputError, match="quarterly_earnings"):
-        await client.get_financials.__wrapped__(
-            client,
+        await client._get_financials_async(
             kind="earnings",
             period="quarterly",
             tickers=["AAPL"],

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import itertools
 import os
@@ -81,14 +80,12 @@ def _measure_yfinance_price(
 
     client = YFinanceClient(rate_limit=60, structured_logs=False)
     t0 = time.monotonic()
-    run_result = asyncio.run(
-        client.get_price_data(
-            tickers=tickers,
-            connect_db=combo_db_path,
-            show_progress=False,
-            start_date=start_date,
-            end_date=end_date,
-        )
+    run_result = client.get_price_data(
+        tickers=tickers,
+        connect_db=combo_db_path,
+        show_progress=False,
+        start_date=start_date,
+        end_date=end_date,
     )
     t1 = time.monotonic()
     return {"duration_s": round(t1 - t0, 3), "metrics": _collect_metrics(run_result)}
@@ -99,14 +96,12 @@ def _measure_yfinance_financials(*, combo_db_path: Path, tickers: list[str]) -> 
 
     client = YFinanceClient(rate_limit=60, structured_logs=False)
     t0 = time.monotonic()
-    run_result = asyncio.run(
-        client.get_financials(
-            kind="income_stmt",
-            period="annual",
-            tickers=tickers,
-            connect_db=combo_db_path,
-            show_progress=False,
-        )
+    run_result = client.get_financials(
+        kind="income_stmt",
+        period="annual",
+        tickers=tickers,
+        connect_db=combo_db_path,
+        show_progress=False,
     )
     t1 = time.monotonic()
     return {"duration_s": round(t1 - t0, 3), "metrics": _collect_metrics(run_result)}
@@ -124,14 +119,12 @@ def _measure_sharadar(
 
     client = SharadarClient(api_key=api_key, rate_limit=60, structured_logs=False)
     t0 = time.monotonic()
-    run_result = asyncio.run(
-        client.get_fundamental_data(
-            tickers=tickers,
-            connect_db=combo_db_path,
-            dimension="MRT",
-            start_date=start_date,
-            end_date=end_date,
-        )
+    run_result = client.get_fundamental_data(
+        tickers=tickers,
+        connect_db=combo_db_path,
+        dimension="MRT",
+        start_date=start_date,
+        end_date=end_date,
     )
     t1 = time.monotonic()
     return {"duration_s": round(t1 - t0, 3), "metrics": _collect_metrics(run_result)}

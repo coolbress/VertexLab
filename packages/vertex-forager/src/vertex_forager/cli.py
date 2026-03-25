@@ -123,7 +123,10 @@ def collect(symbol: tuple[str, ...], source: str) -> None:
                     # For Sharadar, we use the specialized client method
                     # In the future, this can be generalized via a CollectorCore interface
                     sc = cast("SharadarClient", client)
-                    result = cast("pl.DataFrame | RunResult | None", await sc.get_price_data(tickers=list(symbol)))
+                    result = cast(
+                        "pl.DataFrame | RunResult | None",
+                        await sc._get_price_data_async(tickers=list(symbol)),
+                    )
                     return result
                 else:
                     raise click.ClickException(f"`{source}` is not supported by `collect` yet.")
@@ -283,14 +286,12 @@ def tune_profile(
         os.environ.setdefault("VF_METRICS_ENABLED", "1")
         client = YFinanceClient(rate_limit=60, metrics_enabled=True, structured_logs=False)
         _tickers = [t.strip().upper() for t in (tickers or "AAPL,MSFT,NVDA,GOOGL,AMZN").split(",")]
-        run = asyncio.run(
-            client.get_price_data(
-                tickers=_tickers,
-                connect_db=db_path,
-                show_progress=False,
-                start_date=start_date,
-                end_date=end_date,
-            )
+        run = client.get_price_data(
+            tickers=_tickers,
+            connect_db=db_path,
+            show_progress=False,
+            start_date=start_date,
+            end_date=end_date,
         )
         data = as_dict(run)
         metrics_path = out_dir / "profile_metrics.json"
@@ -314,14 +315,12 @@ def tune_profile(
             )
         ]
         yfc = YFinanceClient(rate_limit=60, structured_logs=False)
-        yf_run = asyncio.run(
-            yfc.get_financials(
-                kind="income_stmt",
-                period="annual",
-                tickers=yf_tickers,
-                connect_db=db_path,
-                show_progress=False,
-            )
+        yf_run = yfc.get_financials(
+            kind="income_stmt",
+            period="annual",
+            tickers=yf_tickers,
+            connect_db=db_path,
+            show_progress=False,
         )
         sh_key = os.getenv("SHARADAR_API_KEY")
         sh_run = None
@@ -332,12 +331,10 @@ def tune_profile(
                     rate_limit=60,
                     structured_logs=False,
                 )
-                sh_run = asyncio.run(
-                    shc.get_fundamental_data(
-                        tickers=yf_tickers[:5],
-                        connect_db=db_path,
-                        dimension="MRT",
-                    )
+                sh_run = shc.get_fundamental_data(
+                    tickers=yf_tickers[:5],
+                    connect_db=db_path,
+                    dimension="MRT",
                 )
             except Exception as e:
                 logger.warning("Sharadar verification skipped due to error: %s", e)
