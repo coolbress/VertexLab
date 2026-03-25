@@ -204,6 +204,8 @@ jobs:
         uses: pypa/gh-action-pip-audit@1220774d901786e6f652ae159f7b6bc8fea6d266  # v1.1.0 pinned
         with:
           virtual-environment: ${{ env.VENV }}
+          # Temporary: transitive vulnerability via yfinance optional dependency; local-access regex DoS, not exploitable in CI runtime.
+          # Tracking: remove this allowlist once upstream ships a fixed pygments release (CVE-2026-4539).
           ignore-vulns: |
             CVE-2026-4539
 
