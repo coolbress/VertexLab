@@ -50,6 +50,26 @@ def schedule_packet_sentinels(
     writer_tasks: list[asyncio.Task[Any]] | None,
     logger: Any,
 ) -> tuple[int, list[asyncio.Task[Any]]]:
+    """Schedule packet-queue sentinels for active writer tasks.
+
+    Attempts to enqueue ``None`` sentinels with ``put_nowait`` first, then
+    falls back to async ``put`` tasks for any remaining writers when the queue
+    is full.
+
+    Args:
+        pkt_q: Packet queue receiving writer shutdown sentinels, or ``None``.
+        writer_tasks: Current writer task list (or ``None`` if unavailable).
+        logger: Logger used for debug-level diagnostics.
+
+    Returns:
+        A tuple of ``(active_writers, sentinel_put_tasks)`` where
+        ``active_writers`` is the count of unfinished writer tasks and
+        ``sentinel_put_tasks`` contains scheduled async put tasks.
+
+    Notes:
+        - Uses best-effort insertion and suppresses operational exceptions.
+        - Returns ``(0, [])`` when no queue is present or no active writers.
+    """
     try:
         if pkt_q is None:
             return 0, []
@@ -83,6 +103,21 @@ async def await_packet_sentinel_tasks(
     sentinel_put_tasks: list[asyncio.Task[Any]],
     logger: Any,
 ) -> bool:
+    """Await pending sentinel put tasks and handle timeout cancellation.
+
+    Args:
+        writer_set: Active writer tasks to cancel if sentinel puts time out.
+        sentinel_put_tasks: Async tasks created to enqueue packet sentinels.
+        logger: Logger used for debug-level diagnostics.
+
+    Returns:
+        ``True`` if a timeout occurred, otherwise ``False``.
+
+    Notes:
+        - Wait timeout is fixed at ``10.0`` seconds.
+        - On timeout, pending sentinel put tasks are cancelled.
+        - On timeout, writer tasks are also cancelled and awaited best-effort.
+    """
     if not sentinel_put_tasks:
         return False
     try:
@@ -107,6 +142,19 @@ async def cancel_non_writer_tasks(
     active_tasks: list[asyncio.Task[Any]],
     writer_set: set[asyncio.Task[Any]],
 ) -> None:
+    """Cancel all active tasks except writer tasks.
+
+    Args:
+        active_tasks: All currently tracked pipeline tasks.
+        writer_set: Writer tasks that must be preserved in this phase.
+
+    Returns:
+        None.
+
+    Notes:
+        - Non-writer tasks are cancelled if still pending.
+        - Completion is awaited with ``return_exceptions=True``.
+    """
     other_tasks: list[asyncio.Task[Any]] = [t for t in active_tasks if t not in writer_set]
     for task in other_tasks:
         if not task.done():
@@ -120,6 +168,19 @@ async def await_writer_tasks(
     writer_set: set[asyncio.Task[Any]],
     logger: Any,
 ) -> None:
+    """Await writer tasks with suppressed operational exceptions.
+
+    Args:
+        writer_set: Writer tasks to await.
+        logger: Logger used for debug-level diagnostics.
+
+    Returns:
+        None.
+
+    Notes:
+        - Returns immediately when no writer tasks are present.
+        - Exceptions during gather are suppressed and logged at debug level.
+    """
     if not writer_set:
         return
     try:
