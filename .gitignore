@@ -11,11 +11,12 @@ env/
 .mypy_cache/
 
 # IDE
-.vscode/
 .idea/
 *.swp
 *.swo
 .trae/
+.vscode/launch.json
+.vscode/tasks.json
 
 # OS
 .DS_Store
