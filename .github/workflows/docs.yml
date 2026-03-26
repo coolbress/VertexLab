@@ -9,13 +9,6 @@ on:
       - "packages/**/mkdocs.yml"
       - "packages/vertex-forager/docs/**"
       - ".github/workflows/docs.yml"
-  push:
-    branches: ["main"]
-    paths:
-      - "mkdocs.yml"
-      - "docs/**"
-      - "packages/**/mkdocs.yml"
-      - "packages/vertex-forager/docs/**"
 
 permissions:
   contents: read
