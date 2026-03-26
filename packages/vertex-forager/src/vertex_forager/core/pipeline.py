@@ -22,21 +22,18 @@ Usage:
 from __future__ import annotations
 
 import asyncio
-from collections import defaultdict, deque
+from collections import deque
 from collections.abc import Awaitable, Callable, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
-from functools import partial
 import inspect
 import itertools
 import logging
 import os
-import re
 import time
 from typing import TYPE_CHECKING, Any, cast
 
 import httpx
-import polars as pl
 from polars.exceptions import ComputeError
 
 from vertex_forager.constants import (
@@ -68,6 +65,21 @@ from vertex_forager.core.dlq import (
     build_writer_error_summary,
     spool_to_dlq_and_rescue,
 )
+from vertex_forager.core.lifecycle import (
+    RunFinalizer,
+)
+from vertex_forager.core.lifecycle import (
+    create_run_queues as create_run_queues_impl,
+)
+from vertex_forager.core.lifecycle import (
+    create_run_result as create_run_result_impl,
+)
+from vertex_forager.core.lifecycle import (
+    init_metrics_for_run as init_metrics_for_run_impl,
+)
+from vertex_forager.core.lifecycle import (
+    initialize_run_state as initialize_run_state_impl,
+)
 from vertex_forager.core.orchestration import (
     await_packet_sentinel_tasks as await_packet_sentinel_tasks_impl,
 )
@@ -83,12 +95,32 @@ from vertex_forager.core.orchestration import (
 from vertex_forager.core.orchestration import (
     schedule_packet_sentinels as schedule_packet_sentinels_impl,
 )
-from vertex_forager.exceptions import (
-    DLQSpoolError,
-    FetchError,
-    PrimaryKeyMissingError,
-    PrimaryKeyNullError,
-    ValidationError,
+from vertex_forager.core.quality import (
+    validate_data_quality as validate_data_quality_impl,
+)
+from vertex_forager.core.retry import (
+    RetryExecutor,
+)
+from vertex_forager.core.scheduler import (
+    FairnessState,
+)
+from vertex_forager.core.scheduler import (
+    pop_next_job_respecting_fairness as pop_next_job_respecting_fairness_impl,
+)
+from vertex_forager.core.workerio import (
+    emit_packets_and_next_jobs as emit_packets_and_next_jobs_impl,
+)
+from vertex_forager.core.workerio import (
+    fetch_payload as fetch_payload_impl,
+)
+from vertex_forager.core.workerio import (
+    parse_payload as parse_payload_impl,
+)
+from vertex_forager.core.workerio import (
+    record_worker_error as record_worker_error_impl,
+)
+from vertex_forager.core.writerflush import (
+    WriterFlushService,
 )
 
 try:
@@ -103,17 +135,21 @@ from vertex_forager.core.config import (
     ParseResult,
     RunResult,
 )
-from vertex_forager.core.errors import RunError
-from vertex_forager.core.retry import create_retry_controller
+from vertex_forager.core.errors import (
+    DLQSpoolError,
+    FetchError,
+    RunError,
+    ValidationError,
+)
 from vertex_forager.schema.registry import get_table_schema
-from vertex_forager.utils import cleanup_dlq_tmp, sanitize_field
+from vertex_forager.utils import sanitize_field
 
 if TYPE_CHECKING:
+    import polars as pl
+
     from vertex_forager.core.contracts import IMapper, IRouter, IWriter
     from vertex_forager.core.controller import FlowController
     from vertex_forager.core.http import HttpExecutor
-    from vertex_forager.core.types import DLQStatus
-    from vertex_forager.schema.config import TableSchema
 
 InMemoryBufferWriterType: type | None
 try:
@@ -242,14 +278,49 @@ class VertexForager:
         )
         # Global pagination fairness bookkeeping
         self._fair_lock: asyncio.Lock | None = None
-        self._fair_last_symbol: str | None = None
-        self._fair_burst_count: int = 0
+        self._fair_state = FairnessState()
         # Writer flush idempotence
         self._writer_flushed: bool = False
         self._writer_flush_attempted: bool = False
         self._summary: dict[str, float] = {}
         self._metrics_sink = getattr(config, "metrics_sink", None)
         self._stop_task: asyncio.Task[None] | None = None
+        self._retry_executor = RetryExecutor(
+            retry_config=self._config.retry,
+            controller=self.controller,
+            http_fetch=self._http.fetch,
+            observe=self._observe,
+            log_structured=self._log_structured,
+        )
+        self._run_finalizer = RunFinalizer(
+            mapper=self._mapper,
+            writer=self._writer,
+            inc=self._inc,
+            structured_logs=self._structured_logs,
+            log_verbose=self._log_verbose,
+            provider=str(getattr(self._router, "provider", "")),
+            sanitize_field=sanitize_field,
+            logger=logger,
+        )
+        self._writer_flush_service = WriterFlushService(
+            writer=self._writer,
+            config=self._config,
+            logger=logger,
+            inc=self._inc,
+            observe=self._observe,
+            log_structured=self._log_structured,
+            span=self._span,
+            validate_data_quality=self._validate_data_quality,
+            get_table_schema=get_table_schema,
+            spool_to_dlq_and_rescue=spool_to_dlq_and_rescue,
+            build_writer_error_summary=build_writer_error_summary,
+            compute_error_cls=ComputeError,
+            validation_error_cls=ValidationError,
+            dlq_spool_error_cls=DLQSpoolError,
+            duckdb_module=_duckdb,
+            progress_log_chunk_rows=PROGRESS_LOG_CHUNK_ROWS,
+            router_flexible_schema=bool(getattr(self._router, "flexible_schema", False)),
+        )
 
         # For checkpoint tracking
         self._completed_symbols: set[str] = set()
@@ -600,8 +671,7 @@ class VertexForager:
         self._pkt_q = pkt_q
         self._writer_tasks = writer_tasks
         self._fair_lock = asyncio.Lock()
-        self._fair_last_symbol = None
-        self._fair_burst_count = 0
+        self._fair_state = FairnessState()
         self._writer_flush_attempted = False
         self._writer_flushed = False
         self._flush_lock = asyncio.Lock()
@@ -694,31 +764,16 @@ class VertexForager:
         await fetch_monitor
 
     def _initialize_run_state(self, *, dataset: str, resume: bool) -> tuple[str, set[str]]:
-        run_id = f"{self._router.provider}_{dataset}_{int(time.time())}"
-        completed_symbols: set[str] = set()
-        self._run_id = run_id
-        self._completed_symbols = set()
-        self._failed_symbols = set()
-        if not resume:
-            return run_id, completed_symbols
-        latest_checkpoint = self._find_latest_checkpoint(self._router.provider, dataset)
-        if latest_checkpoint is None:
-            logger.info(
-                "PIPELINE: No checkpoint found for provider %s and dataset %s, starting fresh",
-                self._router.provider,
-                dataset,
-            )
-            return run_id, completed_symbols
-        run_id = latest_checkpoint.run_id
-        completed_symbols = set(latest_checkpoint.completed)
-        self._run_id = run_id
-        self._completed_symbols = set(latest_checkpoint.completed)
-        self._failed_symbols = set(latest_checkpoint.failed)
-        logger.info(
-            "PIPELINE: Resuming from checkpoint %s, skipping %d completed symbols",
-            run_id,
-            len(completed_symbols),
+        run_id, completed_symbols, failed_symbols = initialize_run_state_impl(
+            provider=self._router.provider,
+            dataset=dataset,
+            resume=resume,
+            find_latest_checkpoint=self._find_latest_checkpoint,
+            logger=logger,
         )
+        self._run_id = run_id
+        self._completed_symbols = set(completed_symbols)
+        self._failed_symbols = set(failed_symbols)
         return run_id, completed_symbols
 
     def _create_run_queues(
@@ -727,31 +782,32 @@ class VertexForager:
         asyncio.PriorityQueue[tuple[int, int, FetchJob | None]],
         asyncio.Queue[FramePacket | None],
     ]:
-        req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue(
-            maxsize=self._config.queue_max
+        req_q, pkt_q = create_run_queues_impl(
+            queue_max=self._config.queue_max,
+            dlq_tmp_periodic_cleanup=bool(getattr(self._config, "dlq_tmp_periodic_cleanup", False)),
+            dlq_tmp_retention_s=int(getattr(self._config, "dlq_tmp_retention_s", 86400)),
+            cache_dir=get_cache_dir(),
+            logger=logger,
         )
-        pkt_q: asyncio.Queue[FramePacket | None] = asyncio.Queue(maxsize=self._config.queue_max)
-        if getattr(self._config, "dlq_tmp_periodic_cleanup", False):
-            try:
-                cleanup_dlq_tmp(get_cache_dir() / "dlq", int(getattr(self._config, "dlq_tmp_retention_s", 86400)))
-            except Exception as cleanup_error:
-                logger.warning("PIPELINE: DLQ periodic cleanup failed: %s", cleanup_error)
-        return req_q, pkt_q
+        return (
+            cast("asyncio.PriorityQueue[tuple[int, int, FetchJob | None]]", req_q),
+            cast("asyncio.Queue[FramePacket | None]", pkt_q),
+        )
 
     def _init_metrics_for_run(self) -> None:
+        counters, hists, summary = init_metrics_for_run_impl(metrics_enabled=self._metrics_enabled)
         if not self._metrics_enabled:
             return
-        self._counters = {}
-        self._hists = {}
-        self._summary = {}
-        self._counters["pipeline_runs"] = 1
+        self._counters = counters
+        self._hists = hists
+        self._summary = summary
 
     def _create_run_result(self, *, run_id: str, dataset: str) -> tuple[RunResult, asyncio.Lock]:
-        result = RunResult(provider=self._router.provider)
-        result.run_id = run_id
-        result.dataset = dataset
-        result.started_at = time.time()
-        result_lock = asyncio.Lock()
+        result, result_lock = create_run_result_impl(
+            provider=self._router.provider,
+            run_id=run_id,
+            dataset=dataset,
+        )
         self._run_result = result
         self._run_result_lock = result_lock
         return result, result_lock
@@ -827,30 +883,14 @@ class VertexForager:
                 logger.warning("PIPELINE: Failed to save run history: %s", e)
 
     def _merge_component_counters(self) -> None:
-        with suppress(Exception):
-            mapper_counters = getattr(self._mapper, "get_counters_and_reset", None)
-            if callable(mapper_counters):
-                for k, v in dict(mapper_counters()).items():
-                    self._inc(k, int(v))
-        with suppress(Exception):
-            writer_counters = getattr(self._writer, "get_counters_and_reset", None)
-            if callable(writer_counters):
-                for k, v in dict(writer_counters()).items():
-                    self._inc(k, int(v))
+        self._run_finalizer.merge_component_counters()
 
     def _emit_pipeline_summary_log(self, *, dataset: str, started_monotonic: float) -> None:
-        if not self._structured_logs:
-            return
-        dur_run = time.monotonic() - started_monotonic
-        msg_s = (
-            f"OBS provider={sanitize_field(self._router.provider)} "
-            f"dataset={sanitize_field(dataset)} symbol=* stage=pipeline_summary attempt=0 "
-            f"duration={dur_run:.3f}s " + " ".join(f"{k}={v:.3f}" for k, v in sorted(self._summary.items()))
+        self._run_finalizer.emit_pipeline_summary_log(
+            dataset=dataset,
+            started_monotonic=started_monotonic,
+            summary=self._summary,
         )
-        if self._log_verbose:
-            logger.info(msg_s)
-        else:
-            logger.debug(msg_s)
 
     async def stop(self) -> None:
         task = getattr(self, "_stop_task", None)
@@ -1122,7 +1162,7 @@ class VertexForager:
         self,
         *,
         req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]],
-        burst_cap: int | None,
+        burst_cap: int,
     ) -> tuple[int, FetchJob | None, list[FetchJob], bool]:
         """Atomically select the next job while enforcing pagination burst cap.
 
@@ -1133,66 +1173,20 @@ class VertexForager:
             already_done: True if this method already called task_done on the selected item
                           (only true when consuming a sentinel); caller must NOT call task_done again.
         """
-        demote_jobs: list[FetchJob] = []
-        already_done = False
         fair_lock = self._fair_lock
         if fair_lock is None:
             raise RuntimeError("Fairness lock must be initialized before use")
-        async with fair_lock:
-            while True:
-                priority, _, job = await req_q.get()
-                # Sentinel: consume and return
-                if job is None:
-                    req_q.task_done()
-                    already_done = True
-                    return priority, None, demote_jobs, already_done
-                # Non-pagination or no cap: establish baseline fairness state and return
-                if burst_cap is None or priority != self.PRIORITY_PAGINATION:
-                    self._fair_last_symbol = None if priority != self.PRIORITY_PAGINATION else job.symbol
-                    self._fair_burst_count = 0 if priority != self.PRIORITY_PAGINATION else 1
-                    return priority, job, demote_jobs, already_done
-                # Pagination with cap
-                if self._fair_last_symbol == job.symbol:
-                    self._fair_burst_count += 1
-                else:
-                    self._fair_last_symbol = job.symbol
-                    self._fair_burst_count = 1
-                if self._fair_burst_count <= burst_cap:
-                    return priority, job, demote_jobs, already_done
-                # Cap exceeded: demote this job and any consecutive same-symbol paginations at the head
-                demote_jobs.append(job)
-                return self._pick_after_demotion(
-                    req_q=req_q,
-                    demote_jobs=demote_jobs,
-                    already_done=already_done,
-                )
-
-    def _pick_after_demotion(
-        self,
-        *,
-        req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]],
-        demote_jobs: list[FetchJob],
-        already_done: bool,
-    ) -> tuple[int, FetchJob | None, list[FetchJob], bool]:
-        while True:
-            try:
-                p2, _, cand = req_q.get_nowait()
-            except asyncio.QueueEmpty:
-                return self.PRIORITY_NEW_JOB, None, demote_jobs, already_done
-            if p2 == self.PRIORITY_PAGINATION and cand is not None and cand.symbol == self._fair_last_symbol:
-                demote_jobs.append(cand)
-                continue
-            if cand is None:
-                req_q.task_done()
-                already_done = True
-                return p2, None, demote_jobs, already_done
-            if p2 == self.PRIORITY_PAGINATION:
-                self._fair_last_symbol = cand.symbol
-                self._fair_burst_count = 1
-            else:
-                self._fair_last_symbol = None
-                self._fair_burst_count = 0
-            return p2, cand, demote_jobs, already_done
+        priority, job, demote_jobs, already_done, _, _ = (
+            await pop_next_job_respecting_fairness_impl(
+                req_q=req_q,
+                fair_lock=fair_lock,
+                burst_cap=burst_cap,
+                priority_pagination=self.PRIORITY_PAGINATION,
+                priority_new_job=self.PRIORITY_NEW_JOB,
+                fairness_state=self._fair_state,
+            )
+        )
+        return priority, job, demote_jobs, already_done
 
     async def _fetch_worker(
         self,
@@ -1342,6 +1336,8 @@ class VertexForager:
                 req_q.task_done()
                 already_done = True
             return priority, job, [], already_done
+        if not isinstance(burst_cap, int):
+            raise RuntimeError("pagination_max_burst must be int when fairness dequeue is enabled")
         return await self._pop_next_job_respecting_fairness(req_q=req_q, burst_cap=burst_cap)
 
     def _requeue_demoted_jobs(
@@ -1449,56 +1445,29 @@ class VertexForager:
         return payload, worker_exc, parse_result
 
     async def _fetch_payload(self, *, worker_id: int, priority: int, job: FetchJob) -> bytes:
-        logger.debug("[Worker-%s] Processing job: %s (priority: %s)", worker_id, job.symbol, priority)
-        self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="fetch_start")
-        t_fetch_start = time.monotonic()
-        with self._span("fetch", provider=job.provider, dataset=job.dataset, symbol=str(job.symbol)):
-            payload = await self._fetch_with_retry(job)
-        fetch_latency = time.monotonic() - t_fetch_start
-        self._observe("fetch_duration_s", fetch_latency)
-        self._log_structured(
-            provider=job.provider,
-            dataset=job.dataset,
-            symbol=job.symbol,
-            stage="fetch_end",
-            duration_s=fetch_latency,
+        return await fetch_payload_impl(
+            worker_id=worker_id,
+            priority=priority,
+            job=job,
+            fetch_with_retry=self._fetch_with_retry,
+            span=self._span,
+            observe=self._observe,
+            log_structured=self._log_structured,
+            logger=logger,
         )
-        logger.debug(
-            "[Worker-%s] Fetched %s (%s bytes) in %.3fs",
-            worker_id,
-            job.symbol,
-            len(payload) if payload else 0,
-            fetch_latency,
-        )
-        return payload
 
     async def _parse_payload(self, *, job: FetchJob, payload: bytes, worker_id: int) -> ParseResult:
-        self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage="parse_start")
-        t1 = time.monotonic()
-        loop = asyncio.get_running_loop()
-        with self._span("parse", provider=job.provider, dataset=job.dataset, symbol=str(job.symbol)):
-            parse_result = await loop.run_in_executor(
-                self._parse_executor,
-                partial(self._router.parse, job=job, payload=payload),
-            )
-        parse_latency = time.monotonic() - t1
-        self._observe("parse_duration_s", parse_latency)
-        logger.debug(
-            "[Worker-%s] Parsed %s in %.3fs. Packets: %s, Next Jobs: %s",
-            worker_id,
-            job.symbol,
-            parse_latency,
-            len(parse_result.packets),
-            len(parse_result.next_jobs),
+        return await parse_payload_impl(
+            job=job,
+            payload=payload,
+            worker_id=worker_id,
+            parse_executor=self._parse_executor,
+            router_parse=self._router.parse,
+            span=self._span,
+            observe=self._observe,
+            log_structured=self._log_structured,
+            logger=logger,
         )
-        self._log_structured(
-            provider=job.provider,
-            dataset=job.dataset,
-            symbol=job.symbol,
-            stage="parse_end",
-            duration_s=parse_latency,
-        )
-        return parse_result
 
     async def _emit_packets_and_next_jobs(
         self,
@@ -1510,23 +1479,19 @@ class VertexForager:
         worker_id: int,
         job: FetchJob,
     ) -> None:
-        for packet in parse_result.packets:
-            loop = asyncio.get_running_loop()
-            normalized_packet = await loop.run_in_executor(
-                self._parse_executor,
-                partial(self._mapper.normalize, packet=packet),
-            )
-            await pkt_q.put(normalized_packet)
-            self._inc("packets_emitted", 1)
-        if parse_result.next_jobs:
-            logger.debug(
-                "[Worker-%s] Adding %s pagination jobs for %s",
-                worker_id,
-                len(parse_result.next_jobs),
-                job.symbol,
-            )
-            for next_job in parse_result.next_jobs:
-                await req_q.put((self.PRIORITY_PAGINATION, next(order_counter), next_job))
+        await emit_packets_and_next_jobs_impl(
+            parse_result=parse_result,
+            req_q=req_q,
+            pkt_q=pkt_q,
+            order_counter=order_counter,
+            worker_id=worker_id,
+            job=job,
+            parse_executor=self._parse_executor,
+            normalize_packet=self._mapper.normalize if self._mapper is not None else (lambda *, packet: packet),
+            inc=self._inc,
+            priority_pagination=self.PRIORITY_PAGINATION,
+            logger=logger,
+        )
 
     async def _record_worker_error(
         self,
@@ -1538,22 +1503,24 @@ class VertexForager:
         worker_id: int,
         stage: str,
     ) -> None:
-        async with result_lock:
-            result.errors.append(RunError.from_exception(exc, job.provider, job.dataset, job.symbol))
-        if stage == "error_unexpected":
-            logger.exception("[Worker-%s] Unexpected error processing %s: %s", worker_id, job.symbol, exc)
-        elif stage == "error_fetch":
-            logger.error("[Worker-%s] Fetch exhausted for %s: %s", worker_id, job.symbol, exc)
-        else:
-            logger.error("[Worker-%s] Error processing %s: %s", worker_id, job.symbol, exc)
-        self._inc("errors_total", 1)
-        self._log_structured(provider=job.provider, dataset=job.dataset, symbol=job.symbol, stage=stage)
+        await record_worker_error_impl(
+            result=result,
+            result_lock=result_lock,
+            job=job,
+            exc=exc,
+            worker_id=worker_id,
+            stage=stage,
+            inc=self._inc,
+            log_structured=self._log_structured,
+            logger=logger,
+        )
 
     async def _record_worker_symbol_state(self, *, job: FetchJob, worker_exc: Exception | None) -> None:
         if not job.symbol:
             return
         async with self._checkpoint_lock:
             if worker_exc is None:
+                self._failed_symbols.discard(job.symbol)
                 self._completed_symbols.add(job.symbol)
             else:
                 self._failed_symbols.add(job.symbol)
@@ -1574,51 +1541,13 @@ class VertexForager:
         result: RunResult,
         result_lock: asyncio.Lock,
     ) -> None:
-        """Validate data quality using table schema rules.
-
-        Args:
-            table: Table name to validate
-            df: DataFrame to validate
-            result: RunResult to record violations
-            result_lock: Lock for thread-safe result updates
-        """
-        schema = get_table_schema(table)
-        if not schema or not schema.quality_rules:
-            return
-
-        violations_count = 0
-
-        def _parse_violation_count(message: str) -> int:
-            contains_match = re.search(r"\bcontains\s+(\d+)\b", message, flags=re.IGNORECASE)
-            if contains_match is not None:
-                return int(contains_match.group(1))
-            found_match = re.search(r"\bfound\s+(\d+)\b", message, flags=re.IGNORECASE)
-            if found_match is not None:
-                return int(found_match.group(1))
-            return 1
-
-        for rule in schema.quality_rules:
-            try:
-                violation_messages = rule.validate(df)
-                if violation_messages:
-                    for violation_message in violation_messages:
-                        violations_count += _parse_violation_count(violation_message)
-                    logger.warning(
-                        "Data quality violations in table %s: %s",
-                        table,
-                        ", ".join(violation_messages),
-                    )
-            except Exception as e:
-                logger.warning(
-                    "Failed to execute quality rule %s for table %s: %s",
-                    type(rule).__name__,
-                    table,
-                    e,
-                )
-
-        if violations_count > 0:
-            async with result_lock:
-                result.add_quality_violations(table=table, count=violations_count)
+        await validate_data_quality_impl(
+            table=table,
+            df=df,
+            result=result,
+            result_lock=result_lock,
+            logger=logger,
+        )
 
     async def _writer_worker(
         self,
@@ -1627,54 +1556,12 @@ class VertexForager:
         result: RunResult,
         result_lock: asyncio.Lock,
     ) -> None:
-        buffers: dict[str, list[FramePacket]] = defaultdict(list)
-        buffer_rows: dict[str, int] = defaultdict(int)
-        threshold = self._flush_threshold
-        logger.debug("WRITER: Adaptive bulk writing enabled. Threshold=%s rows", threshold)
-        while True:
-            got_item = False
-            try:
-                packet = await pkt_q.get()
-                got_item = True
-                if packet is None:
-                    logger.debug("WRITER: Received shutdown signal. Flushing remaining buffers...")
-                    await self._flush_all_writer_buffers(
-                        buffers=buffers,
-                        buffer_rows=buffer_rows,
-                        result=result,
-                        result_lock=result_lock,
-                    )
-                    return
-                await self._buffer_or_flush_packet(
-                    packet=packet,
-                    threshold=threshold,
-                    buffers=buffers,
-                    buffer_rows=buffer_rows,
-                    result=result,
-                    result_lock=result_lock,
-                )
-            except asyncio.CancelledError:
-                await self._flush_on_writer_cancel(
-                    buffers=buffers,
-                    buffer_rows=buffer_rows,
-                    result=result,
-                    result_lock=result_lock,
-                )
-                raise
-            except Exception as e:
-                async with result_lock:
-                    if not getattr(e, "_already_reported", False):
-                        result.errors.append(RunError.from_exception(
-                            exc=e,
-                            provider="",
-                            dataset="",
-                            symbol=""
-                        ))
-                logger.exception("WRITER: Unexpected error")
-                raise
-            finally:
-                if got_item:
-                    pkt_q.task_done()
+        await self._writer_flush_service.writer_worker(
+            pkt_q=pkt_q,
+            result=result,
+            result_lock=result_lock,
+            flush_threshold=self._flush_threshold,
+        )
 
     async def _flush_on_writer_cancel(
         self,
@@ -1684,19 +1571,12 @@ class VertexForager:
         result: RunResult,
         result_lock: asyncio.Lock,
     ) -> None:
-        for table in list(buffers.keys()):
-            try:
-                await asyncio.shield(
-                    self._flush_writer_table(
-                        table=table,
-                        buffers=buffers,
-                        buffer_rows=buffer_rows,
-                        result=result,
-                        result_lock=result_lock,
-                    )
-                )
-            except Exception as e:
-                logger.exception("WRITER: Error during cancellation flush for %s: %s", table, e)
+        await self._writer_flush_service.flush_on_writer_cancel(
+            buffers=buffers,
+            buffer_rows=buffer_rows,
+            result=result,
+            result_lock=result_lock,
+        )
 
     async def _flush_all_writer_buffers(
         self,
@@ -1706,18 +1586,12 @@ class VertexForager:
         result: RunResult,
         result_lock: asyncio.Lock,
     ) -> None:
-        try:
-            for table in list(buffers.keys()):
-                await self._flush_writer_table(
-                    table=table,
-                    buffers=buffers,
-                    buffer_rows=buffer_rows,
-                    result=result,
-                    result_lock=result_lock,
-                )
-        except Exception as e:
-            logger.exception("WRITER: Error during shutdown flush: %s", e)
-            raise
+        await self._writer_flush_service.flush_all_writer_buffers(
+            buffers=buffers,
+            buffer_rows=buffer_rows,
+            result=result,
+            result_lock=result_lock,
+        )
 
     async def _buffer_or_flush_packet(
         self,
@@ -1729,391 +1603,14 @@ class VertexForager:
         result: RunResult,
         result_lock: asyncio.Lock,
     ) -> None:
-        table = packet.table
-        buffers[table].append(packet)
-        previous_rows = buffer_rows[table]
-        current_rows = previous_rows + len(packet.frame)
-        buffer_rows[table] = current_rows
-        chunk_rows = max(1, int(PROGRESS_LOG_CHUNK_ROWS))
-        if (current_rows // chunk_rows) > (previous_rows // chunk_rows):
-            logger.debug("WRITER: Buffering %s... %d / %d rows", table, current_rows, threshold)
-        if current_rows >= threshold:
-            await self._flush_writer_table(
-                table=table,
-                buffers=buffers,
-                buffer_rows=buffer_rows,
-                result=result,
-                result_lock=result_lock,
-            )
-
-    def _writer_table_context(self, packets: list[FramePacket]) -> tuple[str, str]:
-        first_packet = packets[0] if packets else None
-        provider = first_packet.provider if first_packet is not None else ""
-        symbol = ""
-        if first_packet is None:
-            return provider, symbol
-        context_symbol = first_packet.context.get("symbol")
-        if isinstance(context_symbol, str):
-            symbol = context_symbol
-            return provider, symbol
-        context_ticker = first_packet.context.get("ticker")
-        if isinstance(context_ticker, str):
-            symbol = context_ticker
-        return provider, symbol
-
-    async def _handle_writer_flush_error(
-        self,
-        *,
-        table: str,
-        packets: list[FramePacket],
-        exc: Exception,
-        prefix: str,
-        buffers: dict[str, list[FramePacket]],
-        buffer_rows: dict[str, int],
-        result: RunResult,
-        result_lock: asyncio.Lock,
-    ) -> None:
-        self._inc("errors_total", 1)
-        provider, symbol = self._writer_table_context(packets)
-        try:
-            status = await spool_to_dlq_and_rescue(
-                table=table,
-                packets=packets,
-                writer=self._writer,
-                config=self._config,
-                result=result,
-                result_lock=result_lock,
-                inc=self._inc,
-                log_structured=self._log_structured,
-            )
-        except Exception as spool_exc:
-            if isinstance(spool_exc, DLQSpoolError):
-                rescued_count = spool_exc.rescued
-                remaining_count = spool_exc.remaining
-            else:
-                rescued_count = 0
-                remaining_count = 0
-            status = cast(
-                "DLQStatus",
-                {
-                    "status": "spool_failed",
-                    "rescued": rescued_count,
-                    "remaining": remaining_count,
-                    "path": None,
-                    "error": spool_exc,
-                },
-            )
-            summary = build_writer_error_summary(
-                status=status,
-                table=table,
-                prefix=prefix,
-                exc=exc,
-                provider=provider,
-                symbol=symbol,
-            )
-            async with result_lock:
-                result.errors.append(summary)
-            buffers[table] = []
-            buffer_rows[table] = 0
-            logger.exception("WRITER: Spool failed after %s for %s: %s", prefix, table, spool_exc)
-            with suppress(Exception):
-                reported_exc = cast("Any", spool_exc)
-                reported_exc._already_reported = True
-            raise
-        summary = build_writer_error_summary(
-            status=status,
-            table=table,
-            prefix=prefix,
-            exc=exc,
-            provider=provider,
-            symbol=symbol,
-        )
-        async with result_lock:
-            result.errors.append(summary)
-        buffers[table] = []
-        buffer_rows[table] = 0
-
-    def _concat_frames_with_flex(
-        self,
-        *,
-        frames: list[pl.DataFrame],
-        table_name: str,
-        schema: object,
-        rechunk: bool,
-    ) -> pl.DataFrame:
-        try:
-            return pl.concat(frames, how="vertical", rechunk=rechunk)
-        except pl.exceptions.PolarsError as e:
-            is_flexible = getattr(self._router, "flexible_schema", False) or (
-                schema is not None and getattr(schema, "flexible_schema", False)
-            )
-            if not is_flexible:
-                raise
-            logger.warning(
-                "WRITER: Schema mismatch for %s: %s. Falling back to diagonal concat",
-                table_name,
-                e,
-            )
-            return pl.concat(frames, how="diagonal")
-
-    def _validate_unique_key(self, *, schema: object, table: str, frame: pl.DataFrame) -> None:
-        schema_obj = cast("TableSchema | None", schema)
-        if schema_obj is None or not schema_obj.unique_key:
-            return
-        for col in schema_obj.unique_key:
-            if col not in frame.columns:
-                raise PrimaryKeyMissingError(table=table, column=col)
-            nulls = frame.get_column(col).null_count()
-            if nulls > 0:
-                raise PrimaryKeyNullError(table=table, column=col, null_count=nulls)
-
-    async def _write_merged_packet(
-        self,
-        *,
-        table: str,
-        packet: FramePacket,
-        stage: str,
-        result: RunResult,
-        result_lock: asyncio.Lock,
-    ) -> None:
-        t_w0 = time.monotonic()
-        with self._span("write_flush", table=table, rows=len(packet.frame)):
-            write_result = await self._writer.write(packet)
-        t_w1 = time.monotonic()
-        self._inc("writer_flushes", 1)
-        self._observe("writer_flush_duration_s", float(t_w1 - t_w0))
-        self._observe("writer_rows", float(write_result.rows))
-        self._observe(f"writer_flush_duration_s.{table}", float(t_w1 - t_w0))
-        self._observe(f"writer_rows.{table}", float(write_result.rows))
-        self._inc("rows_written_total", int(write_result.rows))
-        self._log_structured(
-            provider=packet.provider,
-            dataset=packet.table,
-            symbol=None,
-            stage=stage,
-            duration_s=(t_w1 - t_w0),
-        )
-        async with result_lock:
-            result.tables[write_result.table] = result.tables.get(write_result.table, 0) + write_result.rows
-
-    async def _flush_chunked_table(
-        self,
-        *,
-        table: str,
-        packets: list[FramePacket],
-        schema: object,
-        chunk_size: int,
-        buffers: dict[str, list[FramePacket]],
-        buffer_rows: dict[str, int],
-        result: RunResult,
-        result_lock: asyncio.Lock,
-    ) -> None:
-        first = packets[0]
-        quality_df = self._concat_frames_with_flex(
-            frames=[p.frame for p in packets],
-            table_name=first.table,
-            schema=schema,
-            rechunk=False,
-        )
-        await self._validate_data_quality(table=table, df=quality_df, result=result, result_lock=result_lock)
-        total_rows_est = sum(len(p.frame) for p in packets)
-        if total_rows_est > 0:
-            est_chunks = (total_rows_est + chunk_size - 1) // chunk_size
-            logger.debug(
-                "WRITER: Chunking flush for %s rows~=%s chunk_size=%s chunks~=%s",
-                table,
-                total_rows_est,
-                chunk_size,
-                est_chunks,
-            )
-            self._log_structured(
-                provider=first.provider,
-                dataset=first.table,
-                symbol=None,
-                stage=f"write_chunking_rows_{total_rows_est}_size_{chunk_size}_chunks_{est_chunks}",
-            )
-        i = 0
-        idx = 0
-        while i < len(packets):
-            rows_in_chunk = 0
-            current_frames: list[pl.DataFrame] = []
-            start_i = i
-            while i < len(packets) and rows_in_chunk < chunk_size:
-                pkt = packets[i]
-                current_frames.append(pkt.frame)
-                rows_in_chunk += len(pkt.frame)
-                i += 1
-            try:
-                chunk_df = self._concat_frames_with_flex(
-                    frames=current_frames,
-                    table_name=first.table,
-                    schema=schema,
-                    rechunk=False,
-                )
-                self._validate_unique_key(schema=schema, table=table, frame=chunk_df)
-                chunk_packet = FramePacket(
-                    provider=first.provider,
-                    table=first.table,
-                    frame=chunk_df,
-                    observed_at=first.observed_at,
-                    context=first.context,
-                )
-                await self._write_merged_packet(
-                    table=table,
-                    packet=chunk_packet,
-                    stage=f"write_flush_chunk_{idx + 1}",
-                    result=result,
-                    result_lock=result_lock,
-                )
-                idx += 1
-            except (ComputeError, ValidationError) as e:
-                remaining_packets = packets[start_i : len(packets)]
-                await self._handle_writer_flush_error(
-                    table=table,
-                    packets=remaining_packets,
-                    exc=e,
-                    prefix="WriterError",
-                    buffers=buffers,
-                    buffer_rows=buffer_rows,
-                    result=result,
-                    result_lock=result_lock,
-                )
-                if isinstance(e, PrimaryKeyMissingError):
-                    logger.error("WRITER: PKMissing table=%s column=%s", table, e.column)
-                elif isinstance(e, PrimaryKeyNullError):
-                    logger.error("WRITER: PKNull table=%s column=%s nulls=%s", table, e.column, e.null_count)
-                else:
-                    logger.error("WRITER: Error writing chunk for %s: %s", table, e)
-                return
-            except Exception as e:
-                if isinstance(e, DLQSpoolError) or getattr(e, "_already_reported", False):
-                    raise
-                remaining_packets = packets[start_i : len(packets)]
-                is_duckdb_error = _duckdb is not None and isinstance(e, _duckdb.Error)
-                prefix = "DuckDBError" if is_duckdb_error else "UnexpectedWriterError"
-                await self._handle_writer_flush_error(
-                    table=table,
-                    packets=remaining_packets,
-                    exc=e,
-                    prefix=prefix,
-                    buffers=buffers,
-                    buffer_rows=buffer_rows,
-                    result=result,
-                    result_lock=result_lock,
-                )
-                if prefix == "DuckDBError":
-                    logger.exception("WRITER: DuckDB error for %s: %s", table, e)
-                else:
-                    logger.exception("WRITER: Unexpected error writing chunk for %s: %s", table, e)
-                return
-
-    async def _flush_legacy_table(
-        self,
-        *,
-        table: str,
-        packets: list[FramePacket],
-        schema: object,
-        result: RunResult,
-        result_lock: asyncio.Lock,
-    ) -> None:
-        first = packets[0]
-        merged_frame = self._concat_frames_with_flex(
-            frames=[p.frame for p in packets],
-            table_name=first.table,
-            schema=schema,
-            rechunk=True,
-        )
-        self._validate_unique_key(schema=schema, table=table, frame=merged_frame)
-        merged_packet = FramePacket(
-            provider=first.provider,
-            table=first.table,
-            frame=merged_frame,
-            observed_at=first.observed_at,
-            context=first.context,
-        )
-        logger.debug("WRITER: Flushing %s packets (%s rows) for %s", len(packets), len(merged_frame), table)
-        await self._validate_data_quality(table=table, df=merged_frame, result=result, result_lock=result_lock)
-        await self._write_merged_packet(
-            table=table,
-            packet=merged_packet,
-            stage="write_flush",
+        await self._writer_flush_service.buffer_or_flush_packet(
+            packet=packet,
+            threshold=threshold,
+            buffers=buffers,
+            buffer_rows=buffer_rows,
             result=result,
             result_lock=result_lock,
         )
-
-    async def _flush_writer_table(
-        self,
-        *,
-        table: str,
-        buffers: dict[str, list[FramePacket]],
-        buffer_rows: dict[str, int],
-        result: RunResult,
-        result_lock: asyncio.Lock,
-    ) -> None:
-        packets = buffers.get(table, [])
-        if not packets:
-            return
-        first = packets[0]
-        schema = get_table_schema(first.table)
-        chunk_size = getattr(self._config, "writer_chunk_rows", None)
-        try:
-            if isinstance(chunk_size, int) and chunk_size > 0:
-                await self._flush_chunked_table(
-                    table=table,
-                    packets=packets,
-                    schema=schema,
-                    chunk_size=chunk_size,
-                    buffers=buffers,
-                    buffer_rows=buffer_rows,
-                    result=result,
-                    result_lock=result_lock,
-                )
-            else:
-                await self._flush_legacy_table(
-                    table=table,
-                    packets=packets,
-                    schema=schema,
-                    result=result,
-                    result_lock=result_lock,
-                )
-            buffers[table] = []
-            buffer_rows[table] = 0
-        except (ComputeError, ValidationError) as e:
-            await self._handle_writer_flush_error(
-                table=table,
-                packets=packets,
-                exc=e,
-                prefix="WriterError",
-                buffers=buffers,
-                buffer_rows=buffer_rows,
-                result=result,
-                result_lock=result_lock,
-            )
-            if isinstance(e, PrimaryKeyMissingError):
-                logger.error("WRITER: PKMissing table=%s column=%s", table, e.column)
-            elif isinstance(e, PrimaryKeyNullError):
-                logger.error("WRITER: PKNull table=%s column=%s nulls=%s", table, e.column, e.null_count)
-            else:
-                logger.error("WRITER: Error writing batch for %s: %s", table, e)
-        except Exception as e:
-            if isinstance(e, DLQSpoolError) or getattr(e, "_already_reported", False):
-                raise
-            prefix = "DuckDBError" if _duckdb is not None and isinstance(e, _duckdb.Error) else "UnexpectedWriterError"
-            await self._handle_writer_flush_error(
-                table=table,
-                packets=packets,
-                exc=e,
-                prefix=prefix,
-                buffers=buffers,
-                buffer_rows=buffer_rows,
-                result=result,
-                result_lock=result_lock,
-            )
-            if prefix == "DuckDBError":
-                logger.exception("WRITER: DuckDB error for %s: %s", table, e)
-            else:
-                logger.exception("WRITER: Unexpected error writing batch for %s: %s", table, e)
-                return
 
     async def _fetch_with_retry(self, job: FetchJob) -> bytes:
         """Execute a fetch job with rate limiting and exponential backoff retry.
@@ -2131,64 +1628,4 @@ class VertexForager:
             This guarantees that the physical request rate (RPM) never exceeds the limit,
             even if one "logical" user request expands into hundreds of API calls.
         """
-        # Honor per-request idempotency: non-idempotent requests should not retry.
-        retry_controller = create_retry_controller(self._config.retry, idempotent=job.spec.idempotent)
-
-        async for attempt in retry_controller:
-            with attempt:
-                state = getattr(attempt, "retry_state", None)
-                att_no = getattr(state, "attempt_number", None) if state is not None else None
-                async with self.controller.throttle():
-                    t0 = time.monotonic()
-                    self._log_structured(
-                        provider=job.provider,
-                        dataset=job.dataset,
-                        symbol=job.symbol,
-                        stage="http_start",
-                        attempt=att_no,
-                    )
-                    try:
-                        resp = await self._http.fetch(job.spec)
-                        rf = getattr(self.controller, "record_feedback", None)
-                        if callable(rf):
-                            rf(status_code=200, retried=bool(att_no and att_no > 1))
-                    except Exception as e:
-                        reason = "error"
-                        if isinstance(e, httpx.HTTPStatusError):
-                            resp0 = getattr(e, "response", None)
-                            sc = getattr(resp0, "status_code", None)
-                            reason = f"http_status_{sc}"
-                            rf = getattr(self.controller, "record_feedback", None)
-                            if callable(rf):
-                                rf(status_code=sc, retried=True)
-                        elif isinstance(e, httpx.TransportError):
-                            reason = "transport_error"
-                            rf = getattr(self.controller, "record_feedback", None)
-                            if callable(rf):
-                                rf(status_code=None, retried=True)
-                        else:
-                            reason = type(e).__name__
-                        self._log_structured(
-                            provider=job.provider,
-                            dataset=job.dataset,
-                            symbol=job.symbol,
-                            stage=f"http_retry_reason:{reason}",
-                            attempt=att_no,
-                        )
-                        raise
-                t1 = time.monotonic()
-                dur = t1 - t0
-                self._observe("http_duration_s", dur)
-                self._log_structured(
-                    provider=job.provider,
-                    dataset=job.dataset,
-                    symbol=job.symbol,
-                    stage="http_end",
-                    attempt=att_no,
-                    duration_s=dur,
-                )
-                return resp
-        # Unreachable at runtime with tenacity.AsyncRetrying(reraise=True):
-        # the last exception is re-raised inside the loop when attempts are exhausted.
-        # Kept for static analysis clarity and as a defensive fallback.
-        raise FetchError("Fetch failed after all retry attempts")
+        return await self._retry_executor.fetch(job)

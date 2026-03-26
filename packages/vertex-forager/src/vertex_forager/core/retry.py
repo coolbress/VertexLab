@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import AbstractAsyncContextManager
 import logging
 import secrets
-from typing import TYPE_CHECKING
+import time
+from typing import TYPE_CHECKING, Protocol
 
 import httpx
 from tenacity import (
@@ -16,7 +19,9 @@ from tenacity import (
 )
 
 if TYPE_CHECKING:
-    from vertex_forager.core.config import RetryConfig
+    from vertex_forager.core.config import FetchJob, RequestSpec, RetryConfig
+
+from vertex_forager.core.errors import FetchError
 
 logger = logging.getLogger("vertex_forager.retry")
 
@@ -69,3 +74,117 @@ def create_retry_controller(
         before_sleep=before_sleep_log(logger, log_level),
         reraise=True,
     )
+
+
+class RetryAttempt(Protocol):
+    retry_state: object | None
+
+    def __enter__(self) -> object: ...
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> bool: ...
+
+
+class RetryController(Protocol):
+    def __aiter__(self) -> AsyncIterator[RetryAttempt]: ...
+
+
+class FeedbackController(Protocol):
+    def throttle(self) -> AbstractAsyncContextManager[object]: ...
+
+
+HttpFetch = Callable[["RequestSpec"], Awaitable[bytes]]
+ObserveFunc = Callable[[str, float], None]
+LogStructuredFunc = Callable[..., None]
+
+
+class RetryExecutor:
+    def __init__(
+        self,
+        *,
+        retry_config: RetryConfig,
+        controller: FeedbackController,
+        http_fetch: HttpFetch,
+        observe: ObserveFunc,
+        log_structured: LogStructuredFunc,
+    ) -> None:
+        self._retry_config = retry_config
+        self._controller = controller
+        self._http_fetch = http_fetch
+        self._observe = observe
+        self._log_structured = log_structured
+
+    async def fetch(self, job: FetchJob) -> bytes:
+        return await fetch_with_retry(
+            job=job,
+            retry_config=self._retry_config,
+            controller=self._controller,
+            http_fetch=self._http_fetch,
+            observe=self._observe,
+            log_structured=self._log_structured,
+        )
+
+
+async def fetch_with_retry(
+    *,
+    job: FetchJob,
+    retry_config: RetryConfig,
+    controller: FeedbackController,
+    http_fetch: HttpFetch,
+    observe: ObserveFunc,
+    log_structured: LogStructuredFunc,
+) -> bytes:
+    retry_controller = create_retry_controller(retry_config, idempotent=job.spec.idempotent)
+    async for attempt in retry_controller:
+        with attempt:
+            state = getattr(attempt, "retry_state", None)
+            att_no = getattr(state, "attempt_number", None) if state is not None else None
+            async with controller.throttle():
+                t0 = time.monotonic()
+                log_structured(
+                    provider=job.provider,
+                    dataset=job.dataset,
+                    symbol=job.symbol,
+                    stage="http_start",
+                    attempt=att_no,
+                )
+                try:
+                    resp = await http_fetch(job.spec)
+                    rf = getattr(controller, "record_feedback", None)
+                    if callable(rf):
+                        rf(status_code=200, retried=bool(att_no and att_no > 1))
+                    t1 = time.monotonic()
+                    dur = t1 - t0
+                    observe("http_duration_s", dur)
+                    log_structured(
+                        provider=job.provider,
+                        dataset=job.dataset,
+                        symbol=job.symbol,
+                        stage="http_end",
+                        attempt=att_no,
+                        duration_s=dur,
+                    )
+                    return resp
+                except Exception as exc:
+                    reason = "error"
+                    if isinstance(exc, httpx.HTTPStatusError):
+                        resp0 = getattr(exc, "response", None)
+                        sc = getattr(resp0, "status_code", None)
+                        reason = f"http_status_{sc}"
+                        rf = getattr(controller, "record_feedback", None)
+                        if callable(rf):
+                            rf(status_code=sc, retried=True)
+                    elif isinstance(exc, httpx.TransportError):
+                        reason = "transport_error"
+                        rf = getattr(controller, "record_feedback", None)
+                        if callable(rf):
+                            rf(status_code=None, retried=True)
+                    else:
+                        reason = type(exc).__name__
+                    log_structured(
+                        provider=job.provider,
+                        dataset=job.dataset,
+                        symbol=job.symbol,
+                        stage=f"http_retry_reason:{reason}",
+                        attempt=att_no,
+                    )
+                    raise
+    raise FetchError("Fetch failed after all retry attempts")

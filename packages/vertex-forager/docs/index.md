@@ -24,6 +24,7 @@ Industry‑grade ingestion for financial data: transport decoupling, schema‑aw
   - [Pipeline architecture](explanation/architecture.md)
   - [Router & Client architecture](explanation/router-client.md)
   - [Data storage flow & DLQ](explanation/data-storage-flow.md)
+  - [Core error policy](explanation/error-policy.md)
   - [Writer security](explanation/writer-security.md)
   - [Writer fan‑out roadmap](explanation/writer-fanout-roadmap.md)
   - Diagrams: [pipeline_architecture.mmd](diagrams/pipeline_architecture.mmd)
