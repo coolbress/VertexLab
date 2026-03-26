@@ -14,10 +14,10 @@ This page documents the policy for JavaScript‑based GitHub Actions in this rep
 
 ## References
 
-- CI workflow: https://github.com/coolbress/VertexLab/blob/main/.github/workflows/ci.yml
-- Type Check workflow: https://github.com/coolbress/VertexLab/blob/main/.github/workflows/typecheck.yml
-- Docs build/deploy: https://github.com/coolbress/VertexLab/blob/main/.github/workflows/docs.yml
-- Labeler: https://github.com/coolbress/VertexLab/blob/main/.github/workflows/labeler.yml
+- CI workflow: <https://github.com/coolbress/VertexLab/blob/main/.github/workflows/ci.yml>
+- Type Check workflow: <https://github.com/coolbress/VertexLab/blob/main/.github/workflows/typecheck.yml>
+- Docs build/deploy: <https://github.com/coolbress/VertexLab/blob/main/.github/workflows/docs.yml>
+- Labeler: <https://github.com/coolbress/VertexLab/blob/main/.github/workflows/labeler.yml>
 
 ## Policy Notes
 

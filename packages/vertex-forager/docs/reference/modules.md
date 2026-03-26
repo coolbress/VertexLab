@@ -4,7 +4,7 @@ Overview of the `vertex_forager` package structure. See [API Reference](api.md) 
 
 ## Package Layout
 
-```
+```text
 vertex_forager/
 ├── api.py              # Public API helpers (client/router/writer factories)
 ├── cli.py              # CLI entrypoint

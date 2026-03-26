@@ -45,7 +45,7 @@ uv run pytest packages/vertex-forager/tests/unit/test_config.py -v
 
 ## Test Directory Structure
 
-```
+```text
 packages/vertex-forager/tests/
 ├── conftest.py                 # Shared fixtures (mock clients, sample data)
 ├── unit/                       # ~36 files — fast, no external dependencies

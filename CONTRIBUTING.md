@@ -3,6 +3,7 @@
 Thank you for contributing to Vertex Forager!
 
 ## Table of Contents
+
 - [Development quickstart](#development-quickstart)
 - [Tests](#tests)
 - [Benchmark baseline policy](#benchmark-baseline-policy)
@@ -15,6 +16,7 @@ Thank you for contributing to Vertex Forager!
 - [Lockfile Policy (uv.lock)](#lockfile-policy-uvlock)
 
 ## Development quickstart
+
 - Install uv and set up the workspace:
   - `uv sync`
 - Install and enable Git hooks:
@@ -30,6 +32,7 @@ Thank you for contributing to Vertex Forager!
   - See `packages/vertex-forager/tests/README.md` for test structure (unit/integration/property/verification) and markers (`smoke`, `manual`), plus commands and CI policy.
 
 ## Tests
+
 - Test layout, markers, and CI policy are documented in `packages/vertex-forager/tests/README.md`.
 - Quick commands:
   - Default fast suite: `pytest packages/ -m "not manual"`
@@ -77,8 +80,8 @@ Thank you for contributing to Vertex Forager!
         from collections.abc import Sequence
     ```
 
-
 Quick references:
+
 - pyproject: `[tool.ruff]`, `[tool.ruff.lint]`, `[tool.ruff.lint.per-file-ignores]`
 - Tests keep only: S101, TC002, TC003, TC006 under `packages/vertex-forager/tests/**`.
 
@@ -118,6 +121,7 @@ Quick references:
 - The PR template includes required sections to help reviewers (Summary, Risk & Rollback, etc.). Link your lint exceptions and follow‑up cleanups there.
 
 ## Commit/PR guidelines
+
 - Use conventional prefixes (guard‑approved): `feat:`, `fix:`, `docs:`, `refactor:`, `perf:`, `test:`, `chore:`.
 - Add tests for user-visible changes when applicable.
 - Keep provider-specific logic in provider modules; avoid bleeding into core.
@@ -125,6 +129,7 @@ Quick references:
 - Ensure public API changes include docstrings; place tests under `packages/vertex-forager/tests/`.
 
 ## Security
+
 - Never commit secrets. Use environment variables or secret managers.
 - Report vulnerabilities via `SECURITY.md`.
 

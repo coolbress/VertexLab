@@ -31,6 +31,7 @@ cfg = EngineConfig(
 ```
 
 Monitor:
+
 - `writer_rows.{table}` histogram distribution
 - `writer_flush_duration_s.{table}` percentiles
 
