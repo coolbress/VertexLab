@@ -10,9 +10,9 @@ Modern Python monorepo for financial data collection, analysis, and visualizatio
 ```text
 vertex-lab/                    # Monorepo root
 ├── packages/                  # All packages
-│   ├── vertex-forager/        # Data collection package
-│   ├── vertex-caliber/        # Data analysis package  
-│   └── vertex-viz/            # Data visualization package
+│   ├── vertex-forager/        # Data collection
+│   ├── vertex-qt/             # Analysis
+│   └── vertex-workspace/      # UI dashboard to operate vertex-forager and vertex-qt
 ├── .github/workflows/         # CI/CD pipelines
 └── pyproject.toml            # Root dependencies & workspace config
 ```
@@ -68,7 +68,7 @@ job = FetchJob(
 result = client.fetch(job)
 ```
 
-### vertex-caliber
+### vertex-workspace
 
 Data analysis and quantitative research tools.
 
