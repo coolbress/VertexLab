@@ -103,6 +103,7 @@ from vertex_forager.core.retry import (
 )
 from vertex_forager.core.scheduler import (
     FairnessState,
+    SchedulerResult,
 )
 from vertex_forager.core.scheduler import (
     pop_next_job_respecting_fairness as pop_next_job_respecting_fairness_impl,
@@ -1176,17 +1177,15 @@ class VertexForager:
         fair_lock = self._fair_lock
         if fair_lock is None:
             raise RuntimeError("Fairness lock must be initialized before use")
-        priority, job, demote_jobs, already_done, _, _ = (
-            await pop_next_job_respecting_fairness_impl(
-                req_q=req_q,
-                fair_lock=fair_lock,
-                burst_cap=burst_cap,
-                priority_pagination=self.PRIORITY_PAGINATION,
-                priority_new_job=self.PRIORITY_NEW_JOB,
-                fairness_state=self._fair_state,
-            )
+        selected: SchedulerResult = await pop_next_job_respecting_fairness_impl(
+            req_q=req_q,
+            fair_lock=fair_lock,
+            burst_cap=burst_cap,
+            priority_pagination=self.PRIORITY_PAGINATION,
+            priority_new_job=self.PRIORITY_NEW_JOB,
+            fairness_state=self._fair_state,
         )
-        return priority, job, demote_jobs, already_done
+        return selected.priority, selected.job, selected.demoted, selected.already_done
 
     async def _fetch_worker(
         self,
