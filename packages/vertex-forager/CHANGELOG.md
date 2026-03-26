@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.11.0...vertex-forager-v0.11.1) (2026-03-26)
+
+
+### Documentation
+
+* consolidate quality-gate checklist references ([#237](https://github.com/coolbress/VertexLab/issues/237)) ([a54c1cf](https://github.com/coolbress/VertexLab/commit/a54c1cfe21f4731f9c9d39a7d578a35ab4b73cce))
+
 ## [0.11.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.10.0...vertex-forager-v0.11.0) (2026-03-25)
 
 
