@@ -1,14 +1,14 @@
 changelog:
   exclude:
     labels:
-      - skip-changelog
+      - no-changelog
   categories:
     - title: Breaking Changes
       labels:
-        - type:breaking
+        - impact:user
     - title: New Features
       labels:
-        - type:feat
+        - type:feature
     - title: Bug Fixes
       labels:
         - type:fix
@@ -19,8 +19,7 @@ changelog:
       labels:
         - type:chore
         - type:refactor
-        - type:ci
+        - scope:ci
     - title: Documentation
       labels:
         - type:docs
-        - documentation
