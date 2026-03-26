@@ -3,15 +3,18 @@
 Purpose: Define a clear, provider‑agnostic extension model for non‑HTTP providers while keeping transport concerns centralized and shared across the project.
 
 ## Design Goals
+
 - Provider‑agnostic core: No provider‑specific branches in core/http; shared timeout, retries, rate limiting, logging, and error translation.
 - Unified interface: Routers/clients call fetch(spec) regardless of transport; HTTP stays in core/http, non‑HTTP uses provider plugins.
 - Safety & testability: Strict invocation rules, clear error contracts, and comprehensive tests.
 
 ## When to Implement a Fetcher
+
 - HTTP providers (e.g., Sharadar) do NOT require a fetcher. Use router‑built RequestSpec with http/https URLs; core/http executes requests.
 - Library / non‑HTTP providers (e.g., yfinance) MUST provide a fetcher. The fetcher wraps provider APIs behind a scheme (e.g., yfinance://) and implements fetch(spec) with explicit, provider‑specific logic.
 
 ## Contract (Interfaces & Types)
+
 - RequestSpec (core/config.py)
   - url: string; for library providers use "<scheme>://<payload>" (e.g., "yfinance://AAPL")
   - params: dict including "dataset" and "lib" describing the library call
@@ -24,6 +27,7 @@ Purpose: Define a clear, provider‑agnostic extension model for non‑HTTP prov
   - HttpExecutor.fetch(spec) routes non‑HTTP URLs to the registry and returns pickled Python objects; HTTP returns bytes
 
 ## Security & Safety (Invocation Rules)
+
 - Allowed calls only:
   - Public methods/attributes; block private/dunder names (startswith("_") or "__" in name)
   - Validate lib dict: type (e.g., "download", "ticker_attr"), attr name, kwargs types (JSONValue only)
@@ -35,6 +39,7 @@ Purpose: Define a clear, provider‑agnostic extension model for non‑HTTP prov
   - Raise ValueError for invalid spec/unsupported call from fetcher; core/http maps/propagates as project‑standard
 
 ## Registry (Idempotent & Unique)
+
 - register_library_fetcher(fetcher):
   - Enforces unique scheme; raises on duplicate
 - get_library_fetcher(scheme):
@@ -43,11 +48,13 @@ Purpose: Define a clear, provider‑agnostic extension model for non‑HTTP prov
   - Inside providers/<name>/fetcher.py, declare class and call register_library_fetcher(...) on import
 
 ## Response Normalization
+
 - Library fetch path returns pickled objects; routers decode and normalize (records/frames, strict types, null policy)
 - HTTP path returns raw bytes; routers parse JSON/CSV and normalize similarly
 - Ensure downstream routers remain transport‑agnostic: they only decode/normalize payloads
 
 ## Testing Requirements
+
 - Unit tests (plugins):
   - parse_spec validation (missing/invalid lib, wrong scheme)
   - safe invocation (reject private/dunder)
@@ -60,6 +67,7 @@ Purpose: Define a clear, provider‑agnostic extension model for non‑HTTP prov
 ## Example: Library Provider (yfinance)
 
 Implementation sketch (simplified):
+
 ```python
 from typing import Any
 from vertex_forager.core.config import RequestSpec
@@ -99,6 +107,7 @@ spec = RequestSpec(url=url, params=params)
 ```
 
 ## Adding a New Provider
+
 1. Decide transport:
    - HTTP: no plugin; implement router rules and build http/https RequestSpec
    - Library/non‑HTTP: implement fetcher.py with unique scheme and explicit fetch(spec)
@@ -111,5 +120,6 @@ spec = RequestSpec(url=url, params=params)
 5. Run CI: ruff, mypy, pytest must be green
 
 ## Notes
+
 - Keep provider‑specific logic in providers/<name>/fetcher.py and router.py; avoid core modifications except for shared transport behavior.
 - Scheme naming should be short, lowercase, and unique (e.g., "yfinance", "myprovider").

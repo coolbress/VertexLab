@@ -6,7 +6,7 @@ Modern Python monorepo for financial data collection, analysis, and visualizatio
 
 ## 🏗️ Architecture
 
-```
+```text
 vertex-lab/                    # Monorepo root
 ├── packages/                  # All packages
 │   ├── vertex-forager/        # Data collection package
@@ -19,6 +19,7 @@ vertex-lab/                    # Monorepo root
 ## 🚀 Getting Started
 
 ### Prerequisites
+
 - Python 3.10+
 - [uv](https://github.com/astral-sh/uv) - Fast Python package manager
 
@@ -49,6 +50,7 @@ uv add --editable packages/vertex-forager
 ## 📦 Packages
 
 ### vertex-forager
+
 Data collection framework for financial markets.
 
 ```python
@@ -66,9 +68,11 @@ result = client.fetch(job)
 ```
 
 ### vertex-caliber
+
 Data analysis and quantitative research tools.
 
 ### vertex-viz
+
 Interactive data visualization components.
 
 ## 🧪 Testing
@@ -98,6 +102,7 @@ uv run mypy packages/
 ```
 
 ## 🔐 CI Policy (Actions Pinning)
+
 - Pin GitHub Actions by SHA; annotate the upstream major in the inline comment (e.g., checkout v5 SHA).
 - Prefer Node 24‑compatible action versions; avoid floating tags.
 
@@ -105,7 +110,7 @@ uv run mypy packages/
 
 Each package follows the modern Python `src` layout:
 
-```
+```text
 packages/vertex-forager/
 ├── src/
 │   └── vertex_forager/
@@ -126,7 +131,7 @@ packages/vertex-forager/
 3. Include issue number in commit messages
 4. Keep PRs focused and well-documented
 5. Documentation:
-   - Site: https://coolbress.github.io/VertexLab/
+   - Site: <https://coolbress.github.io/VertexLab/>
    - Repo index: [packages/vertex-forager/docs/index.md](packages/vertex-forager/docs/index.md)
 
 ## 📄 License
