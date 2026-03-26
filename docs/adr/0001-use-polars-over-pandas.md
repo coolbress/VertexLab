@@ -1,7 +1,7 @@
 # ADR-0001: Use Polars over pandas
 
 Date: 2026-03-26  
-Status: Accepted
+Status: Accepted (with transition exceptions)
 
 ## Context
 
@@ -22,6 +22,8 @@ Migration policy:
 - Transition window: until 2026-06-30 for existing provider/ingress paths.
 - Ownership: provider/ingress maintainers own pandas-to-Polars conversion before handoff.
 - Allowed exceptions: third-party integrations that only expose pandas may keep pandas internally, but handoff to core pipeline must still be Polars.
+- Current implementation exception: `vertex_forager.core.http` (`_fetch_library`) currently accepts pandas DataFrame/Series payloads from library fetchers and converts them to Polars before IPC handoff.
+- Sunset rule for the exception: keep this compatibility shim only through the transition window, then require ingress/library fetchers to hand off Polars directly.
 
 ## Consequences
 
