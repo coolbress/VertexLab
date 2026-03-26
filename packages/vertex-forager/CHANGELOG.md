@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.2](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.11.1...vertex-forager-v0.11.2) (2026-03-26)
+
+
+### Documentation
+
+* add Architecture Decision Records and ADR navigation ([#229](https://github.com/coolbress/VertexLab/issues/229))  ([b79ed61](https://github.com/coolbress/VertexLab/commit/b79ed619dbe145f39f64445b35457b7d53cbbc12))
+
 ## [0.11.1](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.11.0...vertex-forager-v0.11.1) (2026-03-26)
 
 
