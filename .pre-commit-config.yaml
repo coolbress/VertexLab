@@ -46,7 +46,7 @@ repos:
     rev: v0.15.1
     hooks:
       - id: lychee
-        args: ["--verbose", "--max-concurrency", "10", "--retry-wait-time", "2"]
+        args: ["--verbose", "--max-concurrency", "10", "--retry-wait-time", "2", "--exclude", "^https://raw\\.githubusercontent\\.com/coolbress/VertexLab/python-coverage-comment-action-data/badge\\.svg$", "--exclude", "^https://github\\.com/coolbress/VertexLab/tree/python-coverage-comment-action-data$", "--exclude", "^https://coolbress\\.github\\.io/vertex-lab/$", "--exclude", "^https://github\\.com/coolbress/vertex-lab/actions$", "--exclude", "^https://github\\.com/coolbress/vertex-lab/actions/workflows/ci\\.yml/badge\\.svg$", "--exclude", "^https://github\\.com/coolbress/VertexLab/compare/vertex-forager-v0\\.1\\.0\\.\\.\\.vertex-forager-v0\\.2\\.0$"]
         files: |-
           ^(README\.md|packages/.+\.md|docs/.+\.md|packages/vertex-forager/mkdocs\.yml)
         stages: [manual]
@@ -72,8 +72,7 @@ repos:
       - id: markdownlint-cli2
         args: ["--fix"]
         files: |-
-          ^(docs/.+\.md|packages/.+/docs/.+\.md|README\.md|CONTRIBUTING\.md|SECURITY\.md|CODE_OF_CONDUCT\.md|\.github/PULL_REQUEST_TEMPLATE\.md|\.github/SAVED_REPLIES\.md)$
-        exclude: (^legacy_code/|.*/legacy_code/)
+          ^(docs/.+\.md|packages/.+/docs/.+\.md|README\.md|CONTRIBUTING\.md|SECURITY\.md|\.github/PULL_REQUEST_TEMPLATE\.md)$
         language_version: 22.13.0
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0

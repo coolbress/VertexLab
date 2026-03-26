@@ -17,7 +17,7 @@ classifiers = [
     "Operating System :: OS Independent",
     "Typing :: Typed",
 ]
-urls = { "Documentation" = "https://coolbress.github.io/VertexLab/", "Changelog" = "https://github.com/coolbress/VertexLab/blob/main/CHANGELOG.md", "Issues" = "https://github.com/coolbress/VertexLab/issues", "Source" = "https://github.com/coolbress/VertexLab" }
+urls = { "Documentation" = "https://coolbress.github.io/VertexLab/", "Changelog" = "https://github.com/coolbress/VertexLab/blob/main/packages/vertex-forager/CHANGELOG.md", "Issues" = "https://github.com/coolbress/VertexLab/issues", "Source" = "https://github.com/coolbress/VertexLab" }
 dependencies = [
     "click>=8.3.1,<9.0.0",
     "duckdb>=1.4.4,<2.0.0",

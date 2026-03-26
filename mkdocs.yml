@@ -64,5 +64,8 @@ nav:
       - CI Security: ci-security.md
       - CI Node Runtime Policy: explanation/ci-node-policy.md
       - Labels Policy: explanation/labels-policy.md
+  - Development:
+      - Workflow Guides: development/workflow-guides.md
+      - Claude Prompt Snippets: development/claude-prompts.md
   - Components:
       - vertex-forager: '!include packages/vertex-forager/mkdocs.yml'
