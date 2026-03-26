@@ -121,6 +121,8 @@ def _pick_after_demotion(
                 fairness_state.burst_count,
             )
         if p2 == priority_pagination and cand is not None and cand.symbol == fairness_state.last_symbol:
+            # Do not call req_q.task_done() here: demoted jobs are acknowledged after requeue in
+            # pipeline._requeue_demoted_jobs, which owns the task_done lifecycle for demotions.
             demote_jobs.append(cand)
             continue
         if cand is None:
