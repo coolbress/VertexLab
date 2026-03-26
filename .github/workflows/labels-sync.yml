@@ -59,6 +59,7 @@ jobs:
             "type:docs|0075ca|Documentation changes",
             "type:chore|d4c5f9|Chores and maintenance",
             "type:refactor|cfd3d7|Refactoring without behavior change",
+            "type:breaking|b60205|Backward-incompatible or breaking change",
             "type:perf|a2eeef|Performance improvements",
             "type:test|5319e7|Test related changes",
             "scope:writer|8ed1fc|Writers and sinks",

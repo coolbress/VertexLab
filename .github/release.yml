@@ -5,7 +5,7 @@ changelog:
   categories:
     - title: Breaking Changes
       labels:
-        - impact:user
+        - type:breaking
     - title: New Features
       labels:
         - type:feature
