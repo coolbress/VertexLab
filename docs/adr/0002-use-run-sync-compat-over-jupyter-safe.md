@@ -9,11 +9,13 @@ The project needed a consistent sync entry path for environments that may alread
 
 ## Decision
 
-Use `run_sync_compat` as the explicit compatibility boundary for sync invocation instead of relying on the `@jupyter_safe` decorator pattern.
+`run_sync_compat` is the official event-loop compatibility boundary for synchronous invocation.
+
+`jupyter_safe` is no longer an independent compatibility layer. It is a wrapper that delegates compatibility behavior by calling `run_sync_compat` internally.
 
 ## Consequences
 
 - Event-loop compatibility logic is centralized and explicit.
-- Call paths are easier to audit and test than scattered decorator usage.
-- Existing and future sync surfaces should consistently route through the helper.
-- Maintainers must keep helper semantics stable because it is a key execution boundary.
+- Compatibility guarantees, maintenance responsibility, and behavior regression testing are owned at `run_sync_compat`.
+- `jupyter_safe` remains as a convenience wrapper surface, but must preserve delegation-only semantics to avoid duplicated compatibility logic.
+- Existing and future sync surfaces should route through `run_sync_compat` directly or through wrappers that delegate to it.
