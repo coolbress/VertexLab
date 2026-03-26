@@ -39,7 +39,6 @@ htmlcov/
 *.parquet.*
 data/
 output/
-packages/vertex-forager/legacy_code/
 packages/vertex-forager/development_note/
 docs/vertex-forager-collab.md
 

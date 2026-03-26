@@ -89,7 +89,7 @@ jobs:
           format: sarif
           output: trivy-results.sarif
           exit-code: 0
-          skip-dirs: ".hypothesis,.ruff_cache,data,output,packages/vertex-forager/legacy_code,.venv,.tox,.cache,build,dist,node_modules"
+          skip-dirs: ".hypothesis,.ruff_cache,data,output,.venv,.tox,.cache,build,dist,node_modules"
         env:
           TRIVY_SKIP_VERSION_CHECK: "true"
           TRIVY_CACHE_DIR: ~/.cache/trivy
@@ -133,17 +133,13 @@ jobs:
         run: python3 scripts/check_cycles.py
 
       - name: Lint Code (Ruff)
-        # packages 폴더 안에 있는 모든 코드를 검사 (legacy_code 제외)
         if: ${{ matrix.python-version == '3.10' }}
-        run: uv run ruff check packages/ --exclude "legacy_code"
+        run: uv run ruff check packages/
 
       - name: Lint (Ruff Tier-2 Warnings)
         if: ${{ matrix.python-version == '3.10' }}
         continue-on-error: true
-        run: |
-          uv run ruff check packages/ \
-            --exclude "legacy_code" \
-            --select SIM,TC
+        run: uv run ruff check packages/ --select SIM,TC
 
       - name: YAML Lint
         if: ${{ matrix.python-version == '3.10' }}

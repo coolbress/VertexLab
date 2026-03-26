@@ -42,5 +42,5 @@ Industry‑grade ingestion for financial data: transport decoupling, schema‑aw
 ## Links
 
 - [README](https://github.com/coolbress/VertexLab/blob/main/README.md)
-- [Changelog (Keep a Changelog)](https://github.com/coolbress/VertexLab/blob/main/CHANGELOG.md)
+- [Changelog (Keep a Changelog)](https://github.com/coolbress/VertexLab/blob/main/packages/vertex-forager/CHANGELOG.md)
 - [Semantic Versioning](https://semver.org/)

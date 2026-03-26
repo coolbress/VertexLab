@@ -1,3 +1,3 @@
 [codespell]
-skip = .git,uv.lock,*.ipc,*.parquet,legacy_code
+skip = .git,uv.lock,*.ipc,*.parquet
 ignore-words-list = ans,fo,nd
