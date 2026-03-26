@@ -21,6 +21,14 @@ class FairnessState:
     burst_count: int = 0
 
 
+@dataclass(frozen=True)
+class SchedulerResult:
+    priority: int
+    job: FetchJob | None
+    demoted: list[FetchJob]
+    already_done: bool
+
+
 async def pop_next_job_respecting_fairness(
     *,
     req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]],
@@ -28,10 +36,8 @@ async def pop_next_job_respecting_fairness(
     burst_cap: int,
     priority_pagination: int,
     priority_new_job: int,
-    fairness_state: FairnessState | None = None,
-    fair_last_symbol: str | None = None,
-    fair_burst_count: int = 0,
-) -> tuple[int, FetchJob | None, list[FetchJob], bool, str | None, int]:
+    fairness_state: FairnessState,
+) -> SchedulerResult:
     """Select the next queue item while enforcing pagination burst fairness.
 
     Args:
@@ -44,50 +50,41 @@ async def pop_next_job_respecting_fairness(
         priority_pagination: Priority value used for paginated follow-up jobs.
         priority_new_job: Priority value used when demoted jobs should be
             requeued as normal jobs.
-        fairness_state: Shared mutable fairness state. When provided, this
-            object is updated in-place under fair_lock.
-        fair_last_symbol: Backward-compatible seed value for last symbol when no
-            shared fairness_state is provided.
-        fair_burst_count: Backward-compatible seed value for burst count when no
-            shared fairness_state is provided.
+        fairness_state: Shared mutable fairness state, updated in-place under
+            fair_lock.
 
     Returns:
-        A tuple of:
-        - selected priority
-        - selected FetchJob or None (sentinel/defer path)
-        - demoted jobs that caller should requeue at priority_new_job
-        - already_done flag indicating task_done was already called for selected
+        SchedulerResult:
+        - priority: selected priority
+        - job: selected FetchJob or None (sentinel/defer path)
+        - demoted: jobs caller should requeue at priority_new_job
+        - already_done: True when task_done was already called for selected
           sentinel
-        - updated fair_last_symbol
-        - updated fair_burst_count
 
     Side effects:
         - Reads/removes items from req_q.
-        - Updates fairness_state when provided.
+        - Updates fairness_state in-place.
         - Calls req_q.task_done() for consumed sentinels.
     """
     demote_jobs: list[FetchJob] = []
     already_done = False
-    state = fairness_state if fairness_state is not None else FairnessState(
-        last_symbol=fair_last_symbol,
-        burst_count=fair_burst_count,
-    )
+    state = fairness_state
     async with fair_lock:
         priority, _, job = await req_q.get()
         if job is None:
             req_q.task_done()
-            return priority, None, demote_jobs, True, state.last_symbol, state.burst_count
+            return SchedulerResult(priority=priority, job=None, demoted=demote_jobs, already_done=True)
         if priority != priority_pagination:
             state.last_symbol = None
             state.burst_count = 0
-            return priority, job, demote_jobs, already_done, state.last_symbol, state.burst_count
+            return SchedulerResult(priority=priority, job=job, demoted=demote_jobs, already_done=already_done)
         if state.last_symbol == job.symbol:
             state.burst_count += 1
         else:
             state.last_symbol = job.symbol
             state.burst_count = 1
         if state.burst_count <= burst_cap:
-            return priority, job, demote_jobs, already_done, state.last_symbol, state.burst_count
+            return SchedulerResult(priority=priority, job=job, demoted=demote_jobs, already_done=already_done)
         demote_jobs.append(job)
         return _pick_after_demotion(
             req_q=req_q,
@@ -107,18 +104,16 @@ def _pick_after_demotion(
     priority_pagination: int,
     priority_new_job: int,
     fairness_state: FairnessState,
-) -> tuple[int, FetchJob | None, list[FetchJob], bool, str | None, int]:
+) -> SchedulerResult:
     while True:
         try:
             p2, order2, cand = req_q.get_nowait()
         except asyncio.QueueEmpty:
-            return (
-                priority_new_job,
-                None,
-                demote_jobs,
-                already_done,
-                fairness_state.last_symbol,
-                fairness_state.burst_count,
+            return SchedulerResult(
+                priority=priority_new_job,
+                job=None,
+                demoted=demote_jobs,
+                already_done=already_done,
             )
         if p2 == priority_pagination and cand is not None and cand.symbol == fairness_state.last_symbol:
             # Do not call req_q.task_done() here: demoted jobs are acknowledged after requeue in
@@ -129,20 +124,18 @@ def _pick_after_demotion(
             if demote_jobs:
                 req_q.task_done()
                 req_q.put_nowait((p2, order2, None))
-                return (
-                    priority_new_job,
-                    None,
-                    demote_jobs,
-                    already_done,
-                    fairness_state.last_symbol,
-                    fairness_state.burst_count,
+                return SchedulerResult(
+                    priority=priority_new_job,
+                    job=None,
+                    demoted=demote_jobs,
+                    already_done=already_done,
                 )
             req_q.task_done()
-            return p2, None, demote_jobs, True, fairness_state.last_symbol, fairness_state.burst_count
+            return SchedulerResult(priority=p2, job=None, demoted=demote_jobs, already_done=True)
         if p2 == priority_pagination:
             fairness_state.last_symbol = cand.symbol
             fairness_state.burst_count = 1
         else:
             fairness_state.last_symbol = None
             fairness_state.burst_count = 0
-        return p2, cand, demote_jobs, already_done, fairness_state.last_symbol, fairness_state.burst_count
+        return SchedulerResult(priority=p2, job=cand, demoted=demote_jobs, already_done=already_done)

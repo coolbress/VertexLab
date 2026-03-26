@@ -11,6 +11,9 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
+import itertools
+from pathlib import Path
+import time
 from typing import Any
 
 import pytest
@@ -352,3 +355,199 @@ async def test_concurrent_run_raises() -> None:
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
+
+
+def test_find_latest_checkpoint_skips_corrupted_and_uses_latest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    root = tmp_path / "vf-root"
+    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(root))
+    cache_root = root / "cache"
+    checkpoints_dir = cache_root / "checkpoints"
+    checkpoints_dir.mkdir(parents=True, exist_ok=True)
+    bad = checkpoints_dir / "bad_checkpoint"
+    old = checkpoints_dir / "stub_d_100"
+    new = checkpoints_dir / "stub_d_200"
+    bad.mkdir(exist_ok=True)
+    old.mkdir(exist_ok=True)
+    new.mkdir(exist_ok=True)
+    (bad / "progress.json").write_text("{invalid-json")
+    (old / "progress.json").write_text(
+        '{"run_id":"stub_d_100","provider":"stub","dataset":"d","completed":[],"failed":[]}'
+    )
+    (new / "progress.json").write_text(
+        '{"run_id":"stub_d_200","provider":"stub","dataset":"d","completed":[],"failed":[]}'
+    )
+    old_ts = time.time() - 10
+    new_ts = time.time()
+    os_old = old / "progress.json"
+    os_new = new / "progress.json"
+    os_old.touch()
+    os_new.touch()
+    import os
+
+    os.utime(os_old, (old_ts, old_ts))
+    os.utime(os_new, (new_ts, new_ts))
+    cp = engine._find_latest_checkpoint("stub", "d")
+    assert cp is not None
+    assert cp.run_id == "stub_d_200"
+
+
+@pytest.mark.asyncio
+async def test_finalize_run_metrics_sink_and_history_error_suppressed(monkeypatch: pytest.MonkeyPatch) -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    engine._metrics_enabled = True
+    engine._counters = {"rows_written_total": 0}
+    engine._hists = {}
+    engine._summary = {}
+    engine._completed_symbols = {"AAPL"}
+    engine._failed_symbols = {"MSFT"}
+    engine._checkpoint_lock = asyncio.Lock()
+
+    class _Sink:
+        @staticmethod
+        def summary(_payload: dict[str, float]) -> None:
+            raise RuntimeError("sink boom")
+
+    engine._metrics_sink = _Sink()
+    engine._config.persist_run_history = True
+
+    async def _noop_flush(*, suppress: bool, consume: bool = True) -> None:
+        return None
+
+    monkeypatch.setattr(engine, "_try_flush_once", _noop_flush, raising=True)
+    monkeypatch.setattr(engine, "_merge_component_counters", lambda: None, raising=True)
+    monkeypatch.setattr(engine, "_compute_summary", lambda: {"http_duration_s_p95": 1.0}, raising=True)
+    monkeypatch.setattr(engine, "_emit_pipeline_summary_log", lambda **kwargs: None, raising=True)
+    monkeypatch.setattr(engine, "_update_checkpoint", lambda *args, **kwargs: None, raising=True)
+    import vertex_forager.core.pipeline as pipeline_mod
+
+    def _save_run_history_fail(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("history boom")
+
+    monkeypatch.setattr(pipeline_mod, "save_run_history", _save_run_history_fail)
+    result = RunResult(provider="stub")
+    await engine._finalize_run(result=result, dataset="d", run_id="rid", started_monotonic=time.monotonic() - 1.0)
+    assert result.metrics_summary.get("http_duration_s_p95") == 1.0
+    assert result.finished_at is not None
+
+
+@pytest.mark.asyncio
+async def test_fetch_worker_handles_none_job_then_sentinel(monkeypatch: pytest.MonkeyPatch) -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+
+    class _Req:
+        @staticmethod
+        def task_done() -> None:
+            return None
+
+    req_q = _Req()
+    pkt_q: asyncio.Queue[FramePacket | None] = asyncio.Queue()
+    result = RunResult(provider="stub")
+    lock = asyncio.Lock()
+    order_counter = itertools.count()
+    steps = [
+        (0, None, [], False),
+        (engine.PRIORITY_SENTINEL, None, [], True),
+    ]
+
+    async def _dequeue_worker_job(**kwargs: object):
+        return steps.pop(0)
+
+    monkeypatch.setattr(engine, "_dequeue_worker_job", _dequeue_worker_job, raising=True)
+    monkeypatch.setattr(engine, "_drain_deferred_demotes", lambda **kwargs: None, raising=True)
+    monkeypatch.setattr(engine, "_requeue_demoted_jobs", lambda **kwargs: None, raising=True)
+
+    async def _process_worker_job(**kwargs: object):
+        return b"x", None, ParseResult(packets=[], next_jobs=[])
+
+    monkeypatch.setattr(engine, "_process_worker_job", _process_worker_job, raising=True)
+
+    async def _record_worker_symbol_state(**kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr(engine, "_record_worker_symbol_state", _record_worker_symbol_state, raising=True)
+    sleep_calls = {"n": 0}
+
+    async def _sleep(_delay: float) -> None:
+        sleep_calls["n"] += 1
+
+    monkeypatch.setattr(asyncio, "sleep", _sleep)
+    await engine._fetch_worker(
+        0,
+        req_q=req_q,  # type: ignore[arg-type]
+        pkt_q=pkt_q,
+        result=result,
+        result_lock=lock,
+        order_counter=order_counter,
+        on_progress=None,
+    )
+    assert sleep_calls["n"] == 1
+
+
+@pytest.mark.asyncio
+async def test_fetch_worker_logs_every_100_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+
+    class _Req:
+        @staticmethod
+        def task_done() -> None:
+            return None
+
+    req_q = _Req()
+    pkt_q: asyncio.Queue[FramePacket | None] = asyncio.Queue()
+    result = RunResult(provider="stub")
+    lock = asyncio.Lock()
+    order_counter = itertools.count()
+    jobs = [
+        (
+            engine.PRIORITY_NEW_JOB,
+            FetchJob(provider="stub", dataset="d", symbol=f"S{i}", spec=RequestSpec(url="https://x")),
+            [],
+            False,
+        )
+        for i in range(100)
+    ]
+    jobs.append((engine.PRIORITY_SENTINEL, None, [], True))
+
+    async def _dequeue_worker_job(**kwargs: object):
+        return jobs.pop(0)
+
+    monkeypatch.setattr(engine, "_dequeue_worker_job", _dequeue_worker_job, raising=True)
+    monkeypatch.setattr(engine, "_drain_deferred_demotes", lambda **kwargs: None, raising=True)
+    monkeypatch.setattr(engine, "_requeue_demoted_jobs", lambda **kwargs: None, raising=True)
+
+    async def _process_worker_job(**kwargs: object):
+        return b"x", None, ParseResult(packets=[], next_jobs=[])
+
+    monkeypatch.setattr(engine, "_process_worker_job", _process_worker_job, raising=True)
+
+    async def _record_worker_symbol_state(**kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr(engine, "_record_worker_symbol_state", _record_worker_symbol_state, raising=True)
+    debug_msgs: list[str] = []
+    import vertex_forager.core.pipeline as pipeline_mod
+
+    monkeypatch.setattr(
+        pipeline_mod.logger,
+        "debug",
+        lambda msg, *args: debug_msgs.append(str(msg)),
+        raising=True,
+    )
+    await engine._fetch_worker(
+        0,
+        req_q=req_q,  # type: ignore[arg-type]
+        pkt_q=pkt_q,
+        result=result,
+        result_lock=lock,
+        order_counter=order_counter,
+        on_progress=None,
+    )
+    assert any("Processed %s jobs so far..." in m for m in debug_msgs)
