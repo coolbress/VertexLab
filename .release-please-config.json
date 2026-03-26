@@ -35,7 +35,8 @@
       "component": "vertex-lab",
       "version-file": "vertex_lab_version.py",
       "extra-files": [
-        "pyproject.toml"
+        "pyproject.toml",
+        "src/vertex_lab/__init__.py"
       ]
     }
   }
