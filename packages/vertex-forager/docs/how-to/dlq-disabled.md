@@ -26,7 +26,7 @@ client = create_client(
 )
 ```
 
-2) Run your fetch:
+1) Run your fetch:
 
 ```python
 res = client.get_price_data(tickers=["AAPL"], connect_db="duckdb://./forager.duckdb")

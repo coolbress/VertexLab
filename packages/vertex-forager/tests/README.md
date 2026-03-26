@@ -14,8 +14,7 @@
 ## Local Commands
 - Fast suite (default): `pytest packages/ -m "not manual"`
 - Manual only: `pytest packages/ -m manual`
-- Coverage: `pytest packages/ --cov --cov-fail-under=80`
-- Lint & typecheck: `ruff check packages/ --fix && mypy packages/vertex-forager/src --strict`
+- For quality gates (coverage/lint/typecheck), use the canonical checklist in [CONTRIBUTING.md](../../../CONTRIBUTING.md#development-quickstart).
 
 ## CI Policy
 - Default run excludes manual tests for speed and determinism.

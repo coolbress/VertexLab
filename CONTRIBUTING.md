@@ -26,7 +26,7 @@ Thank you for contributing to Vertex Forager!
 - Run quality gates locally:
   - `uv run ruff check packages/`
   - `uv run mypy packages/vertex-forager/src --strict`
-  - `uv run pytest packages/ -q`
+  - `uv run pytest packages/ --cov-fail-under=80`
   - Note: pre-commit runs mypy against the same target (`packages/vertex-forager/src`) with `--strict` to ensure local and CI type errors match. Install hooks via `pre-commit install`.
   - Note (tests): keep packages/vertex-forager/tests/** exceptions S101 and TC002/TC003/TC006 for pytest assert ergonomics and type-checking imports.
   - See `packages/vertex-forager/tests/README.md` for test structure (unit/integration/property/verification) and markers (`smoke`, `manual`), plus commands and CI policy.
@@ -34,10 +34,8 @@ Thank you for contributing to Vertex Forager!
 ## Tests
 
 - Test layout, markers, and CI policy are documented in `packages/vertex-forager/tests/README.md`.
-- Quick commands:
-  - Default fast suite: `pytest packages/ -m "not manual"`
-  - Manual tests only: `pytest packages/ -m manual`
-  - Coverage gate: `pytest packages/ --cov --cov-fail-under=80`
+- For the canonical quality-gate checklist, use **Development quickstart → Run quality gates locally**.
+- Test-selection commands (non-gate) are documented in `packages/vertex-forager/tests/README.md`.
 
 ## Benchmark baseline policy
 
