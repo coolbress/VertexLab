@@ -10,10 +10,10 @@ resolution-markers = [
 
 [manifest]
 members = [
-    "vertex-caliber",
     "vertex-forager",
     "vertex-lab",
-    "vertexqt",
+    "vertex-qt",
+    "vertex-workspace",
 ]
 
 [[package]]
@@ -3017,13 +3017,8 @@ wheels = [
 ]
 
 [[package]]
-name = "vertex-caliber"
-version = "0.1.0"
-source = { editable = "packages/vertex-caliber" }
-
-[[package]]
 name = "vertex-forager"
-version = "0.11.0"
+version = "0.11.2"
 source = { editable = "packages/vertex-forager" }
 dependencies = [
     { name = "click" },
@@ -3107,7 +3102,12 @@ dev = [
 [[package]]
 name = "vertex-lab"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
+dependencies = [
+    { name = "vertex-forager" },
+    { name = "vertex-qt" },
+    { name = "vertex-workspace" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -3126,6 +3126,11 @@ dev = [
 ]
 
 [package.metadata]
+requires-dist = [
+    { name = "vertex-forager", editable = "packages/vertex-forager" },
+    { name = "vertex-qt", editable = "packages/vertex-qt" },
+    { name = "vertex-workspace", editable = "packages/vertex-workspace" },
+]
 
 [package.metadata.requires-dev]
 dev = [
@@ -3143,9 +3148,14 @@ dev = [
 ]
 
 [[package]]
-name = "vertexqt"
+name = "vertex-qt"
 version = "0.1.0"
-source = { editable = "packages/vertexqt" }
+source = { editable = "packages/vertex-qt" }
+
+[[package]]
+name = "vertex-workspace"
+version = "0.1.0"
+source = { editable = "packages/vertex-workspace" }
 
 [[package]]
 name = "watchdog"

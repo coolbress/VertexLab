@@ -10,6 +10,33 @@
       "extra-files": [
         "packages/vertex-forager/pyproject.toml"
       ]
+    },
+    "packages/vertex-qt": {
+      "release-type": "python",
+      "package-name": "vertex-qt",
+      "component": "vertex-qt",
+      "version-file": "packages/vertex-qt/src/vertex_qt/__init__.py",
+      "extra-files": [
+        "packages/vertex-qt/pyproject.toml"
+      ]
+    },
+    "packages/vertex-workspace": {
+      "release-type": "python",
+      "package-name": "vertex-workspace",
+      "component": "vertex-workspace",
+      "version-file": "packages/vertex-workspace/src/vertex_workspace/__init__.py",
+      "extra-files": [
+        "packages/vertex-workspace/pyproject.toml"
+      ]
+    },
+    ".": {
+      "release-type": "python",
+      "package-name": "vertex-lab",
+      "component": "vertex-lab",
+      "version-file": "vertex_lab_version.py",
+      "extra-files": [
+        "pyproject.toml"
+      ]
     }
   }
 }
