@@ -2,6 +2,8 @@
 
 This page consolidates practical workflow guidance previously kept under archived `legacy_code/fmp/docs/`.
 
+- Architecture rationale is tracked in [ADR index](../adr/README.md).
+
 ## Repository Workflow
 
 - Branching and PR policy: [CONTRIBUTING.md](https://github.com/coolbress/VertexLab/blob/main/CONTRIBUTING.md)
