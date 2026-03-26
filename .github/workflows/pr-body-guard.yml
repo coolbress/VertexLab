@@ -45,6 +45,9 @@ jobs:
               core.info('Bot-authored PR detected; skipping PR Body Guard checks.');
               return;
             }
+            const title = (pr.title || '').trim();
+            const titleRegex = /^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([^)]+\))?(!)?: .+ \(#([0-9]+)\)$/;
+            const titleInvalid = !titleRegex.test(title);
             const body = (pr.body || '').toLowerCase();
             const required = [
               '## summary',
@@ -58,15 +61,24 @@ jobs:
             ];
             const missing = required.filter(h => !body.includes(h));
             core.setOutput('missing', JSON.stringify(missing));
-            if (missing.length > 0) {
+            core.setOutput('title_invalid', String(titleInvalid));
+            if (missing.length > 0 || titleInvalid) {
               const marker = '[PR Body Guard]';
-              const msg = [
-                marker,
-                'PR body is missing required sections:',
-                ...missing.map(s => `- ${s.replace(/^##\s*/,'')}`),
-                '',
-                'Please fill out the repository PR template sections for consistency.'
-              ].join('\n');
+              const details = [];
+              if (titleInvalid) {
+                details.push(
+                  'PR title does not match required format:',
+                  '- `type(scope): summary (#123)`',
+                  '- Allowed types: build, chore, ci, docs, feat, fix, perf, refactor, revert, style, test'
+                );
+              }
+              if (missing.length > 0) {
+                details.push(
+                  'PR body is missing required sections:',
+                  ...missing.map(s => `- ${s.replace(/^##\s*/, '')}`)
+                );
+              }
+              const msg = [marker, ...details, '', 'Please update the title/body to match the repository PR policy.'].join('\n');
               const owner = context.repo.owner;
               const repo = context.repo.repo;
               const comments = await github.rest.issues.listComments({
@@ -82,5 +94,12 @@ jobs:
                   owner, repo, issue_number: pr.number, body: msg
                 });
               }
-              core.setFailed(`Missing sections: ${missing.join(', ')}`);
+              const reasons = [];
+              if (titleInvalid) {
+                reasons.push('invalid title format');
+              }
+              if (missing.length > 0) {
+                reasons.push(`missing sections: ${missing.join(', ')}`);
+              }
+              core.setFailed(reasons.join('; '));
             }
