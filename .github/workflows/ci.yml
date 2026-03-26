@@ -143,7 +143,7 @@ jobs:
         run: |
           uv run ruff check packages/ \
             --exclude "legacy_code" \
-            --select C4,PT,TCH,SIM,TC
+            --select SIM,TC
 
       - name: YAML Lint
         if: ${{ matrix.python-version == '3.10' }}

@@ -19,8 +19,9 @@ line-length = 120
 target-version = "py310"
 
 [tool.ruff.lint]
-# Tier‑1 (blocking): core correctness/safety; Tier‑2 runs in CI for C4/PT/TCH/SIM/TC
-select = ["E", "F", "W", "I", "UP", "B", "S", "RUF", "G", "C901", "PLR0912", "PLR0915"]
+# Tier‑1 (blocking): core correctness/safety + promoted categories
+# Tier‑2 runs in CI (non-blocking) for TCH/SIM/TC.
+select = ["E", "F", "W", "I", "UP", "B", "S", "RUF", "G", "C901", "PLR0912", "PLR0915", "C4", "PT"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 15
