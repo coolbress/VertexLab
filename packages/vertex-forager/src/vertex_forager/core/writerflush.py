@@ -3,10 +3,9 @@ from __future__ import annotations
 import asyncio
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
-from contextlib import AbstractContextManager
 from dataclasses import dataclass
 import time
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import polars as pl
 
@@ -16,7 +15,11 @@ from vertex_forager.core.errors import (
     PrimaryKeyNullError,
     RunError,
 )
-from vertex_forager.writers.base import WriteResult
+
+if TYPE_CHECKING:
+    from contextlib import AbstractContextManager
+
+    from vertex_forager.writers.base import WriteResult
 
 LogStructuredFunc = Callable[..., None]
 IncFunc = Callable[[str, int], None]
@@ -253,15 +256,25 @@ async def handle_writer_flush_error(
         if isinstance(spool_exc, dlq_spool_error_cls):
             rescued_count = int(getattr(spool_exc, "rescued", 0))
             remaining_count = int(getattr(spool_exc, "remaining", 0))
+            reported_spool_exc: Exception = spool_exc
         else:
             rescued_count = 0
             remaining_count = 0
+            spool_error_factory: Callable[..., Exception] = dlq_spool_error_cls
+            try:
+                reported_spool_exc = spool_error_factory(
+                    rescued=rescued_count,
+                    remaining=remaining_count,
+                    original=spool_exc,
+                )
+            except TypeError:
+                reported_spool_exc = spool_error_factory(str(spool_exc))
         status = {
             "status": "spool_failed",
             "rescued": rescued_count,
             "remaining": remaining_count,
             "path": None,
-            "error": spool_exc,
+            "error": reported_spool_exc,
         }
         summary = build_writer_error_summary(
             status=status,
@@ -276,7 +289,7 @@ async def handle_writer_flush_error(
         buffers[table] = []
         buffer_rows[table] = 0
         logger.exception("WRITER: Spool failed after %s for %s: %s", prefix, table, spool_exc)
-        raise
+        raise reported_spool_exc from spool_exc
     summary = build_writer_error_summary(
         status=status,
         table=table,
