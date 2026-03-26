@@ -1,6 +1,7 @@
 # Vertex Lab - Data Science Platform
 
 [![Docs](https://img.shields.io/badge/docs-online-blue)](https://coolbress.github.io/VertexLab/)
+[![Coverage](https://raw.githubusercontent.com/coolbress/VertexLab/python-coverage-comment-action-data/badge.svg)](https://github.com/coolbress/VertexLab/tree/python-coverage-comment-action-data)
 
 Modern Python monorepo for financial data collection, analysis, and visualization.
 
