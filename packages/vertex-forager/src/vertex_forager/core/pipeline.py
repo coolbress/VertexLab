@@ -121,7 +121,18 @@ from vertex_forager.core.workerio import (
     record_worker_error as record_worker_error_impl,
 )
 from vertex_forager.core.writerflush import (
-    WriterFlushService,
+    WriterContext,
+    buffer_or_flush_packet,
+    concat_frames_with_flex,
+    flush_all_writer_buffers,
+    flush_chunked_table,
+    flush_legacy_table,
+    flush_on_writer_cancel,
+    flush_writer_table,
+    handle_writer_flush_error,
+    validate_unique_key,
+    write_merged_packet,
+    writer_worker,
 )
 
 try:
@@ -139,6 +150,8 @@ from vertex_forager.core.config import (
 from vertex_forager.core.errors import (
     DLQSpoolError,
     FetchError,
+    PrimaryKeyMissingError,
+    PrimaryKeyNullError,
     RunError,
     ValidationError,
 )
@@ -278,7 +291,7 @@ class VertexForager:
             thread_name_prefix="vertex-forager:parse",
         )
         # Global pagination fairness bookkeeping
-        self._fair_lock: asyncio.Lock | None = None
+        self._fair_lock = asyncio.Lock()
         self._fair_state = FairnessState()
         # Writer flush idempotence
         self._writer_flushed: bool = False
@@ -303,7 +316,7 @@ class VertexForager:
             sanitize_field=sanitize_field,
             logger=logger,
         )
-        self._writer_flush_service = WriterFlushService(
+        self._writer_context = WriterContext(
             writer=self._writer,
             config=self._config,
             logger=logger,
@@ -671,7 +684,6 @@ class VertexForager:
         self._req_q = req_q
         self._pkt_q = pkt_q
         self._writer_tasks = writer_tasks
-        self._fair_lock = asyncio.Lock()
         self._fair_state = FairnessState()
         self._writer_flush_attempted = False
         self._writer_flushed = False
@@ -1159,34 +1171,6 @@ class VertexForager:
                         result.dlq_counts[pkt.table] = entry
                         result.errors.append(RunError.from_exception(e, pkt.provider, pkt.table, ""))
 
-    async def _pop_next_job_respecting_fairness(
-        self,
-        *,
-        req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]],
-        burst_cap: int,
-    ) -> tuple[int, FetchJob | None, list[FetchJob], bool]:
-        """Atomically select the next job while enforcing pagination burst cap.
-
-        Returns:
-            priority: Selected job priority.
-            job: Selected FetchJob (None when sentinel was consumed).
-            demote_jobs: Jobs to requeue at lower priority (processed outside the lock).
-            already_done: True if this method already called task_done on the selected item
-                          (only true when consuming a sentinel); caller must NOT call task_done again.
-        """
-        fair_lock = self._fair_lock
-        if fair_lock is None:
-            raise RuntimeError("Fairness lock must be initialized before use")
-        selected: SchedulerResult = await pop_next_job_respecting_fairness_impl(
-            req_q=req_q,
-            fair_lock=fair_lock,
-            burst_cap=burst_cap,
-            priority_pagination=self.PRIORITY_PAGINATION,
-            priority_new_job=self.PRIORITY_NEW_JOB,
-            fairness_state=self._fair_state,
-        )
-        return selected.priority, selected.job, selected.demoted, selected.already_done
-
     async def _fetch_worker(
         self,
         worker_id: int,
@@ -1214,10 +1198,14 @@ class VertexForager:
         deferred_demotes: deque[tuple[int, int, FetchJob]] = deque()
         while True:
             self._drain_deferred_demotes(req_q=req_q, deferred_demotes=deferred_demotes)
-            priority, job, demote_jobs, already_done = await self._dequeue_worker_job(
+            selected = await self._dequeue_worker_job(
                 req_q=req_q,
                 burst_cap=burst_cap,
             )
+            priority = selected.priority
+            job = selected.job
+            demote_jobs = selected.demoted
+            already_done = selected.already_done
             self._requeue_demoted_jobs(
                 req_q=req_q,
                 demote_jobs=demote_jobs,
@@ -1327,17 +1315,24 @@ class VertexForager:
         *,
         req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]],
         burst_cap: int | None,
-    ) -> tuple[int, FetchJob | None, list[FetchJob], bool]:
+    ) -> SchedulerResult:
         if burst_cap is None:
             priority, _, job = await req_q.get()
             already_done = False
             if job is None:
                 req_q.task_done()
                 already_done = True
-            return priority, job, [], already_done
+            return SchedulerResult(priority=priority, job=job, demoted=[], already_done=already_done)
         if not isinstance(burst_cap, int):
             raise RuntimeError("pagination_max_burst must be int when fairness dequeue is enabled")
-        return await self._pop_next_job_respecting_fairness(req_q=req_q, burst_cap=burst_cap)
+        return await pop_next_job_respecting_fairness_impl(
+            req_q=req_q,
+            fair_lock=self._fair_lock,
+            burst_cap=burst_cap,
+            priority_pagination=self.PRIORITY_PAGINATION,
+            priority_new_job=self.PRIORITY_NEW_JOB,
+            fairness_state=self._fair_state,
+        )
 
     def _requeue_demoted_jobs(
         self,
@@ -1555,11 +1550,17 @@ class VertexForager:
         result: RunResult,
         result_lock: asyncio.Lock,
     ) -> None:
-        await self._writer_flush_service.writer_worker(
+        ctx = self._writer_context
+        await writer_worker(
             pkt_q=pkt_q,
             result=result,
             result_lock=result_lock,
             flush_threshold=self._flush_threshold,
+            flush_all_writer_buffers=self._flush_all_writer_buffers,
+            buffer_or_flush_packet=self._buffer_or_flush_packet,
+            flush_on_writer_cancel=self._flush_on_writer_cancel,
+            dlq_spool_error_cls=ctx.dlq_spool_error_cls,
+            logger=ctx.logger,
         )
 
     async def _flush_on_writer_cancel(
@@ -1570,11 +1571,14 @@ class VertexForager:
         result: RunResult,
         result_lock: asyncio.Lock,
     ) -> None:
-        await self._writer_flush_service.flush_on_writer_cancel(
+        ctx = self._writer_context
+        await flush_on_writer_cancel(
             buffers=buffers,
             buffer_rows=buffer_rows,
             result=result,
             result_lock=result_lock,
+            flush_writer_table=self._flush_writer_table,
+            logger=ctx.logger,
         )
 
     async def _flush_all_writer_buffers(
@@ -1585,11 +1589,14 @@ class VertexForager:
         result: RunResult,
         result_lock: asyncio.Lock,
     ) -> None:
-        await self._writer_flush_service.flush_all_writer_buffers(
+        ctx = self._writer_context
+        await flush_all_writer_buffers(
             buffers=buffers,
             buffer_rows=buffer_rows,
             result=result,
             result_lock=result_lock,
+            flush_writer_table=self._flush_writer_table,
+            logger=ctx.logger,
         )
 
     async def _buffer_or_flush_packet(
@@ -1602,13 +1609,171 @@ class VertexForager:
         result: RunResult,
         result_lock: asyncio.Lock,
     ) -> None:
-        await self._writer_flush_service.buffer_or_flush_packet(
+        ctx = self._writer_context
+        await buffer_or_flush_packet(
             packet=packet,
             threshold=threshold,
             buffers=buffers,
             buffer_rows=buffer_rows,
             result=result,
             result_lock=result_lock,
+            flush_writer_table=self._flush_writer_table,
+            progress_log_chunk_rows=ctx.progress_log_chunk_rows,
+            logger=ctx.logger,
+        )
+
+    async def _flush_writer_table(
+        self,
+        *,
+        table: str,
+        buffers: dict[str, list[FramePacket]],
+        buffer_rows: dict[str, int],
+        result: RunResult,
+        result_lock: asyncio.Lock,
+    ) -> None:
+        ctx = self._writer_context
+
+        def _concat_frames_with_flex(
+            *,
+            frames: list[pl.DataFrame],
+            table_name: str,
+            schema: object,
+            rechunk: bool,
+        ) -> pl.DataFrame:
+            return concat_frames_with_flex(
+                frames=frames,
+                table_name=table_name,
+                schema=schema,
+                rechunk=rechunk,
+                router_flexible_schema=ctx.router_flexible_schema,
+                logger=ctx.logger,
+            )
+
+        async def _write_merged_packet(
+            *,
+            table: str,
+            packet: FramePacket,
+            stage: str,
+            result: RunResult,
+            result_lock: asyncio.Lock,
+        ) -> None:
+            await write_merged_packet(
+                table=table,
+                packet=packet,
+                stage=stage,
+                result=result,
+                result_lock=result_lock,
+                writer=ctx.writer,
+                span=ctx.span,
+                inc=ctx.inc,
+                observe=ctx.observe,
+                log_structured=ctx.log_structured,
+            )
+
+        async def _handle_writer_flush_error(
+            *,
+            table: str,
+            packets: list[FramePacket],
+            exc: Exception,
+            prefix: str,
+            buffers: dict[str, list[FramePacket]],
+            buffer_rows: dict[str, int],
+            result: RunResult,
+            result_lock: asyncio.Lock,
+        ) -> None:
+            await handle_writer_flush_error(
+                table=table,
+                packets=packets,
+                exc=exc,
+                prefix=prefix,
+                buffers=buffers,
+                buffer_rows=buffer_rows,
+                result=result,
+                result_lock=result_lock,
+                writer=ctx.writer,
+                config=ctx.config,
+                inc=ctx.inc,
+                log_structured=ctx.log_structured,
+                spool_to_dlq_and_rescue=ctx.spool_to_dlq_and_rescue,
+                build_writer_error_summary=ctx.build_writer_error_summary,
+                dlq_spool_error_cls=ctx.dlq_spool_error_cls,
+                logger=ctx.logger,
+            )
+
+        async def _flush_chunked_table(
+            *,
+            table: str,
+            packets: list[FramePacket],
+            schema: object,
+            chunk_size: int,
+            buffers: dict[str, list[FramePacket]],
+            buffer_rows: dict[str, int],
+            result: RunResult,
+            result_lock: asyncio.Lock,
+        ) -> None:
+            await flush_chunked_table(
+                table=table,
+                packets=packets,
+                schema=schema,
+                chunk_size=chunk_size,
+                buffers=buffers,
+                buffer_rows=buffer_rows,
+                result=result,
+                result_lock=result_lock,
+                concat_frames_with_flex=_concat_frames_with_flex,
+                validate_unique_key=validate_unique_key,
+                validate_data_quality=ctx.validate_data_quality,
+                write_merged_packet=_write_merged_packet,
+                handle_writer_flush_error=_handle_writer_flush_error,
+                compute_error_cls=ctx.compute_error_cls,
+                validation_error_cls=ctx.validation_error_cls,
+                primary_key_missing_error_cls=PrimaryKeyMissingError,
+                primary_key_null_error_cls=PrimaryKeyNullError,
+                dlq_spool_error_cls=ctx.dlq_spool_error_cls,
+                duckdb_module=ctx.duckdb_module,
+                log_structured=ctx.log_structured,
+                logger=ctx.logger,
+            )
+
+        async def _flush_legacy_table(
+            *,
+            table: str,
+            packets: list[FramePacket],
+            schema: object,
+            result: RunResult,
+            result_lock: asyncio.Lock,
+        ) -> None:
+            await flush_legacy_table(
+                table=table,
+                packets=packets,
+                schema=schema,
+                result=result,
+                result_lock=result_lock,
+                concat_frames_with_flex=_concat_frames_with_flex,
+                validate_unique_key=validate_unique_key,
+                validate_data_quality=ctx.validate_data_quality,
+                write_merged_packet=_write_merged_packet,
+                logger=ctx.logger,
+            )
+
+        await flush_writer_table(
+            table=table,
+            buffers=buffers,
+            buffer_rows=buffer_rows,
+            result=result,
+            result_lock=result_lock,
+            get_table_schema=ctx.get_table_schema,
+            writer_chunk_rows=getattr(ctx.config, "writer_chunk_rows", None),
+            flush_chunked_table=_flush_chunked_table,
+            flush_legacy_table=_flush_legacy_table,
+            handle_writer_flush_error=_handle_writer_flush_error,
+            compute_error_cls=ctx.compute_error_cls,
+            validation_error_cls=ctx.validation_error_cls,
+            primary_key_missing_error_cls=PrimaryKeyMissingError,
+            primary_key_null_error_cls=PrimaryKeyNullError,
+            dlq_spool_error_cls=ctx.dlq_spool_error_cls,
+            duckdb_module=ctx.duckdb_module,
+            logger=ctx.logger,
         )
 
     async def _fetch_with_retry(self, job: FetchJob) -> bytes:

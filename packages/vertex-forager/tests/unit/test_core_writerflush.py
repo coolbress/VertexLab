@@ -73,6 +73,7 @@ async def test_writer_worker_flushes_on_shutdown_sentinel() -> None:
         flush_all_writer_buffers=_flush_all_writer_buffers,
         buffer_or_flush_packet=_buffer_or_flush_packet,
         flush_on_writer_cancel=_flush_on_writer_cancel,
+        dlq_spool_error_cls=Exception,
         logger=type("L", (), {"debug": lambda *args, **kwargs: None, "exception": lambda *args, **kwargs: None})(),
     )
     assert called["flush_all"] == 1
