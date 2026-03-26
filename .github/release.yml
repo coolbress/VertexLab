@@ -1,0 +1,25 @@
+changelog:
+  exclude:
+    labels:
+      - no-changelog
+  categories:
+    - title: Breaking Changes
+      labels:
+        - type:breaking
+    - title: New Features
+      labels:
+        - type:feature
+    - title: Bug Fixes
+      labels:
+        - type:fix
+    - title: Performance
+      labels:
+        - type:perf
+    - title: Maintenance
+      labels:
+        - type:chore
+        - type:refactor
+        - scope:ci
+    - title: Documentation
+      labels:
+        - type:docs
