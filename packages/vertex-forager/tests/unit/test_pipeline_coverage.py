@@ -22,7 +22,7 @@ from vertex_forager.core.config import EngineConfig, FetchJob, FramePacket, Pars
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor
 from vertex_forager.core.pipeline import VertexForager
-from vertex_forager.core.scheduler import FairnessState
+from vertex_forager.core.scheduler import FairnessState, SchedulerResult
 
 # ─── Stubs ──────────────────────────────────────────────────────────────
 
@@ -148,7 +148,7 @@ async def test_no_burst_cap_allows_all_consecutive_pages() -> None:
     assert max_consec >= 4, f"Expected ≥4 consecutive same-symbol events without cap, got {max_consec}"
 
 
-# ─── Test 2: _pop_next_job_respecting_fairness direct tests ────────────
+# ─── Test 2: fairness dequeue tests ─────────────────────────────────────
 
 
 @pytest.mark.asyncio
@@ -162,13 +162,13 @@ async def test_fairness_sentinel_returns_already_done() -> None:
     req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
     await req_q.put((VertexForager.PRIORITY_SENTINEL, 0, None))
 
-    priority, job, demote_jobs, already_done = await engine._pop_next_job_respecting_fairness(
+    selected = await engine._dequeue_worker_job(
         req_q=req_q, burst_cap=2
     )
-    assert job is None
-    assert already_done is True
-    assert priority == VertexForager.PRIORITY_SENTINEL
-    assert demote_jobs == []
+    assert selected.job is None
+    assert selected.already_done is True
+    assert selected.priority == VertexForager.PRIORITY_SENTINEL
+    assert selected.demoted == []
 
 
 @pytest.mark.asyncio
@@ -186,14 +186,14 @@ async def test_fairness_burst_cap_demotes_and_finds_different_candidate() -> Non
     await req_q.put((VertexForager.PRIORITY_PAGINATION, 1, aapl_job))
     await req_q.put((VertexForager.PRIORITY_PAGINATION, 2, msft_job))
 
-    _priority, job, demote_jobs, already_done = await engine._pop_next_job_respecting_fairness(
+    selected = await engine._dequeue_worker_job(
         req_q=req_q, burst_cap=2
     )
-    assert job is not None
-    assert job.symbol == "MSFT"
-    assert len(demote_jobs) == 2
-    assert all(dj.symbol == "AAPL" for dj in demote_jobs)
-    assert not already_done
+    assert selected.job is not None
+    assert selected.job.symbol == "MSFT"
+    assert len(selected.demoted) == 2
+    assert all(dj.symbol == "AAPL" for dj in selected.demoted)
+    assert not selected.already_done
 
 
 @pytest.mark.asyncio
@@ -208,14 +208,14 @@ async def test_fairness_burst_cap_queue_empty_after_demotes() -> None:
     aapl_job = FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x"))
     await req_q.put((VertexForager.PRIORITY_PAGINATION, 0, aapl_job))
 
-    priority, job, demote_jobs, already_done = await engine._pop_next_job_respecting_fairness(
+    selected = await engine._dequeue_worker_job(
         req_q=req_q, burst_cap=2
     )
-    assert job is None
-    assert len(demote_jobs) == 1
-    assert demote_jobs[0].symbol == "AAPL"
-    assert not already_done
-    assert priority == VertexForager.PRIORITY_NEW_JOB
+    assert selected.job is None
+    assert len(selected.demoted) == 1
+    assert selected.demoted[0].symbol == "AAPL"
+    assert not selected.already_done
+    assert selected.priority == VertexForager.PRIORITY_NEW_JOB
 
 
 @pytest.mark.asyncio
@@ -232,13 +232,13 @@ async def test_fairness_sentinel_found_during_demote_drain() -> None:
     await req_q.put((VertexForager.PRIORITY_PAGINATION, 0, aapl_job))
     await req_q.put((VertexForager.PRIORITY_SENTINEL, 0, None))
 
-    _priority, job, demote_jobs, already_done = await engine._pop_next_job_respecting_fairness(
+    selected = await engine._dequeue_worker_job(
         req_q=req_q, burst_cap=2
     )
-    assert job is None
-    assert already_done is False
-    assert len(demote_jobs) == 1
-    assert demote_jobs[0].symbol == "AAPL"
+    assert selected.job is None
+    assert selected.already_done is False
+    assert len(selected.demoted) == 1
+    assert selected.demoted[0].symbol == "AAPL"
     p2, _ord, sentinel = req_q.get_nowait()
     assert p2 == VertexForager.PRIORITY_SENTINEL
     assert sentinel is None
@@ -452,8 +452,8 @@ async def test_fetch_worker_handles_none_job_then_sentinel(monkeypatch: pytest.M
     lock = asyncio.Lock()
     order_counter = itertools.count()
     steps = [
-        (0, None, [], False),
-        (engine.PRIORITY_SENTINEL, None, [], True),
+        SchedulerResult(priority=0, job=None, demoted=[], already_done=False),
+        SchedulerResult(priority=engine.PRIORITY_SENTINEL, job=None, demoted=[], already_done=True),
     ]
 
     async def _dequeue_worker_job(**kwargs: object):
@@ -506,15 +506,15 @@ async def test_fetch_worker_logs_every_100_jobs(monkeypatch: pytest.MonkeyPatch)
     lock = asyncio.Lock()
     order_counter = itertools.count()
     jobs = [
-        (
-            engine.PRIORITY_NEW_JOB,
-            FetchJob(provider="stub", dataset="d", symbol=f"S{i}", spec=RequestSpec(url="https://x")),
-            [],
-            False,
+        SchedulerResult(
+            priority=engine.PRIORITY_NEW_JOB,
+            job=FetchJob(provider="stub", dataset="d", symbol=f"S{i}", spec=RequestSpec(url="https://x")),
+            demoted=[],
+            already_done=False,
         )
         for i in range(100)
     ]
-    jobs.append((engine.PRIORITY_SENTINEL, None, [], True))
+    jobs.append(SchedulerResult(priority=engine.PRIORITY_SENTINEL, job=None, demoted=[], already_done=True))
 
     async def _dequeue_worker_job(**kwargs: object):
         return jobs.pop(0)

@@ -28,7 +28,6 @@ async def test_pop_next_job_respecting_fairness_demotes_excess_burst() -> None:
         config=config,
         controller=controller,
     )
-    eng._fair_lock = asyncio.Lock()  # type: ignore[attr-defined]
     q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
     counter = itertools.count()
 
@@ -42,19 +41,15 @@ async def test_pop_next_job_respecting_fairness_demotes_excess_burst() -> None:
 
     # With burst_cap=1, picking should demote the second A and return first A,
     # then on next pick it should return B (since A burst exceeded)
-    _p, j, demotes, _done = await eng._pop_next_job_respecting_fairness(  # type: ignore[attr-defined]
-        req_q=q, burst_cap=1
-    )
-    assert j is not None
-    assert j.symbol == "A"
+    selected = await eng._dequeue_worker_job(req_q=q, burst_cap=1)  # type: ignore[attr-defined]
+    assert selected.job is not None
+    assert selected.job.symbol == "A"
     # Requeue demotes at NEW_JOB priority
-    for d in demotes:
+    for d in selected.demoted:
         await q.put((eng.PRIORITY_NEW_JOB, next(counter), d))
     # Next pick
-    _p2, j2, _demotes2, _done2 = await eng._pop_next_job_respecting_fairness(  # type: ignore[attr-defined]
-        req_q=q, burst_cap=1
-    )
-    assert j2 is not None
-    assert j2.symbol in {"A", "B"}
+    selected2 = await eng._dequeue_worker_job(req_q=q, burst_cap=1)  # type: ignore[attr-defined]
+    assert selected2.job is not None
+    assert selected2.job.symbol in {"A", "B"}
     # If fairness enforced, B should appear before the demoted A
-    assert j2.symbol == "B"
+    assert selected2.job.symbol == "B"

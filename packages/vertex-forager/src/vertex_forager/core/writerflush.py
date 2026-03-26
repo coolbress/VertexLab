@@ -3,9 +3,9 @@ from __future__ import annotations
 import asyncio
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
-from contextlib import AbstractContextManager, suppress
+from dataclasses import dataclass
 import time
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import polars as pl
 
@@ -15,7 +15,11 @@ from vertex_forager.core.errors import (
     PrimaryKeyNullError,
     RunError,
 )
-from vertex_forager.writers.base import WriteResult
+
+if TYPE_CHECKING:
+    from contextlib import AbstractContextManager
+
+    from vertex_forager.writers.base import WriteResult
 
 LogStructuredFunc = Callable[..., None]
 IncFunc = Callable[[str, int], None]
@@ -41,285 +45,25 @@ class ConfigLike(Protocol):
     writer_chunk_rows: int | None
 
 
-class WriterFlushService:
-    def __init__(
-        self,
-        *,
-        writer: WriterLike,
-        config: ConfigLike,
-        logger: LoggerLike,
-        inc: IncFunc,
-        observe: ObserveFunc,
-        log_structured: LogStructuredFunc,
-        span: Callable[..., AbstractContextManager[object]],
-        validate_data_quality: Callable[..., Awaitable[None]],
-        get_table_schema: Callable[[str], object | None],
-        spool_to_dlq_and_rescue: Callable[..., Awaitable[object]],
-        build_writer_error_summary: Callable[..., RunError],
-        compute_error_cls: type[Exception],
-        validation_error_cls: type[Exception],
-        dlq_spool_error_cls: type[Exception],
-        duckdb_module: object | None,
-        progress_log_chunk_rows: int,
-        router_flexible_schema: bool,
-    ) -> None:
-        self._writer = writer
-        self._config = config
-        self._logger = logger
-        self._inc = inc
-        self._observe = observe
-        self._log_structured = log_structured
-        self._span = span
-        self._validate_data_quality = validate_data_quality
-        self._get_table_schema = get_table_schema
-        self._spool_to_dlq_and_rescue = spool_to_dlq_and_rescue
-        self._build_writer_error_summary = build_writer_error_summary
-        self._compute_error_cls = compute_error_cls
-        self._validation_error_cls = validation_error_cls
-        self._dlq_spool_error_cls = dlq_spool_error_cls
-        self._duckdb_module = duckdb_module
-        self._progress_log_chunk_rows = progress_log_chunk_rows
-        self._router_flexible_schema = router_flexible_schema
-
-    async def writer_worker(
-        self,
-        *,
-        pkt_q: asyncio.Queue[FramePacket | None],
-        result: RunResult,
-        result_lock: asyncio.Lock,
-        flush_threshold: int,
-    ) -> None:
-        await writer_worker(
-            pkt_q=pkt_q,
-            result=result,
-            result_lock=result_lock,
-            flush_threshold=flush_threshold,
-            flush_all_writer_buffers=self.flush_all_writer_buffers,
-            buffer_or_flush_packet=self.buffer_or_flush_packet,
-            flush_on_writer_cancel=self.flush_on_writer_cancel,
-            logger=self._logger,
-        )
-
-    async def flush_on_writer_cancel(
-        self,
-        *,
-        buffers: dict[str, list[FramePacket]],
-        buffer_rows: dict[str, int],
-        result: RunResult,
-        result_lock: asyncio.Lock,
-    ) -> None:
-        await flush_on_writer_cancel(
-            buffers=buffers,
-            buffer_rows=buffer_rows,
-            result=result,
-            result_lock=result_lock,
-            flush_writer_table=self.flush_writer_table,
-            logger=self._logger,
-        )
-
-    async def flush_all_writer_buffers(
-        self,
-        *,
-        buffers: dict[str, list[FramePacket]],
-        buffer_rows: dict[str, int],
-        result: RunResult,
-        result_lock: asyncio.Lock,
-    ) -> None:
-        await flush_all_writer_buffers(
-            buffers=buffers,
-            buffer_rows=buffer_rows,
-            result=result,
-            result_lock=result_lock,
-            flush_writer_table=self.flush_writer_table,
-            logger=self._logger,
-        )
-
-    async def buffer_or_flush_packet(
-        self,
-        *,
-        packet: FramePacket,
-        threshold: int,
-        buffers: dict[str, list[FramePacket]],
-        buffer_rows: dict[str, int],
-        result: RunResult,
-        result_lock: asyncio.Lock,
-    ) -> None:
-        await buffer_or_flush_packet(
-            packet=packet,
-            threshold=threshold,
-            buffers=buffers,
-            buffer_rows=buffer_rows,
-            result=result,
-            result_lock=result_lock,
-            flush_writer_table=self.flush_writer_table,
-            progress_log_chunk_rows=self._progress_log_chunk_rows,
-            logger=self._logger,
-        )
-
-    async def handle_writer_flush_error(
-        self,
-        *,
-        table: str,
-        packets: list[FramePacket],
-        exc: Exception,
-        prefix: str,
-        buffers: dict[str, list[FramePacket]],
-        buffer_rows: dict[str, int],
-        result: RunResult,
-        result_lock: asyncio.Lock,
-    ) -> None:
-        await handle_writer_flush_error(
-            table=table,
-            packets=packets,
-            exc=exc,
-            prefix=prefix,
-            buffers=buffers,
-            buffer_rows=buffer_rows,
-            result=result,
-            result_lock=result_lock,
-            writer=self._writer,
-            config=self._config,
-            inc=self._inc,
-            log_structured=self._log_structured,
-            spool_to_dlq_and_rescue=self._spool_to_dlq_and_rescue,
-            build_writer_error_summary=self._build_writer_error_summary,
-            dlq_spool_error_cls=self._dlq_spool_error_cls,
-            logger=self._logger,
-        )
-
-    @staticmethod
-    def writer_table_context(packets: list[FramePacket]) -> tuple[str, str]:
-        return writer_table_context(packets)
-
-    def concat_frames_with_flex(
-        self,
-        *,
-        frames: list[pl.DataFrame],
-        table_name: str,
-        schema: object,
-        rechunk: bool,
-    ) -> pl.DataFrame:
-        return concat_frames_with_flex(
-            frames=frames,
-            table_name=table_name,
-            schema=schema,
-            rechunk=rechunk,
-            router_flexible_schema=self._router_flexible_schema,
-            logger=self._logger,
-        )
-
-    @staticmethod
-    def validate_unique_key(*, schema: object, table: str, frame: pl.DataFrame) -> None:
-        validate_unique_key(schema=schema, table=table, frame=frame)
-
-    async def write_merged_packet(
-        self,
-        *,
-        table: str,
-        packet: FramePacket,
-        stage: str,
-        result: RunResult,
-        result_lock: asyncio.Lock,
-    ) -> None:
-        await write_merged_packet(
-            table=table,
-            packet=packet,
-            stage=stage,
-            result=result,
-            result_lock=result_lock,
-            writer=self._writer,
-            span=self._span,
-            inc=self._inc,
-            observe=self._observe,
-            log_structured=self._log_structured,
-        )
-
-    async def flush_chunked_table(
-        self,
-        *,
-        table: str,
-        packets: list[FramePacket],
-        schema: object,
-        chunk_size: int,
-        buffers: dict[str, list[FramePacket]],
-        buffer_rows: dict[str, int],
-        result: RunResult,
-        result_lock: asyncio.Lock,
-    ) -> None:
-        await flush_chunked_table(
-            table=table,
-            packets=packets,
-            schema=schema,
-            chunk_size=chunk_size,
-            buffers=buffers,
-            buffer_rows=buffer_rows,
-            result=result,
-            result_lock=result_lock,
-            concat_frames_with_flex=self.concat_frames_with_flex,
-            validate_unique_key=self.validate_unique_key,
-            validate_data_quality=self._validate_data_quality,
-            write_merged_packet=self.write_merged_packet,
-            handle_writer_flush_error=self.handle_writer_flush_error,
-            compute_error_cls=self._compute_error_cls,
-            validation_error_cls=self._validation_error_cls,
-            primary_key_missing_error_cls=PrimaryKeyMissingError,
-            primary_key_null_error_cls=PrimaryKeyNullError,
-            dlq_spool_error_cls=self._dlq_spool_error_cls,
-            duckdb_module=self._duckdb_module,
-            log_structured=self._log_structured,
-            logger=self._logger,
-        )
-
-    async def flush_legacy_table(
-        self,
-        *,
-        table: str,
-        packets: list[FramePacket],
-        schema: object,
-        result: RunResult,
-        result_lock: asyncio.Lock,
-    ) -> None:
-        await flush_legacy_table(
-            table=table,
-            packets=packets,
-            schema=schema,
-            result=result,
-            result_lock=result_lock,
-            concat_frames_with_flex=self.concat_frames_with_flex,
-            validate_unique_key=self.validate_unique_key,
-            validate_data_quality=self._validate_data_quality,
-            write_merged_packet=self.write_merged_packet,
-            logger=self._logger,
-        )
-
-    async def flush_writer_table(
-        self,
-        *,
-        table: str,
-        buffers: dict[str, list[FramePacket]],
-        buffer_rows: dict[str, int],
-        result: RunResult,
-        result_lock: asyncio.Lock,
-    ) -> None:
-        await flush_writer_table(
-            table=table,
-            buffers=buffers,
-            buffer_rows=buffer_rows,
-            result=result,
-            result_lock=result_lock,
-            get_table_schema=self._get_table_schema,
-            writer_chunk_rows=getattr(self._config, "writer_chunk_rows", None),
-            flush_chunked_table=self.flush_chunked_table,
-            flush_legacy_table=self.flush_legacy_table,
-            handle_writer_flush_error=self.handle_writer_flush_error,
-            compute_error_cls=self._compute_error_cls,
-            validation_error_cls=self._validation_error_cls,
-            primary_key_missing_error_cls=PrimaryKeyMissingError,
-            primary_key_null_error_cls=PrimaryKeyNullError,
-            dlq_spool_error_cls=self._dlq_spool_error_cls,
-            duckdb_module=self._duckdb_module,
-            logger=self._logger,
-        )
+@dataclass(frozen=True)
+class WriterContext:
+    writer: WriterLike
+    config: ConfigLike
+    logger: LoggerLike
+    inc: IncFunc
+    observe: ObserveFunc
+    log_structured: LogStructuredFunc
+    span: Callable[..., AbstractContextManager[object]]
+    validate_data_quality: Callable[..., Awaitable[None]]
+    get_table_schema: Callable[[str], object | None]
+    spool_to_dlq_and_rescue: Callable[..., Awaitable[object]]
+    build_writer_error_summary: Callable[..., RunError]
+    compute_error_cls: type[Exception]
+    validation_error_cls: type[Exception]
+    dlq_spool_error_cls: type[Exception]
+    duckdb_module: object | None
+    progress_log_chunk_rows: int
+    router_flexible_schema: bool
 
 
 async def writer_worker(
@@ -331,6 +75,7 @@ async def writer_worker(
     flush_all_writer_buffers: AsyncFunc,
     buffer_or_flush_packet: AsyncFunc,
     flush_on_writer_cancel: AsyncFunc,
+    dlq_spool_error_cls: type[Exception],
     logger: LoggerLike,
 ) -> None:
     buffers: dict[str, list[FramePacket]] = defaultdict(list)
@@ -368,8 +113,8 @@ async def writer_worker(
             )
             raise
         except Exception as exc:
-            async with result_lock:
-                if not getattr(exc, "_already_reported", False):
+            if not isinstance(exc, dlq_spool_error_cls):
+                async with result_lock:
                     result.errors.append(RunError.from_exception(exc=exc, provider="", dataset="", symbol=""))
             logger.exception("WRITER: Unexpected error")
             raise
@@ -511,15 +256,25 @@ async def handle_writer_flush_error(
         if isinstance(spool_exc, dlq_spool_error_cls):
             rescued_count = int(getattr(spool_exc, "rescued", 0))
             remaining_count = int(getattr(spool_exc, "remaining", 0))
+            reported_spool_exc: Exception = spool_exc
         else:
             rescued_count = 0
             remaining_count = 0
+            spool_error_factory: Callable[..., Exception] = dlq_spool_error_cls
+            try:
+                reported_spool_exc = spool_error_factory(
+                    rescued=rescued_count,
+                    remaining=remaining_count,
+                    original=spool_exc,
+                )
+            except TypeError:
+                reported_spool_exc = spool_error_factory(str(spool_exc))
         status = {
             "status": "spool_failed",
             "rescued": rescued_count,
             "remaining": remaining_count,
             "path": None,
-            "error": spool_exc,
+            "error": reported_spool_exc,
         }
         summary = build_writer_error_summary(
             status=status,
@@ -534,9 +289,7 @@ async def handle_writer_flush_error(
         buffers[table] = []
         buffer_rows[table] = 0
         logger.exception("WRITER: Spool failed after %s for %s: %s", prefix, table, spool_exc)
-        with suppress(Exception):
-            object.__setattr__(spool_exc, "_already_reported", True)
-        raise
+        raise reported_spool_exc from spool_exc
     summary = build_writer_error_summary(
         status=status,
         table=table,
@@ -721,7 +474,7 @@ async def flush_chunked_table(
                 else:
                     logger.error("WRITER: Error writing chunk for %s: %s", table, exc)
                 return
-            if isinstance(exc, dlq_spool_error_cls) or getattr(exc, "_already_reported", False):
+            if isinstance(exc, dlq_spool_error_cls):
                 raise
             remaining_packets = packets[start_i : len(packets)]
             is_duckdb_error = _is_duckdb_error(duckdb_module, exc)
@@ -854,7 +607,7 @@ async def flush_writer_table(
             else:
                 logger.error("WRITER: Error writing batch for %s: %s", table, exc)
             return
-        if isinstance(exc, dlq_spool_error_cls) or getattr(exc, "_already_reported", False):
+        if isinstance(exc, dlq_spool_error_cls):
             raise
         is_duckdb_error = _is_duckdb_error(duckdb_module, exc)
         prefix = "DuckDBError" if is_duckdb_error else "UnexpectedWriterError"

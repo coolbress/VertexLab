@@ -105,6 +105,8 @@ def _pick_after_demotion(
     priority_new_job: int,
     fairness_state: FairnessState,
 ) -> SchedulerResult:
+    # O(N) over currently queued items in the worst case when many consecutive
+    # pagination jobs for the same symbol are demoted in a single selection pass.
     while True:
         try:
             p2, order2, cand = req_q.get_nowait()
