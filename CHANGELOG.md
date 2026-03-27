@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/coolbress/VertexLab/compare/vertex-lab-v0.2.1...vertex-lab-v0.2.2) (2026-03-27)
+
+
+### Bug Fixes
+
+* **vertex-lab:** restore PR automation label permissions ([#282](https://github.com/coolbress/VertexLab/issues/282)) ([52dfad3](https://github.com/coolbress/VertexLab/commit/52dfad39a8c9f85733e8e4296975e31dfaed0094))
+
 ## [0.2.1](https://github.com/coolbress/VertexLab/compare/vertex-lab-v0.2.0...vertex-lab-v0.2.1) (2026-03-27)
 
 
