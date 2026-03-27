@@ -15,7 +15,7 @@ This page documents the policy for JavaScript‑based GitHub Actions in this rep
 ## References
 
 - CI workflow: <https://github.com/coolbress/VertexLab/blob/main/.github/workflows/ci.yml>
-- Type Check workflow: <https://github.com/coolbress/VertexLab/blob/main/.github/workflows/typecheck.yml>
+- Type checking in quality-check: <https://github.com/coolbress/VertexLab/blob/main/.github/workflows/ci.yml>
 - Docs build/deploy: <https://github.com/coolbress/VertexLab/blob/main/.github/workflows/docs.yml>
 - PR automation: <../../.github/workflows/pr-automation.yml>
 

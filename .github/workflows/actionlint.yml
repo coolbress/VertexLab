@@ -18,5 +18,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5 pinned
+      - name: Install actionlint
+        run: |
+          version=1.7.11
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL -o "$RUNNER_TEMP/actionlint.tar.gz" "https://github.com/rhysd/actionlint/releases/download/v${version}/actionlint_${version}_linux_amd64.tar.gz"
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP"
+          install "$RUNNER_TEMP/actionlint" "$HOME/.local/bin/actionlint"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Run actionlint
-        uses: devops-actions/actionlint@469810fd82c015d3c43815cd2b0e4d02eecc4819
+        run: actionlint
