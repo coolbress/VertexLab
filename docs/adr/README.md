@@ -2,6 +2,8 @@
 
 Architecture Decision Records capture the context, decision, and consequences of important technical choices.
 
+Read this section when you want the rationale behind repository-wide architectural decisions, workflow choices, and tooling standards.
+
 ## ADR Index
 
 - [ADR-0001: Use Polars over pandas](0001-use-polars-over-pandas.md)
