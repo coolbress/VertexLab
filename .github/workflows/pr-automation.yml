@@ -63,7 +63,7 @@ jobs:
               revert: "type:chore",
             };
             const chosen = map[t];
-            const breaking = (t === "feat" && bang) || /BREAKING CHANGE/i.test(body);
+            const breaking = bang || /BREAKING(?: |-)?CHANGE/i.test(body);
             const managed = ["type:feature","type:fix","type:docs","type:perf","type:refactor","type:chore","type:breaking"];
             const labelsResp = await github.rest.issues.listLabelsOnIssue({ owner, repo, issue_number, per_page: 100 });
             const current = labelsResp.data.map(x => x.name || "");
@@ -99,14 +99,7 @@ jobs:
               if (p.startsWith("packages/vertex-forager/")) labels.add("package:vertex-forager");
               if (p.startsWith("packages/vertex-qt/")) labels.add("package:vertex-qt");
               if (p.startsWith("packages/vertex-workspace/")) labels.add("package:vertex-workspace");
-              if (
-                p === "pyproject.toml" ||
-                p.startsWith(".github/") ||
-                p.startsWith("src/vertex_lab/") ||
-                p.startsWith("scripts/")
-              ) {
-                labels.add("package:vertex-lab");
-              }
+              if (!p.startsWith("packages/")) labels.add("package:vertex-lab");
             }
             const managed = [
               "package:vertex-forager",
