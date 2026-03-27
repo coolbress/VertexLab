@@ -1,7 +1,7 @@
-name: "Technical Task"
-description: "Refactor, tests, build/CI and other non‑feature work"
-title: "chore: <short summary>"
-labels: ["task", "needs-triage"]
+name: "Maintenance / CI / Chore"
+description: "Maintenance, CI, refactor, tests and other non-feature work"
+title: ""
+labels: ["type:chore"]
 assignees: []
 body:
   - type: textarea
@@ -35,12 +35,3 @@ body:
     attributes:
       label: Risk & Rollback
       placeholder: Identify risks and how to revert safely
-  - type: dropdown
-    id: priority
-    attributes:
-      label: Priority
-      options:
-        - P1
-        - P2
-        - P3
-        - P4

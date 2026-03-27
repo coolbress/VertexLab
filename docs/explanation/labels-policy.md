@@ -1,35 +1,51 @@
 ---
-title: Labels Policy — scope:* Unification
+title: Labels Policy — type:* and package:* Automation
 ---
 
 Goal
 
-- Unify path/function taxonomy on a single axis using `scope:*` labels.
+- Keep labels consistent, low-maintenance, and fully automated.
+- Use only two managed axes for PR labeling: `type:*` and `package:*`.
 
-Policy
+Managed label taxonomy
 
-- Use only `scope:*` for path/function classification:
-  - scope:docs, scope:ci, scope:pipeline, scope:writer,
-  - scope:provider:yfinance, scope:provider:sharadar
-- Do not add `area:*` labels in new PRs.
-- Keep `type:*`, `severity/*`, `priority/*`, `impact:*` and no-changelog as-is.
+- `type:*`
+  - `type:feature`
+  - `type:fix`
+  - `type:docs`
+  - `type:perf`
+  - `type:refactor`
+  - `type:chore`
+  - `type:breaking`
+- `package:*`
+  - `package:vertex-forager`
+  - `package:vertex-qt`
+  - `package:vertex-workspace`
+  - `package:vertex-lab`
+- Optional release-control label
+  - `no-changelog`
 
-Migration (legacy → scope)
+Automation behavior
 
-- area:docs → scope:docs
-- area:ci → scope:ci
-- area:core, area:routers → scope:pipeline
-- area:writers → scope:writer
-- area:clients / area:providers → `scope:provider:*` (or generic `scope:provider` if adopted)
+- PR title validation uses Conventional Commit style:
+  - `type(scope)?: summary`
+  - Allowed types: `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`, `test`
+- `type:*` labels are inferred from title:
+  - `feat` → `type:feature`
+  - `fix` → `type:fix`
+  - `docs` → `type:docs`
+  - `perf` → `type:perf`
+  - `refactor` → `type:refactor`
+  - `chore` / `ci` / `build` / `test` / `style` / `revert` → `type:chore`
+  - `feat!` or `BREAKING CHANGE` in body → `type:breaking`
+- `package:*` labels are inferred from changed paths:
+  - `packages/vertex-forager/**` → `package:vertex-forager`
+  - `packages/vertex-qt/**` → `package:vertex-qt`
+  - `packages/vertex-workspace/**` → `package:vertex-workspace`
+  - `pyproject.toml`, `.github/**`, `src/vertex_lab/**`, `scripts/**` → `package:vertex-lab`
 
-Rollout
+Contributor expectations
 
-1) Stop adding `area:*` in auto labelers (labeler.yml + workflow fallback).
-2) Backfill historical PRs (gh CLI) to replace `area:*` with `scope:*`.
-3) Verify “0 usage” of `area:*` labels, then remove them from the repository.
-4) Keep this document referenced from contributor guidelines.
-
-Notes
-
-- Title → `type:*` remains inferred from Conventional Commits (feat/fix/docs/etc.).
-- If mixed provider changes occur, allow multiple `scope:provider:*` labels.
+- Do not use or introduce `scope:*`, `area:*`, `severity/*`, or `priority/*` labels.
+- Do not manually set managed `type:*` / `package:*` labels unless automation is unavailable.
+- Keep PR titles aligned with the validation rule so automation can label correctly.

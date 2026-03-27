@@ -115,15 +115,16 @@ Quick references:
 
 ### Labels policy (overview)
 
-- See `docs/explanation/labels-policy.md` for the label taxonomy (type, area, priority) and how to apply labels on PRs/issues.
-- The PR template includes required sections to help reviewers (Summary, Risk & Rollback, etc.). Link your lint exceptions and follow‑up cleanups there.
+- See `docs/explanation/labels-policy.md` for the label taxonomy (`type:*` + `package:*`) and automation behavior.
+- PRs are auto-labeled from title and changed paths by `pr-automation.yml`.
 
 ## Commit/PR guidelines
 
 - Use conventional prefixes (guard‑approved): `feat:`, `fix:`, `docs:`, `refactor:`, `perf:`, `test:`, `chore:`.
 - Add tests for user-visible changes when applicable.
 - Keep provider-specific logic in provider modules; avoid bleeding into core.
-- Follow the PR template: include Summary, Linked Issue, Type of Change, Changes, Verification, Security Considerations, Risk & Rollback, Breaking Change?, Screenshots/CLI Output, and Checklist.
+- Follow the PR template with five sections: Summary, Linked Issue, Changes, Verification, Checklist.
+- PR title format: `type(scope)?: summary` (no issue-number suffix in title).
 - Ensure public API changes include docstrings; place tests under `packages/vertex-forager/tests/`.
 
 ## Security

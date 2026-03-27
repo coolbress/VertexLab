@@ -1,5 +1,5 @@
 ---
-name: Sync Severity/Priority Labels
+name: Sync Repository Labels
 on:
   push:
     branches: [main]
@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Ensure severity/priority labels exist
+      - name: Ensure repository labels exist
         env:
           REPO: ${{ github.repository }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -46,14 +46,6 @@ jobs:
             fi
           }
           python3 -c 'print("\n".join([
-            "severity/critical|d73a4a|Critical severity issue",
-            "severity/high|b60205|High severity issue",
-            "severity/medium|fbca04|Medium severity issue",
-            "severity/low|0e8a16|Low severity issue",
-            "priority/P1|d73a4a|Highest priority",
-            "priority/P2|b60205|High priority",
-            "priority/P3|fbca04|Medium priority",
-            "priority/P4|0e8a16|Low priority",
             "type:feature|28a745|New feature",
             "type:fix|d73a4a|Bug fix",
             "type:docs|0075ca|Documentation changes",
@@ -61,16 +53,10 @@ jobs:
             "type:refactor|cfd3d7|Refactoring without behavior change",
             "type:breaking|b60205|Backward-incompatible or breaking change",
             "type:perf|a2eeef|Performance improvements",
-            "type:test|5319e7|Test related changes",
-            "scope:writer|8ed1fc|Writers and sinks",
-            "scope:pipeline|0e8a16|Core pipeline and flow control",
-            "scope:provider:yfinance|0366d6|YFinance provider",
-            "scope:provider:sharadar|1f6feb|Sharadar provider",
-            "scope:ci|6f42c1|CI/CD and workflows",
-            "scope:docs|0b7dda|Documentation and site",
             "package:vertex-forager|c5def5|Vertex Forager package",
-            "impact:user|fbca04|User-facing impact",
-            "impact:internal|ededed|Internal only change",
+            "package:vertex-qt|c5def5|Vertex Qt package",
+            "package:vertex-workspace|c5def5|Vertex Workspace package",
+            "package:vertex-lab|d4c5f9|Root meta-package and infra changes",
             "no-changelog|d1d4f2|Exclude from changelog aggregation"
           ]))' | while IFS='|' read -r n c d; do
             create_or_update "$n" "$c" "$d"

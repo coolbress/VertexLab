@@ -1,7 +1,8 @@
 <!--
-Title convention to help labeler: start with one of
-feat: | fix: | docs: | refactor: | perf: | test: | chore:
-Example: docs: rewrite README and add mkdocs site
+PR title convention:
+type(scope)?: summary
+Allowed types: build, chore, ci, docs, feat, fix, perf, refactor, revert, style, test
+Examples: feat(vertex-forager): add X / ci: update workflow
 -->
 
 ## Summary
@@ -13,16 +14,6 @@ Example: docs: rewrite README and add mkdocs site
 
 - Closes #<id> (if applicable)
 
-## Type of Change
-
-- [ ] docs
-- [ ] fix
-- [ ] feat
-- [ ] refactor
-- [ ] perf
-- [ ] test
-- [ ] ci/chore
-
 ## Changes
 
 - List the user‑visible changes and important internal updates
@@ -30,23 +21,6 @@ Example: docs: rewrite README and add mkdocs site
 ## Verification
 
 - Steps, commands, or screenshots to demonstrate the change works
-
-## Security Considerations
-
-- Any secrets/PII, dependency risks, or permissions changes?
-
-## Risk & Rollback
-
-- Risk level and how to roll back if needed
-
-## Breaking Change?
-
-- [ ] Yes (backward-incompatible)
-- [ ] No
-
-## Screenshots / CLI Output (optional)
-
-- If helpful, include images or command output
 
 ## Checklist
 
