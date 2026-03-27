@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/coolbress/VertexLab/compare/vertex-lab-v0.2.2...vertex-lab-v0.3.0) (2026-03-27)
+
+
+### Features
+
+* **vertex-lab:** add CLI stub and align version metadata ([#285](https://github.com/coolbress/VertexLab/issues/285)) ([2c1ed40](https://github.com/coolbress/VertexLab/commit/2c1ed4023ebccb1705056288084be70075f82a4e))
+
 ## [0.2.2](https://github.com/coolbress/VertexLab/compare/vertex-lab-v0.2.1...vertex-lab-v0.2.2) (2026-03-27)
 
 
