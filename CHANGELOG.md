@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/coolbress/VertexLab/compare/vertex-lab-v0.3.1...vertex-lab-v0.3.2) (2026-03-27)
+
+
+### Documentation
+
+* **vertex-lab:** rewrite contributing guide, relocate to docs/, and consolidate version-file ([#296](https://github.com/coolbress/VertexLab/issues/296)) ([d8430e7](https://github.com/coolbress/VertexLab/commit/d8430e7a0df0e759dec1aba41dc64c6f3db2791c))
+
 ## [0.3.1](https://github.com/coolbress/VertexLab/compare/vertex-lab-v0.3.0...vertex-lab-v0.3.1) (2026-03-27)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.3](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.11.2...vertex-forager-v0.11.3) (2026-03-27)
+
+
+### Documentation
+
+* **vertex-lab:** rewrite contributing guide, relocate to docs/, and consolidate version-file ([#296](https://github.com/coolbress/VertexLab/issues/296)) ([d8430e7](https://github.com/coolbress/VertexLab/commit/d8430e7a0df0e759dec1aba41dc64c6f3db2791c))
+
 ## [0.11.2](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.11.1...vertex-forager-v0.11.2) (2026-03-26)
 
 
