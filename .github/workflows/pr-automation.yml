@@ -63,7 +63,7 @@ jobs:
               revert: "type:chore",
             };
             const chosen = map[t];
-            const breaking = bang || /BREAKING(?: |-)?CHANGE/i.test(body);
+            const breaking = bang || /^BREAKING(?: |-)?CHANGE[:\s]/im.test(body);
             const managed = ["type:feature","type:fix","type:docs","type:perf","type:refactor","type:chore","type:breaking"];
             const labelsResp = await github.rest.issues.listLabelsOnIssue({ owner, repo, issue_number, per_page: 100 });
             const current = labelsResp.data.map(x => x.name || "");

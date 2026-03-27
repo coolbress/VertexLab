@@ -8,7 +8,7 @@ This page consolidates practical workflow guidance previously kept under archive
 
 - Branching and PR policy: [CONTRIBUTING.md](https://github.com/coolbress/VertexLab/blob/main/CONTRIBUTING.md)
 - PR template requirements: [.github/PULL_REQUEST_TEMPLATE.md](https://github.com/coolbress/VertexLab/blob/main/.github/PULL_REQUEST_TEMPLATE.md)
-- PR automation behavior: [pr-automation.yml](../../.github/workflows/pr-automation.yml)
+- PR automation behavior: `pr-automation.yml` (`.github/workflows/`)
 
 ## CI and Release Operations
 
