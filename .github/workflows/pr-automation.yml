@@ -31,7 +31,7 @@ jobs:
             const re = /^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([^)]+\))?(!)?: .+$/;
             if (!re.test(title)) {
               core.setFailed(
-                "Invalid PR title. Expected: type(scope)?: description with type in [build, chore, ci, docs, feat, fix, perf, refactor, revert, style, test]."
+                "Invalid PR title. Expected: type(scope)?: description (must include a colon and a space after the type/scope, e.g. 'feat(scope): add feature') with type in [build, chore, ci, docs, feat, fix, perf, refactor, revert, style, test]."
               );
             }
       - name: Sync type labels from title
