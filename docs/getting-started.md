@@ -31,6 +31,12 @@ This page helps you choose the right entrypoint for VertexLab.
    NO_MKDOCS_2_WARNING=1 uv run mkdocs build --strict
    ```
 
+   If your environment does not already have the MkDocs tooling installed through the project dependencies, run the explicit form instead:
+
+   ```bash
+   NO_MKDOCS_2_WARNING=1 uv run --with mkdocs --with mkdocs-material --with mkdocs-monorepo-plugin --with 'mkdocstrings[python]' --with pymdown-extensions mkdocs build --strict
+   ```
+
 ## Main Component
 
 ### vertex-forager
