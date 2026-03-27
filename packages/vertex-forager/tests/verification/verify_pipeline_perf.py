@@ -2,6 +2,7 @@ import json
 import math
 import os
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from vertex_forager.utils import as_dict
@@ -61,7 +62,9 @@ def _run_mocked_price_collection(
         ticker = kwargs.get("tickers")
         if isinstance(ticker, str) and ticker in fixture_map:
             return fixture_map[ticker].copy()
-        return _build_fixture_frame("AAPL")
+        if isinstance(ticker, str):
+            raise ValueError(f"Unexpected ticker requested in mocked yfinance.download: {ticker}")
+        raise ValueError("Mocked yfinance.download expected keyword argument `tickers` as a string symbol.")
 
     class _MockTicker:
         def __init__(self, symbol: str) -> None:
@@ -70,11 +73,11 @@ def _run_mocked_price_collection(
         def history(self, **_: object) -> object:
             if self._symbol in fixture_map:
                 return fixture_map[self._symbol].copy()
-            return _build_fixture_frame("AAPL")
+            raise ValueError(f"Unexpected ticker requested in mocked yfinance.Ticker.history: {self._symbol}")
 
-    with (
-        patch("vertex_forager.providers.yfinance.fetcher._http_mod.yf.download", side_effect=_mock_download),
-        patch("vertex_forager.providers.yfinance.fetcher._http_mod.yf.Ticker", side_effect=_MockTicker),
+    with patch(
+        "vertex_forager.providers.yfinance.fetcher._http_mod.yf",
+        new=SimpleNamespace(download=_mock_download, Ticker=_MockTicker),
     ):
         if warmup_db_path.exists():
             warmup_db_path.unlink()
