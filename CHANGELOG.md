@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.3](https://github.com/coolbress/VertexLab/compare/vertex-lab-v0.3.2...vertex-lab-v0.3.3) (2026-03-27)
+
+
+### Documentation
+
+* **vertex-lab:** rewrite root docs landing page and nav ([#298](https://github.com/coolbress/VertexLab/issues/298)) ([c859489](https://github.com/coolbress/VertexLab/commit/c859489a2f223c4e6d12573205f4bfecc2a7d01f))
+
 ## [0.3.2](https://github.com/coolbress/VertexLab/compare/vertex-lab-v0.3.1...vertex-lab-v0.3.2) (2026-03-27)
 
 
