@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/coolbress/VertexLab/compare/vertex-lab-v0.2.0...vertex-lab-v0.2.1) (2026-03-27)
+
+
+### Bug Fixes
+
+* **vertex-lab:** restore issue forms by removing empty title fields ([#279](https://github.com/coolbress/VertexLab/issues/279)) ([c21f396](https://github.com/coolbress/VertexLab/commit/c21f396027602d9e20c5395ae14732962a69cc9c))
+
 ## [0.2.0](https://github.com/coolbress/VertexLab/compare/vertex-lab-v0.1.0...vertex-lab-v0.2.0) (2026-03-26)
 
 
