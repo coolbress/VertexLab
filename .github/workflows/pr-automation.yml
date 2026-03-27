@@ -112,10 +112,15 @@ jobs:
             const labels = new Set();
             for (const f of files) {
               const p = f.filename || "";
-              if (p.startsWith("packages/vertex-forager/")) labels.add("package:vertex-forager");
-              if (p.startsWith("packages/vertex-qt/")) labels.add("package:vertex-qt");
-              if (p.startsWith("packages/vertex-workspace/")) labels.add("package:vertex-workspace");
-              if (!p.startsWith("packages/")) labels.add("package:vertex-lab");
+              const isForager = p.startsWith("packages/vertex-forager/");
+              const isQt = p.startsWith("packages/vertex-qt/");
+              const isWorkspace = p.startsWith("packages/vertex-workspace/");
+              if (isForager) labels.add("package:vertex-forager");
+              if (isQt) labels.add("package:vertex-qt");
+              if (isWorkspace) labels.add("package:vertex-workspace");
+              if (!p.startsWith("packages/") || (p.startsWith("packages/") && !isForager && !isQt && !isWorkspace)) {
+                labels.add("package:vertex-lab");
+              }
             }
             const managed = [
               "package:vertex-forager",
