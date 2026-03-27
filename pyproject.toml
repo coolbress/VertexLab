@@ -11,6 +11,9 @@ dependencies = [
     "vertex-workspace==0.1.0",
 ]
 
+[project.scripts]
+vertex-lab = "vertex_lab.app:main"
+
 [build-system]
 requires = ["uv-build>=0.9.27,<0.10.0"]
 build-backend = "uv_build"
@@ -38,7 +41,7 @@ select = ["E", "F", "W", "I", "UP", "B", "S", "RUF", "G", "C901", "PLR0912", "PL
 max-complexity = 15
 
 [tool.ruff.lint.isort]
-known-first-party = ["vertex_forager"]
+known-first-party = ["vertex_forager", "vertex_qt", "vertex_workspace"]
 force-sort-within-sections = true
 
 [tool.ruff.lint.per-file-ignores]
