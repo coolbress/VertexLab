@@ -17,9 +17,10 @@
 ## PR Title Validation
 
 - Trigger: pull_request (opened, edited, synchronize, reopened, ready_for_review)
-- Pattern (Conventional Commits + issue):  
-  `^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([^)]+\))?(!)?: .+ \(#\d+\)$`
-- Mode: Warning only (`continue-on-error: true`), later switch to blocking
+- Pattern:  
+  `^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([^)]+\))?(!)?: .+$`
+- Enforced by `.github/workflows/pr-automation.yml`
+- Labels are also applied there based on PR title and changed paths
 
 ## Validation
 
@@ -35,4 +36,4 @@
 ## References
 
 - `.github/workflows/release-please.yml`
-- `.github/workflows/validate-pr-title.yml`
+- `.github/workflows/pr-automation.yml`

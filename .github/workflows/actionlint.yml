@@ -18,5 +18,22 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5 pinned
+      - name: Install actionlint
+        run: |
+          version=1.7.11
+          archive="actionlint_${version}_linux_amd64.tar.gz"
+          base_url="https://github.com/rhysd/actionlint/releases/download/v${version}"
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL -o "$RUNNER_TEMP/actionlint.tar.gz" "$base_url/$archive"
+          curl -fsSL -o "$RUNNER_TEMP/checksums.txt" "$base_url/actionlint_${version}_checksums.txt"
+          expected_checksum="$(awk -v archive="$archive" '$2 == archive { print $1 }' "$RUNNER_TEMP/checksums.txt")"
+          actual_checksum="$(sha256sum "$RUNNER_TEMP/actionlint.tar.gz" | awk '{ print $1 }')"
+          if [ -z "$expected_checksum" ] || [ "$expected_checksum" != "$actual_checksum" ]; then
+            echo "::error::actionlint checksum verification failed"
+            exit 1
+          fi
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP"
+          install "$RUNNER_TEMP/actionlint" "$HOME/.local/bin/actionlint"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Run actionlint
-        uses: devops-actions/actionlint@469810fd82c015d3c43815cd2b0e4d02eecc4819
+        run: actionlint

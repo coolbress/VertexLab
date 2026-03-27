@@ -33,10 +33,9 @@
       "release-type": "python",
       "package-name": "vertex-lab",
       "component": "vertex-lab",
-      "version-file": "vertex_lab_version.py",
+      "version-file": "src/vertex_lab/__init__.py",
       "extra-files": [
-        "pyproject.toml",
-        "src/vertex_lab/__init__.py"
+        "pyproject.toml"
       ]
     }
   }

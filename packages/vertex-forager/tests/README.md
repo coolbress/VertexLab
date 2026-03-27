@@ -14,7 +14,7 @@
 ## Local Commands
 - Fast suite (default): `pytest packages/ -m "not manual"`
 - Manual only: `pytest packages/ -m manual`
-- For quality gates (coverage/lint/typecheck), use the canonical checklist in [CONTRIBUTING.md](../../../CONTRIBUTING.md#development-quickstart).
+- For quality gates (coverage/lint/typecheck), use the canonical checklist in [contributing.md](../../../docs/contributing.md#development-quickstart).
 
 ## CI Policy
 - Default run excludes manual tests for speed and determinism.
