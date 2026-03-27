@@ -136,6 +136,10 @@ jobs:
         if: ${{ matrix.python-version == '3.10' }}
         run: uv run ruff check packages/
 
+      - name: Type Check (Mypy)
+        if: ${{ matrix.python-version == '3.10' }}
+        run: uv run mypy packages/vertex-forager/src --strict
+
       - name: Lint (Ruff Tier-2 Warnings)
         if: ${{ matrix.python-version == '3.10' }}
         continue-on-error: true
