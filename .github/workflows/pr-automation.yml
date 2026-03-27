@@ -1,0 +1,146 @@
+---
+name: PR Automation
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+concurrency:
+  group: pr-automation-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+jobs:
+  automate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR title
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            if (!pr) return;
+            const author = (pr.user && pr.user.login) || "";
+            if (author.endsWith("[bot]")) {
+              core.info("Bot PR detected, skipping title validation.");
+              return;
+            }
+            const title = (pr.title || "").trim();
+            const re = /^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([^)]+\))?(!)?: .+$/;
+            if (!re.test(title)) {
+              core.setFailed(
+                "Invalid PR title. Expected: type(scope)?: description (must include a colon and a space after the type/scope, e.g. 'feat(scope): add feature') with type in [build, chore, ci, docs, feat, fix, perf, refactor, revert, style, test]."
+              );
+            }
+      - name: Sync type labels from title
+        if: ${{ always() }}
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            if (!pr) return;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue_number = pr.number;
+            const title = (pr.title || "").trim();
+            const body = String(pr.body || "");
+            const logApiError = (operation, payload, error) => {
+              const message = error && (error.message || String(error));
+              console.error(`[pr-automation] ${operation} failed`, { issue_number, ...payload, message, error });
+            };
+            const m = title.match(/^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([^)]+\))?(!)?: /);
+            if (!m) return;
+            const t = m[1];
+            const bang = Boolean(m[3]);
+            const map = {
+              feat: "type:feature",
+              fix: "type:fix",
+              docs: "type:docs",
+              perf: "type:perf",
+              refactor: "type:refactor",
+              chore: "type:chore",
+              ci: "type:chore",
+              build: "type:chore",
+              test: "type:chore",
+              style: "type:chore",
+              revert: "type:chore",
+            };
+            const chosen = map[t];
+            const breaking = bang || /^BREAKING(?: |-)?CHANGE[:\s]/im.test(body);
+            const managed = ["type:feature","type:fix","type:docs","type:perf","type:refactor","type:chore","type:breaking"];
+            const labelsResp = await github.rest.issues.listLabelsOnIssue({ owner, repo, issue_number, per_page: 100 });
+            const current = labelsResp.data.map(x => x.name || "");
+            for (const label of current) {
+              if (managed.includes(label) && label !== chosen && !(breaking && label === "type:breaking")) {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number, name: label }).catch((error) => {
+                  logApiError("removeLabel", { label }, error);
+                });
+              }
+            }
+            await github.rest.issues.addLabels({ owner, repo, issue_number, labels: [chosen] }).catch((error) => {
+              logApiError("addLabels", { labels: [chosen] }, error);
+            });
+            if (breaking) {
+              await github.rest.issues.addLabels({ owner, repo, issue_number, labels: ["type:breaking"] }).catch((error) => {
+                logApiError("addLabels", { labels: ["type:breaking"] }, error);
+              });
+            } else {
+              await github.rest.issues.removeLabel({ owner, repo, issue_number, name: "type:breaking" }).catch((error) => {
+                logApiError("removeLabel", { label: "type:breaking" }, error);
+              });
+            }
+      - name: Sync package labels from changed files
+        if: ${{ always() }}
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            if (!pr) return;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue_number = pr.number;
+            const logApiError = (operation, payload, error) => {
+              const message = error && (error.message || String(error));
+              console.error(`[pr-automation] ${operation} failed`, { issue_number, ...payload, message, error });
+            };
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner,
+              repo,
+              pull_number: pr.number,
+              per_page: 100,
+            });
+            const labels = new Set();
+            for (const f of files) {
+              const p = f.filename || "";
+              const isForager = p.startsWith("packages/vertex-forager/");
+              const isQt = p.startsWith("packages/vertex-qt/");
+              const isWorkspace = p.startsWith("packages/vertex-workspace/");
+              if (isForager) labels.add("package:vertex-forager");
+              if (isQt) labels.add("package:vertex-qt");
+              if (isWorkspace) labels.add("package:vertex-workspace");
+              if (!p.startsWith("packages/") || (p.startsWith("packages/") && !isForager && !isQt && !isWorkspace)) {
+                labels.add("package:vertex-lab");
+              }
+            }
+            const managed = [
+              "package:vertex-forager",
+              "package:vertex-qt",
+              "package:vertex-workspace",
+              "package:vertex-lab",
+            ];
+            const labelsResp = await github.rest.issues.listLabelsOnIssue({ owner, repo, issue_number, per_page: 100 });
+            const current = labelsResp.data.map(x => x.name || "");
+            for (const label of current) {
+              if (managed.includes(label) && !labels.has(label)) {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number, name: label }).catch((error) => {
+                  logApiError("removeLabel", { label }, error);
+                });
+              }
+            }
+            if (labels.size > 0) {
+              await github.rest.issues.addLabels({ owner, repo, issue_number, labels: Array.from(labels) }).catch((error) => {
+                logApiError("addLabels", { labels: Array.from(labels) }, error);
+              });
+            }

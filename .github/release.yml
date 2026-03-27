@@ -19,7 +19,6 @@ changelog:
       labels:
         - type:chore
         - type:refactor
-        - scope:ci
     - title: Documentation
       labels:
         - type:docs

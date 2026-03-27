@@ -1,8 +1,8 @@
 name: Docs improvement
 description: Suggest a documentation improvement
-title: "docs: <short summary>"
+title: ""
 labels:
-  - documentation
+  - type:docs
 body:
   - type: checkboxes
     id: area
@@ -13,17 +13,6 @@ body:
         - label: Guides (How‑to/Tutorials)
         - label: Reference/API
         - label: Explanation/Architecture
-    validations:
-      required: true
-  - type: dropdown
-    id: priority
-    attributes:
-      label: Priority
-      options:
-        - P1
-        - P2
-        - P3
-        - P4
     validations:
       required: true
   - type: textarea

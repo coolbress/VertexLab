@@ -1,20 +1,9 @@
 name: Feature request
 description: Suggest an idea for this project
-title: "feat: <short summary>"
+title: ""
 labels:
-  - enhancement
+  - type:feature
 body:
-  - type: dropdown
-    id: priority
-    attributes:
-      label: Priority
-      options:
-        - P1
-        - P2
-        - P3
-        - P4
-    validations:
-      required: true
   - type: textarea
     id: problem
     attributes:
