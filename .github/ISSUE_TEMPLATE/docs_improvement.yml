@@ -1,6 +1,5 @@
 name: Docs improvement
 description: Suggest a documentation improvement
-title: ""
 labels:
   - type:docs
 body:

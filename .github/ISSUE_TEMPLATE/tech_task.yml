@@ -1,6 +1,5 @@
 name: "Maintenance / CI / Chore"
 description: "Maintenance, CI, refactor, tests and other non-feature work"
-title: ""
 labels: ["type:chore"]
 assignees: []
 body:
