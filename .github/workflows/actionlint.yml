@@ -26,7 +26,7 @@ jobs:
           mkdir -p "$HOME/.local/bin"
           curl -fsSL -o "$RUNNER_TEMP/actionlint.tar.gz" "$base_url/$archive"
           curl -fsSL -o "$RUNNER_TEMP/checksums.txt" "$base_url/actionlint_${version}_checksums.txt"
-          expected_checksum="$(awk '/ actionlint_'\"$version\"'_linux_amd64\.tar\.gz$/ { print $1 }' "$RUNNER_TEMP/checksums.txt")"
+          expected_checksum="$(awk -v archive="$archive" '$2 == archive { print $1 }' "$RUNNER_TEMP/checksums.txt")"
           actual_checksum="$(sha256sum "$RUNNER_TEMP/actionlint.tar.gz" | awk '{ print $1 }')"
           if [ -z "$expected_checksum" ] || [ "$expected_checksum" != "$actual_checksum" ]; then
             echo "::error::actionlint checksum verification failed"
