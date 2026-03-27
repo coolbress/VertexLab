@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/coolbress/VertexLab/compare/vertex-lab-v0.3.0...vertex-lab-v0.3.1) (2026-03-27)
+
+
+### Documentation
+
+* **vertex-lab:** scope root changelog to meta-package history ([#288](https://github.com/coolbress/VertexLab/issues/288)) ([5738a03](https://github.com/coolbress/VertexLab/commit/5738a032c6e68a522692298030e5496b83f9cb50))
+
 ## [0.3.0](https://github.com/coolbress/VertexLab/compare/vertex-lab-v0.2.2...vertex-lab-v0.3.0) (2026-03-27)
 
 
