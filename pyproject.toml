@@ -1,6 +1,6 @@
 [project]
 name = "vertex-lab"
-version = "0.3.6"
+version = "0.3.7"
 description = "Vertex Investment Framework Monorepo"
 readme = "README.md"
 requires-python = ">=3.10"

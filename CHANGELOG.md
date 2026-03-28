@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.7](https://github.com/coolbress/VertexLab/compare/vertex-lab-v0.3.6...vertex-lab-v0.3.7) (2026-03-28)
+
+
+### Documentation
+
+* **vertex-lab:** restructure vertex-lab docs nav to OSS-standard user-facing layout ([#308](https://github.com/coolbress/VertexLab/issues/308)) ([8f3705c](https://github.com/coolbress/VertexLab/commit/8f3705ce80d5953bb3c1257a38cfdac7619edd73))
+
 ## [0.3.6](https://github.com/coolbress/VertexLab/compare/vertex-lab-v0.3.5...vertex-lab-v0.3.6) (2026-03-28)
 
 
