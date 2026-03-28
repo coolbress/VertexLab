@@ -1,37 +1,70 @@
 # VertexLab
 
-VertexLab is a Python monorepo for data and research workflows, package development, and release automation across the Vertex toolchain.
+[![Distribution](https://img.shields.io/badge/distribution-GitHub%20Releases-blue)](https://github.com/coolbress/VertexLab/releases)
+[![CI](https://github.com/coolbress/VertexLab/actions/workflows/ci.yml/badge.svg)](https://github.com/coolbress/VertexLab/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/coolbress/VertexLab/blob/main/LICENSE)
 
-## What You Will Find Here
+Collect large-scale financial data, run quantitative analysis, and manage everything from a unified local dashboard.
 
-- A root documentation portal for repository-wide workflows, policies, and architecture decisions
-- Component documentation for packages maintained in this monorepo
-- Contributor guidance, release process notes, and changelog history for the `vertex-lab` meta-package
+> Note: `vertex-forager` is the production-ready component today. `vertex-qt` and `vertex-workspace` are planned parts of the VertexLab experience, and their docs will expand as implementation work lands.
+
+## Features
+
+- Async data ingestion from Sharadar and yfinance with GCRA rate limiting and DLQ resilience
+- Schema-aware normalization into local DuckDB with no cloud dependency
+- Checkpoint-based resumable runs for large dataset collection
+- Quantitative analysis and backtesting via `vertex-qt` with zipline, alphalens, and pyfolio
+- Local Panel dashboard via `vertex-workspace` for collection control and visualization
+
+## Installation
+
+```bash
+git clone https://github.com/coolbress/VertexLab.git vertex-lab
+cd vertex-lab
+uv sync --group dev
+```
+
+VertexLab is currently distributed through GitHub and repository-based workflows rather than PyPI. `pip install` is still possible when you use a GitHub source URL or release asset URL. See [Installation](installation.md) for the supported install paths.
+
+## Quick Example
+
+```python
+# Full example coming soon — see Quickstart for current vertex-forager usage
+```
+
+## Preview
+
+- Workspace screenshots and richer end-to-end output examples will be added here as `vertex-workspace` and `vertex-qt` become available.
+- For the current concrete workflow, use the [Quickstart](quickstart.md) and the `vertex-forager` package docs.
 
 ## Components
 
-### vertex-forager
+```mermaid
+graph TD
+    User["User (browser · local)<br/>click · drag · configure"] --> WS
+    WS["vertex-workspace<br/>Collection Panel │ Data Explorer │ Analysis"]
+    WS --> VF["vertex-forager<br/>data collection & ingestion"]
+    WS --> QT["vertex-qt<br/>zipline · alphalens · pyfolio"]
+    VF --> DB[("DuckDB (local)")]
+    QT --> DB
+```
 
-`vertex-forager` is the current primary package in this repository. It provides data-ingestion and persistence workflows together with API reference, tutorials, how-to guides, and architecture explanations.
+| Package | Status | Purpose | Docs |
+| --- | --- | --- | --- |
+| `vertex-forager` | Available now | Efficiently collect large-scale financial data from multiple sources and build a local database on your machine with no cloud dependency required. | [Docs](https://coolbress.github.io/VertexLab/vertex-forager/) · [Releases](https://github.com/coolbress/VertexLab/releases) |
+| `vertex-qt` | Planned | Develop and validate investment strategies using the collected data with backtests, factor analysis, and performance review. | More docs will be added as implementation work lands |
+| `vertex-workspace` | Planned | Control collection, explore the database, run backtests, and visualize results from a local UI without writing code. | More docs will be added as implementation work lands |
 
-- Package docs: [vertex-forager](https://coolbress.github.io/VertexLab/vertex-forager/)
-- Examples: [examples directory](https://github.com/coolbress/VertexLab/tree/main/packages/vertex-forager/examples)
+## Support
 
-## Start Here
+- Python support: Python 3.10 and newer
+- Release expectations: release artifacts are attached to GitHub Releases and changelog entries are maintained from the repository root
+- Stability note: `vertex-forager` is available now; `vertex-qt` and `vertex-workspace` remain planned and will gain fuller docs as implementation work lands
 
-- New to the repository: start with [Getting Started](getting-started.md)
-- Working on changes: read [Contributing](contributing.md)
-- Looking for release history: open [CHANGELOG.md](https://github.com/coolbress/VertexLab/blob/main/CHANGELOG.md)
-- Reviewing technical decisions: browse the [ADR index](adr/README.md)
+## Links
 
-## Policies And Governance
-
-- [CI Security](ci-security.md)
-- [CI Node Runtime Policy](explanation/ci-node-policy.md)
-- [Labels Policy](explanation/labels-policy.md)
-
-## Repository Map
-
-- `docs/` contains root policies, contributor guidance, and ADRs
-- `packages/vertex-forager/` contains the main package source, tests, examples, and package docs
-- `.github/workflows/` contains the CI, release, and automation workflows that govern the repository
+- [Installation](installation.md)
+- [Quickstart](quickstart.md)
+- [Contributing](contributing.md)
+- [Changelog](changelog.md)
