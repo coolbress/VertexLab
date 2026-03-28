@@ -27,10 +27,12 @@ pip install https://github.com/coolbress/VertexLab/releases/download/<tag>/verte
 Use package-specific installs when you only need one part of the stack.
 
 ```bash
-pip install "vertex-forager @ git+https://github.com/coolbress/VertexLab.git@main#subdirectory=packages/vertex-forager"
-pip install "vertex-forager[yfinance] @ git+https://github.com/coolbress/VertexLab.git@main#subdirectory=packages/vertex-forager"
-pip install "vertex-forager[notebook] @ git+https://github.com/coolbress/VertexLab.git@main#subdirectory=packages/vertex-forager"
+pip install "vertex-forager @ git+https://github.com/coolbress/VertexLab.git@vertex-forager-v0.11.4#subdirectory=packages/vertex-forager"
+pip install "vertex-forager[yfinance] @ git+https://github.com/coolbress/VertexLab.git@vertex-forager-v0.11.4#subdirectory=packages/vertex-forager"
+pip install "vertex-forager[notebook] @ git+https://github.com/coolbress/VertexLab.git@vertex-forager-v0.11.4#subdirectory=packages/vertex-forager"
 ```
+
+Prefer a release tag such as `vertex-forager-v0.11.4` or a commit SHA for reproducible installs instead of using a moving branch name.
 
 Use package-specific docs when you want a direct workflow for an individual component:
 
