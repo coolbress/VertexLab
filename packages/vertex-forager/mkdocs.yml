@@ -5,12 +5,13 @@ docs_dir: docs
 
 nav:
   - Overview: index.md
+  - Get Started:
+      - Installation: get-started/installation.md
+      - Testing Guide: get-started/testing.md
   - Tutorials:
       - Quickstart: tutorials/quickstart.md
-  - Guides:
-      - Migration Guide: guides/migration.md
-      - Testing Guide: guides/testing.md
-  - How-to:
+  - How-to Guides:
+      - Migration Guide: how-to/migration.md
       - Operate with DLQ disabled: how-to/dlq-disabled.md
       - Tune chunked flush thresholds: how-to/chunked-flush.md
       - Performance tuning: how-to/performance-tuning.md
@@ -34,3 +35,5 @@ nav:
       - Writer security: explanation/writer-security.md
       - Writer fan-out roadmap: explanation/writer-fanout-roadmap.md
       - Writer upsert behavior: explanation/writer-upsert-behavior.md
+  - Changelog: https://github.com/coolbress/VertexLab/blob/main/packages/vertex-forager/CHANGELOG.md
+  - Contributing: https://coolbress.github.io/VertexLab/contributing/
