@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.5](https://github.com/coolbress/VertexLab/compare/vertex-lab-v0.3.4...vertex-lab-v0.3.5) (2026-03-28)
+
+
+### Bug Fixes
+
+* **vertex-lab:** raise benchmark regression threshold to 30% for shared runner variance ([#303](https://github.com/coolbress/VertexLab/issues/303)) ([197b6a0](https://github.com/coolbress/VertexLab/commit/197b6a06cb7434dc17f3083d65807c4d5e24915a))
+
 ## [0.3.4](https://github.com/coolbress/VertexLab/compare/vertex-lab-v0.3.3...vertex-lab-v0.3.4) (2026-03-28)
 
 
