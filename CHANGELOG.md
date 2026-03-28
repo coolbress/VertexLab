@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.11](https://github.com/coolbress/VertexLab/compare/vertex-lab-v0.3.10...vertex-lab-v0.3.11) (2026-03-28)
+
+
+### Documentation
+
+* **vertex-forager:** rewrite landing page and quickstart for users ([#332](https://github.com/coolbress/VertexLab/issues/332)) ([0f6a2eb](https://github.com/coolbress/VertexLab/commit/0f6a2eb587981285346dc7ad586445933c5c5ad6))
+
 ## [0.3.10](https://github.com/coolbress/VertexLab/compare/vertex-lab-v0.3.9...vertex-lab-v0.3.10) (2026-03-28)
 
 
