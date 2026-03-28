@@ -8,25 +8,21 @@ Follow this hands‑on tutorial to fetch data and persist it to DuckDB.
 - If you want to run the repository example scripts below, first clone the repo and change into it:
 
 ```bash
-git clone https://github.com/coolbress/vertex-lab.git
-cd vertex-lab
+git clone https://github.com/coolbress/VertexLab.git
+cd VertexLab
 ```
 
-- Install package (from GitHub, until PyPI release):
+- Install package from GitHub:
 
 ```bash
-# Latest main (pin to a tag/commit for reproducibility)
-uv pip install "git+https://github.com/coolbress/vertex-lab@main#subdirectory=packages/vertex-forager"
-
-# Example: pin to a version tag
-uv pip install "git+https://github.com/coolbress/vertex-lab@v0.1.0#subdirectory=packages/vertex-forager"
+# Pin to a release tag for reproducibility
+pip install "vertex-forager[yfinance] @ git+https://github.com/coolbress/VertexLab.git@vertex-forager-v0.11.4#subdirectory=packages/vertex-forager"
 ```
 
 - Optional extras:
 
 ```bash
-pip install "vertex-forager[yfinance]"
-pip install "vertex-forager[notebook]"
+pip install "vertex-forager[notebook] @ git+https://github.com/coolbress/VertexLab.git@vertex-forager-v0.11.4#subdirectory=packages/vertex-forager"
 ```
 
 ## Provider‑agnostic: Fetch and Persist (sync‑friendly)

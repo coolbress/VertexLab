@@ -8,7 +8,7 @@
 
 ## Modules
 
-- routers/interfaces.py
+- routers/base.py
   - BaseRouter contract and responsibilities (generate_jobs, parse).
 - routers/transforms.py
   - Common helpers for metadata injection, date parsing, empties, column normalization.
@@ -54,7 +54,7 @@ These keys are explicitly passed into pipeline.run and should be removed from an
 
 ## Provider Integration Guide
 
-- Implement Router that inherits BaseRouter and conforms to interfaces.generate_jobs/parse.
+- Implement a router that inherits `BaseRouter` from `routers/base.py` and conforms to the documented `generate_jobs` and `parse` contract.
 
 ## Diagrams
 

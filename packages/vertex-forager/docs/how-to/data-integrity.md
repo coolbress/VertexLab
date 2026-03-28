@@ -46,3 +46,46 @@ Counter (metrics enabled only):
 
 - Metrics gating: counters are merged into `RunResult.metrics_counters` only when `EngineConfig.metrics_enabled=True`.
 - Defaults are unchanged unless you opt in to these features.
+
+## Data Quality Rules
+
+`TableSchema` supports a `quality_rules` tuple so you can attach lightweight validation to a table without changing the main fetch and write flow.
+
+### Available rules
+
+- `DataQualityRule`
+  - Protocol for custom validators. Implement `validate(df) -> list[str]` and return violation messages.
+- `NoDuplicateRows`
+  - Detects duplicate rows either across the full frame or within a subset of columns such as `["ticker", "date"]`.
+- `NoFutureDates`
+  - Flags rows whose date or datetime columns are later than the current time.
+- `NoNegativePrices`
+  - Flags negative numeric values in common price columns such as `open`, `high`, `low`, and `close`.
+
+### Pass rules through a schema
+
+```python
+import polars as pl
+
+from vertex_forager import NoDuplicateRows, NoFutureDates, NoNegativePrices
+from vertex_forager.schema.config import TableSchema
+
+price_schema = TableSchema(
+    table="custom_price",
+    schema={"ticker": pl.String, "date": pl.Date, "close": pl.Float64},
+    unique_key=("ticker", "date"),
+    quality_rules=(
+        NoDuplicateRows(subset=["ticker", "date"]),
+        NoFutureDates(date_columns=["date"]),
+        NoNegativePrices(price_columns=["close"]),
+    ),
+)
+```
+
+### When to use each rule
+
+- Use `NoDuplicateRows` when a table has a natural key and duplicate packets should be surfaced before downstream analysis.
+- Use `NoFutureDates` when provider timestamps must never exceed the observation time for the run.
+- Use `NoNegativePrices` when market data should always remain non-negative and you want quick anomaly detection.
+
+Violations are logged, aggregated into `RunResult.quality_violations`, and kept separate from schema-mapping failures so you can decide whether to treat them as warnings or operational alerts.

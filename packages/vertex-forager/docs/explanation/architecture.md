@@ -1,5 +1,23 @@
 # Pipeline Architecture
 
+```mermaid
+flowchart TD
+  A[Router Jobs] --> B[Throttle (GCRA) + Concurrency (Gradient)]
+  B --> C[HTTP / Library Fetch with Retry]
+  C --> D[Parse -> FramePackets]
+  D --> E[Normalize (Schemas, PK)]
+  E --> F{Flush threshold reached?}
+  F -- No --> E
+  F -- Yes --> G[Merge Frames, PK Checks]
+  G --> H{Write Chunk}
+  H -- Success --> I[Update RunResult & Metrics]
+  H -- Failure --> J[Per-packet Rescue]
+  J -- Partial Success --> K[DLQ Spool Failed Packets]
+  J -- All Fail --> K
+  K --> L[Operator Recovery CLI]
+  L --> H
+```
+
 ## High‑level Flow
 
 1) Fetch jobs scheduled with `FlowController`:
