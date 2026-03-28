@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.9](https://github.com/coolbress/VertexLab/compare/vertex-lab-v0.3.8...vertex-lab-v0.3.9) (2026-03-28)
+
+
+### Documentation
+
+* **vertex-lab:** fix vertex-forager installation link in root docs ([#316](https://github.com/coolbress/VertexLab/issues/316)) ([5d31204](https://github.com/coolbress/VertexLab/commit/5d31204c7ec62d9f5ff40404268500ef5f8b4869))
+
 ## [0.3.8](https://github.com/coolbress/VertexLab/compare/vertex-lab-v0.3.7...vertex-lab-v0.3.8) (2026-03-28)
 
 
