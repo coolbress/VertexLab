@@ -29,7 +29,7 @@ uv pip install vertex-forager
 ```bash
 git clone https://github.com/coolbress/VertexLab.git
 cd VertexLab
-uv sync
+uv sync --dev
 ```
 
 Use the repository workflow when you are developing the package, running the examples, or contributing documentation and tests.
