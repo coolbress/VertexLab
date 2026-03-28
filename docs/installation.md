@@ -41,7 +41,7 @@ Prefer a release tag such as `vertex-forager-v0.11.4` or a commit SHA for reprod
 
 Use package-specific docs when you want a direct workflow for an individual component:
 
-- `vertex-forager`: [installation docs](https://coolbress.github.io/VertexLab/vertex-forager/get-started/installation/)
+- `vertex-forager`: [installation docs](https://coolbress.github.io/VertexLab/vertex-forager/installation/)
 - `vertex-qt`: docs will be added when the package implementation is ready
 
 - `vertex-forager` handles data collection, schema-aware normalization, and DuckDB persistence
@@ -53,7 +53,7 @@ Use package-specific docs when you want a direct workflow for an individual comp
 | Use case | Recommended install |
 | --- | --- |
 | You want the top-level VertexLab package and the root project docs experience | Clone the repo and run `uv sync --group dev` |
-| You want the current production-ready data ingestion workflow right now | Install `vertex-forager` from GitHub and follow the [vertex-forager installation docs](https://coolbress.github.io/VertexLab/vertex-forager/get-started/installation/) |
+| You want the current production-ready data ingestion workflow right now | Install `vertex-forager` from GitHub and follow the [vertex-forager installation docs](https://coolbress.github.io/VertexLab/vertex-forager/installation/) |
 | You need the yfinance-backed provider path | Install `vertex-forager[yfinance]` from GitHub |
 | You want notebook execution support for examples and experiments | Install `vertex-forager[notebook]` from GitHub |
 | You are waiting for future quant-analysis package guidance | `vertex-qt` docs will be added when the package is ready |
