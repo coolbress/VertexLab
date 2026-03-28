@@ -10,16 +10,16 @@ This guide explains how to run tests, understand test structure, and write new t
 
 ```bash
 git clone https://github.com/coolbress/VertexLab.git
-cd vertex-lab
+cd VertexLab
 uv sync --dev
 ```
 
 ## Running Tests
 
-### All tests (excluding integration)
+### All tests (excluding manual)
 
 ```bash
-uv run pytest packages/vertex-forager/tests/ -m "not integration"
+uv run pytest packages/vertex-forager/tests/ -m "not manual"
 ```
 
 ### Integration tests only
@@ -33,9 +33,11 @@ uv run pytest packages/vertex-forager/tests/ -m integration
 ```bash
 uv run pytest packages/vertex-forager/tests/ \
   --cov=packages/vertex-forager/src/vertex_forager \
-  --cov-report=term-missing \
-  -m "not integration"
+  --cov-report=term \
+  -m "not manual"
 ```
+
+Use `--cov-report=term-missing` locally when you want missing-line detail in addition to the CI-aligned terminal summary.
 
 ### Single test file
 
@@ -66,7 +68,7 @@ Fast, isolated tests with mocked dependencies. These form the bulk of the test s
 End-to-end tests exercise real writers, pipelines, or CLI paths and use `@pytest.mark.integration`.
 
 !!! note
-  Integration tests are excluded from the default CI run (`-m "not integration"`) to keep the feedback loop fast. Run them locally before submitting PRs that change writers or pipeline logic.
+  The default CI flow excludes manual tests with `-m "not manual"`. Integration tests still run in CI, so reserve the manual marker for opt-in verification paths.
 
 ## Property-Based Testing
 

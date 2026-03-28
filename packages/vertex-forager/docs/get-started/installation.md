@@ -15,8 +15,8 @@ pip install "vertex-forager[yfinance]"
 pip install "vertex-forager[notebook]"
 ```
 
-- `yfinance` enables the library-backed provider and notebook-friendly examples
-- `notebook` installs the dependencies used for notebook execution
+- `yfinance` installs the library-backed provider dependencies: `pandas` and `yfinance`
+- `notebook` installs the notebook runtime dependencies: `ipywidgets`, `ipython`, and `nest-asyncio`
 
 ## Install With uv
 
