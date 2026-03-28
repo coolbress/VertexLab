@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.6](https://github.com/coolbress/VertexLab/compare/vertex-lab-v0.3.5...vertex-lab-v0.3.6) (2026-03-28)
+
+
+### Documentation
+
+* **vertex-lab:** restructure CLAUDE.md and remove redundant claude-prompts.md ([#305](https://github.com/coolbress/VertexLab/issues/305)) ([a86bed9](https://github.com/coolbress/VertexLab/commit/a86bed93cb2e81e666c2ee48540b32580b852bff))
+
 ## [0.3.5](https://github.com/coolbress/VertexLab/compare/vertex-lab-v0.3.4...vertex-lab-v0.3.5) (2026-03-28)
 
 
