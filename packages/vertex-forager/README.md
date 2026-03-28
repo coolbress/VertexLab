@@ -220,7 +220,7 @@ print(res)  # RunResult
   - [API Reference](docs/reference/api.md)
 - Explanation
   - [Pipeline architecture and design](docs/explanation/architecture.md)
-  - [Router & Client](docs/explanation/router-client.md)
+  - [How built-in providers work](docs/explanation/how-built-in-providers-work.md)
   - [Data storage & DLQ](docs/explanation/data-storage-flow.md)
   - [Writer security](docs/explanation/writer-security.md)
   - [Writer fan‑out roadmap](docs/explanation/writer-fanout-roadmap.md)
