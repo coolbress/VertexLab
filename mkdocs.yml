@@ -60,19 +60,9 @@ markdown_extensions:
 
 nav:
   - Overview: index.md
-  - Getting Started: getting-started.md
+  - Installation: installation.md
+  - Quickstart: quickstart.md
   - Components:
       - vertex-forager: '!include packages/vertex-forager/mkdocs.yml'
   - Contributing: contributing.md
-  - Changelog: https://github.com/coolbress/VertexLab/blob/main/CHANGELOG.md
-  - Policies:
-      - CI Security: ci-security.md
-      - CI Node Runtime Policy: explanation/ci-node-policy.md
-      - Labels Policy: explanation/labels-policy.md
-  - ADRs:
-      - ADR Index: adr/README.md
-      - ADR-0001 Polars over pandas: adr/0001-use-polars-over-pandas.md
-      - ADR-0002 run_sync_compat over @jupyter_safe: adr/0002-use-run-sync-compat-over-jupyter-safe.md
-      - ADR-0003 uv workspace monorepo: adr/0003-use-uv-workspace-monorepo.md
-      - ADR-0004 release-please changelog automation: adr/0004-use-release-please-for-changelog-automation.md
-      - ADR Template: adr/template.md
+  - Changelog: changelog.md

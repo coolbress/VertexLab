@@ -41,8 +41,6 @@ Thank you for contributing to VertexLab.
    uv run pytest packages/ -m smoke
    ```
 
-See [labels-policy.md](explanation/labels-policy.md) for the repository label taxonomy and automation behavior.
-
 ## Issue Guidelines
 
 - Bug report: use for defects, regressions, and broken workflows.
@@ -98,6 +96,20 @@ See [labels-policy.md](explanation/labels-policy.md) for the repository label ta
   - Checklist
 - Use squash merge. The PR title becomes the final merge commit title.
 - Do not append issue numbers to the PR title. Link issues in the PR body instead.
+
+## Labels
+
+VertexLab keeps pull-request labels low-maintenance and automation-friendly by managing only `type:*` and `package:*` labels in normal workflow.
+
+| Label Group | Labels |
+| --- | --- |
+| `type:*` | `type:feature`, `type:fix`, `type:docs`, `type:perf`, `type:refactor`, `type:chore`, `type:breaking` |
+| `package:*` | `package:vertex-forager`, `package:vertex-qt`, `package:vertex-workspace`, `package:vertex-lab` |
+| Release control | `no-changelog` |
+
+- `pr-automation.yml` maps PR titles to `type:*` labels and changed paths to `package:*` labels.
+- Keep PR titles aligned with the Conventional Commit rule so labels can be applied automatically.
+- Do not manually introduce extra label systems such as `scope:*`, `area:*`, `severity/*`, or `priority/*` unless repository policy changes.
 
 ## Pre-commit Hooks
 
