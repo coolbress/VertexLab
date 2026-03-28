@@ -3,7 +3,6 @@
 Install `vertex-lab` when you want the full VertexLab meta-package and a single entrypoint for the broader toolchain.
 
 > Today, `vertex-forager` is the implemented component behind the practical install and quickstart path. `vertex-qt` and `vertex-workspace` remain planned components, and this page will expand as they ship.
-
 > Current distribution model: VertexLab packages are distributed through GitHub Releases and repository-based workflows. PyPI publishing is not enabled yet, but `pip install` still works when you point pip at a GitHub source URL or a release asset URL.
 
 ## Install The Meta-package From GitHub
