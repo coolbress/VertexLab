@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.6](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.11.5...vertex-forager-v0.11.6) (2026-03-28)
+
+
+### Documentation
+
+* **vertex-forager:** reclassify provider docs around built-in architecture ([#329](https://github.com/coolbress/VertexLab/issues/329)) ([64729f4](https://github.com/coolbress/VertexLab/commit/64729f40064694b22440fc08982a027c877f8496))
+
 ## [0.11.5](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.11.4...vertex-forager-v0.11.5) (2026-03-28)
 
 
