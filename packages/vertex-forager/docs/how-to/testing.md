@@ -1,17 +1,16 @@
 # Testing Guide
 
-This guide explains how to run tests, understand test structure, and write new tests for vertex-forager.
+Use this guide when you need to run the vertex-forager test suite, inspect coverage, or add new tests while working on the package.
 
 > Note
-> For the monorepo-wide test layout, markers (`smoke`/`manual`), and CI policy, see the repository guide:
-> `packages/vertex-forager/tests/README.md`. This page focuses on vertex-forager-specific workflows.
+> For the monorepo-wide test layout, markers (`smoke`/`manual`), and CI policy, see `packages/vertex-forager/tests/README.md`. This page focuses on vertex-forager-specific workflows.
 
 ## Prerequisites
 
 ```bash
 git clone https://github.com/coolbress/VertexLab.git
 cd VertexLab
-uv sync --dev
+uv sync --group dev
 ```
 
 ## Running Tests
