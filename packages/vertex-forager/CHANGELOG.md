@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.4](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.11.3...vertex-forager-v0.11.4) (2026-03-28)
+
+
+### Documentation
+
+* **vertex-forager:** improve landing page and align docs nav ([#301](https://github.com/coolbress/VertexLab/issues/301)) ([5617664](https://github.com/coolbress/VertexLab/commit/56176644f40e4076b497f83bf8900265b63deb65))
+
 ## [0.11.3](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.11.2...vertex-forager-v0.11.3) (2026-03-27)
 
 
