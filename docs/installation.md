@@ -19,16 +19,19 @@ If you want a direct `pip install` path without PyPI, use a GitHub release asset
 
 ```bash
 pip install https://github.com/coolbress/VertexLab/releases/download/<tag>/vertex_lab-<version>-py3-none-any.whl
+pip install https://github.com/coolbress/VertexLab/releases/download/vertex-lab-v0.3.6/vertex_lab-0.3.6-py3-none-any.whl
 ```
 
 ## Install Individual Packages
 
 Use package-specific installs when you only need one part of the stack.
 
+Choose one of the following package install variants depending on the workflow you need.
+
 ```bash
-pip install "vertex-forager @ git+https://github.com/coolbress/VertexLab.git@vertex-forager-v0.11.4#subdirectory=packages/vertex-forager"
-pip install "vertex-forager[yfinance] @ git+https://github.com/coolbress/VertexLab.git@vertex-forager-v0.11.4#subdirectory=packages/vertex-forager"
-pip install "vertex-forager[notebook] @ git+https://github.com/coolbress/VertexLab.git@vertex-forager-v0.11.4#subdirectory=packages/vertex-forager"
+pip install "vertex-forager @ git+https://github.com/coolbress/VertexLab.git@vertex-forager-v0.11.4#subdirectory=packages/vertex-forager"            (basic)
+pip install "vertex-forager[yfinance] @ git+https://github.com/coolbress/VertexLab.git@vertex-forager-v0.11.4#subdirectory=packages/vertex-forager"  (with yfinance)
+pip install "vertex-forager[notebook] @ git+https://github.com/coolbress/VertexLab.git@vertex-forager-v0.11.4#subdirectory=packages/vertex-forager"  (with notebook)
 ```
 
 Prefer a release tag such as `vertex-forager-v0.11.4` or a commit SHA for reproducible installs instead of using a moving branch name.
