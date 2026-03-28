@@ -69,7 +69,6 @@ nav:
       - CI Security: ci-security.md
       - CI Node Runtime Policy: explanation/ci-node-policy.md
       - Labels Policy: explanation/labels-policy.md
-      - Claude Prompt Snippets: development/claude-prompts.md
   - ADRs:
       - ADR Index: adr/README.md
       - ADR-0001 Polars over pandas: adr/0001-use-polars-over-pandas.md
