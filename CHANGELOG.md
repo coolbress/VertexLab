@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.8](https://github.com/coolbress/VertexLab/compare/vertex-lab-v0.3.7...vertex-lab-v0.3.8) (2026-03-28)
+
+
+### Documentation
+
+* **vertex-forager:** align docs with Diátaxis-style user flows ([#312](https://github.com/coolbress/VertexLab/issues/312)) ([559c618](https://github.com/coolbress/VertexLab/commit/559c61869e5846f7ecaab7c520450f37570896d4))
+
 ## [0.3.7](https://github.com/coolbress/VertexLab/compare/vertex-lab-v0.3.6...vertex-lab-v0.3.7) (2026-03-28)
 
 
