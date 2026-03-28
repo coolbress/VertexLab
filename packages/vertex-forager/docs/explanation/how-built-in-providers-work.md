@@ -132,6 +132,7 @@ The provider split is an implementation detail that supports a consistent built-
 - writer
 - mapper
 - on_progress
+- resume
 
 These keys are explicitly passed into `pipeline.run` and should be removed from kwargs forwarding using `clients/validation.filter_reserved_kwargs`.
 
