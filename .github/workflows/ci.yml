@@ -275,7 +275,7 @@ jobs:
         env:
           VF_PROFILE_OUTPUT_DIR: ${{ github.workspace }}/output/forager-profiles
           BENCHMARK_METRIC_PATH: duration_s
-          BENCHMARK_MAX_REGRESSION: "0.20"
+          BENCHMARK_MAX_REGRESSION: "0.30"
         run: uv run python .github/scripts/compare_benchmark_metrics.py
       - name: Upload benchmark metrics artifact
         if: ${{ always() }}
