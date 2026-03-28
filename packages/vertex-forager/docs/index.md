@@ -5,22 +5,31 @@
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/coolbress/VertexLab/blob/main/LICENSE)
 
-Provider-agnostic financial data ingestion with resilient writes, schema-aware normalization, and operational controls for production-oriented pipelines.
+Fetch financial data from multiple providers and build your own local database — no cloud required, no infrastructure to manage.
+
+Built-in providers today: yfinance and Sharadar.
 
 ## Why vertex-forager
 
-- Fetch data through a unified client layer across HTTP and library-backed providers
-- Normalize frames with Polars and schema-aware validation before persistence
-- Persist safely with DuckDB and DLQ-backed recovery controls
-- Inspect configuration, metrics, and API behavior through dedicated reference docs
+Getting financial data into a usable local database is harder than it should be. Rate limits kick in, writes fail halfway through, and large datasets take too long to re-fetch when something goes wrong.
+
+vertex-forager handles the operational complexity so you can focus on the data:
+
+- **Async bulk collection** — fetch large datasets concurrently within API rate limits so workflows that would be slow sequentially can finish much faster
+- **Multiple providers, one interface** — switch between yfinance and Sharadar without rewriting your collection flow
+- **Automatic rate limiting** — built-in throttling helps you stay within API limits without manual sleep logic
+- **Safe local persistence** — schema-aware normalization into DuckDB with idempotent upserts means reruns do not create duplicates
+- **Resilient writes** — failed packets can be recovered later instead of forcing a full re-fetch after a transient error
+- **Data quality checks** — built-in rules can catch duplicates, future dates, and negative prices before they reach your database
+- **No cloud dependency** — everything runs locally on your own machine
 
 ## Installation
 
 ```bash
-pip install "vertex-forager @ git+https://github.com/coolbress/VertexLab.git@vertex-forager-v0.11.4#subdirectory=packages/vertex-forager"
+pip install "vertex-forager[yfinance] @ git+https://github.com/coolbress/VertexLab.git@vertex-forager-v0.11.4#subdirectory=packages/vertex-forager"
 ```
 
-vertex-forager is currently distributed from GitHub rather than PyPI. See [Installation](installation.md) for install variants, extras, and repository-based workflows.
+vertex-forager is currently distributed from GitHub rather than PyPI. The example below uses the yfinance provider, so the install snippet includes the `yfinance` extra. See [Installation](installation.md) for other install variants, extras, and repository-based workflows.
 
 ## Quick Example
 
@@ -28,10 +37,7 @@ vertex-forager is currently distributed from GitHub rather than PyPI. See [Insta
 from vertex_forager import create_client
 
 client = create_client(provider="yfinance", rate_limit=60)
-result = client.get_price_data(
-    tickers=["AAPL", "MSFT"],
-    connect_db="duckdb://./forager.duckdb",
-)
+result = client.get_price_data(tickers=["AAPL", "MSFT"])
 print(result)
 ```
 
