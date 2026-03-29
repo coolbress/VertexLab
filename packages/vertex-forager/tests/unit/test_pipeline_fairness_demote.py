@@ -5,7 +5,7 @@ import itertools
 
 import pytest
 
-from vertex_forager.core.config import EngineConfig, FetchJob, RequestSpec
+from vertex_forager.core.config import FetchJob, RequestSpec, ResolvedClientConfig
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor
 from vertex_forager.core.pipeline import VertexForager
@@ -18,7 +18,7 @@ class _StubClient:
 
 @pytest.mark.asyncio
 async def test_pop_next_job_respecting_fairness_demotes_excess_burst() -> None:
-    config = EngineConfig(requests_per_minute=60, concurrency=1)
+    config = ResolvedClientConfig(requests_per_minute=60, concurrency=1)
     controller = FlowController(requests_per_minute=60, concurrency_limit=1)
     eng = VertexForager(
         router=None,  # type: ignore[arg-type]

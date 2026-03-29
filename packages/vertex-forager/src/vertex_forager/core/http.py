@@ -234,19 +234,42 @@ def default_async_client() -> httpx.AsyncClient:
         httpx.AsyncClient: Configured client for HTTP operations.
     """
 
-    mk = env_int("VF_HTTP_MAX_KEEPALIVE", HTTP_MAX_KEEPALIVE_CONNECTIONS)
-    max_keepalive = mk if mk is not None and mk > 0 else HTTP_MAX_KEEPALIVE_CONNECTIONS
+    env_keepalive = env_int("VF_HTTP_MAX_KEEPALIVE", HTTP_MAX_KEEPALIVE_CONNECTIONS)
+    env_connections = env_int("VF_HTTP_MAX_CONNECTIONS", HTTP_MAX_CONNECTIONS)
+    env_timeout = env_float("VF_HTTP_TIMEOUT_S", HTTP_TIMEOUT_S)
+    return build_async_client(
+        timeout_s=env_timeout if env_timeout is not None and env_timeout > 0 else HTTP_TIMEOUT_S,
+        max_keepalive_connections=env_keepalive
+        if env_keepalive is not None and env_keepalive > 0
+        else HTTP_MAX_KEEPALIVE_CONNECTIONS,
+        max_connections=env_connections
+        if env_connections is not None and env_connections > 0
+        else HTTP_MAX_CONNECTIONS,
+    )
 
-    mc = env_int("VF_HTTP_MAX_CONNECTIONS", HTTP_MAX_CONNECTIONS)
-    max_conns = mc if mc is not None and mc > 0 else HTTP_MAX_CONNECTIONS
 
-    to = env_float("VF_HTTP_TIMEOUT_S", HTTP_TIMEOUT_S)
-    timeout_s = to if to is not None and to > 0 else HTTP_TIMEOUT_S
+def build_async_client(
+    *,
+    timeout_s: float,
+    max_keepalive_connections: int,
+    max_connections: int,
+) -> httpx.AsyncClient:
+    """Create a configured ``httpx.AsyncClient`` instance.
+
+    Args:
+        timeout_s: Request timeout in seconds.
+        max_keepalive_connections: Maximum keep-alive connections.
+        max_connections: Maximum total connections.
+
+    Returns:
+        Configured HTTP client instance.
+    """
+
     return httpx.AsyncClient(
         headers={"User-Agent": HTTP_USER_AGENT},
         timeout=httpx.Timeout(timeout_s),
         limits=httpx.Limits(
-            max_keepalive_connections=max_keepalive,
-            max_connections=max_conns,
+            max_keepalive_connections=max_keepalive_connections,
+            max_connections=max_connections,
         ),
     )

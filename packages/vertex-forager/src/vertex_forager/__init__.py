@@ -6,7 +6,13 @@ from vertex_forager.api import (
     create_client,
     create_router,
 )
-from vertex_forager.core import EngineConfig, RunResult
+from vertex_forager.core import (
+    AdvancedConfig,
+    DownshiftConfig,
+    HTTPConfig,
+    RetryConfig,
+    RunResult,
+)
 from vertex_forager.core.errors import RunError
 from vertex_forager.core.quality import (
     DataQualityRule,
@@ -23,14 +29,17 @@ from vertex_forager.exceptions import (
 __version__ = "0.11.7"
 
 __all__ = [
+    "AdvancedConfig",
     "BaseClient",
     "BaseRouter",
     "DataQualityRule",
-    "EngineConfig",
+    "DownshiftConfig",
     "FetchError",
+    "HTTPConfig",
     "NoDuplicateRows",
     "NoFutureDates",
     "NoNegativePrices",
+    "RetryConfig",
     "RunError",
     "RunResult",
     "SharadarClient",

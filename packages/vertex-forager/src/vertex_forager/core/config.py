@@ -73,6 +73,62 @@ class RetryConfig(BaseModel):
         return v
 
 
+class DownshiftConfig(BaseModel):
+    """Adaptive RPM downshift policy exposed on the client boundary.
+
+    Attributes:
+        enabled: Enables adaptive downshift and recovery behavior.
+        window_s: Sliding window in seconds used to evaluate recent error rate.
+        error_rate_threshold: Error ratio that triggers downshift.
+        rpm_floor: Minimum RPM maintained while downshift is active.
+        recovery_step: RPM added back during healthy recovery.
+        healthy_window_s: Healthy period required before recovering RPM upward.
+    """
+
+    enabled: bool = False
+    window_s: int = Field(default=60, ge=1)
+    error_rate_threshold: float = Field(default=0.2, ge=0.0, le=1.0)
+    rpm_floor: int = Field(default=1, ge=1)
+    recovery_step: int = Field(default=5, ge=1)
+    healthy_window_s: int = Field(default=60, ge=1)
+
+
+class HTTPConfig(BaseModel):
+    """HTTP connection-pool settings exposed as a grouped public config.
+
+    Attributes:
+        max_connections: Maximum connection pool size.
+        max_keepalive_connections: Maximum keep-alive pool size.
+    """
+
+    max_connections: int = Field(default=200, ge=1)
+    max_keepalive_connections: int = Field(default=100, ge=1)
+
+
+class AdvancedConfig(BaseModel):
+    """Advanced and transitional client settings.
+
+    Attributes:
+        dlq_tmp_cleanup_on_error: Best-effort cleanup toggle for failed DLQ temp files.
+        dlq_tmp_periodic_cleanup: Startup cleanup toggle for stale DLQ temp files.
+        dlq_tmp_retention_s: Retention window for stale DLQ temp files.
+        tracer: Optional tracing adapter implementing ``start_span``.
+        otel_enabled: Optional tracing toggle.
+        mem_threshold_ratio: Memory warning threshold as a ratio of available RAM.
+        mem_threshold_abs_mb: Absolute memory warning threshold in MB.
+    """
+
+    dlq_tmp_cleanup_on_error: bool = True
+    dlq_tmp_periodic_cleanup: bool = True
+    dlq_tmp_retention_s: int = Field(default=86_400, ge=0)
+    tracer: TracerProtocol | None = None
+    otel_enabled: bool | None = None
+    mem_threshold_ratio: float = Field(default=0.7, gt=0.0, le=1.0)
+    mem_threshold_abs_mb: int | None = Field(default=4096, ge=1)
+
+    model_config = {"arbitrary_types_allowed": True}
+
+
 class HttpMethod(str, Enum):
     """HTTP method for request execution.
 
@@ -188,119 +244,87 @@ class FramePacket(BaseModel):
     model_config = {"arbitrary_types_allowed": True}
 
 
-class EngineConfig(BaseModel):
-    """Unified pipeline execution configuration (Simple & Flat).
+class ResolvedClientConfig(BaseModel):
+    """Internal resolved snapshot of client configuration.
 
-    Consolidates all tuning parameters into a single configuration object.
-    Automatically calculates optimal concurrency based on RPM if not provided.
+    This model is not part of the supported public package API. It exists so the
+    runtime can carry a fully validated, default-applied view of the effective
+    client settings after `create_client(...)` inputs have been normalized.
 
-    Attribute Groups:
-        Core: requests_per_minute, concurrency
-        Retry: retry
-        Storage & Flush: flush_threshold_rows, writer_chunk_rows
-        Observability: metrics_enabled, structured_logs, log_verbose
-        DLQ: dlq_enabled, dlq_tmp_cleanup_on_error, dlq_tmp_periodic_cleanup, dlq_tmp_retention_s
-        Adaptive Downshift:
-          downshift_enabled, downshift_window_s, error_rate_threshold,
-          rpm_floor, recovery_step, healthy_window_s
-
-    Attributes:
-        requests_per_minute (int): Maximum allowed requests per minute; must be > 0.
-        concurrency (int | None): Explicit concurrency limit; if None, executor derives a safe value.
-        retry (RetryConfig): Retry/backoff policy (attempts, backoff window, status codes).
-        flush_threshold_rows (int): Rows buffered per table before flush; higher = fewer large flushes.
-        writer_chunk_rows (int | None): Target per-chunk rows during flush; when set must be >= 10_000.
-        writer_concurrency (int): Number of writer worker tasks to run in parallel (default: 1).
-        metrics_enabled (bool): Emit counters/histograms when True.
-        structured_logs (bool): Emit structured stage logs when True.
-        log_verbose (bool): Increase logging verbosity when True.
-        dlq_enabled (bool): Enable on-disk DLQ spooling; when False,
-            files are not written and summaries/counts still populate.
-        dlq_tmp_cleanup_on_error (bool): Attempt cleanup of temporary DLQ files on writer errors.
-        dlq_tmp_periodic_cleanup (bool): Periodically clean temporary DLQ spool artifacts.
-        dlq_tmp_retention_s (int): Retention window (seconds) for temporary DLQ artifacts (default 86_400 = 1 day).
-        downshift_enabled (bool): Enable adaptive RPM downshift based on error rates.
-        downshift_window_s (int): Sliding window (seconds) to evaluate error rate for downshift.
-        error_rate_threshold (float): Error rate threshold (0..1) to trigger downshift.
-        rpm_floor (int): Minimum RPM when downshift is active; must be <= requests_per_minute.
-        recovery_step (int): RPM increment when recovering from downshift.
-        healthy_window_s (int): Window (seconds) of healthy operation before stepping up RPM.
-
-        tracer (TracerProtocol | None): Optional tracer used to create spans around
-            engine stages. When None (default), tracing is disabled regardless of
-            otel_enabled. When set, pipeline uses `tracer.start_span(name, attributes=...)`
-            as a context manager for major operations.
-        otel_enabled (bool | None): Toggle for OpenTelemetry instrumentation. When True
-            and a tracer is provided, spans are created; when False or None, spans are
-            not created even if a tracer exists.
-        pagination_max_burst (int | None): Maximum consecutive pagination pages per symbol
-            before yielding to other symbols. When None (default), no burst cap is enforced
-            and existing pagination priority semantics are preserved.
-
-    Notes:
-        - `model_config = {"arbitrary_types_allowed": True}` permits using `TracerProtocol`
-          (a Protocol) as a field type on Pydantic v2 models.
-        - If both `tracer is None` and `otel_enabled` is falsy, tracing is a no-op.
-          Providing a tracer and setting `otel_enabled` truthy enables span contexts.
-
-    Raises:
-        ValueError: If requests_per_minute is not positive.
+    Public callers should set configuration through `create_client(...)` and the
+    grouped public config objects (`RetryConfig`, `DownshiftConfig`, `HTTPConfig`,
+    `AdvancedConfig`) rather than constructing this model directly.
     """
 
-    # 1. Core Parameters
     requests_per_minute: int = Field(..., gt=0)
-    concurrency: int | None = Field(default=None, gt=0)
-
-    # 2. Retry Configuration
-    retry: RetryConfig = Field(default_factory=RetryConfig)
-
-    # 3. Advanced Tuning (Internal Defaults)
-    flush_threshold_rows: int = FLUSH_THRESHOLD_ROWS
-    writer_chunk_rows: int | None = None
-    writer_concurrency: int = Field(default=1, ge=1)
     metrics_enabled: bool = False
     structured_logs: bool = False
     log_verbose: bool = False
     dlq_enabled: bool = True
-    dlq_tmp_cleanup_on_error: bool = True
-    dlq_tmp_periodic_cleanup: bool = True
-    dlq_tmp_retention_s: int = Field(default=86400, ge=0)
-
-    # 4. Adaptive RPM Downshift
-    downshift_enabled: bool = False
-    downshift_window_s: int = Field(default=60, ge=1)
-    error_rate_threshold: float = Field(default=0.2, ge=0.0, le=1.0)
-    rpm_floor: int = Field(default=1, ge=1)
-    recovery_step: int = Field(default=5, ge=1)
-    healthy_window_s: int = Field(default=60, ge=1)
-
-    # 5. Optional Tracing
-    tracer: TracerProtocol | None = None
-    otel_enabled: bool | None = None
-    # 6. Run Persistence
-    persist_run_history: bool = Field(default=True)
-    # 7. Pagination Fairness
     pagination_max_burst: int | None = Field(default=None, ge=1)
+    retry: RetryConfig = Field(default_factory=RetryConfig)
+    downshift: DownshiftConfig = Field(default_factory=DownshiftConfig)
+    concurrency: int | None = Field(default=None, gt=0)
+    flush_threshold_rows: int = FLUSH_THRESHOLD_ROWS
+    writer_chunk_rows: int | None = None
+    writer_concurrency: int = Field(default=1, ge=1)
+    http_timeout_s: float = Field(default=HTTP_TIMEOUT_S, gt=0)
+    limits: HTTPConfig = Field(default_factory=HTTPConfig)
+    advanced: AdvancedConfig = Field(default_factory=AdvancedConfig)
+    persist_run_history: bool = True
 
     model_config = {"arbitrary_types_allowed": True}
 
     @property
     def fetch_concurrency(self) -> int | None:
-        """Alias for concurrency to maintain semantic clarity.
-
-        Returns:
-            int | None: The configured concurrency limit.
-        """
         return self.concurrency
 
     @property
-    def queue_max(self) -> int:
-        """Calculate max queue size based on available system memory.
-        Target: 5% of Total System RAM.
+    def downshift_enabled(self) -> bool:
+        return self.downshift.enabled
 
-        Returns:
-            int: Calculated maximum queue size (clamped between 100 and 2000).
-        """
+    @property
+    def downshift_window_s(self) -> int:
+        return self.downshift.window_s
+
+    @property
+    def error_rate_threshold(self) -> float:
+        return self.downshift.error_rate_threshold
+
+    @property
+    def rpm_floor(self) -> int:
+        return self.downshift.rpm_floor
+
+    @property
+    def recovery_step(self) -> int:
+        return self.downshift.recovery_step
+
+    @property
+    def healthy_window_s(self) -> int:
+        return self.downshift.healthy_window_s
+
+    @property
+    def dlq_tmp_cleanup_on_error(self) -> bool:
+        return self.advanced.dlq_tmp_cleanup_on_error
+
+    @property
+    def dlq_tmp_periodic_cleanup(self) -> bool:
+        return self.advanced.dlq_tmp_periodic_cleanup
+
+    @property
+    def dlq_tmp_retention_s(self) -> int:
+        return self.advanced.dlq_tmp_retention_s
+
+    @property
+    def tracer(self) -> TracerProtocol | None:
+        return self.advanced.tracer
+
+    @property
+    def otel_enabled(self) -> bool | None:
+        return self.advanced.otel_enabled
+
+    @property
+    def queue_max(self) -> int:
         try:
             total_ram = psutil.virtual_memory().total
             target_buffer_bytes = total_ram * QUEUE_TARGET_RAM_RATIO
@@ -312,11 +336,6 @@ class EngineConfig(BaseModel):
             return QUEUE_DEFAULT
 
     def assert_valid(self) -> None:
-        """Validate configuration values.
-
-        Raises:
-            ValueError: If requests_per_minute is less than or equal to 0.
-        """
         if self.requests_per_minute <= 0:
             raise ValueError("requests_per_minute must be positive")
         if self.concurrency is not None and self.concurrency <= 0:
@@ -328,7 +347,6 @@ class EngineConfig(BaseModel):
                 raise VertexForagerError(f"writer_chunk_rows must be an integer or None: {e}") from e
             if v < 10_000:
                 raise ValueError("writer_chunk_rows must be >= 10_000 when specified")
-            # Coerce to int for downstream isinstance checks and consistent typing
             self.writer_chunk_rows = v
         try:
             wc = int(self.writer_concurrency)
@@ -337,7 +355,7 @@ class EngineConfig(BaseModel):
         if wc <= 0:
             raise ValueError("writer_concurrency must be >= 1")
         self.writer_concurrency = wc
-        if self.rpm_floor > self.requests_per_minute:
+        if self.downshift.rpm_floor > self.requests_per_minute:
             raise ValueError("rpm_floor must be <= requests_per_minute")
 
 
@@ -432,13 +450,14 @@ class ParseResult:
 
 
 __all__ = [
-    "EngineConfig",
+    "AdvancedConfig",
+    "DownshiftConfig",
     "FetchJob",
     "FramePacket",
+    "HTTPConfig",
     "HttpMethod",
     "ParseResult",
     "RequestAuth",
     "RequestSpec",
     "RetryConfig",
-    "RunResult",
 ]

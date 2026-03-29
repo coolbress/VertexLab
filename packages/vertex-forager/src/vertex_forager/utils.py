@@ -4,7 +4,6 @@ import contextlib
 import functools
 import itertools
 import logging
-import math
 import os
 from pathlib import Path
 import re
@@ -223,6 +222,8 @@ def validate_memory_usage(
     symbols: list[str] | None,
     connect_db: str | Path | None,
     bytes_per_item: int = 1 * 1024 * 1024,
+    threshold_ratio: float = 0.7,
+    threshold_absolute: int | None = 4 * 1024 * 1024 * 1024,
 ) -> None:
     """Validate memory safety for per-ticker jobs.
 
@@ -230,6 +231,8 @@ def validate_memory_usage(
         symbols: List of ticker symbols for the per-ticker job.
         connect_db: Database connection path or None for in-memory.
         bytes_per_item: Estimated bytes per ticker for the dataset.
+        threshold_ratio: Ratio of available memory to trigger warning.
+        threshold_absolute: Absolute size in bytes to trigger warning.
     """
     if connect_db is not None:
         return
@@ -240,7 +243,13 @@ def validate_memory_usage(
     num_items = len(symbols)
     estimated_size = num_items * bytes_per_item
     available_memory = psutil.virtual_memory().available
-    check_memory_safety(estimated_size, available_memory, num_items)
+    check_memory_safety(
+        estimated_size,
+        available_memory,
+        num_items,
+        threshold_ratio=threshold_ratio,
+        threshold_absolute=threshold_absolute,
+    )
 
 
 def check_memory_safety(
@@ -248,7 +257,7 @@ def check_memory_safety(
     available_memory: int,
     num_tickers: int,
     threshold_ratio: float = 0.7,
-    threshold_absolute: int = 4 * 1024 * 1024 * 1024,
+    threshold_absolute: int | None = 4 * 1024 * 1024 * 1024,
 ) -> None:
     """Check if the request is safe for memory usage.
 
@@ -259,19 +268,6 @@ def check_memory_safety(
         threshold_ratio: Ratio of available memory to trigger warning.
         threshold_absolute: Absolute size in bytes to trigger warning.
     """
-    with contextlib.suppress(TypeError, ValueError):
-        env_ratio = float(os.getenv("VF_MEM_THRESHOLD_RATIO", "").strip() or threshold_ratio)
-        if 0 < env_ratio <= 1:
-            threshold_ratio = env_ratio
-        else:
-            logger.debug("Ignoring invalid VF_MEM_THRESHOLD_RATIO=%s (must be 0 < x <= 1)", env_ratio)
-    with contextlib.suppress(TypeError, ValueError, OverflowError):
-        _abs_str = os.getenv("VF_MEM_THRESHOLD_ABS_MB", "").strip()
-        env_abs_mb = float(_abs_str or (threshold_absolute / 1024 / 1024))
-        if env_abs_mb > 0 and math.isfinite(env_abs_mb):
-            threshold_absolute = int(env_abs_mb * 1024 * 1024)
-        else:
-            logger.debug("Ignoring invalid VF_MEM_THRESHOLD_ABS_MB=%s", _abs_str)
     if estimated_size > available_memory * threshold_ratio:
         warnings.warn(
             f"High memory usage warning: Requesting data for {num_tickers} symbols "
@@ -281,7 +277,7 @@ def check_memory_safety(
             UserWarning,
             stacklevel=3,
         )
-    elif estimated_size > threshold_absolute:
+    elif threshold_absolute is not None and estimated_size > threshold_absolute:
         warnings.warn(
             f"Large data request warning: Requesting data for {num_tickers} symbols "
             f"(est. {estimated_size / 1024 / 1024 / 1024:.1f} GB). "

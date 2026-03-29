@@ -13,6 +13,7 @@ import polars as pl
 
 from vertex_forager.clients.base import BaseClient
 from vertex_forager.constants import PAGES_UNIT, RESERVED_PIPELINE_KEYS, TICKERS_UNIT
+from vertex_forager.core.config import AdvancedConfig, DownshiftConfig, HTTPConfig, RetryConfig
 from vertex_forager.core.types import JSONValue, SharadarDataset
 from vertex_forager.exceptions import InputError
 from vertex_forager.logging.constants import (
@@ -36,7 +37,6 @@ from vertex_forager.schema.mapper import SchemaMapper
 from vertex_forager.utils import (
     Spinner,
     run_sync_compat,
-    validate_memory_usage,
     validate_tickers,
 )
 
@@ -117,14 +117,44 @@ class SharadarClient(BaseClient[SharadarDataset]):
         *,
         api_key: str,
         rate_limit: int,
-        **kwargs: object,
+        metrics_enabled: bool | None = None,
+        structured_logs: bool | None = None,
+        log_verbose: bool | None = None,
+        dlq_enabled: bool | None = None,
+        pagination_max_burst: int | None = None,
+        retry: RetryConfig | dict[str, Any] | None = None,
+        downshift: DownshiftConfig | dict[str, Any] | None = None,
+        concurrency: int | None = None,
+        flush_threshold_rows: int | None = None,
+        writer_chunk_rows: int | None = None,
+        writer_concurrency: int | None = None,
+        persist_run_history: bool | None = None,
+        http_timeout_s: float | None = None,
+        limits: HTTPConfig | dict[str, Any] | None = None,
+        advanced: AdvancedConfig | dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> None:
         """Initialize the Sharadar client.
 
         Args:
             api_key: Valid API key for the provider.
             rate_limit: Requests per minute (int).
-            **kwargs: Additional configuration parameters for EngineConfig.
+            metrics_enabled: Enables metrics emission when True.
+            structured_logs: Enables structured stage logs when True.
+            log_verbose: Promotes structured logs to INFO when True.
+            dlq_enabled: Enables DLQ spooling on persistence failures.
+            pagination_max_burst: Pagination fairness burst cap.
+            retry: Grouped retry policy configuration.
+            downshift: Grouped adaptive downshift policy configuration.
+            concurrency: Explicit fetch concurrency limit.
+            flush_threshold_rows: Buffered row threshold before flush begins.
+            writer_chunk_rows: Transitional write chunk-size tuning.
+            writer_concurrency: Transitional writer worker count tuning.
+            persist_run_history: Transitional run-history persistence toggle.
+            http_timeout_s: HTTP request timeout in seconds.
+            limits: Grouped HTTP connection-pool configuration.
+            advanced: Grouped advanced and transitional settings.
+            **kwargs: Legacy compatibility kwargs still normalized into internal config.
         """
         if not isinstance(api_key, str):
             raise InputError("Sharadar API Key must be a string")
@@ -135,6 +165,21 @@ class SharadarClient(BaseClient[SharadarDataset]):
         super().__init__(
             api_key=api_key,
             rate_limit=rate_limit,
+            metrics_enabled=metrics_enabled,
+            structured_logs=structured_logs,
+            log_verbose=log_verbose,
+            dlq_enabled=dlq_enabled,
+            pagination_max_burst=pagination_max_burst,
+            retry=retry,
+            downshift=downshift,
+            concurrency=concurrency,
+            flush_threshold_rows=flush_threshold_rows,
+            writer_chunk_rows=writer_chunk_rows,
+            writer_concurrency=writer_concurrency,
+            persist_run_history=persist_run_history,
+            http_timeout_s=http_timeout_s,
+            limits=limits,
+            advanced=advanced,
             **kwargs,
         )
 
@@ -754,7 +799,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             self._validate_tickers(symbols)
 
         bytes_per_item = self.BYTES_PER_TICKER_METADATA if config.dataset == "tickers" else self.BYTES_PER_TICKER_FULL
-        validate_memory_usage(
+        self.validate_memory_usage(
             symbols=config.symbols,
             connect_db=config.connect_db,
             bytes_per_item=bytes_per_item,
@@ -765,9 +810,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             logger.info(LOG_META_CACHE_MISS.format(prefix=CLIENT_LOG_PREFIX))
             try:
                 spinner_ctx = (
-                    Spinner("Prefetching metadata for smart batching...")
-                    if config.show_progress
-                    else nullcontext()
+                    Spinner("Prefetching metadata for smart batching...") if config.show_progress else nullcontext()
                 )
                 with spinner_ctx:
                     meta_result = await self._get_ticker_info_impl(

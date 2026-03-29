@@ -3,17 +3,27 @@ from __future__ import annotations
 from abc import ABC
 import asyncio
 from contextlib import AsyncExitStack, asynccontextmanager, nullcontext
+from dataclasses import dataclass
 from functools import partial
 import logging
 import time
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
+import warnings
 
 from tqdm.auto import tqdm
 
-from vertex_forager.core.config import EngineConfig, RunResult
+from vertex_forager.constants import FLUSH_THRESHOLD_ROWS, HTTP_TIMEOUT_S
+from vertex_forager.core.config import (
+    AdvancedConfig,
+    DownshiftConfig,
+    HTTPConfig,
+    ResolvedClientConfig,
+    RetryConfig,
+    RunResult,
+)
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor as _HttpExecutor
-from vertex_forager.core.http import default_async_client
+from vertex_forager.core.http import build_async_client, default_async_client
 from vertex_forager.core.pipeline import VertexForager as _VertexForager
 from vertex_forager.core.types import JSONValue, SharadarDataset, YFinanceDataset
 from vertex_forager.schema.registry import get_table_schema
@@ -21,8 +31,12 @@ from vertex_forager.utils import (
     Spinner,
     create_pbar_updater,
     env_bool,
+    env_float,
     env_int,
     sanitize_field,
+)
+from vertex_forager.utils import (
+    validate_memory_usage as validate_memory_usage_impl,
 )
 from vertex_forager.writers import create_writer
 
@@ -46,6 +60,323 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=SharadarDataset | YFinanceDataset | str)
 
 
+def _warn_deprecated(message: str) -> None:
+    warnings.warn(message, DeprecationWarning, stacklevel=4)
+
+
+def _coerce_grouped_config(value: Any, model_cls: type[Any]) -> Any:
+    if value is None:
+        return None
+    if isinstance(value, model_cls):
+        return value
+    if isinstance(value, dict):
+        return model_cls(**value)
+    return model_cls.model_validate(value)
+
+
+@dataclass
+class _NormalizedClientSettings:
+    runtime_config: ResolvedClientConfig
+    http_timeout_s: float
+    http_limits: HTTPConfig
+    memory_threshold_ratio: float
+    memory_threshold_absolute: int | None
+
+
+def _apply_legacy_downshift_kwargs(
+    downshift: DownshiftConfig,
+    config_params: dict[str, Any],
+) -> DownshiftConfig:
+    legacy_downshift_map = {
+        "enabled": "downshift_enabled",
+        "window_s": "downshift_window_s",
+        "error_rate_threshold": "error_rate_threshold",
+        "rpm_floor": "rpm_floor",
+        "recovery_step": "recovery_step",
+        "healthy_window_s": "healthy_window_s",
+    }
+    legacy_values = {
+        field: config_params.pop(legacy_key)
+        for field, legacy_key in legacy_downshift_map.items()
+        if legacy_key in config_params
+    }
+    if not legacy_values:
+        return downshift
+    _warn_deprecated("Flat downshift kwargs are deprecated; pass downshift=DownshiftConfig(...) instead.")
+    merged = downshift.model_dump()
+    merged.update(legacy_values)
+    return DownshiftConfig(**merged)
+
+
+def _apply_legacy_advanced_kwargs(
+    advanced: AdvancedConfig,
+    config_params: dict[str, Any],
+) -> AdvancedConfig:
+    legacy_keys = (
+        "dlq_tmp_cleanup_on_error",
+        "dlq_tmp_periodic_cleanup",
+        "dlq_tmp_retention_s",
+        "tracer",
+        "otel_enabled",
+        "mem_threshold_ratio",
+        "mem_threshold_abs_mb",
+    )
+    legacy_values = {key: config_params.pop(key) for key in legacy_keys if key in config_params}
+    if not legacy_values:
+        return advanced
+    _warn_deprecated("Flat advanced kwargs are deprecated; pass advanced=AdvancedConfig(...) instead.")
+    merged = advanced.model_dump()
+    merged.update(legacy_values)
+    return AdvancedConfig(**merged)
+
+
+def _resolve_env_behavior_backfills(
+    *,
+    metrics_enabled: bool | None,
+    structured_logs: bool | None,
+    log_verbose: bool | None,
+    concurrency: int | None,
+    flush_threshold_rows: int | None,
+) -> tuple[bool | None, bool | None, bool | None, int | None, int | None]:
+    if metrics_enabled is None:
+        env_metrics = env_bool("VF_METRICS_ENABLED")
+        if env_metrics is not None:
+            _warn_deprecated("VF_METRICS_ENABLED is deprecated; pass metrics_enabled=... instead.")
+            metrics_enabled = env_metrics
+    if structured_logs is None:
+        env_structured_logs = env_bool("VF_STRUCTURED_LOGS")
+        if env_structured_logs is not None:
+            _warn_deprecated("VF_STRUCTURED_LOGS is deprecated; pass structured_logs=... instead.")
+            structured_logs = env_structured_logs
+    if log_verbose is None:
+        env_log_verbose = env_bool("VF_LOG_VERBOSE")
+        if env_log_verbose is not None:
+            _warn_deprecated("VF_LOG_VERBOSE is deprecated; pass log_verbose=... instead.")
+            log_verbose = env_log_verbose
+    if concurrency is None:
+        env_concurrency = env_int("VF_CONCURRENCY")
+        if env_concurrency is not None and env_concurrency > 0:
+            _warn_deprecated("VF_CONCURRENCY is deprecated; pass concurrency=... instead.")
+            concurrency = env_concurrency
+    if flush_threshold_rows is None:
+        env_flush_threshold_rows = env_int("VF_FLUSH_THRESHOLD_ROWS")
+        if env_flush_threshold_rows is not None and env_flush_threshold_rows > 0:
+            _warn_deprecated("VF_FLUSH_THRESHOLD_ROWS is deprecated; pass flush_threshold_rows=... instead.")
+            flush_threshold_rows = env_flush_threshold_rows
+    return metrics_enabled, structured_logs, log_verbose, concurrency, flush_threshold_rows
+
+
+def _resolve_env_transport_backfills(
+    *,
+    http_timeout_s: float | None,
+    limits: HTTPConfig | dict[str, Any] | None,
+    limits_config: HTTPConfig,
+) -> tuple[float | None, HTTPConfig]:
+    if http_timeout_s is None:
+        env_http_timeout_s = env_float("VF_HTTP_TIMEOUT_S")
+        if env_http_timeout_s is not None and env_http_timeout_s > 0:
+            _warn_deprecated("VF_HTTP_TIMEOUT_S is deprecated; pass http_timeout_s=... instead.")
+            http_timeout_s = env_http_timeout_s
+    env_max_keepalive = env_int("VF_HTTP_MAX_KEEPALIVE")
+    env_max_connections = env_int("VF_HTTP_MAX_CONNECTIONS")
+    if limits is None and (
+        (env_max_keepalive is not None and env_max_keepalive > 0)
+        or (env_max_connections is not None and env_max_connections > 0)
+    ):
+        _warn_deprecated(
+            "VF_HTTP_MAX_KEEPALIVE and VF_HTTP_MAX_CONNECTIONS are deprecated; pass limits=HTTPConfig(...) instead."
+        )
+        limits_config = limits_config.model_copy(
+            update={
+                "max_keepalive_connections": env_max_keepalive
+                if env_max_keepalive is not None and env_max_keepalive > 0
+                else limits_config.max_keepalive_connections,
+                "max_connections": env_max_connections
+                if env_max_connections is not None and env_max_connections > 0
+                else limits_config.max_connections,
+            }
+        )
+    return http_timeout_s, limits_config
+
+
+def _resolve_env_advanced_backfills(
+    *,
+    advanced: AdvancedConfig | dict[str, Any] | None,
+    advanced_config: AdvancedConfig,
+) -> AdvancedConfig:
+    if advanced is None and advanced_config.otel_enabled is None:
+        env_otel_enabled = env_bool("VF_OTEL_ENABLED")
+        if env_otel_enabled is not None:
+            _warn_deprecated("VF_OTEL_ENABLED is deprecated; pass advanced=AdvancedConfig(otel_enabled=...) instead.")
+            advanced_config = advanced_config.model_copy(update={"otel_enabled": env_otel_enabled})
+    if advanced is None:
+        env_mem_threshold_ratio = env_float("VF_MEM_THRESHOLD_RATIO")
+        if env_mem_threshold_ratio is not None and 0 < env_mem_threshold_ratio <= 1:
+            _warn_deprecated(
+                "VF_MEM_THRESHOLD_RATIO is deprecated; pass advanced=AdvancedConfig(mem_threshold_ratio=...) instead."
+            )
+            advanced_config = advanced_config.model_copy(update={"mem_threshold_ratio": env_mem_threshold_ratio})
+        env_mem_threshold_abs_mb = env_int("VF_MEM_THRESHOLD_ABS_MB")
+        if env_mem_threshold_abs_mb is not None and env_mem_threshold_abs_mb > 0:
+            _warn_deprecated(
+                "VF_MEM_THRESHOLD_ABS_MB is deprecated; pass advanced=AdvancedConfig(mem_threshold_abs_mb=...) instead."
+            )
+            advanced_config = advanced_config.model_copy(update={"mem_threshold_abs_mb": env_mem_threshold_abs_mb})
+    return advanced_config
+
+
+def _resolve_env_backfills(
+    *,
+    metrics_enabled: bool | None,
+    structured_logs: bool | None,
+    log_verbose: bool | None,
+    concurrency: int | None,
+    flush_threshold_rows: int | None,
+    http_timeout_s: float | None,
+    limits: HTTPConfig | dict[str, Any] | None,
+    advanced: AdvancedConfig | dict[str, Any] | None,
+    advanced_config: AdvancedConfig,
+    limits_config: HTTPConfig,
+) -> tuple[bool | None, bool | None, bool | None, int | None, int | None, float | None, HTTPConfig, AdvancedConfig]:
+    (
+        metrics_enabled,
+        structured_logs,
+        log_verbose,
+        concurrency,
+        flush_threshold_rows,
+    ) = _resolve_env_behavior_backfills(
+        metrics_enabled=metrics_enabled,
+        structured_logs=structured_logs,
+        log_verbose=log_verbose,
+        concurrency=concurrency,
+        flush_threshold_rows=flush_threshold_rows,
+    )
+    http_timeout_s, limits_config = _resolve_env_transport_backfills(
+        http_timeout_s=http_timeout_s,
+        limits=limits,
+        limits_config=limits_config,
+    )
+    advanced_config = _resolve_env_advanced_backfills(
+        advanced=advanced,
+        advanced_config=advanced_config,
+    )
+    return (
+        metrics_enabled,
+        structured_logs,
+        log_verbose,
+        concurrency,
+        flush_threshold_rows,
+        http_timeout_s,
+        limits_config,
+        advanced_config,
+    )
+
+
+def _normalize_client_settings(
+    *,
+    rate_limit: int,
+    metrics_enabled: bool | None,
+    structured_logs: bool | None,
+    log_verbose: bool | None,
+    dlq_enabled: bool | None,
+    pagination_max_burst: int | None,
+    retry: RetryConfig | dict[str, Any] | None,
+    downshift: DownshiftConfig | dict[str, Any] | None,
+    concurrency: int | None,
+    flush_threshold_rows: int | None,
+    writer_chunk_rows: int | None,
+    writer_concurrency: int | None,
+    persist_run_history: bool | None,
+    http_timeout_s: float | None,
+    limits: HTTPConfig | dict[str, Any] | None,
+    advanced: AdvancedConfig | dict[str, Any] | None,
+    kwargs: dict[str, Any],
+) -> _NormalizedClientSettings:
+    config_params = kwargs.copy()
+    downshift_config = _apply_legacy_downshift_kwargs(
+        _coerce_grouped_config(downshift, DownshiftConfig) or DownshiftConfig(),
+        config_params,
+    )
+    limits_config = _coerce_grouped_config(limits, HTTPConfig) or HTTPConfig()
+    advanced_config = _apply_legacy_advanced_kwargs(
+        _coerce_grouped_config(advanced, AdvancedConfig) or AdvancedConfig(),
+        config_params,
+    )
+    retry_config = _coerce_grouped_config(retry, RetryConfig) or RetryConfig()
+
+    legacy_persist_run_history = config_params.pop("persist_run_history", None)
+    if legacy_persist_run_history is not None:
+        _warn_deprecated(
+            "persist_run_history is deprecated and scheduled for removal; "
+            "it remains supported only as a compatibility kwarg."
+        )
+        if persist_run_history is None:
+            persist_run_history = bool(legacy_persist_run_history)
+
+    legacy_writer_chunk_rows = config_params.pop("writer_chunk_rows", None)
+    legacy_writer_concurrency = config_params.pop("writer_concurrency", None)
+    if legacy_writer_chunk_rows is not None or legacy_writer_concurrency is not None:
+        _warn_deprecated(
+            "writer_chunk_rows and writer_concurrency are deprecated flat client kwargs "
+            "and remain supported only for compatibility."
+        )
+        if writer_chunk_rows is None:
+            writer_chunk_rows = legacy_writer_chunk_rows
+        if writer_concurrency is None:
+            writer_concurrency = legacy_writer_concurrency
+
+    (
+        metrics_enabled,
+        structured_logs,
+        log_verbose,
+        concurrency,
+        flush_threshold_rows,
+        http_timeout_s,
+        limits_config,
+        advanced_config,
+    ) = _resolve_env_backfills(
+        metrics_enabled=metrics_enabled,
+        structured_logs=structured_logs,
+        log_verbose=log_verbose,
+        concurrency=concurrency,
+        flush_threshold_rows=flush_threshold_rows,
+        http_timeout_s=http_timeout_s,
+        limits=limits,
+        advanced=advanced,
+        advanced_config=advanced_config,
+        limits_config=limits_config,
+    )
+
+    runtime_config = ResolvedClientConfig(
+        requests_per_minute=rate_limit,
+        metrics_enabled=bool(metrics_enabled) if metrics_enabled is not None else False,
+        structured_logs=bool(structured_logs) if structured_logs is not None else False,
+        log_verbose=bool(log_verbose) if log_verbose is not None else False,
+        dlq_enabled=bool(dlq_enabled) if dlq_enabled is not None else True,
+        pagination_max_burst=pagination_max_burst,
+        retry=retry_config,
+        downshift=downshift_config,
+        concurrency=concurrency,
+        flush_threshold_rows=flush_threshold_rows if flush_threshold_rows is not None else FLUSH_THRESHOLD_ROWS,
+        writer_chunk_rows=writer_chunk_rows,
+        writer_concurrency=writer_concurrency if writer_concurrency is not None else 1,
+        http_timeout_s=http_timeout_s if http_timeout_s is not None else HTTP_TIMEOUT_S,
+        limits=limits_config,
+        advanced=advanced_config,
+        persist_run_history=True if persist_run_history is None else persist_run_history,
+    )
+
+    return _NormalizedClientSettings(
+        runtime_config=runtime_config,
+        http_timeout_s=runtime_config.http_timeout_s,
+        http_limits=runtime_config.limits,
+        memory_threshold_ratio=runtime_config.advanced.mem_threshold_ratio,
+        memory_threshold_absolute=None
+        if runtime_config.advanced.mem_threshold_abs_mb is None
+        else runtime_config.advanced.mem_threshold_abs_mb * 1024 * 1024,
+    )
+
+
 class BaseClient(ABC, Generic[T]):
     """
     Vendor-agnostic base client abstraction for the Vertex Forager pipeline.
@@ -61,7 +392,7 @@ class BaseClient(ABC, Generic[T]):
        components like Routers, Writers, and Mappers.
     3. **Flow Control**: Initializes the `FlowController` to enforce global rate limits and concurrency
        policies across all pipeline operations.
-    4. **Configuration**: Centralizes engine configuration (`EngineConfig`) handling.
+    4. **Configuration**: Centralizes grouped runtime configuration handling.
 
     Design Principles:
     - **Provider-Agnostic**: Contains NO vendor-specific logic. All vendor details must be injected
@@ -104,6 +435,21 @@ class BaseClient(ABC, Generic[T]):
         *,
         api_key: str | None = None,
         rate_limit: int,
+        metrics_enabled: bool | None = None,
+        structured_logs: bool | None = None,
+        log_verbose: bool | None = None,
+        dlq_enabled: bool | None = None,
+        pagination_max_burst: int | None = None,
+        retry: RetryConfig | dict[str, Any] | None = None,
+        downshift: DownshiftConfig | dict[str, Any] | None = None,
+        concurrency: int | None = None,
+        flush_threshold_rows: int | None = None,
+        writer_chunk_rows: int | None = None,
+        writer_concurrency: int | None = None,
+        persist_run_history: bool | None = None,
+        http_timeout_s: float | None = None,
+        limits: HTTPConfig | dict[str, Any] | None = None,
+        advanced: AdvancedConfig | dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialize the base client infrastructure.
@@ -111,45 +457,88 @@ class BaseClient(ABC, Generic[T]):
         Args:
             api_key: API key for the provider (optional, depends on provider).
             rate_limit: Maximum requests per minute (RPM) allowed for this client.
-            **kwargs: Additional configuration parameters passed directly to `EngineConfig`.
+            metrics_enabled: Enables metrics emission when True.
+            structured_logs: Enables structured stage logs when True.
+            log_verbose: Promotes structured logs to INFO when True.
+            dlq_enabled: Enables DLQ spooling on persistence failures.
+            pagination_max_burst: Pagination fairness burst cap.
+            retry: Grouped retry policy configuration.
+            downshift: Grouped adaptive downshift policy configuration.
+            concurrency: Explicit fetch concurrency limit.
+            flush_threshold_rows: Buffered row threshold before flush begins.
+            writer_chunk_rows: Transitional write chunk-size tuning.
+            writer_concurrency: Transitional writer worker count tuning.
+            persist_run_history: Transitional run-history persistence toggle.
+            http_timeout_s: HTTP request timeout in seconds.
+            limits: Grouped HTTP connection-pool configuration.
+            advanced: Grouped advanced and transitional settings.
+            **kwargs: Legacy compatibility kwargs still normalized into internal config.
         """
         self.api_key = api_key
+        normalized = _normalize_client_settings(
+            rate_limit=rate_limit,
+            metrics_enabled=metrics_enabled,
+            structured_logs=structured_logs,
+            log_verbose=log_verbose,
+            dlq_enabled=dlq_enabled,
+            pagination_max_burst=pagination_max_burst,
+            retry=retry,
+            downshift=downshift,
+            concurrency=concurrency,
+            flush_threshold_rows=flush_threshold_rows,
+            writer_chunk_rows=writer_chunk_rows,
+            writer_concurrency=writer_concurrency,
+            persist_run_history=persist_run_history,
+            http_timeout_s=http_timeout_s,
+            limits=limits,
+            advanced=advanced,
+            kwargs=kwargs,
+        )
 
-        # Enforce rate_limit into EngineConfig
-        config_params = kwargs.copy()
-        config_params["requests_per_minute"] = rate_limit
-
-        if ("metrics_enabled" not in config_params) or (config_params.get("metrics_enabled") is None):
-            config_params["metrics_enabled"] = env_bool("VF_METRICS_ENABLED")
-        if ("structured_logs" not in config_params) or (config_params.get("structured_logs") is None):
-            config_params["structured_logs"] = env_bool("VF_STRUCTURED_LOGS")
-        if ("log_verbose" not in config_params) or (config_params.get("log_verbose") is None):
-            config_params["log_verbose"] = env_bool("VF_LOG_VERBOSE")
-        if ("concurrency" not in config_params) or (config_params.get("concurrency") is None):
-            ci = env_int("VF_CONCURRENCY")
-            if ci is not None and ci > 0:
-                config_params["concurrency"] = ci
-        if ("flush_threshold_rows" not in config_params) or (config_params.get("flush_threshold_rows") is None):
-            ft = env_int("VF_FLUSH_THRESHOLD_ROWS")
-            if ft is not None and ft > 0:
-                config_params["flush_threshold_rows"] = ft
-        self._config = EngineConfig(**config_params)
+        self._config = normalized.runtime_config
         self._structured_logs = bool(self._config.structured_logs)
         self._log_verbose = bool(self._config.log_verbose)
+        self._http_timeout_s = normalized.http_timeout_s
+        self._http_limits = normalized.http_limits
+        self._memory_threshold_ratio = normalized.memory_threshold_ratio
+        self._memory_threshold_absolute = normalized.memory_threshold_absolute
 
-        # Initialize FlowController for global rate limiting
         self.controller = FlowController(
             requests_per_minute=self._config.requests_per_minute,
             concurrency_limit=self._config.fetch_concurrency,
-            downshift_enabled=self._config.downshift_enabled,
-            downshift_window_s=self._config.downshift_window_s,
-            error_rate_threshold=self._config.error_rate_threshold,
-            rpm_floor=self._config.rpm_floor,
-            recovery_step=self._config.recovery_step,
-            healthy_window_s=self._config.healthy_window_s,
+            downshift_enabled=self._config.downshift.enabled,
+            downshift_window_s=self._config.downshift.window_s,
+            error_rate_threshold=self._config.downshift.error_rate_threshold,
+            rpm_floor=self._config.downshift.rpm_floor,
+            recovery_step=self._config.downshift.recovery_step,
+            healthy_window_s=self._config.downshift.healthy_window_s,
         )
         self.last_run: RunResult | None = None
         self._client: httpx.AsyncClient | None = None
+
+    def _build_http_client(self) -> httpx.AsyncClient:
+        if self._http_timeout_s == HTTP_TIMEOUT_S and self._http_limits == HTTPConfig():
+            return default_async_client()
+        return build_async_client(
+            timeout_s=self._http_timeout_s,
+            max_keepalive_connections=self._http_limits.max_keepalive_connections,
+            max_connections=self._http_limits.max_connections,
+        )
+
+    def validate_memory_usage(
+        self,
+        *,
+        symbols: list[str] | None,
+        connect_db: str | Path | None,
+        bytes_per_item: int,
+    ) -> None:
+        validate_memory_usage_impl(
+            symbols=symbols,
+            connect_db=connect_db,
+            bytes_per_item=bytes_per_item,
+            threshold_ratio=self._memory_threshold_ratio,
+            threshold_absolute=self._memory_threshold_absolute,
+        )
 
     async def aclose(self) -> None:
         """Asynchronously close the underlying HTTP client to release resources."""
@@ -163,7 +552,7 @@ class BaseClient(ABC, Generic[T]):
         Initializes the shared HTTP client.
         """
         if self._client is None:
-            self._client = default_async_client()
+            self._client = self._build_http_client()
         return self
 
     async def __aexit__(
@@ -179,17 +568,17 @@ class BaseClient(ABC, Generic[T]):
         await self.aclose()
 
     @property
-    def config(self) -> EngineConfig:
-        """Public engine/client configuration.
+    def config(self) -> ResolvedClientConfig:
+        """Resolved internal configuration snapshot.
 
         Returns:
-            EngineConfig: The configuration object governing rate limits,
+            ResolvedClientConfig: The configuration object governing rate limits,
                 concurrency, queue sizes, and thresholds used by this client.
 
         Notes:
             Read-only accessor. Callers should not mutate the returned object
-            in place; prefer constructing a new EngineConfig or using factory
-            helpers to apply changes.
+            in place. Public callers should prefer `create_client(...)` and
+            grouped config inputs rather than constructing this model directly.
         """
         return self._config
 
@@ -347,7 +736,7 @@ class BaseClient(ABC, Generic[T]):
             yield self._client
             return
 
-        client = default_async_client()
+        client = self._build_http_client()
         try:
             self._client = client
             yield client
@@ -474,6 +863,7 @@ class BaseClient(ABC, Generic[T]):
             try:
                 # local import for optionality
                 from vertex_forager.writers.memory import InMemoryBufferWriter as _IMW
+
                 if isinstance(writer, _IMW):
                     writer.set_unique_key(list(schema.unique_key))
             except Exception as e:

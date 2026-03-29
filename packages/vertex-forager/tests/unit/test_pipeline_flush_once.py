@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from vertex_forager.core.config import EngineConfig
+from vertex_forager.core.config import ResolvedClientConfig
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor
 from vertex_forager.core.pipeline import VertexForager
@@ -23,7 +23,7 @@ class _FlushWriter:
 
 @pytest.mark.asyncio
 async def test_try_flush_once_consume_false_sets_flag() -> None:
-    cfg = EngineConfig(requests_per_minute=60, concurrency=1)
+    cfg = ResolvedClientConfig(requests_per_minute=60, concurrency=1)
     ctrl = FlowController(requests_per_minute=60, concurrency_limit=1)
     eng = VertexForager(
         router=None,  # type: ignore[arg-type]
@@ -47,7 +47,7 @@ class _RaisingWriter:
 
 @pytest.mark.asyncio
 async def test_try_flush_once_unsuppressed_raises() -> None:
-    cfg = EngineConfig(requests_per_minute=60, concurrency=1)
+    cfg = ResolvedClientConfig(requests_per_minute=60, concurrency=1)
     ctrl = FlowController(requests_per_minute=60, concurrency_limit=1)
     eng = VertexForager(
         router=None,  # type: ignore[arg-type]
@@ -63,7 +63,7 @@ async def test_try_flush_once_unsuppressed_raises() -> None:
 
 @pytest.mark.asyncio
 async def test_try_flush_once_suppressed_ignores_errors() -> None:
-    cfg = EngineConfig(requests_per_minute=60, concurrency=1)
+    cfg = ResolvedClientConfig(requests_per_minute=60, concurrency=1)
     ctrl = FlowController(requests_per_minute=60, concurrency_limit=1)
     eng = VertexForager(
         router=None,  # type: ignore[arg-type]
@@ -79,7 +79,7 @@ async def test_try_flush_once_suppressed_ignores_errors() -> None:
 
 @pytest.mark.asyncio
 async def test_try_flush_once_consume_true_no_flag() -> None:
-    cfg = EngineConfig(requests_per_minute=60, concurrency=1)
+    cfg = ResolvedClientConfig(requests_per_minute=60, concurrency=1)
     ctrl = FlowController(requests_per_minute=60, concurrency_limit=1)
     w = _FlushWriter()
     eng = VertexForager(

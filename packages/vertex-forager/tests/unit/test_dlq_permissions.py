@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import polars as pl
 import pytest
 
-from vertex_forager.core.config import EngineConfig, FramePacket
+from vertex_forager.core.config import FramePacket, ResolvedClientConfig
 from vertex_forager.core.pipeline import RunResult, VertexForager
 from vertex_forager.writers.base import BaseWriter, WriteResult
 
@@ -33,7 +33,7 @@ async def test_dlq_ipc_file_mode_is_0600(tmp_path, monkeypatch) -> None:
         http=mock_http,
         writer=mock_writer,
         mapper=mock_mapper,
-        config=EngineConfig(requests_per_minute=100),
+        config=ResolvedClientConfig(requests_per_minute=100),
         controller=mock_controller,
     )
 

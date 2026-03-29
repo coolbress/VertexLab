@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, MagicMock
 import polars as pl
 import pytest
 
-from vertex_forager.core.config import EngineConfig, FramePacket
+from vertex_forager.core.config import FramePacket, ResolvedClientConfig
 from vertex_forager.core.pipeline import RunResult, VertexForager
 from vertex_forager.writers.base import BaseWriter, WriteResult
 
@@ -43,7 +43,7 @@ async def test_adaptive_batching_worker_drains_queue_correctly() -> None:
         http=mock_http,
         writer=mock_writer,
         mapper=mock_mapper,
-        config=EngineConfig(requests_per_minute=100),
+        config=ResolvedClientConfig(requests_per_minute=100),
         controller=mock_controller,
     )
 
@@ -113,7 +113,7 @@ async def test_writer_failure_propagates_exception(tmp_path, monkeypatch) -> Non
         http=mock_http,
         writer=mock_writer,
         mapper=mock_mapper,
-        config=EngineConfig(requests_per_minute=100),
+        config=ResolvedClientConfig(requests_per_minute=100),
         controller=mock_controller,
     )
 
@@ -168,7 +168,7 @@ async def test_dlq_spool_and_per_packet_rescue(tmp_path, monkeypatch) -> None:
         http=mock_http,
         writer=mock_writer,
         mapper=mock_mapper,
-        config=EngineConfig(requests_per_minute=100),
+        config=ResolvedClientConfig(requests_per_minute=100),
         controller=mock_controller,
     )
 
@@ -225,7 +225,7 @@ async def test_dlq_summary_after_consecutive_failures(tmp_path, monkeypatch) -> 
         http=mock_http,
         writer=mock_writer,
         mapper=mock_mapper,
-        config=EngineConfig(requests_per_minute=100),
+        config=ResolvedClientConfig(requests_per_minute=100),
         controller=mock_controller,
     )
 
@@ -273,7 +273,7 @@ async def test_dlq_tmp_on_error_cleanup(tmp_path, monkeypatch) -> None:
     mock_mapper = MagicMock()
     mock_controller = MagicMock()
 
-    cfg = EngineConfig(requests_per_minute=100)
+    cfg = ResolvedClientConfig(requests_per_minute=100)
     forager = VertexForager(
         router=mock_router,
         http=mock_http,
@@ -322,7 +322,7 @@ async def test_dlq_tmp_cleanup_on_spool_failure(tmp_path, monkeypatch) -> None:
     mock_mapper = MagicMock()
     mock_controller = MagicMock()
 
-    cfg = EngineConfig(requests_per_minute=100)
+    cfg = ResolvedClientConfig(requests_per_minute=100)
     forager = VertexForager(
         router=mock_router,
         http=mock_http,

@@ -60,7 +60,7 @@ GRADIENT_QUEUE_SIZE_DEFAULT: Final[int] = 4
 GRADIENT_SMOOTHING_DEFAULT: Final[float] = 0.2
 GRADIENT_WINDOW_S: Final[float] = 60.0
 
-# Queue sizing defaults for EngineConfig
+# Queue sizing defaults for the internal resolved client config
 QUEUE_TARGET_RAM_RATIO: Final[float] = 0.05
 PACKET_SIZE_EST_BYTES: Final[int] = 5 * 1024 * 1024
 QUEUE_MIN: Final[int] = 100

@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import polars as pl
 import pytest
 
-from vertex_forager.core.config import EngineConfig, FramePacket, RunResult
+from vertex_forager.core.config import FramePacket, ResolvedClientConfig, RunResult
 from vertex_forager.core.pipeline import VertexForager
 from vertex_forager.exceptions import VertexForagerError
 from vertex_forager.writers.base import BaseWriter, WriteResult
@@ -29,9 +29,7 @@ async def test_chunked_flush_writes_multiple_chunks() -> None:
     mock_mapper = MagicMock()
     mock_controller = MagicMock()
 
-    cfg = EngineConfig(
-        requests_per_minute=100, writer_chunk_rows=10_000, metrics_enabled=True
-    )
+    cfg = ResolvedClientConfig(requests_per_minute=100, writer_chunk_rows=10_000, metrics_enabled=True)
     forager = VertexForager(
         router=mock_router,
         http=mock_http,
@@ -80,9 +78,9 @@ async def test_chunked_flush_writes_multiple_chunks() -> None:
     assert int(hist[1]) == second_rows
 
 
-def test_engine_config_writer_chunk_rows_coercion() -> None:
+def test_runtime_config_writer_chunk_rows_coercion() -> None:
     # Pydantic may coerce at model construction time; explicitly test assert_valid path
-    cfg = EngineConfig(requests_per_minute=60)
+    cfg = ResolvedClientConfig(requests_per_minute=60)
     cfg.writer_chunk_rows = "20000"  # type: ignore[assignment]
     cfg.assert_valid()
     assert isinstance(cfg.writer_chunk_rows, int)
@@ -113,7 +111,7 @@ async def test_chunked_flush_partial_error(tmp_path, monkeypatch) -> None:
     mock_controller = MagicMock()
 
     monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "app"))
-    cfg = EngineConfig(requests_per_minute=100, writer_chunk_rows=10_000)
+    cfg = ResolvedClientConfig(requests_per_minute=100, writer_chunk_rows=10_000)
     forager = VertexForager(
         router=mock_router,
         http=mock_http,
@@ -160,14 +158,14 @@ async def test_chunked_flush_partial_error(tmp_path, monkeypatch) -> None:
     assert any("DLQ=spooled" in e.message and "remaining=2" in e.message for e in result.errors)
 
 
-def test_engine_config_writer_chunk_rows_lower_bound() -> None:
-    cfg = EngineConfig(requests_per_minute=60, writer_chunk_rows=9_999)
+def test_runtime_config_writer_chunk_rows_lower_bound() -> None:
+    cfg = ResolvedClientConfig(requests_per_minute=60, writer_chunk_rows=9_999)
     with pytest.raises(ValueError, match=r".*"):
         cfg.assert_valid()
 
 
-def test_engine_config_writer_concurrency_coercion() -> None:
-    cfg = EngineConfig(requests_per_minute=60)
+def test_runtime_config_writer_concurrency_coercion() -> None:
+    cfg = ResolvedClientConfig(requests_per_minute=60)
     cfg.writer_concurrency = "2"  # type: ignore[assignment]
     cfg.assert_valid()
     assert isinstance(cfg.writer_concurrency, int)
@@ -177,9 +175,9 @@ def test_engine_config_writer_concurrency_coercion() -> None:
         cfg.assert_valid()
 
 
-def test_engine_config_writer_concurrency_lower_bound() -> None:
+def test_runtime_config_writer_concurrency_lower_bound() -> None:
     with pytest.raises(ValueError, match=r".*"):
-        EngineConfig(requests_per_minute=60, writer_concurrency=0)
+        ResolvedClientConfig(requests_per_minute=60, writer_concurrency=0)
 
 
 def test_compute_summary_percentiles_and_counters() -> None:
@@ -188,7 +186,7 @@ def test_compute_summary_percentiles_and_counters() -> None:
     mock_http = MagicMock()
     mock_mapper = MagicMock()
     mock_controller = MagicMock()
-    cfg = EngineConfig(requests_per_minute=60)
+    cfg = ResolvedClientConfig(requests_per_minute=60)
     vf = VertexForager(
         router=mock_router,
         http=mock_http,

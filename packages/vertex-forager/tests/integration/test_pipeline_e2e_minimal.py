@@ -8,11 +8,11 @@ import duckdb
 import polars as pl
 
 from vertex_forager.core.config import (
-    EngineConfig,
     FetchJob,
     FramePacket,
     ParseResult,
     RequestSpec,
+    ResolvedClientConfig,
 )
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor
@@ -94,7 +94,7 @@ def test_e2e_pipeline_with_duckdb(tmp_path) -> None:
             http=HttpExecutor(client=_FakeHttpClient()),
             writer=writer,
             mapper=SchemaMapper(),
-            config=EngineConfig(requests_per_minute=60),
+            config=ResolvedClientConfig(requests_per_minute=60),
             controller=FlowController(requests_per_minute=60, concurrency_limit=4),
         )
         res = asyncio.run(engine.run(dataset="any", symbols=None))

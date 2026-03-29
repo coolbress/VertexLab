@@ -15,7 +15,7 @@ from vertex_forager.core.checkpoint import (
     save_checkpoint,
     save_run_history,
 )
-from vertex_forager.core.config import EngineConfig, RunResult
+from vertex_forager.core.config import ResolvedClientConfig, RunResult
 from vertex_forager.core.errors import RunError
 
 
@@ -177,18 +177,18 @@ def test_run_result_coerces_legacy_string_errors() -> None:
     assert run_result.errors[0].retryable is False
 
 
-def test_engine_config_persist_run_history() -> None:
-    """Test EngineConfig persist_run_history parameter."""
+def test_resolved_client_config_persist_run_history() -> None:
+    """Test ResolvedClientConfig persist_run_history parameter."""
     # Test default value
-    config = EngineConfig(requests_per_minute=60)
+    config = ResolvedClientConfig(requests_per_minute=60)
     assert config.persist_run_history is True
 
     # Test explicit True
-    config = EngineConfig(requests_per_minute=60, persist_run_history=True)
+    config = ResolvedClientConfig(requests_per_minute=60, persist_run_history=True)
     assert config.persist_run_history is True
 
     # Test explicit False
-    config = EngineConfig(requests_per_minute=60, persist_run_history=False)
+    config = ResolvedClientConfig(requests_per_minute=60, persist_run_history=False)
     assert config.persist_run_history is False
 
 

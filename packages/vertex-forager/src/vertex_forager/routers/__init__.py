@@ -14,7 +14,7 @@ from vertex_forager.core.registries import (
 )
 
 if TYPE_CHECKING:
-    from vertex_forager.core.config import EngineConfig
+    from vertex_forager.core.config import ResolvedClientConfig
 
 # from vertex_forager.providers.sharadar.router import SharadarRouter
 # from vertex_forager.providers.yfinance.router import YFinanceRouter
@@ -51,7 +51,7 @@ def create_router(
     provider: str,
     *,
     api_key: str | None,
-    config: EngineConfig,
+    config: ResolvedClientConfig,
     start_date: str | None = None,
     end_date: str | None = None,
     **kwargs: Any,
@@ -62,7 +62,7 @@ def create_router(
     Args:
         provider: The provider identifier (e.g., "sharadar").
         api_key: API key.
-        config: Engine configuration containing rate limits.
+        config: Internal resolved configuration containing effective rate limits.
         start_date: Optional start date filter.
         end_date: Optional end date filter.
         **kwargs: Additional provider-specific configuration.

@@ -10,11 +10,11 @@ import pytest
 
 from vertex_forager.clients.dispatcher import run_pipeline_for
 from vertex_forager.core.config import (
-    EngineConfig,
     FetchJob,
     FramePacket,
     ParseResult,
     RequestSpec,
+    ResolvedClientConfig,
     RunResult,
 )
 from vertex_forager.core.contracts import IMapper, IRouter, IWriter
@@ -65,7 +65,7 @@ class StubMapper(IMapper):
 
 class StubClient:
     def __init__(self) -> None:
-        self._config = EngineConfig(requests_per_minute=60)
+        self._config = ResolvedClientConfig(requests_per_minute=60)
 
         @dataclass
         class StubController:
