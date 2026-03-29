@@ -325,7 +325,7 @@ def _normalize_client_settings(
             "it remains supported only as a compatibility kwarg."
         )
         if persist_run_history is None:
-            persist_run_history = bool(legacy_persist_run_history)
+            persist_run_history = legacy_persist_run_history
 
     legacy_writer_chunk_rows = config_params.pop("writer_chunk_rows", None)
     legacy_writer_concurrency = config_params.pop("writer_concurrency", None)

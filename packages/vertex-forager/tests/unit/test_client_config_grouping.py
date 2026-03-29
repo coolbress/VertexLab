@@ -79,6 +79,18 @@ def test_legacy_flat_kwargs_emit_deprecation_and_normalize() -> None:
     assert client.config.otel_enabled is True
 
 
+def test_legacy_persist_run_history_string_false_normalizes_correctly() -> None:
+    with pytest.deprecated_call():
+        client = create_client(
+            provider="yfinance",
+            rate_limit=60,
+            persist_run_history="false",  # type: ignore[arg-type]
+        )
+
+    assert isinstance(client, YFinanceClient)
+    assert client.config.persist_run_history is False
+
+
 def test_deprecated_env_vars_still_apply_during_migration(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("VF_CONCURRENCY", "7")
     monkeypatch.setenv("VF_FLUSH_THRESHOLD_ROWS", "12000")
