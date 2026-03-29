@@ -8,6 +8,7 @@ DIP Note:
 from __future__ import annotations
 
 from typing import Any
+import warnings
 
 from vertex_forager.core.registries import (
     RouterRegistration,
@@ -48,7 +49,8 @@ def create_router(
     provider: str,
     *,
     api_key: str | None,
-    rate_limit: int,
+    rate_limit: int | None = None,
+    config: Any | None = None,
     start_date: str | None = None,
     end_date: str | None = None,
     **kwargs: Any,
@@ -60,6 +62,8 @@ def create_router(
         provider: The provider identifier (e.g., "sharadar").
         api_key: API key.
         rate_limit: Effective requests-per-minute setting for the router.
+        config: Deprecated compatibility config object or mapping carrying
+            ``requests_per_minute``.
         start_date: Optional start date filter.
         end_date: Optional end date filter.
         **kwargs: Additional provider-specific configuration.
@@ -70,6 +74,21 @@ def create_router(
     Raises:
         KeyError: If provider is unknown.
     """
+    if config is not None:
+        warnings.warn(
+            "create_router(..., config=...) is deprecated; pass rate_limit=... instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        if rate_limit is None:
+            if isinstance(config, dict):
+                rate_limit = config.get("requests_per_minute")
+            else:
+                rate_limit = getattr(config, "requests_per_minute", None)
+
+    if rate_limit is None:
+        raise ValueError("create_router requires rate_limit or deprecated config.requests_per_minute")
+
     registration = router_registry.get(provider)
 
     # We pass explicit arguments that match the RouterFactory protocol/signature

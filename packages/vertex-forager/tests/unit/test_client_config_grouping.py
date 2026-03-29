@@ -104,15 +104,9 @@ def test_deprecated_env_vars_still_apply_during_migration(monkeypatch: pytest.Mo
 
 
 def test_missing_env_vars_do_not_trigger_backfill_warnings(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in (
-        "VF_METRICS_ENABLED",
-        "VF_STRUCTURED_LOGS",
-        "VF_LOG_VERBOSE",
-        "VF_CONCURRENCY",
-        "VF_FLUSH_THRESHOLD_ROWS",
-        "VF_OTEL_ENABLED",
-    ):
-        monkeypatch.delenv(name, raising=False)
+    for name in list(base_mod.os.environ):
+        if name.startswith("VF_"):
+            monkeypatch.delenv(name, raising=False)
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -152,3 +146,12 @@ def test_build_http_client_uses_normalized_defaults_without_rereading_env(monkey
         "max_keepalive_connections": HTTPConfig().max_keepalive_connections,
         "max_connections": HTTPConfig().max_connections,
     }
+
+
+def test_invalid_cross_field_settings_fail_during_client_creation() -> None:
+    with pytest.raises(ValueError, match="rpm_floor must be <= requests_per_minute"):
+        create_client(
+            provider="yfinance",
+            rate_limit=60,
+            downshift=DownshiftConfig(rpm_floor=100),
+        )

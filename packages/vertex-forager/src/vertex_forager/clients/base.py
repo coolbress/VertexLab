@@ -379,6 +379,7 @@ def _normalize_client_settings(
         advanced=advanced_config,
         persist_run_history=True if persist_run_history is None else persist_run_history,
     )
+    runtime_config.assert_valid()
 
     return _NormalizedClientSettings(
         runtime_config=runtime_config,
