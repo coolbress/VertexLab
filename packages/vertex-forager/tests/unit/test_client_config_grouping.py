@@ -91,6 +91,25 @@ def test_legacy_persist_run_history_string_false_normalizes_correctly() -> None:
     assert client.config.persist_run_history is False
 
 
+def test_string_flag_inputs_normalize_correctly() -> None:
+    client = create_client(
+        provider="yfinance",
+        rate_limit=60,
+        metrics_enabled="false",  # type: ignore[arg-type]
+        structured_logs="0",  # type: ignore[arg-type]
+        log_verbose="no",  # type: ignore[arg-type]
+        dlq_enabled="true",  # type: ignore[arg-type]
+        persist_run_history="1",  # type: ignore[arg-type]
+    )
+
+    assert isinstance(client, YFinanceClient)
+    assert client.config.metrics_enabled is False
+    assert client.config.structured_logs is False
+    assert client.config.log_verbose is False
+    assert client.config.dlq_enabled is True
+    assert client.config.persist_run_history is True
+
+
 def test_deprecated_env_vars_still_apply_during_migration(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("VF_CONCURRENCY", "7")
     monkeypatch.setenv("VF_FLUSH_THRESHOLD_ROWS", "12000")

@@ -84,6 +84,20 @@ def default_async_client() -> httpx.AsyncClient:
     return _default_async_client()
 
 
+def _parse_flag(value: Any, default: bool) -> Any:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes"}:
+            return True
+        if normalized in {"false", "0", "no"}:
+            return False
+    return value
+
+
 @dataclass
 class _NormalizedClientSettings:
     runtime_config: ResolvedClientConfig
@@ -363,10 +377,10 @@ def _normalize_client_settings(
 
     runtime_config = ResolvedClientConfig(
         requests_per_minute=rate_limit,
-        metrics_enabled=bool(metrics_enabled) if metrics_enabled is not None else False,
-        structured_logs=bool(structured_logs) if structured_logs is not None else False,
-        log_verbose=bool(log_verbose) if log_verbose is not None else False,
-        dlq_enabled=bool(dlq_enabled) if dlq_enabled is not None else True,
+        metrics_enabled=_parse_flag(metrics_enabled, False),
+        structured_logs=_parse_flag(structured_logs, False),
+        log_verbose=_parse_flag(log_verbose, False),
+        dlq_enabled=_parse_flag(dlq_enabled, True),
         pagination_max_burst=pagination_max_burst,
         retry=retry_config,
         downshift=downshift_config,
@@ -377,7 +391,7 @@ def _normalize_client_settings(
         http_timeout_s=http_timeout_s if http_timeout_s is not None else HTTP_TIMEOUT_S,
         limits=limits_config,
         advanced=advanced_config,
-        persist_run_history=True if persist_run_history is None else persist_run_history,
+        persist_run_history=_parse_flag(persist_run_history, True),
     )
     runtime_config.assert_valid()
 
