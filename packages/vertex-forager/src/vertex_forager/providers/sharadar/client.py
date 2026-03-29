@@ -903,7 +903,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
                 router = create_router(
                     "sharadar",
                     api_key=cast("str", self.api_key),
-                    config=self._config,
+                    rate_limit=self._config.requests_per_minute,
                     start_date=config.start_date,
                     end_date=config.end_date,
                     ticker_metadata=self._metadata_cache,

@@ -7,14 +7,11 @@ DIP Note:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from vertex_forager.core.registries import (
     RouterRegistration,
 )
-
-if TYPE_CHECKING:
-    from vertex_forager.core.config import ResolvedClientConfig
 
 # from vertex_forager.providers.sharadar.router import SharadarRouter
 # from vertex_forager.providers.yfinance.router import YFinanceRouter
@@ -51,7 +48,7 @@ def create_router(
     provider: str,
     *,
     api_key: str | None,
-    config: ResolvedClientConfig,
+    rate_limit: int,
     start_date: str | None = None,
     end_date: str | None = None,
     **kwargs: Any,
@@ -62,7 +59,7 @@ def create_router(
     Args:
         provider: The provider identifier (e.g., "sharadar").
         api_key: API key.
-        config: Internal resolved configuration containing effective rate limits.
+        rate_limit: Effective requests-per-minute setting for the router.
         start_date: Optional start date filter.
         end_date: Optional end date filter.
         **kwargs: Additional provider-specific configuration.
@@ -82,7 +79,7 @@ def create_router(
         raise ValueError("Sharadar router requires a non-empty api_key")
     return registration.factory(
         api_key=api_key,
-        rate_limit=config.requests_per_minute,
+        rate_limit=rate_limit,
         start_date=start_date,
         end_date=end_date,
         **kwargs,

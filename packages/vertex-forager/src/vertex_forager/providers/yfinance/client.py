@@ -777,7 +777,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
                 router = create_router(
                     "yfinance",
                     api_key=self.api_key or "",
-                    config=self._config,
+                    rate_limit=self._config.requests_per_minute,
                     start_date=start_date,
                     end_date=end_date,
                     **{k: v for k, v in kwargs.items() if k in {PRICE_BATCH_SIZE_KEY}},

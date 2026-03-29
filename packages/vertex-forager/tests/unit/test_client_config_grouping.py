@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import importlib.util
+import warnings
+
 import pytest
 
 from vertex_forager import AdvancedConfig, DownshiftConfig, HTTPConfig, RetryConfig, create_client
+import vertex_forager.clients.base as base_mod
+from vertex_forager.constants import HTTP_TIMEOUT_S
 
-try:
-    from vertex_forager.providers.yfinance.client import YFinanceClient
-except ImportError:
+if importlib.util.find_spec("yfinance") is None:
     YFinanceClient = None
+else:
+    from vertex_forager.providers.yfinance.client import YFinanceClient
 
 pytestmark = pytest.mark.skipif(
     YFinanceClient is None,
@@ -96,3 +101,54 @@ def test_deprecated_env_vars_still_apply_during_migration(monkeypatch: pytest.Mo
     assert client._http_limits.max_keepalive_connections == 12
     assert client._memory_threshold_ratio == 0.4
     assert client._memory_threshold_absolute == 2048 * 1024 * 1024
+
+
+def test_missing_env_vars_do_not_trigger_backfill_warnings(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in (
+        "VF_METRICS_ENABLED",
+        "VF_STRUCTURED_LOGS",
+        "VF_LOG_VERBOSE",
+        "VF_CONCURRENCY",
+        "VF_FLUSH_THRESHOLD_ROWS",
+        "VF_OTEL_ENABLED",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        client = create_client(provider="yfinance", rate_limit=60)
+
+    assert isinstance(client, YFinanceClient)
+    assert not any(issubclass(w.category, DeprecationWarning) for w in caught)
+
+
+def test_build_http_client_uses_normalized_defaults_without_rereading_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("VF_HTTP_TIMEOUT_S", "99")
+    monkeypatch.setenv("VF_HTTP_MAX_CONNECTIONS", "321")
+    monkeypatch.setenv("VF_HTTP_MAX_KEEPALIVE", "123")
+
+    captured: dict[str, float | int] = {}
+
+    def _fake_build_async_client(*, timeout_s: float, max_keepalive_connections: int, max_connections: int):
+        captured["timeout_s"] = timeout_s
+        captured["max_keepalive_connections"] = max_keepalive_connections
+        captured["max_connections"] = max_connections
+        return object()
+
+    monkeypatch.setattr(base_mod, "build_async_client", _fake_build_async_client)
+
+    client = create_client(
+        provider="yfinance",
+        rate_limit=60,
+        http_timeout_s=HTTP_TIMEOUT_S,
+        limits=HTTPConfig(),
+    )
+
+    built = client._build_http_client()
+
+    assert built is not None
+    assert captured == {
+        "timeout_s": HTTP_TIMEOUT_S,
+        "max_keepalive_connections": HTTPConfig().max_keepalive_connections,
+        "max_connections": HTTPConfig().max_connections,
+    }

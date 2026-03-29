@@ -92,6 +92,8 @@ class DownshiftConfig(BaseModel):
     recovery_step: int = Field(default=5, ge=1)
     healthy_window_s: int = Field(default=60, ge=1)
 
+    model_config = {"extra": "forbid"}
+
 
 class HTTPConfig(BaseModel):
     """HTTP connection-pool settings exposed as a grouped public config.
@@ -103,6 +105,8 @@ class HTTPConfig(BaseModel):
 
     max_connections: int = Field(default=200, ge=1)
     max_keepalive_connections: int = Field(default=100, ge=1)
+
+    model_config = {"extra": "forbid"}
 
 
 class AdvancedConfig(BaseModel):
@@ -126,7 +130,7 @@ class AdvancedConfig(BaseModel):
     mem_threshold_ratio: float = Field(default=0.7, gt=0.0, le=1.0)
     mem_threshold_abs_mb: int | None = Field(default=4096, ge=1)
 
-    model_config = {"arbitrary_types_allowed": True}
+    model_config = {"arbitrary_types_allowed": True, "extra": "forbid"}
 
 
 class HttpMethod(str, Enum):

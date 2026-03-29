@@ -6,6 +6,7 @@ from contextlib import AsyncExitStack, asynccontextmanager, nullcontext
 from dataclasses import dataclass
 from functools import partial
 import logging
+import os
 import time
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 import warnings
@@ -23,7 +24,8 @@ from vertex_forager.core.config import (
 )
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor as _HttpExecutor
-from vertex_forager.core.http import build_async_client, default_async_client
+from vertex_forager.core.http import build_async_client
+from vertex_forager.core.http import default_async_client as _default_async_client
 from vertex_forager.core.pipeline import VertexForager as _VertexForager
 from vertex_forager.core.types import JSONValue, SharadarDataset, YFinanceDataset
 from vertex_forager.schema.registry import get_table_schema
@@ -72,6 +74,14 @@ def _coerce_grouped_config(value: Any, model_cls: type[Any]) -> Any:
     if isinstance(value, dict):
         return model_cls(**value)
     return model_cls.model_validate(value)
+
+
+def _env_var_present(name: str) -> bool:
+    return name in os.environ
+
+
+def default_async_client() -> httpx.AsyncClient:
+    return _default_async_client()
 
 
 @dataclass
@@ -140,27 +150,31 @@ def _resolve_env_behavior_backfills(
 ) -> tuple[bool | None, bool | None, bool | None, int | None, int | None]:
     if metrics_enabled is None:
         env_metrics = env_bool("VF_METRICS_ENABLED")
-        if env_metrics is not None:
+        if _env_var_present("VF_METRICS_ENABLED"):
             _warn_deprecated("VF_METRICS_ENABLED is deprecated; pass metrics_enabled=... instead.")
             metrics_enabled = env_metrics
     if structured_logs is None:
         env_structured_logs = env_bool("VF_STRUCTURED_LOGS")
-        if env_structured_logs is not None:
+        if _env_var_present("VF_STRUCTURED_LOGS"):
             _warn_deprecated("VF_STRUCTURED_LOGS is deprecated; pass structured_logs=... instead.")
             structured_logs = env_structured_logs
     if log_verbose is None:
         env_log_verbose = env_bool("VF_LOG_VERBOSE")
-        if env_log_verbose is not None:
+        if _env_var_present("VF_LOG_VERBOSE"):
             _warn_deprecated("VF_LOG_VERBOSE is deprecated; pass log_verbose=... instead.")
             log_verbose = env_log_verbose
     if concurrency is None:
         env_concurrency = env_int("VF_CONCURRENCY")
-        if env_concurrency is not None and env_concurrency > 0:
+        if _env_var_present("VF_CONCURRENCY") and env_concurrency is not None and env_concurrency > 0:
             _warn_deprecated("VF_CONCURRENCY is deprecated; pass concurrency=... instead.")
             concurrency = env_concurrency
     if flush_threshold_rows is None:
         env_flush_threshold_rows = env_int("VF_FLUSH_THRESHOLD_ROWS")
-        if env_flush_threshold_rows is not None and env_flush_threshold_rows > 0:
+        if (
+            _env_var_present("VF_FLUSH_THRESHOLD_ROWS")
+            and env_flush_threshold_rows is not None
+            and env_flush_threshold_rows > 0
+        ):
             _warn_deprecated("VF_FLUSH_THRESHOLD_ROWS is deprecated; pass flush_threshold_rows=... instead.")
             flush_threshold_rows = env_flush_threshold_rows
     return metrics_enabled, structured_logs, log_verbose, concurrency, flush_threshold_rows
@@ -206,7 +220,7 @@ def _resolve_env_advanced_backfills(
 ) -> AdvancedConfig:
     if advanced is None and advanced_config.otel_enabled is None:
         env_otel_enabled = env_bool("VF_OTEL_ENABLED")
-        if env_otel_enabled is not None:
+        if _env_var_present("VF_OTEL_ENABLED"):
             _warn_deprecated("VF_OTEL_ENABLED is deprecated; pass advanced=AdvancedConfig(otel_enabled=...) instead.")
             advanced_config = advanced_config.model_copy(update={"otel_enabled": env_otel_enabled})
     if advanced is None:
@@ -517,8 +531,6 @@ class BaseClient(ABC, Generic[T]):
         self._client: httpx.AsyncClient | None = None
 
     def _build_http_client(self) -> httpx.AsyncClient:
-        if self._http_timeout_s == HTTP_TIMEOUT_S and self._http_limits == HTTPConfig():
-            return default_async_client()
         return build_async_client(
             timeout_s=self._http_timeout_s,
             max_keepalive_connections=self._http_limits.max_keepalive_connections,
