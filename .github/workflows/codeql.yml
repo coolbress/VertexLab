@@ -23,10 +23,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5 pinned
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@38697555549f1db7851b81482ff19f1fa5c4fedc
+        uses: github/codeql-action/init@a899987af240c0578ed84ce13c02319a693e168f
         with:
           languages: python
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@38697555549f1db7851b81482ff19f1fa5c4fedc
+        uses: github/codeql-action/analyze@a899987af240c0578ed84ce13c02319a693e168f
         with:
           upload: ${{ github.event_name != 'pull_request' || vars.ENABLE_CODEQL_ON_PR == 'true' || contains(github.event.pull_request.labels.*.name, 'security-critical') }}
