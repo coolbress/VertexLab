@@ -43,9 +43,9 @@ jobs:
       VENV: ${{ github.workspace }}/verify-wheel
     steps:
       - name: Checkout code
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5 pinned
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 pinned
       - name: Cache uv download/build artifacts
-        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7  # v5.0.3 pinned
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7  # v5.0.4 pinned
         with:
           path: |
             ~/.cache/uv
@@ -54,10 +54,10 @@ jobs:
             ${{ runner.os }}-uv-
 
       - name: Install uv
-        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78  # v5 pinned
+        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57  # v8.0.0 pinned
 
       - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v5 pinned
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0 pinned
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -69,7 +69,7 @@ jobs:
         run: echo "week=$(date +'%G-%V')" >> "$GITHUB_OUTPUT"
       - name: Cache Trivy DB
         if: ${{ matrix.python-version == '3.10' }}
-        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7  # v5.0.3 pinned
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7  # v5.0.4 pinned
         with:
           path: |
             ~/.cache/trivy
@@ -80,7 +80,7 @@ jobs:
       - name: Trivy FS Scan (SARIF)
         if: ${{ matrix.python-version == '3.10' }}
         id: trivy
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # 0.16.1 pinned
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # v0.35.0 pinned
         with:
           scan-type: fs
           trivyignores: .trivyignore
@@ -95,7 +95,7 @@ jobs:
           TRIVY_CACHE_DIR: ~/.cache/trivy
       - name: Upload Trivy SARIF to Security tab
         if: ${{ matrix.python-version == '3.10' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-        uses: github/codeql-action/upload-sarif@38697555549f1db7851b81482ff19f1fa5c4fedc  # v4 pinned
+        uses: github/codeql-action/upload-sarif@38697555549f1db7851b81482ff19f1fa5c4fedc  # v4.34.1 pinned
         with:
           sarif_file: trivy-results.sarif
       - name: Enforce Trivy Gate (HIGH/CRITICAL)
@@ -165,7 +165,7 @@ jobs:
             -m "not manual"
       - name: Upload coverage data
         if: ${{ matrix.python-version == '3.10' }}
-        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808  # v4 pinned
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0 pinned
         with:
           name: coverage-data
           path: .coverage
@@ -248,13 +248,13 @@ jobs:
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5 pinned
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 pinned
       - name: Install uv
-        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78  # v5 pinned
+        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57  # v8.0.0 pinned
       - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v5 pinned
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0 pinned
         with:
-          python-version: "3.10"
+          python-version: "3.14"
       - name: Install dependencies
         run: |
           uv sync
@@ -279,7 +279,7 @@ jobs:
         run: uv run python .github/scripts/compare_benchmark_metrics.py
       - name: Upload benchmark metrics artifact
         if: ${{ always() }}
-        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808  # v4 pinned
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0 pinned
         with:
           name: benchmark-profile-metrics
           path: ${{ github.workspace }}/output/forager-profiles/profile_metrics.json
