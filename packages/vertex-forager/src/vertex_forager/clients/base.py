@@ -127,8 +127,11 @@ def _apply_legacy_downshift_kwargs(
     if not legacy_values:
         return downshift
     _warn_deprecated("Flat downshift kwargs are deprecated; pass downshift=DownshiftConfig(...) instead.")
+    explicit_fields = set(downshift.model_fields_set)
     merged = downshift.model_dump()
-    merged.update(legacy_values)
+    for key, value in legacy_values.items():
+        if key not in explicit_fields:
+            merged[key] = value
     return DownshiftConfig(**merged)
 
 
@@ -149,8 +152,11 @@ def _apply_legacy_advanced_kwargs(
     if not legacy_values:
         return advanced
     _warn_deprecated("Flat advanced kwargs are deprecated; pass advanced=AdvancedConfig(...) instead.")
+    explicit_fields = set(advanced.model_fields_set)
     merged = advanced.model_dump()
-    merged.update(legacy_values)
+    for key, value in legacy_values.items():
+        if key not in explicit_fields:
+            merged[key] = value
     return AdvancedConfig(**merged)
 
 

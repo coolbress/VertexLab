@@ -79,6 +79,38 @@ def test_legacy_flat_kwargs_emit_deprecation_and_normalize() -> None:
     assert client.config.otel_enabled is True
 
 
+def test_grouped_downshift_config_overrides_legacy_flat_kwargs() -> None:
+    with pytest.deprecated_call():
+        client = create_client(
+            provider="yfinance",
+            rate_limit=60,
+            downshift=DownshiftConfig(enabled=True, window_s=30, rpm_floor=5),
+            downshift_enabled=False,
+            downshift_window_s=10,
+            rpm_floor=1,
+        )
+
+    assert isinstance(client, YFinanceClient)
+    assert client.config.downshift_enabled is True
+    assert client.config.downshift_window_s == 30
+    assert client.config.rpm_floor == 5
+
+
+def test_grouped_advanced_config_overrides_legacy_flat_kwargs() -> None:
+    with pytest.deprecated_call():
+        client = create_client(
+            provider="yfinance",
+            rate_limit=60,
+            advanced=AdvancedConfig(otel_enabled=True, mem_threshold_ratio=0.5),
+            otel_enabled=False,
+            mem_threshold_ratio=0.2,
+        )
+
+    assert isinstance(client, YFinanceClient)
+    assert client.config.otel_enabled is True
+    assert client.config.advanced.mem_threshold_ratio == 0.5
+
+
 def test_legacy_persist_run_history_string_false_normalizes_correctly() -> None:
     with pytest.deprecated_call():
         client = create_client(
