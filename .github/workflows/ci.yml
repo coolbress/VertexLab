@@ -80,7 +80,7 @@ jobs:
       - name: Trivy FS Scan (SARIF)
         if: ${{ matrix.python-version == '3.10' }}
         id: trivy
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1  # 0.16.1 pinned
+        uses: aquasecurity/trivy-action@3d1b5be1589a83fc98b82781c263708b2eb3b47b  # 0.16.1 pinned
         with:
           scan-type: fs
           trivyignores: .trivyignore
