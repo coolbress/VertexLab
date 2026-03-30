@@ -20,8 +20,45 @@ from vertex_forager.core.registries import (
 def _register_sharadar() -> None:
     from vertex_forager.providers.sharadar.client import SharadarClient
 
-    def _sharadar_factory(*, api_key: str | None = None, rate_limit: int, **kwargs: Any) -> BaseClient:
-        return SharadarClient(api_key=api_key or "", rate_limit=rate_limit, **kwargs)
+    def _sharadar_factory(
+        *,
+        api_key: str | None = None,
+        rate_limit: int,
+        metrics_enabled: bool | None = None,
+        structured_logs: bool | None = None,
+        log_verbose: bool | None = None,
+        dlq_enabled: bool | None = None,
+        pagination_max_burst: int | None = None,
+        retry: RetryConfig | dict[str, Any] | None = None,
+        downshift: DownshiftConfig | dict[str, Any] | None = None,
+        concurrency: int | None = None,
+        flush_threshold_rows: int | None = None,
+        writer_chunk_rows: int | None = None,
+        writer_concurrency: int | None = None,
+        persist_run_history: bool | None = None,
+        http_timeout_s: float | None = None,
+        limits: HTTPConfig | dict[str, Any] | None = None,
+        advanced: AdvancedConfig | dict[str, Any] | None = None,
+    ) -> BaseClient:
+        return SharadarClient(
+            api_key=api_key or "",
+            rate_limit=rate_limit,
+            metrics_enabled=metrics_enabled,
+            structured_logs=structured_logs,
+            log_verbose=log_verbose,
+            dlq_enabled=dlq_enabled,
+            pagination_max_burst=pagination_max_burst,
+            retry=retry,
+            downshift=downshift,
+            concurrency=concurrency,
+            flush_threshold_rows=flush_threshold_rows,
+            writer_chunk_rows=writer_chunk_rows,
+            writer_concurrency=writer_concurrency,
+            persist_run_history=persist_run_history,
+            http_timeout_s=http_timeout_s,
+            limits=limits,
+            advanced=advanced,
+        )
 
     # Register known providers
     client_registry.register(
@@ -36,8 +73,45 @@ def _register_sharadar() -> None:
 def _register_yfinance() -> None:
     from vertex_forager.providers.yfinance.client import YFinanceClient
 
-    def _yfinance_factory(*, api_key: str | None = None, rate_limit: int, **kwargs: Any) -> BaseClient:
-        return YFinanceClient(api_key=api_key or "", rate_limit=rate_limit, **kwargs)
+    def _yfinance_factory(
+        *,
+        api_key: str | None = None,
+        rate_limit: int,
+        metrics_enabled: bool | None = None,
+        structured_logs: bool | None = None,
+        log_verbose: bool | None = None,
+        dlq_enabled: bool | None = None,
+        pagination_max_burst: int | None = None,
+        retry: RetryConfig | dict[str, Any] | None = None,
+        downshift: DownshiftConfig | dict[str, Any] | None = None,
+        concurrency: int | None = None,
+        flush_threshold_rows: int | None = None,
+        writer_chunk_rows: int | None = None,
+        writer_concurrency: int | None = None,
+        persist_run_history: bool | None = None,
+        http_timeout_s: float | None = None,
+        limits: HTTPConfig | dict[str, Any] | None = None,
+        advanced: AdvancedConfig | dict[str, Any] | None = None,
+    ) -> BaseClient:
+        return YFinanceClient(
+            api_key=api_key or "",
+            rate_limit=rate_limit,
+            metrics_enabled=metrics_enabled,
+            structured_logs=structured_logs,
+            log_verbose=log_verbose,
+            dlq_enabled=dlq_enabled,
+            pagination_max_burst=pagination_max_burst,
+            retry=retry,
+            downshift=downshift,
+            concurrency=concurrency,
+            flush_threshold_rows=flush_threshold_rows,
+            writer_chunk_rows=writer_chunk_rows,
+            writer_concurrency=writer_concurrency,
+            persist_run_history=persist_run_history,
+            http_timeout_s=http_timeout_s,
+            limits=limits,
+            advanced=advanced,
+        )
 
     client_registry.register(
         "yfinance",
@@ -68,7 +142,6 @@ def create_client(
     http_timeout_s: float | None = None,
     limits: HTTPConfig | dict[str, Any] | None = None,
     advanced: AdvancedConfig | dict[str, Any] | None = None,
-    **kwargs: object,
 ) -> BaseClient:
     """
     Create and configure a client instance for the specified provider.
@@ -92,7 +165,6 @@ def create_client(
         http_timeout_s: HTTP request timeout in seconds.
         limits: Grouped HTTP connection-pool configuration.
         advanced: Grouped advanced and transitional settings.
-        **kwargs: Legacy compatibility kwargs forwarded to the client.
 
     Returns:
         Configured client instance inheriting from BaseClient.
@@ -148,7 +220,6 @@ def create_client(
             http_timeout_s=http_timeout_s,
             limits=limits,
             advanced=advanced,
-            **kwargs,
         )
     if rate_limit is None:
         raise ValueError(f"Missing rate_limit for provider '{provider}'")
@@ -170,7 +241,6 @@ def create_client(
         http_timeout_s=http_timeout_s,
         limits=limits,
         advanced=advanced,
-        **kwargs,
     )
 
 

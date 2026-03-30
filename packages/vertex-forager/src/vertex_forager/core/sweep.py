@@ -42,11 +42,14 @@ def build_sweep_combinations(
     timeouts = _parse_positive_int_list(timeout_list, [30, 45], "timeout_list")
     combos = [
         {
-            "VF_CONCURRENCY": c,
-            "VF_FLUSH_THRESHOLD_ROWS": f,
-            "VF_HTTP_MAX_KEEPALIVE": k,
-            "VF_HTTP_MAX_CONNECTIONS": m,
-            "VF_HTTP_TIMEOUT_S": t,
+            "metrics_enabled": True,
+            "concurrency": c,
+            "flush_threshold_rows": f,
+            "http_timeout_s": t,
+            "limits": {
+                "max_keepalive_connections": k,
+                "max_connections": m,
+            },
         }
         for c, f, k, m, t in itertools.product(concs, flushes, keepalives, connections, timeouts)
     ]
@@ -75,10 +78,11 @@ def _measure_yfinance_price(
     tickers: list[str],
     start_date: str | None,
     end_date: str | None,
+    client_config: dict[str, Any],
 ) -> dict[str, Any]:
     from vertex_forager.providers.yfinance.client import YFinanceClient
 
-    client = YFinanceClient(rate_limit=60, structured_logs=False)
+    client = YFinanceClient(rate_limit=60, structured_logs=False, **client_config)
     t0 = time.monotonic()
     run_result = client.get_price_data(
         tickers=tickers,
@@ -91,10 +95,15 @@ def _measure_yfinance_price(
     return {"duration_s": round(t1 - t0, 3), "metrics": _collect_metrics(run_result)}
 
 
-def _measure_yfinance_financials(*, combo_db_path: Path, tickers: list[str]) -> dict[str, Any]:
+def _measure_yfinance_financials(
+    *,
+    combo_db_path: Path,
+    tickers: list[str],
+    client_config: dict[str, Any],
+) -> dict[str, Any]:
     from vertex_forager.providers.yfinance.client import YFinanceClient
 
-    client = YFinanceClient(rate_limit=60, structured_logs=False)
+    client = YFinanceClient(rate_limit=60, structured_logs=False, **client_config)
     t0 = time.monotonic()
     run_result = client.get_financials(
         kind="income_stmt",
@@ -114,10 +123,11 @@ def _measure_sharadar(
     tickers: list[str],
     start_date: str | None,
     end_date: str | None,
+    client_config: dict[str, Any],
 ) -> dict[str, Any]:
     from vertex_forager.providers.sharadar.client import SharadarClient
 
-    client = SharadarClient(api_key=api_key, rate_limit=60, structured_logs=False)
+    client = SharadarClient(api_key=api_key, rate_limit=60, structured_logs=False, **client_config)
     t0 = time.monotonic()
     run_result = client.get_fundamental_data(
         tickers=tickers,
@@ -128,15 +138,6 @@ def _measure_sharadar(
     )
     t1 = time.monotonic()
     return {"duration_s": round(t1 - t0, 3), "metrics": _collect_metrics(run_result)}
-
-
-def _restore_environment(original_env: dict[str, str]) -> None:
-    current_env = dict(os.environ)
-    for key in current_env.keys() - original_env.keys():
-        os.environ.pop(key, None)
-    for key, value in original_env.items():
-        os.environ[key] = value
-    os.environ.setdefault("VF_METRICS_ENABLED", "1")
 
 
 def _run_single_combo(
@@ -154,19 +155,18 @@ def _run_single_combo(
     sh_tickers: list[str],
     sh_start: str | None,
     sh_end: str | None,
-    set_env: Any,
 ) -> dict[str, Any]:
     combo_db_path = output_dir / f"profile_sweep_{idx}.duckdb"
     if combo_db_path.exists():
         combo_db_path.unlink()
-    set_env(cfg)
-    entry: dict[str, Any] = {"env": dict(cfg), "measurements": {}}
+    entry: dict[str, Any] = {"client_config": dict(cfg), "measurements": {}}
     try:
         entry["measurements"]["yfinance_price"] = _measure_yfinance_price(
             combo_db_path=combo_db_path,
             tickers=yf_tickers_price,
             start_date=yf_start,
             end_date=yf_end,
+            client_config=cfg,
         )
     except Exception as exc:
         logger.warning("YFinance Price sweep error: %s", exc)
@@ -175,6 +175,7 @@ def _run_single_combo(
         entry["measurements"]["yfinance_financials"] = _measure_yfinance_financials(
             combo_db_path=combo_db_path,
             tickers=yf_tickers_fin,
+            client_config=cfg,
         )
     except Exception as exc:
         logger.warning("YFinance Financials sweep error: %s", exc)
@@ -187,6 +188,7 @@ def _run_single_combo(
                 tickers=sh_tickers,
                 start_date=sh_start,
                 end_date=sh_end,
+                client_config=cfg,
             )
         except Exception as exc:
             logger.warning("Sharadar sweep error: %s", exc)
@@ -206,7 +208,7 @@ def run_sweep_measurements(
     include_sharadar: bool,
     logger: Any,
 ) -> dict[str, Any]:
-    from vertex_forager.utils import load_tickers_env, set_env
+    from vertex_forager.utils import load_tickers_env
 
     yf_tickers_price = load_tickers_env("YF_TICKERS_PRICE", ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN"])
     yf_tickers_fin = load_tickers_env("YF_TICKERS_FIN", ["AAPL", "MSFT", "NVDA"])
@@ -217,30 +219,24 @@ def run_sweep_measurements(
     sh_start = os.getenv("SH_START_DATE")
     sh_end = os.getenv("SH_END_DATE")
     results: dict[str, Any] = {"runs": []}
-    original_env = os.environ.copy()
-    try:
-        for idx, cfg in enumerate(combos):
-            results["runs"].append(
-                _run_single_combo(
-                    idx=idx,
-                    cfg=cfg,
-                    output_dir=output_dir,
-                    include_sharadar=include_sharadar,
-                    logger=logger,
-                    yf_tickers_price=yf_tickers_price,
-                    yf_tickers_fin=yf_tickers_fin,
-                    yf_start=yf_start,
-                    yf_end=yf_end,
-                    sh_key=sh_key,
-                    sh_tickers=sh_tickers,
-                    sh_start=sh_start,
-                    sh_end=sh_end,
-                    set_env=set_env,
-                )
+    for idx, cfg in enumerate(combos):
+        results["runs"].append(
+            _run_single_combo(
+                idx=idx,
+                cfg=cfg,
+                output_dir=output_dir,
+                include_sharadar=include_sharadar,
+                logger=logger,
+                yf_tickers_price=yf_tickers_price,
+                yf_tickers_fin=yf_tickers_fin,
+                yf_start=yf_start,
+                yf_end=yf_end,
+                sh_key=sh_key,
+                sh_tickers=sh_tickers,
+                sh_start=sh_start,
+                sh_end=sh_end,
             )
-            _restore_environment(original_env)
-    finally:
-        _restore_environment(original_env)
+        )
     return results
 
 

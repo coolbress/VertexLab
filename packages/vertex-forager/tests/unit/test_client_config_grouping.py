@@ -61,63 +61,30 @@ def test_create_client_accepts_grouped_public_configs() -> None:
     assert client._memory_threshold_absolute is None
 
 
-def test_legacy_flat_kwargs_emit_deprecation_and_normalize() -> None:
-    with pytest.deprecated_call():
-        client = create_client(
+def test_removed_legacy_downshift_kwargs_are_rejected() -> None:
+    with pytest.raises(TypeError):
+        create_client(
             provider="yfinance",
             rate_limit=60,
             downshift_enabled=True,
-            downshift_window_s=10,
-            error_rate_threshold=0.1,
+        )
+
+
+def test_removed_legacy_advanced_kwargs_are_rejected() -> None:
+    with pytest.raises(TypeError):
+        create_client(
+            provider="yfinance",
+            rate_limit=60,
             otel_enabled=True,
         )
 
-    assert isinstance(client, YFinanceClient)
-    assert client.config.downshift_enabled is True
-    assert client.config.downshift_window_s == 10
-    assert client.config.error_rate_threshold == 0.1
-    assert client.config.otel_enabled is True
 
-
-def test_grouped_downshift_config_overrides_legacy_flat_kwargs() -> None:
-    with pytest.deprecated_call():
-        client = create_client(
-            provider="yfinance",
-            rate_limit=60,
-            downshift=DownshiftConfig(enabled=True, window_s=30, rpm_floor=5),
-            downshift_enabled=False,
-            downshift_window_s=10,
-            rpm_floor=1,
-        )
-
-    assert isinstance(client, YFinanceClient)
-    assert client.config.downshift_enabled is True
-    assert client.config.downshift_window_s == 30
-    assert client.config.rpm_floor == 5
-
-
-def test_grouped_advanced_config_overrides_legacy_flat_kwargs() -> None:
-    with pytest.deprecated_call():
-        client = create_client(
-            provider="yfinance",
-            rate_limit=60,
-            advanced=AdvancedConfig(otel_enabled=True, mem_threshold_ratio=0.5),
-            otel_enabled=False,
-            mem_threshold_ratio=0.2,
-        )
-
-    assert isinstance(client, YFinanceClient)
-    assert client.config.otel_enabled is True
-    assert client.config.advanced.mem_threshold_ratio == 0.5
-
-
-def test_legacy_persist_run_history_string_false_normalizes_correctly() -> None:
-    with pytest.deprecated_call():
-        client = create_client(
-            provider="yfinance",
-            rate_limit=60,
-            persist_run_history="false",  # type: ignore[arg-type]
-        )
+def test_persist_run_history_string_false_normalizes_correctly() -> None:
+    client = create_client(
+        provider="yfinance",
+        rate_limit=60,
+        persist_run_history="false",  # type: ignore[arg-type]
+    )
 
     assert isinstance(client, YFinanceClient)
     assert client.config.persist_run_history is False
@@ -142,40 +109,35 @@ def test_string_flag_inputs_normalize_correctly() -> None:
     assert client.config.persist_run_history is True
 
 
-def test_deprecated_env_vars_still_apply_during_migration(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("VF_CONCURRENCY", "7")
-    monkeypatch.setenv("VF_FLUSH_THRESHOLD_ROWS", "12000")
+def test_non_auth_env_vars_no_longer_backfill_client_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("VF_METRICS_ENABLED", "1")
     monkeypatch.setenv("VF_HTTP_TIMEOUT_S", "11")
-    monkeypatch.setenv("VF_HTTP_MAX_CONNECTIONS", "30")
-    monkeypatch.setenv("VF_HTTP_MAX_KEEPALIVE", "12")
-    monkeypatch.setenv("VF_OTEL_ENABLED", "1")
     monkeypatch.setenv("VF_MEM_THRESHOLD_RATIO", "0.4")
-    monkeypatch.setenv("VF_MEM_THRESHOLD_ABS_MB", "2048")
 
-    with pytest.deprecated_call():
-        client = create_client(provider="yfinance", rate_limit=60)
+    client = create_client(provider="yfinance", rate_limit=60)
 
     assert isinstance(client, YFinanceClient)
-    assert client.config.concurrency == 7
-    assert client.config.flush_threshold_rows == 12_000
-    assert client.config.otel_enabled is True
-    assert client._http_timeout_s == 11.0
-    assert client._http_limits.max_connections == 30
-    assert client._http_limits.max_keepalive_connections == 12
-    assert client._memory_threshold_ratio == 0.4
-    assert client._memory_threshold_absolute == 2048 * 1024 * 1024
+    assert client.config.metrics_enabled is False
+    assert client._http_timeout_s == HTTP_TIMEOUT_S
+    assert client._http_limits.max_connections == HTTPConfig().max_connections
+    assert client._http_limits.max_keepalive_connections == HTTPConfig().max_keepalive_connections
+    assert client._memory_threshold_ratio == AdvancedConfig().mem_threshold_ratio
+    assert client._memory_threshold_absolute == AdvancedConfig().mem_threshold_abs_mb * 1024 * 1024
 
 
-def test_missing_env_vars_do_not_trigger_backfill_warnings(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in list(base_mod.os.environ):
-        if name.startswith("VF_"):
-            monkeypatch.delenv(name, raising=False)
+def test_client_creation_ignores_non_auth_env_vars_without_warnings(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("VF_METRICS_ENABLED", "1")
+    monkeypatch.setenv("VF_HTTP_TIMEOUT_S", "11")
+    monkeypatch.setenv("VF_MEM_THRESHOLD_RATIO", "0.4")
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         client = create_client(provider="yfinance", rate_limit=60)
 
     assert isinstance(client, YFinanceClient)
+    assert client.config.metrics_enabled is False
+    assert client._http_timeout_s == HTTP_TIMEOUT_S
+    assert client._memory_threshold_ratio == AdvancedConfig().mem_threshold_ratio
     assert not any(issubclass(w.category, DeprecationWarning) for w in caught)
 
 

@@ -23,7 +23,6 @@ from vertex_forager.constants import (
 )
 from vertex_forager.core.config import RequestSpec
 from vertex_forager.core.library import get_library_fetcher
-from vertex_forager.utils import env_float, env_int
 
 if TYPE_CHECKING:
     from vertex_forager.core.contracts import HttpClientProtocol
@@ -234,17 +233,10 @@ def default_async_client() -> httpx.AsyncClient:
         httpx.AsyncClient: Configured client for HTTP operations.
     """
 
-    env_keepalive = env_int("VF_HTTP_MAX_KEEPALIVE", HTTP_MAX_KEEPALIVE_CONNECTIONS)
-    env_connections = env_int("VF_HTTP_MAX_CONNECTIONS", HTTP_MAX_CONNECTIONS)
-    env_timeout = env_float("VF_HTTP_TIMEOUT_S", HTTP_TIMEOUT_S)
     return build_async_client(
-        timeout_s=env_timeout if env_timeout is not None and env_timeout > 0 else HTTP_TIMEOUT_S,
-        max_keepalive_connections=env_keepalive
-        if env_keepalive is not None and env_keepalive > 0
-        else HTTP_MAX_KEEPALIVE_CONNECTIONS,
-        max_connections=env_connections
-        if env_connections is not None and env_connections > 0
-        else HTTP_MAX_CONNECTIONS,
+        timeout_s=HTTP_TIMEOUT_S,
+        max_keepalive_connections=HTTP_MAX_KEEPALIVE_CONNECTIONS,
+        max_connections=HTTP_MAX_CONNECTIONS,
     )
 
 

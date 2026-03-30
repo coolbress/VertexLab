@@ -21,7 +21,6 @@ async def main_async() -> None:
     Env Vars:
         VF_PROFILE_OUTPUT_DIR: Directory for output files
             (default: output/forager-profiles).
-        VF_METRICS_ENABLED: Enabled by default ("1").
         YF_TICKERS: Comma-separated tickers for YFinance (default: top 10 tech).
         SHARADAR_API_KEY: If present, runs Sharadar verification.
 
@@ -40,11 +39,6 @@ async def main_async() -> None:
     db_path = out_dir / "profile_financials.duckdb"
     if db_path.exists():
         db_path.unlink()
-
-    # Apply environment-driven tuning via BaseClient
-    # (VF_CONCURRENCY/VF_FLUSH_THRESHOLD_ROWS)
-    prev_vf_metrics = os.environ.get("VF_METRICS_ENABLED")
-    os.environ.setdefault("VF_METRICS_ENABLED", "1")
 
     try:
         try:
@@ -70,7 +64,7 @@ async def main_async() -> None:
                 "CSCO",
             ],
         )
-        yfc = YFinanceClient(rate_limit=60, structured_logs=False)
+        yfc = YFinanceClient(rate_limit=60, metrics_enabled=True, structured_logs=False)
         try:
             yf_run = yfc.get_financials(
                 kind="income_stmt",
@@ -92,7 +86,7 @@ async def main_async() -> None:
         if sh_key:
             try:
                 shc = SharadarClient(
-                    api_key=sh_key, rate_limit=60, structured_logs=False
+                    api_key=sh_key, rate_limit=60, metrics_enabled=True, structured_logs=False
                 )
                 sh_run = shc.get_fundamental_data(
                     tickers=yf_tickers[:5],
@@ -118,13 +112,6 @@ async def main_async() -> None:
         print(f"Wrote metrics: {metrics_path}")
 
     finally:
-        # Restore environment
-        if prev_vf_metrics is None:
-            os.environ.pop("VF_METRICS_ENABLED", None)
-        else:
-            os.environ["VF_METRICS_ENABLED"] = prev_vf_metrics
-
-        # Cleanup DB
         if db_path.exists():
             try:
                 db_path.unlink()

@@ -192,7 +192,7 @@ print(res)  # RunResult
   - Queue snapshots:
     - `req_q_len_after_producer`, `req_q_len_after_req_join`, `pkt_q_len_after_producer`, `pkt_q_len_after_pkt_join`
 - Optional spans (no hard dependency)
-  - Set env `VF_OTEL_ENABLED=1` and provide `EngineConfig.tracer` with a `start_span(name, attributes=...)` method to receive spans for `pipeline`, `fetch`, `parse`, and `write_flush`.
+  - Pass `advanced=AdvancedConfig(otel_enabled=True, tracer=...)` and provide a tracer with a `start_span(name, attributes=...)` method to receive spans for `pipeline`, `fetch`, `parse`, and `write_flush`.
 
 ## Usage Patterns
 

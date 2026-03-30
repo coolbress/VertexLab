@@ -132,7 +132,6 @@ class SharadarClient(BaseClient[SharadarDataset]):
         http_timeout_s: float | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
         advanced: AdvancedConfig | dict[str, Any] | None = None,
-        **kwargs: Any,
     ) -> None:
         """Initialize the Sharadar client.
 
@@ -154,7 +153,6 @@ class SharadarClient(BaseClient[SharadarDataset]):
             http_timeout_s: HTTP request timeout in seconds.
             limits: Grouped HTTP connection-pool configuration.
             advanced: Grouped advanced and transitional settings.
-            **kwargs: Legacy compatibility kwargs still normalized into internal config.
         """
         if not isinstance(api_key, str):
             raise InputError("Sharadar API Key must be a string")
@@ -180,7 +178,6 @@ class SharadarClient(BaseClient[SharadarDataset]):
             http_timeout_s=http_timeout_s,
             limits=limits,
             advanced=advanced,
-            **kwargs,
         )
 
         self._mapper = SchemaMapper()

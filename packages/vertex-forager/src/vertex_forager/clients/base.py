@@ -6,10 +6,8 @@ from contextlib import AsyncExitStack, asynccontextmanager, nullcontext
 from dataclasses import dataclass
 from functools import partial
 import logging
-import os
 import time
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
-import warnings
 
 from tqdm.auto import tqdm
 
@@ -32,9 +30,6 @@ from vertex_forager.schema.registry import get_table_schema
 from vertex_forager.utils import (
     Spinner,
     create_pbar_updater,
-    env_bool,
-    env_float,
-    env_int,
     sanitize_field,
 )
 from vertex_forager.utils import (
@@ -62,10 +57,6 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=SharadarDataset | YFinanceDataset | str)
 
 
-def _warn_deprecated(message: str) -> None:
-    warnings.warn(message, DeprecationWarning, stacklevel=4)
-
-
 def _coerce_grouped_config(value: Any, model_cls: type[Any]) -> Any:
     if value is None:
         return None
@@ -74,10 +65,6 @@ def _coerce_grouped_config(value: Any, model_cls: type[Any]) -> Any:
     if isinstance(value, dict):
         return model_cls(**value)
     return model_cls.model_validate(value)
-
-
-def _env_var_present(name: str) -> bool:
-    return name in os.environ
 
 
 def default_async_client() -> httpx.AsyncClient:
@@ -107,205 +94,6 @@ class _NormalizedClientSettings:
     memory_threshold_absolute: int | None
 
 
-def _apply_legacy_downshift_kwargs(
-    downshift: DownshiftConfig,
-    config_params: dict[str, Any],
-) -> DownshiftConfig:
-    legacy_downshift_map = {
-        "enabled": "downshift_enabled",
-        "window_s": "downshift_window_s",
-        "error_rate_threshold": "error_rate_threshold",
-        "rpm_floor": "rpm_floor",
-        "recovery_step": "recovery_step",
-        "healthy_window_s": "healthy_window_s",
-    }
-    legacy_values = {
-        field: config_params.pop(legacy_key)
-        for field, legacy_key in legacy_downshift_map.items()
-        if legacy_key in config_params
-    }
-    if not legacy_values:
-        return downshift
-    _warn_deprecated("Flat downshift kwargs are deprecated; pass downshift=DownshiftConfig(...) instead.")
-    explicit_fields = set(downshift.model_fields_set)
-    merged = downshift.model_dump()
-    for key, value in legacy_values.items():
-        if key not in explicit_fields:
-            merged[key] = value
-    return DownshiftConfig(**merged)
-
-
-def _apply_legacy_advanced_kwargs(
-    advanced: AdvancedConfig,
-    config_params: dict[str, Any],
-) -> AdvancedConfig:
-    legacy_keys = (
-        "dlq_tmp_cleanup_on_error",
-        "dlq_tmp_periodic_cleanup",
-        "dlq_tmp_retention_s",
-        "tracer",
-        "otel_enabled",
-        "mem_threshold_ratio",
-        "mem_threshold_abs_mb",
-    )
-    legacy_values = {key: config_params.pop(key) for key in legacy_keys if key in config_params}
-    if not legacy_values:
-        return advanced
-    _warn_deprecated("Flat advanced kwargs are deprecated; pass advanced=AdvancedConfig(...) instead.")
-    explicit_fields = set(advanced.model_fields_set)
-    merged = advanced.model_dump()
-    for key, value in legacy_values.items():
-        if key not in explicit_fields:
-            merged[key] = value
-    return AdvancedConfig(**merged)
-
-
-def _resolve_env_behavior_backfills(
-    *,
-    metrics_enabled: bool | None,
-    structured_logs: bool | None,
-    log_verbose: bool | None,
-    concurrency: int | None,
-    flush_threshold_rows: int | None,
-) -> tuple[bool | None, bool | None, bool | None, int | None, int | None]:
-    if metrics_enabled is None:
-        env_metrics = env_bool("VF_METRICS_ENABLED")
-        if _env_var_present("VF_METRICS_ENABLED"):
-            _warn_deprecated("VF_METRICS_ENABLED is deprecated; pass metrics_enabled=... instead.")
-            metrics_enabled = env_metrics
-    if structured_logs is None:
-        env_structured_logs = env_bool("VF_STRUCTURED_LOGS")
-        if _env_var_present("VF_STRUCTURED_LOGS"):
-            _warn_deprecated("VF_STRUCTURED_LOGS is deprecated; pass structured_logs=... instead.")
-            structured_logs = env_structured_logs
-    if log_verbose is None:
-        env_log_verbose = env_bool("VF_LOG_VERBOSE")
-        if _env_var_present("VF_LOG_VERBOSE"):
-            _warn_deprecated("VF_LOG_VERBOSE is deprecated; pass log_verbose=... instead.")
-            log_verbose = env_log_verbose
-    if concurrency is None:
-        env_concurrency = env_int("VF_CONCURRENCY")
-        if _env_var_present("VF_CONCURRENCY") and env_concurrency is not None and env_concurrency > 0:
-            _warn_deprecated("VF_CONCURRENCY is deprecated; pass concurrency=... instead.")
-            concurrency = env_concurrency
-    if flush_threshold_rows is None:
-        env_flush_threshold_rows = env_int("VF_FLUSH_THRESHOLD_ROWS")
-        if (
-            _env_var_present("VF_FLUSH_THRESHOLD_ROWS")
-            and env_flush_threshold_rows is not None
-            and env_flush_threshold_rows > 0
-        ):
-            _warn_deprecated("VF_FLUSH_THRESHOLD_ROWS is deprecated; pass flush_threshold_rows=... instead.")
-            flush_threshold_rows = env_flush_threshold_rows
-    return metrics_enabled, structured_logs, log_verbose, concurrency, flush_threshold_rows
-
-
-def _resolve_env_transport_backfills(
-    *,
-    http_timeout_s: float | None,
-    limits: HTTPConfig | dict[str, Any] | None,
-    limits_config: HTTPConfig,
-) -> tuple[float | None, HTTPConfig]:
-    if http_timeout_s is None:
-        env_http_timeout_s = env_float("VF_HTTP_TIMEOUT_S")
-        if env_http_timeout_s is not None and env_http_timeout_s > 0:
-            _warn_deprecated("VF_HTTP_TIMEOUT_S is deprecated; pass http_timeout_s=... instead.")
-            http_timeout_s = env_http_timeout_s
-    env_max_keepalive = env_int("VF_HTTP_MAX_KEEPALIVE")
-    env_max_connections = env_int("VF_HTTP_MAX_CONNECTIONS")
-    if limits is None and (
-        (env_max_keepalive is not None and env_max_keepalive > 0)
-        or (env_max_connections is not None and env_max_connections > 0)
-    ):
-        _warn_deprecated(
-            "VF_HTTP_MAX_KEEPALIVE and VF_HTTP_MAX_CONNECTIONS are deprecated; pass limits=HTTPConfig(...) instead."
-        )
-        limits_config = limits_config.model_copy(
-            update={
-                "max_keepalive_connections": env_max_keepalive
-                if env_max_keepalive is not None and env_max_keepalive > 0
-                else limits_config.max_keepalive_connections,
-                "max_connections": env_max_connections
-                if env_max_connections is not None and env_max_connections > 0
-                else limits_config.max_connections,
-            }
-        )
-    return http_timeout_s, limits_config
-
-
-def _resolve_env_advanced_backfills(
-    *,
-    advanced: AdvancedConfig | dict[str, Any] | None,
-    advanced_config: AdvancedConfig,
-) -> AdvancedConfig:
-    if advanced is None and advanced_config.otel_enabled is None:
-        env_otel_enabled = env_bool("VF_OTEL_ENABLED")
-        if _env_var_present("VF_OTEL_ENABLED"):
-            _warn_deprecated("VF_OTEL_ENABLED is deprecated; pass advanced=AdvancedConfig(otel_enabled=...) instead.")
-            advanced_config = advanced_config.model_copy(update={"otel_enabled": env_otel_enabled})
-    if advanced is None:
-        env_mem_threshold_ratio = env_float("VF_MEM_THRESHOLD_RATIO")
-        if env_mem_threshold_ratio is not None and 0 < env_mem_threshold_ratio <= 1:
-            _warn_deprecated(
-                "VF_MEM_THRESHOLD_RATIO is deprecated; pass advanced=AdvancedConfig(mem_threshold_ratio=...) instead."
-            )
-            advanced_config = advanced_config.model_copy(update={"mem_threshold_ratio": env_mem_threshold_ratio})
-        env_mem_threshold_abs_mb = env_int("VF_MEM_THRESHOLD_ABS_MB")
-        if env_mem_threshold_abs_mb is not None and env_mem_threshold_abs_mb > 0:
-            _warn_deprecated(
-                "VF_MEM_THRESHOLD_ABS_MB is deprecated; pass advanced=AdvancedConfig(mem_threshold_abs_mb=...) instead."
-            )
-            advanced_config = advanced_config.model_copy(update={"mem_threshold_abs_mb": env_mem_threshold_abs_mb})
-    return advanced_config
-
-
-def _resolve_env_backfills(
-    *,
-    metrics_enabled: bool | None,
-    structured_logs: bool | None,
-    log_verbose: bool | None,
-    concurrency: int | None,
-    flush_threshold_rows: int | None,
-    http_timeout_s: float | None,
-    limits: HTTPConfig | dict[str, Any] | None,
-    advanced: AdvancedConfig | dict[str, Any] | None,
-    advanced_config: AdvancedConfig,
-    limits_config: HTTPConfig,
-) -> tuple[bool | None, bool | None, bool | None, int | None, int | None, float | None, HTTPConfig, AdvancedConfig]:
-    (
-        metrics_enabled,
-        structured_logs,
-        log_verbose,
-        concurrency,
-        flush_threshold_rows,
-    ) = _resolve_env_behavior_backfills(
-        metrics_enabled=metrics_enabled,
-        structured_logs=structured_logs,
-        log_verbose=log_verbose,
-        concurrency=concurrency,
-        flush_threshold_rows=flush_threshold_rows,
-    )
-    http_timeout_s, limits_config = _resolve_env_transport_backfills(
-        http_timeout_s=http_timeout_s,
-        limits=limits,
-        limits_config=limits_config,
-    )
-    advanced_config = _resolve_env_advanced_backfills(
-        advanced=advanced,
-        advanced_config=advanced_config,
-    )
-    return (
-        metrics_enabled,
-        structured_logs,
-        log_verbose,
-        concurrency,
-        flush_threshold_rows,
-        http_timeout_s,
-        limits_config,
-        advanced_config,
-    )
-
-
 def _normalize_client_settings(
     *,
     rate_limit: int,
@@ -324,62 +112,11 @@ def _normalize_client_settings(
     http_timeout_s: float | None,
     limits: HTTPConfig | dict[str, Any] | None,
     advanced: AdvancedConfig | dict[str, Any] | None,
-    kwargs: dict[str, Any],
 ) -> _NormalizedClientSettings:
-    config_params = kwargs.copy()
-    downshift_config = _apply_legacy_downshift_kwargs(
-        _coerce_grouped_config(downshift, DownshiftConfig) or DownshiftConfig(),
-        config_params,
-    )
+    downshift_config = _coerce_grouped_config(downshift, DownshiftConfig) or DownshiftConfig()
     limits_config = _coerce_grouped_config(limits, HTTPConfig) or HTTPConfig()
-    advanced_config = _apply_legacy_advanced_kwargs(
-        _coerce_grouped_config(advanced, AdvancedConfig) or AdvancedConfig(),
-        config_params,
-    )
+    advanced_config = _coerce_grouped_config(advanced, AdvancedConfig) or AdvancedConfig()
     retry_config = _coerce_grouped_config(retry, RetryConfig) or RetryConfig()
-
-    legacy_persist_run_history = config_params.pop("persist_run_history", None)
-    if legacy_persist_run_history is not None:
-        _warn_deprecated(
-            "persist_run_history is deprecated and scheduled for removal; "
-            "it remains supported only as a compatibility kwarg."
-        )
-        if persist_run_history is None:
-            persist_run_history = legacy_persist_run_history
-
-    legacy_writer_chunk_rows = config_params.pop("writer_chunk_rows", None)
-    legacy_writer_concurrency = config_params.pop("writer_concurrency", None)
-    if legacy_writer_chunk_rows is not None or legacy_writer_concurrency is not None:
-        _warn_deprecated(
-            "writer_chunk_rows and writer_concurrency are deprecated flat client kwargs "
-            "and remain supported only for compatibility."
-        )
-        if writer_chunk_rows is None:
-            writer_chunk_rows = legacy_writer_chunk_rows
-        if writer_concurrency is None:
-            writer_concurrency = legacy_writer_concurrency
-
-    (
-        metrics_enabled,
-        structured_logs,
-        log_verbose,
-        concurrency,
-        flush_threshold_rows,
-        http_timeout_s,
-        limits_config,
-        advanced_config,
-    ) = _resolve_env_backfills(
-        metrics_enabled=metrics_enabled,
-        structured_logs=structured_logs,
-        log_verbose=log_verbose,
-        concurrency=concurrency,
-        flush_threshold_rows=flush_threshold_rows,
-        http_timeout_s=http_timeout_s,
-        limits=limits,
-        advanced=advanced,
-        advanced_config=advanced_config,
-        limits_config=limits_config,
-    )
 
     runtime_config = ResolvedClientConfig(
         requests_per_minute=rate_limit,
@@ -485,7 +222,6 @@ class BaseClient(ABC, Generic[T]):
         http_timeout_s: float | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
         advanced: AdvancedConfig | dict[str, Any] | None = None,
-        **kwargs: Any,
     ) -> None:
         """Initialize the base client infrastructure.
 
@@ -507,7 +243,6 @@ class BaseClient(ABC, Generic[T]):
             http_timeout_s: HTTP request timeout in seconds.
             limits: Grouped HTTP connection-pool configuration.
             advanced: Grouped advanced and transitional settings.
-            **kwargs: Legacy compatibility kwargs still normalized into internal config.
         """
         self.api_key = api_key
         normalized = _normalize_client_settings(
@@ -527,7 +262,6 @@ class BaseClient(ABC, Generic[T]):
             http_timeout_s=http_timeout_s,
             limits=limits,
             advanced=advanced,
-            kwargs=kwargs,
         )
 
         self._config = normalized.runtime_config

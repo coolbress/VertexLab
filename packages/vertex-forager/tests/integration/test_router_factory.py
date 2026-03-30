@@ -4,8 +4,6 @@ Integration tests for router factory functionality.
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
 
 from vertex_forager.providers.sharadar.router import SharadarRouter
@@ -47,15 +45,12 @@ class TestRouterFactory:
         assert router.__class__.__name__ == "YFinanceRouter"
         assert router.rate_limit == 60
 
-    def test_create_router_accepts_deprecated_config_bridge(self) -> None:
+    def test_create_router_requires_explicit_rate_limit(self) -> None:
         api_key = "test_api_key"  # pragma: allowlist secret (test)
 
-        with pytest.deprecated_call(match="create_router\\(\\.\\.\\., config=\\.\\.\\.\\) is deprecated"):
-            router = create_router(
+        with pytest.raises(TypeError):
+            create_router(
                 provider="sharadar",
                 api_key=api_key,  # pragma: allowlist secret (test)
-                config=SimpleNamespace(requests_per_minute=100),
+                config={"requests_per_minute": 100},
             )
-
-        assert isinstance(router, SharadarRouter)
-        assert router.rate_limit == 100

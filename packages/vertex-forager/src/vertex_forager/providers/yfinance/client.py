@@ -75,7 +75,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         http_timeout_s: float | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
         advanced: AdvancedConfig | dict[str, Any] | None = None,
-        **kwargs: Any,
     ) -> None:
         normalized = rate_limit
         if isinstance(normalized, int):
@@ -111,7 +110,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             http_timeout_s=http_timeout_s,
             limits=limits,
             advanced=advanced,
-            **kwargs,
         )
         self._mapper = SchemaMapper()
 
@@ -780,6 +778,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
                     rate_limit=self._config.requests_per_minute,
                     start_date=start_date,
                     end_date=end_date,
+                    structured_logs=self._config.structured_logs,
+                    log_verbose=self._config.log_verbose,
                     **{k: v for k, v in kwargs.items() if k in {PRICE_BATCH_SIZE_KEY}},
                 )
 
