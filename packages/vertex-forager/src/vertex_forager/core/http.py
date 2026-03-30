@@ -148,11 +148,6 @@ class HttpExecutor:
     async def _fetch_library(self, spec: RequestSpec) -> bytes:
         """Execute a non-HTTP library call using the unified client interface.
 
-        ADR-0001 compatibility shim:
-        Until 2026-06-30, this function accepts pandas DataFrame/Series payloads
-        for backward compatibility and converts them to Polars before IPC handoff.
-        After 2026-06-30, library fetchers are expected to return Polars directly.
-
         Args:
             spec: Request specification with a library URL scheme (e.g., yfinance://).
 
