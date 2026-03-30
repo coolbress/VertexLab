@@ -31,7 +31,7 @@ import itertools
 import logging
 import os
 import time
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import httpx
 from polars.exceptions import ComputeError
@@ -155,6 +155,7 @@ from vertex_forager.core.errors import (
     RunError,
     ValidationError,
 )
+from vertex_forager.core.types import Symbols
 from vertex_forager.schema.registry import get_table_schema
 from vertex_forager.utils import sanitize_field
 
@@ -182,8 +183,6 @@ except (ImportError, ModuleNotFoundError):
     DuckDBWriterType = None
 
 logger = logging.getLogger("vertex_forager.debug")
-
-Symbols = Sequence[str]
 
 
 class VertexForager:
@@ -454,7 +453,7 @@ class VertexForager:
         dataset: str,
         completed_symbols: set[str],
         failed_symbols: set[str],
-        status: str = "in_progress",
+        status: Literal["in_progress", "completed"] = "in_progress",
     ) -> None:
         """Update checkpoint with completed and failed symbols."""
         if not completed_symbols and not failed_symbols:
