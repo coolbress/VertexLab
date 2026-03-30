@@ -50,7 +50,7 @@
         "major"
       ],
       "enabled": false,
-      "description": "Disabled while Python 3.9 is supported. Remove when minimum Python version raises to 3.10+."
+      "description": "Disabled while minimum Python <3.11 is supported. Remove when vertex-forager baseline raises to >=3.11."
     }
   ]
 }
