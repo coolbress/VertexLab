@@ -147,6 +147,10 @@ def test_dlq_index_registration_roundtrip() -> None:
             "vertex_forager.core.checkpoint.get_cache_dir",
             return_value=Path(tmpdir),
         ),
+        patch(
+            "vertex_forager.utils.get_cache_dir",
+            return_value=Path(tmpdir),
+        ),
     ):
         path = Path(tmpdir) / "dlq" / "prices" / "batch_1.ipc"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -156,7 +160,7 @@ def test_dlq_index_registration_roundtrip() -> None:
         assert len(entries) == 1
         assert entries[0]["table"] == "prices"
         assert entries[0]["row_count"] == 12
-        assert entries[0]["path"] == str(path)
+        assert entries[0]["path"] == str(path.resolve())
 
 
 def test_run_result_coerces_legacy_string_errors() -> None:

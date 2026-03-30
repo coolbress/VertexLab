@@ -406,7 +406,7 @@ def delete_all_checkpoints() -> int:
 
 def register_dlq_entry(*, path: Path, table: str, provider: str | None, row_count: int) -> None:
     """Register a spooled DLQ file in the SQLite index."""
-    dlq_root = get_cache_dir() / "dlq"
+    dlq_root = get_cache_dir().resolve() / "dlq"
     resolved_path = path.resolve()
     try:
         resolved_path.relative_to(dlq_root)
@@ -500,10 +500,11 @@ def delete_dlq_entry(path: Path) -> bool:
     """Delete a DLQ index entry and its payload file by spool path."""
     resolved_path = path.resolve()
     payload_path = resolved_path.with_suffix(".ipc")
-    with suppress(OSError):
-        if payload_path.exists():
-            payload_path.unlink(missing_ok=True)
-    dlq_root = get_cache_dir() / "dlq"
+    if payload_path != resolved_path:
+        with suppress(OSError):
+            if payload_path.exists():
+                payload_path.unlink(missing_ok=True)
+    dlq_root = get_cache_dir().resolve() / "dlq"
     if not resolved_path.is_relative_to(dlq_root):
         raise ValueError(f"DLQ path {path} is outside DLQ root {dlq_root}") from None
     with suppress(OSError):
@@ -517,7 +518,7 @@ def delete_dlq_entry(path: Path) -> bool:
 def _remove_dlq_files(paths: list[Path]) -> int:
     """Delete DLQ IPC files and return the number of successfully removed files."""
     deleted_files = 0
-    dlq_root = get_cache_dir() / "dlq"
+    dlq_root = get_cache_dir().resolve() / "dlq"
     for path in paths:
         try:
             resolved = path.resolve()

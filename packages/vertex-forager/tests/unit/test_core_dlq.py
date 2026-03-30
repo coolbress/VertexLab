@@ -83,9 +83,11 @@ async def test_spool_to_dlq_and_rescue_disabled_counts() -> None:
 
 @pytest.mark.asyncio
 async def test_spool_to_dlq_and_rescue_spools_to_file(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import vertex_forager.core.checkpoint as ckpt_mod
     import vertex_forager.core.dlq as dlq_mod
 
     monkeypatch.setattr(dlq_mod, "get_cache_dir", lambda: tmp_path, raising=True)
+    monkeypatch.setattr(ckpt_mod, "get_cache_dir", lambda: tmp_path, raising=True)
     result = RunResult(provider="test")
     result_lock = asyncio.Lock()
     counters, inc = _inc_collector()
