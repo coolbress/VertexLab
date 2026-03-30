@@ -165,7 +165,7 @@ jobs:
             -m "not manual"
       - name: Upload coverage data
         if: ${{ matrix.python-version == '3.10' }}
-        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808  # v4 pinned
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0 pinned
         with:
           name: coverage-data
           path: .coverage
@@ -279,7 +279,7 @@ jobs:
         run: uv run python .github/scripts/compare_benchmark_metrics.py
       - name: Upload benchmark metrics artifact
         if: ${{ always() }}
-        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808  # v4 pinned
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0 pinned
         with:
           name: benchmark-profile-metrics
           path: ${{ github.workspace }}/output/forager-profiles/profile_metrics.json
