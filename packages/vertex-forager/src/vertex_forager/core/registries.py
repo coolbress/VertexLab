@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from vertex_forager.clients.base import BaseClient
+    from vertex_forager.core.config import AdvancedConfig, DownshiftConfig, HTTPConfig, RetryConfig
     from vertex_forager.routers.base import BaseRouter
     from vertex_forager.writers.base import BaseWriter
 
@@ -195,13 +196,47 @@ routers = Registry[RouterRegistration]("router")
 class ClientFactory(Protocol):
     """Protocol for client factory functions or classes."""
 
-    def __call__(self, *, api_key: str | None = None, rate_limit: int, **kwargs: Any) -> BaseClient:
+    def __call__(
+        self,
+        *,
+        api_key: str | None = None,
+        rate_limit: int,
+        metrics_enabled: bool | None = None,
+        structured_logs: bool | None = None,
+        log_verbose: bool | None = None,
+        dlq_enabled: bool | None = None,
+        pagination_max_burst: int | None = None,
+        retry: RetryConfig | dict[str, Any] | None = None,
+        downshift: DownshiftConfig | dict[str, Any] | None = None,
+        concurrency: int | None = None,
+        flush_threshold_rows: int | None = None,
+        writer_chunk_rows: int | None = None,
+        writer_concurrency: int | None = None,
+        persist_run_history: bool | None = None,
+        http_timeout_s: float | None = None,
+        limits: HTTPConfig | dict[str, Any] | None = None,
+        advanced: AdvancedConfig | dict[str, Any] | None = None,
+    ) -> BaseClient:
         """Create a client instance.
 
         Args:
             api_key: API key for the provider, or None if not required.
             rate_limit: Rate limit in requests per minute.
-            **kwargs: Additional provider-specific arguments.
+            metrics_enabled: Enables metrics emission when True.
+            structured_logs: Enables structured stage logs when True.
+            log_verbose: Promotes structured logs to INFO when True.
+            dlq_enabled: Enables DLQ spooling when True.
+            pagination_max_burst: Pagination fairness burst cap.
+            retry: Grouped retry policy configuration.
+            downshift: Grouped adaptive downshift policy configuration.
+            concurrency: Explicit fetch concurrency limit.
+            flush_threshold_rows: Buffered row threshold before flush.
+            writer_chunk_rows: Transitional write chunk-size tuning.
+            writer_concurrency: Transitional writer worker count tuning.
+            persist_run_history: Transitional run-history persistence toggle.
+            http_timeout_s: HTTP request timeout in seconds.
+            limits: Grouped HTTP connection-pool configuration.
+            advanced: Grouped advanced and transitional settings.
 
         Returns:
             BaseClient: An initialized client instance.

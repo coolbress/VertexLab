@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC
 import asyncio
 from contextlib import AsyncExitStack, asynccontextmanager, nullcontext
+from dataclasses import dataclass
 from functools import partial
 import logging
 import time
@@ -10,19 +11,29 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from tqdm.auto import tqdm
 
-from vertex_forager.core.config import EngineConfig, RunResult
+from vertex_forager.constants import FLUSH_THRESHOLD_ROWS, HTTP_TIMEOUT_S
+from vertex_forager.core.config import (
+    AdvancedConfig,
+    DownshiftConfig,
+    HTTPConfig,
+    ResolvedClientConfig,
+    RetryConfig,
+    RunResult,
+)
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor as _HttpExecutor
-from vertex_forager.core.http import default_async_client
+from vertex_forager.core.http import build_async_client
+from vertex_forager.core.http import default_async_client as _default_async_client
 from vertex_forager.core.pipeline import VertexForager as _VertexForager
 from vertex_forager.core.types import JSONValue, SharadarDataset, YFinanceDataset
 from vertex_forager.schema.registry import get_table_schema
 from vertex_forager.utils import (
     Spinner,
     create_pbar_updater,
-    env_bool,
-    env_int,
     sanitize_field,
+)
+from vertex_forager.utils import (
+    validate_memory_usage as validate_memory_usage_impl,
 )
 from vertex_forager.writers import create_writer
 
@@ -46,6 +57,98 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=SharadarDataset | YFinanceDataset | str)
 
 
+def _coerce_grouped_config(value: Any, model_cls: type[Any]) -> Any:
+    if value is None:
+        return None
+    if isinstance(value, model_cls):
+        return value
+    if isinstance(value, dict):
+        return model_cls(**value)
+    return model_cls.model_validate(value)
+
+
+def default_async_client() -> httpx.AsyncClient:
+    return _default_async_client()
+
+
+def _parse_flag(value: Any, default: bool) -> Any:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes"}:
+            return True
+        if normalized in {"false", "0", "no"}:
+            return False
+    return value
+
+
+@dataclass
+class _NormalizedClientSettings:
+    runtime_config: ResolvedClientConfig
+    http_timeout_s: float
+    http_limits: HTTPConfig
+    memory_threshold_ratio: float
+    memory_threshold_absolute: int | None
+
+
+def _normalize_client_settings(
+    *,
+    rate_limit: int,
+    metrics_enabled: bool | None,
+    structured_logs: bool | None,
+    log_verbose: bool | None,
+    dlq_enabled: bool | None,
+    pagination_max_burst: int | None,
+    retry: RetryConfig | dict[str, Any] | None,
+    downshift: DownshiftConfig | dict[str, Any] | None,
+    concurrency: int | None,
+    flush_threshold_rows: int | None,
+    writer_chunk_rows: int | None,
+    writer_concurrency: int | None,
+    persist_run_history: bool | None,
+    http_timeout_s: float | None,
+    limits: HTTPConfig | dict[str, Any] | None,
+    advanced: AdvancedConfig | dict[str, Any] | None,
+) -> _NormalizedClientSettings:
+    downshift_config = _coerce_grouped_config(downshift, DownshiftConfig) or DownshiftConfig()
+    limits_config = _coerce_grouped_config(limits, HTTPConfig) or HTTPConfig()
+    advanced_config = _coerce_grouped_config(advanced, AdvancedConfig) or AdvancedConfig()
+    retry_config = _coerce_grouped_config(retry, RetryConfig) or RetryConfig()
+
+    runtime_config = ResolvedClientConfig(
+        requests_per_minute=rate_limit,
+        metrics_enabled=_parse_flag(metrics_enabled, False),
+        structured_logs=_parse_flag(structured_logs, False),
+        log_verbose=_parse_flag(log_verbose, False),
+        dlq_enabled=_parse_flag(dlq_enabled, True),
+        pagination_max_burst=pagination_max_burst,
+        retry=retry_config,
+        downshift=downshift_config,
+        concurrency=concurrency,
+        flush_threshold_rows=flush_threshold_rows if flush_threshold_rows is not None else FLUSH_THRESHOLD_ROWS,
+        writer_chunk_rows=writer_chunk_rows,
+        writer_concurrency=writer_concurrency if writer_concurrency is not None else 1,
+        http_timeout_s=http_timeout_s if http_timeout_s is not None else HTTP_TIMEOUT_S,
+        limits=limits_config,
+        advanced=advanced_config,
+        persist_run_history=_parse_flag(persist_run_history, True),
+    )
+    runtime_config.assert_valid()
+
+    return _NormalizedClientSettings(
+        runtime_config=runtime_config,
+        http_timeout_s=runtime_config.http_timeout_s,
+        http_limits=runtime_config.limits,
+        memory_threshold_ratio=runtime_config.advanced.mem_threshold_ratio,
+        memory_threshold_absolute=None
+        if runtime_config.advanced.mem_threshold_abs_mb is None
+        else runtime_config.advanced.mem_threshold_abs_mb * 1024 * 1024,
+    )
+
+
 class BaseClient(ABC, Generic[T]):
     """
     Vendor-agnostic base client abstraction for the Vertex Forager pipeline.
@@ -61,7 +164,7 @@ class BaseClient(ABC, Generic[T]):
        components like Routers, Writers, and Mappers.
     3. **Flow Control**: Initializes the `FlowController` to enforce global rate limits and concurrency
        policies across all pipeline operations.
-    4. **Configuration**: Centralizes engine configuration (`EngineConfig`) handling.
+    4. **Configuration**: Centralizes grouped runtime configuration handling.
 
     Design Principles:
     - **Provider-Agnostic**: Contains NO vendor-specific logic. All vendor details must be injected
@@ -104,52 +207,105 @@ class BaseClient(ABC, Generic[T]):
         *,
         api_key: str | None = None,
         rate_limit: int,
-        **kwargs: Any,
+        metrics_enabled: bool | None = None,
+        structured_logs: bool | None = None,
+        log_verbose: bool | None = None,
+        dlq_enabled: bool | None = None,
+        pagination_max_burst: int | None = None,
+        retry: RetryConfig | dict[str, Any] | None = None,
+        downshift: DownshiftConfig | dict[str, Any] | None = None,
+        concurrency: int | None = None,
+        flush_threshold_rows: int | None = None,
+        writer_chunk_rows: int | None = None,
+        writer_concurrency: int | None = None,
+        persist_run_history: bool | None = None,
+        http_timeout_s: float | None = None,
+        limits: HTTPConfig | dict[str, Any] | None = None,
+        advanced: AdvancedConfig | dict[str, Any] | None = None,
     ) -> None:
         """Initialize the base client infrastructure.
 
         Args:
             api_key: API key for the provider (optional, depends on provider).
             rate_limit: Maximum requests per minute (RPM) allowed for this client.
-            **kwargs: Additional configuration parameters passed directly to `EngineConfig`.
+            metrics_enabled: Enables metrics emission when True.
+            structured_logs: Enables structured stage logs when True.
+            log_verbose: Promotes structured logs to INFO when True.
+            dlq_enabled: Enables DLQ spooling on persistence failures.
+            pagination_max_burst: Pagination fairness burst cap.
+            retry: Grouped retry policy configuration.
+            downshift: Grouped adaptive downshift policy configuration.
+            concurrency: Explicit fetch concurrency limit.
+            flush_threshold_rows: Buffered row threshold before flush begins.
+            writer_chunk_rows: Transitional write chunk-size tuning.
+            writer_concurrency: Transitional writer worker count tuning.
+            persist_run_history: Transitional run-history persistence toggle.
+            http_timeout_s: HTTP request timeout in seconds.
+            limits: Grouped HTTP connection-pool configuration.
+            advanced: Grouped advanced and transitional settings.
         """
         self.api_key = api_key
+        normalized = _normalize_client_settings(
+            rate_limit=rate_limit,
+            metrics_enabled=metrics_enabled,
+            structured_logs=structured_logs,
+            log_verbose=log_verbose,
+            dlq_enabled=dlq_enabled,
+            pagination_max_burst=pagination_max_burst,
+            retry=retry,
+            downshift=downshift,
+            concurrency=concurrency,
+            flush_threshold_rows=flush_threshold_rows,
+            writer_chunk_rows=writer_chunk_rows,
+            writer_concurrency=writer_concurrency,
+            persist_run_history=persist_run_history,
+            http_timeout_s=http_timeout_s,
+            limits=limits,
+            advanced=advanced,
+        )
 
-        # Enforce rate_limit into EngineConfig
-        config_params = kwargs.copy()
-        config_params["requests_per_minute"] = rate_limit
-
-        if ("metrics_enabled" not in config_params) or (config_params.get("metrics_enabled") is None):
-            config_params["metrics_enabled"] = env_bool("VF_METRICS_ENABLED")
-        if ("structured_logs" not in config_params) or (config_params.get("structured_logs") is None):
-            config_params["structured_logs"] = env_bool("VF_STRUCTURED_LOGS")
-        if ("log_verbose" not in config_params) or (config_params.get("log_verbose") is None):
-            config_params["log_verbose"] = env_bool("VF_LOG_VERBOSE")
-        if ("concurrency" not in config_params) or (config_params.get("concurrency") is None):
-            ci = env_int("VF_CONCURRENCY")
-            if ci is not None and ci > 0:
-                config_params["concurrency"] = ci
-        if ("flush_threshold_rows" not in config_params) or (config_params.get("flush_threshold_rows") is None):
-            ft = env_int("VF_FLUSH_THRESHOLD_ROWS")
-            if ft is not None and ft > 0:
-                config_params["flush_threshold_rows"] = ft
-        self._config = EngineConfig(**config_params)
+        self._config = normalized.runtime_config
         self._structured_logs = bool(self._config.structured_logs)
         self._log_verbose = bool(self._config.log_verbose)
+        self._http_timeout_s = normalized.http_timeout_s
+        self._http_limits = normalized.http_limits
+        self._memory_threshold_ratio = normalized.memory_threshold_ratio
+        self._memory_threshold_absolute = normalized.memory_threshold_absolute
 
-        # Initialize FlowController for global rate limiting
         self.controller = FlowController(
             requests_per_minute=self._config.requests_per_minute,
             concurrency_limit=self._config.fetch_concurrency,
-            downshift_enabled=self._config.downshift_enabled,
-            downshift_window_s=self._config.downshift_window_s,
-            error_rate_threshold=self._config.error_rate_threshold,
-            rpm_floor=self._config.rpm_floor,
-            recovery_step=self._config.recovery_step,
-            healthy_window_s=self._config.healthy_window_s,
+            downshift_enabled=self._config.downshift.enabled,
+            downshift_window_s=self._config.downshift.window_s,
+            error_rate_threshold=self._config.downshift.error_rate_threshold,
+            rpm_floor=self._config.downshift.rpm_floor,
+            recovery_step=self._config.downshift.recovery_step,
+            healthy_window_s=self._config.downshift.healthy_window_s,
         )
         self.last_run: RunResult | None = None
         self._client: httpx.AsyncClient | None = None
+
+    def _build_http_client(self) -> httpx.AsyncClient:
+        return build_async_client(
+            timeout_s=self._http_timeout_s,
+            max_keepalive_connections=self._http_limits.max_keepalive_connections,
+            max_connections=self._http_limits.max_connections,
+        )
+
+    def validate_memory_usage(
+        self,
+        *,
+        symbols: list[str] | None,
+        connect_db: str | Path | None,
+        bytes_per_item: int,
+    ) -> None:
+        validate_memory_usage_impl(
+            symbols=symbols,
+            connect_db=connect_db,
+            bytes_per_item=bytes_per_item,
+            threshold_ratio=self._memory_threshold_ratio,
+            threshold_absolute=self._memory_threshold_absolute,
+        )
 
     async def aclose(self) -> None:
         """Asynchronously close the underlying HTTP client to release resources."""
@@ -163,7 +319,7 @@ class BaseClient(ABC, Generic[T]):
         Initializes the shared HTTP client.
         """
         if self._client is None:
-            self._client = default_async_client()
+            self._client = self._build_http_client()
         return self
 
     async def __aexit__(
@@ -179,17 +335,17 @@ class BaseClient(ABC, Generic[T]):
         await self.aclose()
 
     @property
-    def config(self) -> EngineConfig:
-        """Public engine/client configuration.
+    def config(self) -> ResolvedClientConfig:
+        """Resolved internal configuration snapshot.
 
         Returns:
-            EngineConfig: The configuration object governing rate limits,
+            ResolvedClientConfig: The configuration object governing rate limits,
                 concurrency, queue sizes, and thresholds used by this client.
 
         Notes:
             Read-only accessor. Callers should not mutate the returned object
-            in place; prefer constructing a new EngineConfig or using factory
-            helpers to apply changes.
+            in place. Public callers should prefer `create_client(...)` and
+            grouped config inputs rather than constructing this model directly.
         """
         return self._config
 
@@ -347,7 +503,7 @@ class BaseClient(ABC, Generic[T]):
             yield self._client
             return
 
-        client = default_async_client()
+        client = self._build_http_client()
         try:
             self._client = client
             yield client
@@ -474,6 +630,7 @@ class BaseClient(ABC, Generic[T]):
             try:
                 # local import for optionality
                 from vertex_forager.writers.memory import InMemoryBufferWriter as _IMW
+
                 if isinstance(writer, _IMW):
                     writer.set_unique_key(list(schema.unique_key))
             except Exception as e:

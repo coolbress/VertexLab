@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import polars as pl
 import pytest
 
-from vertex_forager.core.config import EngineConfig, FramePacket, RunResult
+from vertex_forager.core.config import FramePacket, ResolvedClientConfig, RunResult
 from vertex_forager.core.pipeline import VertexForager
 from vertex_forager.writers.base import BaseWriter, WriteResult
 
@@ -24,7 +24,7 @@ async def test_flexible_schema_add_column_evolution() -> None:
     mock_http = MagicMock()
     mock_mapper = MagicMock()
     mock_controller = MagicMock()
-    cfg = EngineConfig(requests_per_minute=60, writer_chunk_rows=None)
+    cfg = ResolvedClientConfig(requests_per_minute=60, writer_chunk_rows=None)
     vf = VertexForager(
         router=mock_router,
         http=mock_http,
@@ -85,7 +85,7 @@ async def test_pk_missing_raises_and_spools(tmp_path, monkeypatch) -> None:
     mock_http = MagicMock()
     mock_mapper = MagicMock()
     mock_controller = MagicMock()
-    cfg = EngineConfig(requests_per_minute=60)
+    cfg = ResolvedClientConfig(requests_per_minute=60)
     vf = VertexForager(
         router=mock_router,
         http=mock_http,

@@ -165,13 +165,11 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         if structured_logs_arg is not None:
             self._structured_logs = _parse_bool(structured_logs_arg)
         else:
-            v_struct = os.getenv("VF_STRUCTURED_LOGS")
-            self._structured_logs = _parse_bool(v_struct)
+            self._structured_logs = False
         if log_verbose_arg is not None:
             self._log_verbose = _parse_bool(log_verbose_arg)
         else:
-            v_verbose = os.getenv("VF_LOG_VERBOSE")
-            self._log_verbose = _parse_bool(v_verbose)
+            self._log_verbose = False
         allow_pickle_arg = kwargs.get("allow_pickle_compat")
         if allow_pickle_arg is not None:
             self._allow_pickle_compat = _parse_bool(allow_pickle_arg)

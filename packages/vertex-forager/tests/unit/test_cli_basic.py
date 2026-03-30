@@ -80,11 +80,12 @@ def test_collect_sharadar_missing_api_key(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_constants_env_only_table(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("VF_HTTP_TIMEOUT_S", "12")
+    monkeypatch.setenv("SHARADAR_API_KEY", "secret")
     runner = CliRunner()
     result = runner.invoke(cli_mod.main, ["constants", "--env-only", "--format", "table"])
     assert result.exit_code == 0
-    assert "VF_HTTP_TIMEOUT_S" in result.output
+    assert "SHARADAR_API_KEY" in result.output
+    assert "<redacted>" in result.output
 
 
 def test_constants_sections_table() -> None:
@@ -112,22 +113,22 @@ def test_constants_yfinance_sharadar_json() -> None:
     assert "MAX_ROWS_PER_REQUEST" in r2.output
 
 
-def test_constants_env_only_flow_concurrency(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_constants_env_only_ignores_non_auth_runtime_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("VF_CONCURRENCY", "16")
     runner = CliRunner()
     res = runner.invoke(cli_mod.main, ["constants", "--section", "flow", "--format", "table", "--env-only"])
     assert res.exit_code == 0
-    # env-only in flow should surface CONCURRENCY_MAX as overridden
-    assert "CONCURRENCY_MAX" in res.output
+    assert "[flow]" not in res.output
+    assert "VF_CONCURRENCY" not in res.output
 
 
-def test_constants_env_only_global_http_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_constants_env_only_global_skips_removed_runtime_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("VF_HTTP_TIMEOUT_S", "15")
     runner = CliRunner()
     res = runner.invoke(cli_mod.main, ["constants", "--section", "global", "--format", "table", "--env-only"])
     assert res.exit_code == 0
-    assert "HTTP_TIMEOUT_S" in res.output
-    assert "(env)" in res.output
+    assert "[global]" not in res.output
+    assert "HTTP_TIMEOUT_S" not in res.output
 
 
 def test_constants_queue_table() -> None:
@@ -173,16 +174,14 @@ def test_recover_table_specified_but_not_found(tmp_path: Path, monkeypatch: pyte
     assert "tables=0" in res.output
 
 
-def test_constants_global_env_only_multiple(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("VF_HTTP_MAX_CONNECTIONS", "64")
-    monkeypatch.setenv("VF_HTTP_MAX_KEEPALIVE", "32")
+def test_constants_env_only_keeps_auth_env_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("VF_HTTP_TIMEOUT_S", "15")
+    monkeypatch.setenv("SHARADAR_API_KEY", "secret")
     runner = CliRunner()
     res = runner.invoke(cli_mod.main, ["constants", "--section", "global", "--format", "table", "--env-only"])
     assert res.exit_code == 0
-    # Alignment varies; ensure keys and env markers are present
-    assert "HTTP_MAX_CONNECTIONS" in res.output
-    assert "HTTP_MAX_KEEPALIVE_CONNECTIONS" in res.output
-    assert res.output.count("(env)") >= 2
+    assert "SHARADAR_API_KEY" in res.output
+    assert "VF_HTTP_TIMEOUT_S" not in res.output
 
 
 def test_constants_writers_table() -> None:
@@ -224,13 +223,13 @@ def test_constants_all_json_has_sections() -> None:
 
 def test_constants_json_env_overrides_included(monkeypatch: pytest.MonkeyPatch) -> None:
     import json as _json
-    monkeypatch.setenv("VF_HTTP_TIMEOUT_S", "17")
+    monkeypatch.setenv("SHARADAR_API_KEY", "secret")
     runner = CliRunner()
     res = runner.invoke(cli_mod.main, ["constants", "--section", "global", "--format", "json"])
     assert res.exit_code == 0
     data = _json.loads(res.output)
     assert "env_overrides" in data
-    assert "VF_HTTP_TIMEOUT_S" in data["env_overrides"]
+    assert data["env_overrides"]["SHARADAR_API_KEY"] == "<redacted>"
 
 
 def test_collect_network_error(monkeypatch: pytest.MonkeyPatch) -> None:

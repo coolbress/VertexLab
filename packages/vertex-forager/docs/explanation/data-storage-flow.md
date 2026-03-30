@@ -63,9 +63,9 @@
   - On-error cleanup: when DLQ spool fails after writing temp, the temp is deleted before recording `DLQSpoolError`.
   - Periodic cleanup: at run start, stale temp files older than retention are removed.
 - Configuration:
-  - `EngineConfig.dlq_tmp_cleanup_on_error` (default True)
-  - `EngineConfig.dlq_tmp_periodic_cleanup` (default True)
-  - `EngineConfig.dlq_tmp_retention_s` (default 86400)
+  - `AdvancedConfig.dlq_tmp_cleanup_on_error` (default True)
+  - `AdvancedConfig.dlq_tmp_periodic_cleanup` (default True)
+  - `AdvancedConfig.dlq_tmp_retention_s` (default 86400)
 
 ## Recovery Workflow
 

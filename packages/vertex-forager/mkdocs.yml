@@ -17,7 +17,7 @@ nav:
       - Testing Guide: how-to/testing.md
       - Migration Guide: how-to/migration.md
   - Reference:
-      - EngineConfig: reference/config.md
+      - Configuration: reference/config.md
       - Metrics: reference/metrics.md
       - Constants: reference/constants.md
       - Schema: reference/schema.md

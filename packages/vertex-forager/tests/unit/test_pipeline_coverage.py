@@ -18,7 +18,14 @@ from typing import Any
 
 import pytest
 
-from vertex_forager.core.config import EngineConfig, FetchJob, FramePacket, ParseResult, RequestSpec, RunResult
+from vertex_forager.core.config import (
+    FetchJob,
+    FramePacket,
+    ParseResult,
+    RequestSpec,
+    ResolvedClientConfig,
+    RunResult,
+)
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor
 from vertex_forager.core.pipeline import VertexForager
@@ -68,7 +75,7 @@ def _make_engine(
     writer: Any | None = None,
 ) -> tuple[VertexForager, Any]:
     w = writer or _RecordingWriter()
-    config = EngineConfig(
+    config = ResolvedClientConfig(
         requests_per_minute=60,
         concurrency=concurrency,
         metrics_enabled=False,

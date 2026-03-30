@@ -13,7 +13,7 @@ from vertex_forager.constants import (
     DEFAULT_RETRY_MAX_BACKOFF_S,
     RESERVED_PIPELINE_KEYS,
 )
-from vertex_forager.core.config import RetryConfig, RunResult
+from vertex_forager.core.config import AdvancedConfig, DownshiftConfig, HTTPConfig, RetryConfig, RunResult
 from vertex_forager.core.types import YFinanceDataset
 from vertex_forager.exceptions import InputError
 from vertex_forager.logging.constants import (
@@ -60,7 +60,21 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         *,
         api_key: str | None = None,
         rate_limit: int = DEFAULT_RATE_LIMIT,
-        **kwargs: Any,
+        metrics_enabled: bool | None = None,
+        structured_logs: bool | None = None,
+        log_verbose: bool | None = None,
+        dlq_enabled: bool | None = None,
+        pagination_max_burst: int | None = None,
+        retry: RetryConfig | dict[str, Any] | None = None,
+        downshift: DownshiftConfig | dict[str, Any] | None = None,
+        concurrency: int | None = None,
+        flush_threshold_rows: int | None = None,
+        writer_chunk_rows: int | None = None,
+        writer_concurrency: int | None = None,
+        persist_run_history: bool | None = None,
+        http_timeout_s: float | None = None,
+        limits: HTTPConfig | dict[str, Any] | None = None,
+        advanced: AdvancedConfig | dict[str, Any] | None = None,
     ) -> None:
         normalized = rate_limit
         if isinstance(normalized, int):
@@ -72,14 +86,31 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         else:
             logger.warning(LOG_RATE_LIMIT_INVALID_TYPE.format(prefix=CLIENT_LOG_PREFIX, value=normalized))
             normalized = DEFAULT_RATE_LIMIT
-        if "retry" not in kwargs:
-            kwargs["retry"] = RetryConfig(
+        if retry is None:
+            retry = RetryConfig(
                 max_attempts=DEFAULT_RETRY_MAX_ATTEMPTS,
                 base_backoff_s=DEFAULT_RETRY_BASE_BACKOFF_S,
                 max_backoff_s=DEFAULT_RETRY_MAX_BACKOFF_S,
             )
-        # Ensure api_key is None for YFinanceClient
-        super().__init__(api_key=None, rate_limit=normalized, **kwargs)
+        super().__init__(
+            api_key=None,
+            rate_limit=normalized,
+            metrics_enabled=metrics_enabled,
+            structured_logs=structured_logs,
+            log_verbose=log_verbose,
+            dlq_enabled=dlq_enabled,
+            pagination_max_burst=pagination_max_burst,
+            retry=retry,
+            downshift=downshift,
+            concurrency=concurrency,
+            flush_threshold_rows=flush_threshold_rows,
+            writer_chunk_rows=writer_chunk_rows,
+            writer_concurrency=writer_concurrency,
+            persist_run_history=persist_run_history,
+            http_timeout_s=http_timeout_s,
+            limits=limits,
+            advanced=advanced,
+        )
         self._mapper = SchemaMapper()
 
     # ----------------------------------------------------------------
@@ -724,6 +755,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             symbols=symbols,
             connect_db=connect_db,
             bytes_per_item=bytes_per_item,
+            threshold_ratio=self._memory_threshold_ratio,
+            threshold_absolute=self._memory_threshold_absolute,
         )
 
         # Use BaseClient's common infrastructure
@@ -742,9 +775,11 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
                 router = create_router(
                     "yfinance",
                     api_key=self.api_key or "",
-                    config=self._config,
+                    rate_limit=self._config.requests_per_minute,
                     start_date=start_date,
                     end_date=end_date,
+                    structured_logs=self._config.structured_logs,
+                    log_verbose=self._config.log_verbose,
                     **{k: v for k, v in kwargs.items() if k in {PRICE_BATCH_SIZE_KEY}},
                 )
 

@@ -10,11 +10,11 @@ import polars as pl
 import pytest
 
 from vertex_forager.core.config import (
-    EngineConfig,
     FetchJob,
     FramePacket,
     ParseResult,
     RequestSpec,
+    ResolvedClientConfig,
     RunResult,
 )
 from vertex_forager.core.contracts import IMapper, IRouter
@@ -32,7 +32,7 @@ class _Resp:
 
 class StubClient:
     def __init__(self) -> None:
-        self._config = EngineConfig(requests_per_minute=60)
+        self._config = ResolvedClientConfig(requests_per_minute=60)
         class C:
             def __init__(self) -> None:
                 self.concurrency_limit = 1
@@ -90,7 +90,7 @@ class StubMapper(IMapper):
 
 def test_duckdb_writer_concurrency_warning(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     writer = DuckDBWriter(str(tmp_path / "warn.duckdb"))
-    cfg = EngineConfig(requests_per_minute=60, writer_concurrency=2)
+    cfg = ResolvedClientConfig(requests_per_minute=60, writer_concurrency=2)
     caplog.set_level("WARNING", logger="vertex_forager.debug")
     try:
         VertexForager(

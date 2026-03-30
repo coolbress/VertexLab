@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import polars as pl
 import pytest
 
-from vertex_forager.core.config import EngineConfig, FramePacket
+from vertex_forager.core.config import FramePacket, ResolvedClientConfig
 from vertex_forager.core.pipeline import RunResult, VertexForager
 from vertex_forager.writers.base import BaseWriter, WriteResult
 
@@ -26,7 +26,7 @@ async def test_dlq_disabled_skips_spooling(tmp_path: Path, monkeypatch) -> None:
     mock_http = MagicMock()
     mock_mapper = MagicMock()
     mock_controller = MagicMock()
-    cfg = EngineConfig(requests_per_minute=60, dlq_enabled=False)
+    cfg = ResolvedClientConfig(requests_per_minute=60, dlq_enabled=False)
     forager = VertexForager(
         router=mock_router,
         http=mock_http,
@@ -70,9 +70,7 @@ async def test_dlq_disabled_flush_by_threshold(tmp_path: Path, monkeypatch) -> N
     mock_mapper = MagicMock()
     mock_controller = MagicMock()
     # Force flush by size: threshold = 1 row
-    cfg = EngineConfig(
-        requests_per_minute=60, dlq_enabled=False, flush_threshold_rows=1
-    )
+    cfg = ResolvedClientConfig(requests_per_minute=60, dlq_enabled=False, flush_threshold_rows=1)
     forager = VertexForager(
         router=mock_router,
         http=mock_http,

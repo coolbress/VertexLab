@@ -136,7 +136,6 @@ def sharadar_client(
                 client = SharadarClient(
                     api_key=sharadar_client_config["api_key"],
                     rate_limit=sharadar_client_config["rate_limit"],
-                    base_url=sharadar_client_config["base_url"],
                 )
 
                 yield client

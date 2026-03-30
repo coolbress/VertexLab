@@ -23,7 +23,6 @@ from vertex_forager.constants import (
 )
 from vertex_forager.core.config import RequestSpec
 from vertex_forager.core.library import get_library_fetcher
-from vertex_forager.utils import env_float, env_int
 
 if TYPE_CHECKING:
     from vertex_forager.core.contracts import HttpClientProtocol
@@ -149,11 +148,6 @@ class HttpExecutor:
     async def _fetch_library(self, spec: RequestSpec) -> bytes:
         """Execute a non-HTTP library call using the unified client interface.
 
-        ADR-0001 compatibility shim:
-        Until 2026-06-30, this function accepts pandas DataFrame/Series payloads
-        for backward compatibility and converts them to Polars before IPC handoff.
-        After 2026-06-30, library fetchers are expected to return Polars directly.
-
         Args:
             spec: Request specification with a library URL scheme (e.g., yfinance://).
 
@@ -234,19 +228,35 @@ def default_async_client() -> httpx.AsyncClient:
         httpx.AsyncClient: Configured client for HTTP operations.
     """
 
-    mk = env_int("VF_HTTP_MAX_KEEPALIVE", HTTP_MAX_KEEPALIVE_CONNECTIONS)
-    max_keepalive = mk if mk is not None and mk > 0 else HTTP_MAX_KEEPALIVE_CONNECTIONS
+    return build_async_client(
+        timeout_s=HTTP_TIMEOUT_S,
+        max_keepalive_connections=HTTP_MAX_KEEPALIVE_CONNECTIONS,
+        max_connections=HTTP_MAX_CONNECTIONS,
+    )
 
-    mc = env_int("VF_HTTP_MAX_CONNECTIONS", HTTP_MAX_CONNECTIONS)
-    max_conns = mc if mc is not None and mc > 0 else HTTP_MAX_CONNECTIONS
 
-    to = env_float("VF_HTTP_TIMEOUT_S", HTTP_TIMEOUT_S)
-    timeout_s = to if to is not None and to > 0 else HTTP_TIMEOUT_S
+def build_async_client(
+    *,
+    timeout_s: float,
+    max_keepalive_connections: int,
+    max_connections: int,
+) -> httpx.AsyncClient:
+    """Create a configured ``httpx.AsyncClient`` instance.
+
+    Args:
+        timeout_s: Request timeout in seconds.
+        max_keepalive_connections: Maximum keep-alive connections.
+        max_connections: Maximum total connections.
+
+    Returns:
+        Configured HTTP client instance.
+    """
+
     return httpx.AsyncClient(
         headers={"User-Agent": HTTP_USER_AGENT},
         timeout=httpx.Timeout(timeout_s),
         limits=httpx.Limits(
-            max_keepalive_connections=max_keepalive,
-            max_connections=max_conns,
+            max_keepalive_connections=max_keepalive_connections,
+            max_connections=max_connections,
         ),
     )

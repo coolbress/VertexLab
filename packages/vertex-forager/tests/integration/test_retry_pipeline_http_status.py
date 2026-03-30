@@ -8,11 +8,11 @@ import httpx
 import pytest
 
 from vertex_forager.core.config import (
-    EngineConfig,
     FetchJob,
     FramePacket,
     ParseResult,
     RequestSpec,
+    ResolvedClientConfig,
 )
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor
@@ -73,7 +73,7 @@ class _Resp:
 
 class StubClient:
     def __init__(self) -> None:
-        self._config = EngineConfig(requests_per_minute=60, structured_logs=True)
+        self._config = ResolvedClientConfig(requests_per_minute=60, structured_logs=True)
         self.controller = FlowController(requests_per_minute=60, concurrency_limit=1)
         self._calls = 0
     async def run_async(self, method: str, url: str, **kwargs: Any) -> _Resp:

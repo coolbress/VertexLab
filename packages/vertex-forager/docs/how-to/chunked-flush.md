@@ -20,10 +20,12 @@ Chunked flush reduces memory peaks by writing in bounded batches. Tune threshold
 ## Example
 
 ```python
-from vertex_forager.core.config import EngineConfig
+from vertex_forager import create_client
 
-cfg = EngineConfig(
-    requests_per_minute=120,
+client = create_client(
+    provider="sharadar",
+    api_key="...",
+    rate_limit=120,
     flush_threshold_rows=500_000,
     writer_chunk_rows=20_000,  # must be >= 10_000 when specified
     metrics_enabled=True,      # observe writer_rows.* histograms

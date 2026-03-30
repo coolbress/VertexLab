@@ -5,7 +5,14 @@ from typing import Any
 
 import pytest
 
-from vertex_forager.core.config import EngineConfig, FetchJob, FramePacket, ParseResult, RequestSpec, RunResult
+from vertex_forager.core.config import (
+    FetchJob,
+    FramePacket,
+    ParseResult,
+    RequestSpec,
+    ResolvedClientConfig,
+    RunResult,
+)
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor
 from vertex_forager.core.pipeline import VertexForager
@@ -68,7 +75,7 @@ async def test_pagination_fairness_cap_prevents_long_bursts() -> None:
     router = FairnessRouter(pages_for_aapl=5)
     http = HttpExecutor(client=StubClient())
     writer = StubWriter()
-    config = EngineConfig(
+    config = ResolvedClientConfig(
         requests_per_minute=60, concurrency=1, metrics_enabled=False, structured_logs=False, pagination_max_burst=2
     )
     controller = FlowController(requests_per_minute=60, concurrency_limit=1)

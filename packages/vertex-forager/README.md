@@ -162,13 +162,10 @@ print(res)  # RunResult
 
 ## Configuration
 
-- EngineConfig
-  - `requests_per_minute`: positive integer (required)
-  - `concurrency`: optional positive integer
-  - `retry`: `{max_attempts, base_backoff_s, max_backoff_s}`
-  - `flush_threshold_rows`: buffer flush threshold (rows)
-  - `writer_chunk_rows`: per‑chunk rows for streaming write (>= 10_000 when set)
-  - `dlq_enabled`: enable/disable DLQ spooling (default True)
+- `create_client(...)`
+  - required: `provider`, `api_key` (Sharadar), `rate_limit`
+  - common runtime knobs: `concurrency`, `flush_threshold_rows`, `writer_chunk_rows`, `dlq_enabled`, `metrics_enabled`
+  - grouped config: `retry=RetryConfig(...)`, `downshift=DownshiftConfig(...)`, `limits=HTTPConfig(...)`, `advanced=AdvancedConfig(...)`
 - Flow control
   - Global rate limiting via `FlowController` (automatic in BaseClient)
 - Writers
@@ -177,7 +174,7 @@ print(res)  # RunResult
 
 ## Observability
 
-- Metrics (enabled via `EngineConfig.metrics_enabled=True`)
+- Metrics (enabled via `create_client(..., metrics_enabled=True)`)
   - Counters:
     - `rows_written_total`
     - `writer_flushes`
@@ -192,7 +189,7 @@ print(res)  # RunResult
   - Queue snapshots:
     - `req_q_len_after_producer`, `req_q_len_after_req_join`, `pkt_q_len_after_producer`, `pkt_q_len_after_pkt_join`
 - Optional spans (no hard dependency)
-  - Set env `VF_OTEL_ENABLED=1` and provide `EngineConfig.tracer` with a `start_span(name, attributes=...)` method to receive spans for `pipeline`, `fetch`, `parse`, and `write_flush`.
+  - Pass `advanced=AdvancedConfig(otel_enabled=True, tracer=...)` and provide a tracer with a `start_span(name, attributes=...)` method to receive spans for `pipeline`, `fetch`, `parse`, and `write_flush`.
 
 ## Usage Patterns
 
@@ -214,7 +211,7 @@ print(res)  # RunResult
   - [Troubleshooting](docs/how-to/troubleshooting.md)
   - [CLI equivalents](docs/how-to/cli-equivalents.md)
 - Reference
-  - [EngineConfig](docs/reference/config.md)
+  - [Configuration](docs/reference/config.md)
   - [Metrics](docs/reference/metrics.md)
   - [Constants](docs/reference/constants.md)
   - [API Reference](docs/reference/api.md)
@@ -251,7 +248,7 @@ print(res)  # RunResult
 - Do I need an API key?
   - Sharadar requires `SHARADAR_API_KEY`; YFinance does not.
 - How do I change concurrency?
-  - Set `EngineConfig(concurrency=...)`; must be positive when specified.
+  - Pass `concurrency=...` to `create_client(...)`; it must be positive when specified.
 - Where are schemas defined?
   - See `vertex_forager/schema/registry.py` and provider-specific `schema.py`.
 
@@ -276,15 +273,15 @@ from vertex_forager import (
 - Configurable retries for specific HTTP status codes (default: 429, 503).
 - Exponential backoff with Full Jitter to reduce thundering herd; transport errors continue to retry.
 - Configuration:
-  - EngineConfig.retry.enable_http_status_retry: bool (default True)
-  - EngineConfig.retry.retry_status_codes: tuple[int, ...] (default (429, 503))
+  - RetryConfig.enable_http_status_retry: bool (default True)
+  - RetryConfig.retry_status_codes: tuple[int, ...] (default (429, 503))
 - Structured logs include retry attempt metadata when enabled.
 
 ### Jitter and Opt-in Status Codes
 
 - Backoff uses Full Jitter: sleep is drawn uniformly from [0, min(max_backoff_s, base_backoff_s * 2^(attempt-1))].
 - Defaults are conservative. To broaden server error retries when appropriate:
-  - EngineConfig.retry.retry_status_codes = (429, 503, 500, 502, 504)
+  - `RetryConfig(retry_status_codes=(429, 503, 500, 502, 504))`
   - Important: Enable broader server error retries ONLY for idempotent operations.
     Non-idempotent requests (e.g., POST/PUT without idempotency keys) can cause duplicate side effects.
     Use idempotency keys or ensure upstream idempotent semantics before opting in.

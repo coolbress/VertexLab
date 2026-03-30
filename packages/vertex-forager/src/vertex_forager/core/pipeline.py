@@ -141,10 +141,10 @@ except ImportError:
     _duckdb = cast("Any", None)
 
 from vertex_forager.core.config import (
-    EngineConfig,
     FetchJob,
     FramePacket,
     ParseResult,
+    ResolvedClientConfig,
     RunResult,
 )
 from vertex_forager.core.errors import (
@@ -199,7 +199,7 @@ class VertexForager:
         _http (HttpExecutor): Handles HTTP requests.
         _writer (IWriter): Writer task manager.
         _mapper (IMapper): Normalizes data schemas.
-        _config (EngineConfig): Configuration object.
+        _config (ResolvedClientConfig): Internal resolved configuration object.
         controller (FlowController): Rate limiter and concurrency controller.
         _flush_threshold (int): Row count threshold for flushing buffers.
 
@@ -230,7 +230,7 @@ class VertexForager:
         http: HttpExecutor,
         writer: IWriter,
         mapper: IMapper,
-        config: EngineConfig,
+        config: ResolvedClientConfig,
         controller: FlowController,
     ) -> None:
         self._router = router
@@ -244,12 +244,8 @@ class VertexForager:
         self._log_verbose = bool(config.log_verbose)
         self._counters: dict[str, int] = {}
         self._hists: dict[str, deque[float]] = {}
-        # Optional tracing hooks (no hard dependency)
-        self._tracer = getattr(config, "tracer", None)
-        self._otel_enabled = bool(
-            getattr(config, "otel_enabled", False)
-            or str(os.getenv("VF_OTEL_ENABLED", "")).lower() in {"1", "true", "yes"}
-        )
+        self._tracer = config.advanced.tracer
+        self._otel_enabled = bool(config.advanced.otel_enabled)
 
         # Track active tasks for graceful shutdown
         self._active_tasks: list[asyncio.Future[Any]] = []
@@ -269,11 +265,7 @@ class VertexForager:
             # We treat 1 billion rows as effectively infinite for memory buffer
             self._flush_threshold = self.FLUSH_THRESHOLD_INFINITE
             logger.debug("PIPELINE: Detected InMemoryBufferWriter. Disabled intermediate flushing.")
-        if (
-            DuckDBWriterType is not None
-            and isinstance(writer, DuckDBWriterType)
-            and int(config.writer_concurrency) > 1
-        ):
+        if DuckDBWriterType is not None and isinstance(writer, DuckDBWriterType) and int(config.writer_concurrency) > 1:
             logger.warning(
                 "PIPELINE: writer_concurrency=%s requested with DuckDBWriter; DuckDB writes remain serialized.",
                 config.writer_concurrency,
@@ -455,8 +447,9 @@ class VertexForager:
         else:
             logger.debug(msg)
 
-    def _update_checkpoint(self, run_id: str, provider: str, dataset: str,
-                          completed_symbols: set[str], failed_symbols: set[str]) -> None:
+    def _update_checkpoint(
+        self, run_id: str, provider: str, dataset: str, completed_symbols: set[str], failed_symbols: set[str]
+    ) -> None:
         """Update checkpoint with completed and failed symbols."""
         if not completed_symbols and not failed_symbols:
             return
@@ -466,7 +459,7 @@ class VertexForager:
             provider=provider,
             dataset=dataset,
             completed=list(completed_symbols),
-            failed=list(failed_symbols)
+            failed=list(failed_symbols),
         )
 
         try:
@@ -504,8 +497,7 @@ class VertexForager:
             if checkpoint_file.exists():
                 try:
                     checkpoint = load_checkpoint(checkpoint_dir.name)
-                    if (checkpoint and checkpoint.provider == provider
-                        and checkpoint.dataset == dataset):
+                    if checkpoint and checkpoint.provider == provider and checkpoint.dataset == dataset:
                         # Get modification time to find the latest
                         mtime = checkpoint_file.stat().st_mtime
                         if mtime > latest_mtime:
@@ -797,8 +789,8 @@ class VertexForager:
     ]:
         req_q, pkt_q = create_run_queues_impl(
             queue_max=self._config.queue_max,
-            dlq_tmp_periodic_cleanup=bool(getattr(self._config, "dlq_tmp_periodic_cleanup", False)),
-            dlq_tmp_retention_s=int(getattr(self._config, "dlq_tmp_retention_s", 86400)),
+            dlq_tmp_periodic_cleanup=self._config.advanced.dlq_tmp_periodic_cleanup,
+            dlq_tmp_retention_s=self._config.advanced.dlq_tmp_retention_s,
             cache_dir=get_cache_dir(),
             logger=logger,
         )

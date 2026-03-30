@@ -1,12 +1,12 @@
 import logging
 from unittest.mock import AsyncMock, MagicMock
 
-from vertex_forager.core.config import EngineConfig
+from vertex_forager.core.config import ResolvedClientConfig
 from vertex_forager.core.pipeline import VertexForager
 
 
 def _make_engine(metrics_enabled: bool) -> VertexForager:
-    cfg = EngineConfig(requests_per_minute=60, metrics_enabled=metrics_enabled)
+    cfg = ResolvedClientConfig(requests_per_minute=60, metrics_enabled=metrics_enabled)
     mock_router = MagicMock()
     mock_http = MagicMock()
     mock_writer = AsyncMock()

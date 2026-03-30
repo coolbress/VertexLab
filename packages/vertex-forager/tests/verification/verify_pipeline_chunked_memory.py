@@ -13,7 +13,7 @@ import polars as pl
 import psutil
 import pytest
 
-from vertex_forager.core.config import EngineConfig, FramePacket, RunResult
+from vertex_forager.core.config import FramePacket, ResolvedClientConfig, RunResult
 from vertex_forager.core.pipeline import VertexForager
 from vertex_forager.writers.base import WriteResult
 
@@ -54,7 +54,7 @@ def _child_run_memory_peak(chunk_rows: int, conn: Connection) -> None:
             )
             frames.append(frame)
         total_rows = rows_per_frame * num_frames
-        cfg = EngineConfig(
+        cfg = ResolvedClientConfig(
             requests_per_minute=100,
             writer_chunk_rows=chunk_rows if chunk_rows > 0 else None,
             flush_threshold_rows=total_rows + 1,

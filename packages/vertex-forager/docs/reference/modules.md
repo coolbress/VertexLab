@@ -10,7 +10,7 @@ vertex_forager/
 ├── cli.py              # CLI entrypoint
 ├── constants.py        # Provider datasets, rate limits, default values
 ├── exceptions.py       # Exception hierarchy (VertexForagerError → leaf errors)
-├── utils.py            # Env helpers, validation, progress bar utilities
+├── utils.py            # App-root helpers, validation, progress bar utilities
 ├── core/
 │   ├── pipeline.py     # VertexForager (main async pipeline engine)
 │   ├── lifecycle.py    # Run setup/finalize lifecycle helpers
@@ -21,7 +21,7 @@ vertex_forager/
 │   ├── quality.py      # Data quality rules + validation runtime
 │   ├── dlq.py          # DLQ spool/recovery helpers
 │   ├── errors.py       # Core-facing error exports + RunError
-│   ├── config.py       # EngineConfig, RetryConfig, RequestSpec, FetchJob, FramePacket, RunResult
+│   ├── config.py       # Public config models, runtime snapshots, RequestSpec, FetchJob, FramePacket, RunResult
 │   ├── controller.py   # FlowController, GradientConcurrencyLimiter, GCRARateLimiter
 │   ├── http.py         # HttpExecutor (async httpx wrapper)
 │   ├── contracts.py    # Protocol types (TracerProtocol, etc.)
@@ -54,7 +54,7 @@ vertex_forager/
 |----------|--------|---------|
 | Create a client | `from vertex_forager import create_client` | [API Reference → Factories](api.md#factories) |
 | Pipeline engine | `from vertex_forager.core import VertexForager` | [API Reference → Pipeline Engine](api.md#pipeline-engine) |
-| Configuration | `from vertex_forager import EngineConfig` | [API Reference → Configuration](api.md#configuration) |
+| Configuration | `from vertex_forager import RetryConfig, DownshiftConfig, HTTPConfig, AdvancedConfig` | [API Reference → Configuration](api.md#configuration) |
 | Flow control | `from vertex_forager.core.controller import FlowController` | [API Reference → Flow Control](api.md#flow-control) |
 | Retry runtime | `from vertex_forager.core.retry import RetryExecutor` | [API Reference → Retry](api.md#retry) |
 | Lifecycle helpers | `from vertex_forager.core.lifecycle import RunFinalizer` | [API Reference → Lifecycle](api.md#lifecycle) |

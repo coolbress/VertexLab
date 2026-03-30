@@ -6,7 +6,13 @@ from datetime import datetime, timezone
 
 import polars as pl
 
-from vertex_forager.core.config import EngineConfig, FetchJob, FramePacket, ParseResult, RequestSpec
+from vertex_forager.core.config import (
+    FetchJob,
+    FramePacket,
+    ParseResult,
+    RequestSpec,
+    ResolvedClientConfig,
+)
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor
 from vertex_forager.core.pipeline import VertexForager
@@ -82,7 +88,7 @@ def test_writer_concurrency_with_inmemory_writer() -> None:
         http=HttpExecutor(client=_FakeHttpClient()),
         writer=writer,
         mapper=SchemaMapper(),
-        config=EngineConfig(
+        config=ResolvedClientConfig(
             requests_per_minute=rpm,
             concurrency=6,
             writer_concurrency=2,

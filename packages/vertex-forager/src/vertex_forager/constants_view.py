@@ -43,25 +43,9 @@ def _queue_constants_map(constants_mod: Any) -> dict[str, object]:
         "QUEUE_DEFAULT": constants_mod.QUEUE_DEFAULT,
     }
 
-
-def _env_var_mapping() -> dict[str, tuple[str, str]]:
-    return {
-        "VF_HTTP_TIMEOUT_S": ("global", "HTTP_TIMEOUT_S"),
-        "VF_HTTP_MAX_CONNECTIONS": ("global", "HTTP_MAX_CONNECTIONS"),
-        "VF_HTTP_MAX_KEEPALIVE": ("global", "HTTP_MAX_KEEPALIVE_CONNECTIONS"),
-        "VF_FLUSH_THRESHOLD_ROWS": ("global", "FLUSH_THRESHOLD_ROWS"),
-        "VF_CONCURRENCY": ("flow", "CONCURRENCY_MAX"),
-    }
-
-
 def _collect_env_overrides() -> dict[str, object]:
-    mapping = _env_var_mapping()
     env_vals = {
         "SHARADAR_API_KEY": os.getenv("SHARADAR_API_KEY"),
-        **{k: os.getenv(k) for k in mapping},
-        "VF_METRICS_ENABLED": os.getenv("VF_METRICS_ENABLED"),
-        "VF_MEM_THRESHOLD_RATIO": os.getenv("VF_MEM_THRESHOLD_RATIO"),
-        "VF_MEM_THRESHOLD_ABS_MB": os.getenv("VF_MEM_THRESHOLD_ABS_MB"),
     }
     env_overrides_obj: dict[str, object] = {k: v for k, v in env_vals.items() if v is not None}
     if "SHARADAR_API_KEY" in env_overrides_obj:
@@ -118,30 +102,19 @@ def render_constants_preview(
     output_format: str,
     env_only: bool,
 ) -> str:
+    if env_only:
+        preview = {"env_overrides": preview.get("env_overrides", {})}
     if output_format == "json":
         return json.dumps(preview, indent=2, ensure_ascii=False)
-    override_flags: dict[str, set[str]] = {
-        "global": set(),
-        "yfinance": set(),
-        "sharadar": set(),
-        "writers": set(),
-        "flow": set(),
-        "queue": set(),
-    }
-    env_mapping = _env_var_mapping()
-    env_overrides = preview.get("env_overrides")
-    if isinstance(env_overrides, dict):
-        for env_name, (section_name, const_name) in env_mapping.items():
-            if env_name in env_overrides:
-                override_flags[section_name].add(const_name)
     lines: list[str] = []
     for name, values in preview.items():
-        lines.append(f"\n[{name}]")
         keys = list(values.keys())
-        if env_only and name in override_flags:
-            keys = [k for k in keys if k in override_flags[name]]
+        if env_only and name != "env_overrides":
+            continue
+        if not keys:
+            continue
+        lines.append(f"\n[{name}]")
         max_key = max((len(k) for k in keys), default=0)
         for key in keys:
-            suffix = " (env)" if name in override_flags and key in override_flags[name] else ""
-            lines.append(f"{key.ljust(max_key)}{suffix}  :  {values[key]}")
+            lines.append(f"{key.ljust(max_key)}  :  {values[key]}")
     return "\n".join(lines)

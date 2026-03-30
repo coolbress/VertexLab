@@ -7,7 +7,7 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from vertex_forager.core.config import EngineConfig, FramePacket, RunResult
+from vertex_forager.core.config import FramePacket, ResolvedClientConfig, RunResult
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor
 from vertex_forager.core.pipeline import VertexForager
@@ -33,7 +33,7 @@ class _StubClient:
 
 @pytest.mark.asyncio
 async def test_persist_packets_with_dlq_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    cfg = EngineConfig(requests_per_minute=60, concurrency=1, dlq_enabled=True)
+    cfg = ResolvedClientConfig(requests_per_minute=60, concurrency=1, dlq_enabled=True)
     ctrl = FlowController(requests_per_minute=60, concurrency_limit=1)
     writer = _CollectingWriter()
     eng = VertexForager(

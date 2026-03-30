@@ -22,14 +22,14 @@ Common operations with both code and CLI.
 ## Operate with DLQ disabled
 
 - Code
-  - `EngineConfig(dlq_enabled=False, ...)`
+  - `create_client(..., dlq_enabled=False)`
 - CLI
-  - Not available today; DLQ toggles are configured through the Python API and engine config.
+  - Not available today; DLQ toggles are configured through the Python API.
 
 ## Tune chunked flush
 
 - Code
-  - `EngineConfig(writer_chunk_rows=20000, flush_threshold_rows=500000, ...)`
+  - `create_client(..., writer_chunk_rows=20000, flush_threshold_rows=500000)`
 - CLI
   - `vertex-forager tune profile --source yfinance --symbol "AAPL,MSFT"`
   - `vertex-forager tune sweep --source yfinance --symbol "AAPL,MSFT"`

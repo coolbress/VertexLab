@@ -9,7 +9,7 @@ from typing import Any
 import polars as pl
 import pytest
 
-from vertex_forager.core.config import EngineConfig, FramePacket, RunResult
+from vertex_forager.core.config import FramePacket, ResolvedClientConfig, RunResult
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor
 from vertex_forager.core.pipeline import VertexForager
@@ -31,7 +31,7 @@ class _StubClient:
 @pytest.mark.asyncio
 async def test_persist_packets_with_dlq_spool_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Engine with failing writer to force DLQ spool path
-    config = EngineConfig(requests_per_minute=60, concurrency=1, dlq_enabled=True)
+    config = ResolvedClientConfig(requests_per_minute=60, concurrency=1, dlq_enabled=True)
     controller = FlowController(requests_per_minute=60, concurrency_limit=1)
     eng = VertexForager(
         router=None,  # type: ignore[arg-type]
@@ -59,6 +59,7 @@ async def test_persist_packets_with_dlq_spool_failure(tmp_path: Path, monkeypatc
     # Make DLQ spool fail by raising from os.open
     def fake_open(*args: object, **kwargs: object) -> int:
         raise OSError("nope")
+
     monkeypatch.setattr(os, "open", fake_open)
 
     await eng._persist_packets_with_dlq([pkt], res, lock)

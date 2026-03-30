@@ -88,9 +88,7 @@ class TestCacheUtils:
     @patch("vertex_forager.utils.get_app_root")
     @patch("vertex_forager.utils.get_cache_dir")
     @patch("shutil.rmtree")
-    def test_clear_app_cache_safety_check_pass(
-        self, mock_rmtree, mock_get_cache, mock_get_root, tmp_path: Path
-    ):
+    def test_clear_app_cache_safety_check_pass(self, mock_rmtree, mock_get_cache, mock_get_root, tmp_path: Path):
         """Test that clear_app_cache proceeds when cache is inside app root."""
         # Setup paths
         # Use resolve() to handle symlinks (e.g. /tmp -> /private/tmp on macOS)
@@ -101,9 +99,11 @@ class TestCacheUtils:
         mock_get_cache.return_value = cache_path
 
         # Mock existence and is_dir
-        with patch.object(Path, "exists", return_value=True), \
-            patch.object(Path, "is_dir", return_value=True), \
-            patch.object(Path, "mkdir") as mock_mkdir:
+        with (
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "is_dir", return_value=True),
+            patch.object(Path, "mkdir") as mock_mkdir,
+        ):
             clear_app_cache()
 
             # Should verify relative_to and call rmtree
@@ -113,9 +113,7 @@ class TestCacheUtils:
     @patch("vertex_forager.utils.get_app_root")
     @patch("vertex_forager.utils.get_cache_dir")
     @patch("shutil.rmtree")
-    def test_clear_app_cache_safety_check_fail(
-        self, mock_rmtree, mock_get_cache, mock_get_root, tmp_path: Path
-    ):
+    def test_clear_app_cache_safety_check_fail(self, mock_rmtree, mock_get_cache, mock_get_root, tmp_path: Path):
         """Test that clear_app_cache aborts when cache is outside app root."""
         # Setup paths that are disjoint
         root_path = (tmp_path / "vertex_root").resolve()
@@ -125,12 +123,12 @@ class TestCacheUtils:
         mock_get_cache.return_value = cache_path
 
         # Mock existence and is_dir to pass initial checks
-        with patch.object(Path, "exists", return_value=True), \
-            patch.object(Path, "is_dir", return_value=True):
+        with patch.object(Path, "exists", return_value=True), patch.object(Path, "is_dir", return_value=True):
             clear_app_cache()
 
         # Should NOT call rmtree
         mock_rmtree.assert_not_called()
+
 
 def test_cleanup_dlq_tmp_removes_old_files(tmp_path, monkeypatch):
     # Setup app root and dlq temp file
@@ -148,6 +146,7 @@ def test_cleanup_dlq_tmp_removes_old_files(tmp_path, monkeypatch):
 
 
 # ===== Additional utils/redact tests (merged) =====
+
 
 @pytest.mark.parametrize(
     ("val", "expected"),
@@ -238,15 +237,14 @@ def test_load_tickers_env_duplicates_and_case(monkeypatch: pytest.MonkeyPatch) -
     assert ticks == ["AAPL", "MSFT", "AAPL", "NVDA"]
 
 
-def test_check_memory_safety_paths(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("VF_MEM_THRESHOLD_RATIO", "0.5")
-    monkeypatch.setenv("VF_MEM_THRESHOLD_ABS_MB", "1")
+def test_check_memory_safety_paths() -> None:
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         check_memory_safety(
             estimated_size=800 * 1024 * 1024,
             available_memory=1024 * 1024 * 1024,
             num_tickers=100,
+            threshold_ratio=0.5,
         )
         assert any("High memory usage" in str(x.message) for x in w)
     with warnings.catch_warnings(record=True) as w:
@@ -286,6 +284,7 @@ def test_cleanup_dlq_tmp_default_base(tmp_path: Path, monkeypatch: pytest.Monkey
     monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "app"))
     # create default dlq tmp under get_cache_dir()
     from vertex_forager.utils import get_cache_dir as _gcd
+
     dlq = _gcd() / "dlq" / "tbl"
     dlq.mkdir(parents=True, exist_ok=True)
     tmpf = dlq / "x.ipc.tmp"
@@ -296,6 +295,7 @@ def test_cleanup_dlq_tmp_default_base(tmp_path: Path, monkeypatch: pytest.Monkey
 
 def test_as_dict_none_and_object() -> None:
     assert as_dict(None) == {}
+
     class R:
         def __init__(self) -> None:
             self.metrics_counters = {"x": 1}
@@ -303,6 +303,7 @@ def test_as_dict_none_and_object() -> None:
             self.metrics_summary = {"t": 2}
             self.tables = {"a": {}}
             self.errors = []
+
     d = as_dict(R())
     assert d["counters"]["x"] == 1
     assert "summary" in d
@@ -362,6 +363,7 @@ def test_as_dict_normalizes_errors_input(raw_errors: object, expected: list[str]
 
 def test_compact_level_formatter_and_list_handler() -> None:
     import logging
+
     logger = logging.getLogger("vf-test")
     logger.setLevel(logging.DEBUG)
     handler = ListHandler()
@@ -392,31 +394,31 @@ def test_compact_level_formatter_and_list_handler() -> None:
         handler.close()
 
 
-def test_check_memory_safety_invalid_envs(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Invalid ratio should be ignored gracefully
-    monkeypatch.setenv("VF_MEM_THRESHOLD_RATIO", "-1")
-    monkeypatch.setenv("VF_MEM_THRESHOLD_ABS_MB", "nan")
-    check_memory_safety(
-        estimated_size=10 * 1024 * 1024,  # 10MB
-        available_memory=1024 * 1024 * 1024,  # 1GB
-        num_tickers=1,
-    )
-    # Also invalid: ratio>1 and abs==0
-    monkeypatch.setenv("VF_MEM_THRESHOLD_RATIO", "2")
-    monkeypatch.setenv("VF_MEM_THRESHOLD_ABS_MB", "0")
-    check_memory_safety(
-        estimated_size=10 * 1024 * 1024,
-        available_memory=1024 * 1024 * 1024,
-        num_tickers=1,
-    )
-    # Valid near-1 ratio should be accepted without warnings for small size
-    monkeypatch.setenv("VF_MEM_THRESHOLD_RATIO", "0.9999")
+def test_check_memory_safety_invalid_thresholds() -> None:
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        check_memory_safety(
+            estimated_size=10 * 1024 * 1024,  # 10MB
+            available_memory=1024 * 1024 * 1024,  # 1GB
+            num_tickers=1,
+            threshold_ratio=-1,
+            threshold_absolute=None,
+        )
+        check_memory_safety(
+            estimated_size=10 * 1024 * 1024,
+            available_memory=1024 * 1024 * 1024,
+            num_tickers=1,
+            threshold_ratio=2,
+            threshold_absolute=0,
+        )
+        assert len(w) == 2
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
         check_memory_safety(
             estimated_size=1,  # tiny
             available_memory=1024 * 1024 * 1024,
             num_tickers=1,
+            threshold_ratio=0.9999,
         )
         assert not w
 
@@ -487,18 +489,23 @@ def test_pbar_updater_pagination_and_final():
     # pagination path
     mock_pbar = MagicMock(spec=tqdm)
     updater = create_pbar_updater(mock_pbar)
+
     class Job:
         symbol = "AAPL,MSFT"
+
     class Parse:
         def __init__(self) -> None:
             self.next_jobs = [1]
+
     updater(job=Job(), parse_result=Parse())
     mock_pbar.set_postfix_str.assert_called()
     # final path (no next jobs) should call update
     mock_pbar = MagicMock(spec=tqdm)
     updater = create_pbar_updater(mock_pbar)
+
     class Parse2:
         def __init__(self) -> None:
             self.next_jobs = None
+
     updater(job=Job(), parse_result=Parse2())
     mock_pbar.update.assert_called()

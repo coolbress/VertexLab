@@ -44,7 +44,7 @@ Counter (metrics enabled only):
 
 ## Notes
 
-- Metrics gating: counters are merged into `RunResult.metrics_counters` only when `EngineConfig.metrics_enabled=True`.
+- Metrics gating: counters are merged into `RunResult.metrics_counters` only when `create_client(..., metrics_enabled=True)` is used.
 - Defaults are unchanged unless you opt in to these features.
 
 ## Data Quality Rules

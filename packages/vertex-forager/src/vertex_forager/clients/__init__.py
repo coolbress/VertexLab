@@ -8,6 +8,7 @@ from typing import Any
 
 from vertex_forager.clients.base import BaseClient
 from vertex_forager.constants import DEFAULT_RATE_LIMIT
+from vertex_forager.core.config import AdvancedConfig, DownshiftConfig, HTTPConfig, RetryConfig
 from vertex_forager.core.registries import (
     ClientRegistration,
 )
@@ -19,8 +20,45 @@ from vertex_forager.core.registries import (
 def _register_sharadar() -> None:
     from vertex_forager.providers.sharadar.client import SharadarClient
 
-    def _sharadar_factory(*, api_key: str | None = None, rate_limit: int, **kwargs: Any) -> BaseClient:
-        return SharadarClient(api_key=api_key or "", rate_limit=rate_limit, **kwargs)
+    def _sharadar_factory(
+        *,
+        api_key: str | None = None,
+        rate_limit: int,
+        metrics_enabled: bool | None = None,
+        structured_logs: bool | None = None,
+        log_verbose: bool | None = None,
+        dlq_enabled: bool | None = None,
+        pagination_max_burst: int | None = None,
+        retry: RetryConfig | dict[str, Any] | None = None,
+        downshift: DownshiftConfig | dict[str, Any] | None = None,
+        concurrency: int | None = None,
+        flush_threshold_rows: int | None = None,
+        writer_chunk_rows: int | None = None,
+        writer_concurrency: int | None = None,
+        persist_run_history: bool | None = None,
+        http_timeout_s: float | None = None,
+        limits: HTTPConfig | dict[str, Any] | None = None,
+        advanced: AdvancedConfig | dict[str, Any] | None = None,
+    ) -> BaseClient:
+        return SharadarClient(
+            api_key=api_key or "",
+            rate_limit=rate_limit,
+            metrics_enabled=metrics_enabled,
+            structured_logs=structured_logs,
+            log_verbose=log_verbose,
+            dlq_enabled=dlq_enabled,
+            pagination_max_burst=pagination_max_burst,
+            retry=retry,
+            downshift=downshift,
+            concurrency=concurrency,
+            flush_threshold_rows=flush_threshold_rows,
+            writer_chunk_rows=writer_chunk_rows,
+            writer_concurrency=writer_concurrency,
+            persist_run_history=persist_run_history,
+            http_timeout_s=http_timeout_s,
+            limits=limits,
+            advanced=advanced,
+        )
 
     # Register known providers
     client_registry.register(
@@ -35,8 +73,45 @@ def _register_sharadar() -> None:
 def _register_yfinance() -> None:
     from vertex_forager.providers.yfinance.client import YFinanceClient
 
-    def _yfinance_factory(*, api_key: str | None = None, rate_limit: int, **kwargs: Any) -> BaseClient:
-        return YFinanceClient(api_key=api_key or "", rate_limit=rate_limit, **kwargs)
+    def _yfinance_factory(
+        *,
+        api_key: str | None = None,
+        rate_limit: int,
+        metrics_enabled: bool | None = None,
+        structured_logs: bool | None = None,
+        log_verbose: bool | None = None,
+        dlq_enabled: bool | None = None,
+        pagination_max_burst: int | None = None,
+        retry: RetryConfig | dict[str, Any] | None = None,
+        downshift: DownshiftConfig | dict[str, Any] | None = None,
+        concurrency: int | None = None,
+        flush_threshold_rows: int | None = None,
+        writer_chunk_rows: int | None = None,
+        writer_concurrency: int | None = None,
+        persist_run_history: bool | None = None,
+        http_timeout_s: float | None = None,
+        limits: HTTPConfig | dict[str, Any] | None = None,
+        advanced: AdvancedConfig | dict[str, Any] | None = None,
+    ) -> BaseClient:
+        return YFinanceClient(
+            api_key=api_key or "",
+            rate_limit=rate_limit,
+            metrics_enabled=metrics_enabled,
+            structured_logs=structured_logs,
+            log_verbose=log_verbose,
+            dlq_enabled=dlq_enabled,
+            pagination_max_burst=pagination_max_burst,
+            retry=retry,
+            downshift=downshift,
+            concurrency=concurrency,
+            flush_threshold_rows=flush_threshold_rows,
+            writer_chunk_rows=writer_chunk_rows,
+            writer_concurrency=writer_concurrency,
+            persist_run_history=persist_run_history,
+            http_timeout_s=http_timeout_s,
+            limits=limits,
+            advanced=advanced,
+        )
 
     client_registry.register(
         "yfinance",
@@ -52,7 +127,21 @@ def create_client(
     provider: str,
     api_key: str | None = None,
     rate_limit: int | None = None,
-    **kwargs: object,
+    metrics_enabled: bool | None = None,
+    structured_logs: bool | None = None,
+    log_verbose: bool | None = None,
+    dlq_enabled: bool | None = None,
+    pagination_max_burst: int | None = None,
+    retry: RetryConfig | dict[str, Any] | None = None,
+    downshift: DownshiftConfig | dict[str, Any] | None = None,
+    concurrency: int | None = None,
+    flush_threshold_rows: int | None = None,
+    writer_chunk_rows: int | None = None,
+    writer_concurrency: int | None = None,
+    persist_run_history: bool | None = None,
+    http_timeout_s: float | None = None,
+    limits: HTTPConfig | dict[str, Any] | None = None,
+    advanced: AdvancedConfig | dict[str, Any] | None = None,
 ) -> BaseClient:
     """
     Create and configure a client instance for the specified provider.
@@ -61,7 +150,21 @@ def create_client(
         provider: The provider identifier (e.g., "sharadar").
         api_key: API key. If not provided, will look up provider-specific env var.
         rate_limit: Rate limit in requests per minute.
-        **kwargs: Additional configuration passed to the client.
+        metrics_enabled: Enables metrics emission when True.
+        structured_logs: Enables structured stage logs when True.
+        log_verbose: Promotes structured logs to INFO when True.
+        dlq_enabled: Enables DLQ spooling when True.
+        pagination_max_burst: Pagination fairness burst cap.
+        retry: Grouped retry policy configuration.
+        downshift: Grouped adaptive downshift policy configuration.
+        concurrency: Explicit fetch concurrency limit.
+        flush_threshold_rows: Buffered row threshold before flush.
+        writer_chunk_rows: Transitional write chunk-size tuning.
+        writer_concurrency: Transitional writer worker count tuning.
+        persist_run_history: Transitional run-history persistence toggle.
+        http_timeout_s: HTTP request timeout in seconds.
+        limits: Grouped HTTP connection-pool configuration.
+        advanced: Grouped advanced and transitional settings.
 
     Returns:
         Configured client instance inheriting from BaseClient.
@@ -99,10 +202,46 @@ def create_client(
 
         # Determine effective rate limit with centralized default fallback
         effective_limit = rate_limit if rate_limit is not None else DEFAULT_RATE_LIMIT
-        return registration.factory(api_key=None, rate_limit=effective_limit, **kwargs)
+        return registration.factory(
+            api_key=None,
+            rate_limit=effective_limit,
+            metrics_enabled=metrics_enabled,
+            structured_logs=structured_logs,
+            log_verbose=log_verbose,
+            dlq_enabled=dlq_enabled,
+            pagination_max_burst=pagination_max_burst,
+            retry=retry,
+            downshift=downshift,
+            concurrency=concurrency,
+            flush_threshold_rows=flush_threshold_rows,
+            writer_chunk_rows=writer_chunk_rows,
+            writer_concurrency=writer_concurrency,
+            persist_run_history=persist_run_history,
+            http_timeout_s=http_timeout_s,
+            limits=limits,
+            advanced=advanced,
+        )
     if rate_limit is None:
         raise ValueError(f"Missing rate_limit for provider '{provider}'")
-    return registration.factory(api_key=resolved_key, rate_limit=rate_limit, **kwargs)
+    return registration.factory(
+        api_key=resolved_key,
+        rate_limit=rate_limit,
+        metrics_enabled=metrics_enabled,
+        structured_logs=structured_logs,
+        log_verbose=log_verbose,
+        dlq_enabled=dlq_enabled,
+        pagination_max_burst=pagination_max_burst,
+        retry=retry,
+        downshift=downshift,
+        concurrency=concurrency,
+        flush_threshold_rows=flush_threshold_rows,
+        writer_chunk_rows=writer_chunk_rows,
+        writer_concurrency=writer_concurrency,
+        persist_run_history=persist_run_history,
+        http_timeout_s=http_timeout_s,
+        limits=limits,
+        advanced=advanced,
+    )
 
 
 __all__ = ["BaseClient", "create_client"]

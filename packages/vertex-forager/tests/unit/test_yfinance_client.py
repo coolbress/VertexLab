@@ -266,6 +266,7 @@ async def test_fetch_per_ticker_filters_pipeline_kwargs(monkeypatch: pytest.Monk
 
     assert result == {"done": True}
     assert captured["router_provider"] == "yfinance"
+    assert captured["router_kwargs"]["rate_limit"] == client.config.requests_per_minute
     assert captured["router_kwargs"]["price_batch_size"] == 123
     assert "custom_flag" not in captured["router_kwargs"]
     assert captured["run_pipeline_kwargs"]["dataset"] == "price"

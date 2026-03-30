@@ -14,6 +14,9 @@ def test_build_sweep_combinations_defaults() -> None:
     assert isinstance(combos, list)
     assert len(combos) == 3
     assert all(isinstance(c, dict) for c in combos)
+    assert all("client_config" not in c for c in combos)
+    assert all("limits" in c for c in combos)
+    assert all("concurrency" in c for c in combos)
 
 
 def test_build_sweep_combinations_invalid_token_raises() -> None:
@@ -101,7 +104,7 @@ def test_tune_profile_financials_writes_metrics(tmp_path: Path, monkeypatch: pyt
 
 def test_tune_sweep_sampling_and_writes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     def _run_sweep_measurements(combos, out_dir, include_sharadar):  # type: ignore[no-untyped-def]
-        return {"results": [], "best": {"env": {"VF_CONCURRENCY": 8}}}
+        return {"results": [], "best": {"client_config": {"concurrency": 8}}}
 
     def _score_and_rank_results(results, rank_by, rank_alpha, rank_error_penalty):  # type: ignore[no-untyped-def]
         return results
@@ -148,8 +151,8 @@ def test_tune_export_best_writes_file(tmp_path: Path, monkeypatch: pytest.Monkey
         if self.name == "profile_tuning_best.json":
             return (
                 '{'
-                '"yfinance_price":{"env":{"VF_CONCURRENCY":8}},'
-                '"yfinance_financials":{"env":{"VF_HTTP_TIMEOUT_S":30}}'
+                '"yfinance_price":{"client_config":{"concurrency":8}},'
+                '"yfinance_financials":{"client_config":{"http_timeout_s":30}}'
                 '}'
             )
         return original_read_text(self)
@@ -168,7 +171,7 @@ def test_tune_export_best_writes_file(tmp_path: Path, monkeypatch: pytest.Monkey
     )
     assert res.exit_code == 0
     assert captured.get("path") == write_file
-    assert "VF_CONCURRENCY" in captured.get("content", "")
+    assert "\"concurrency\": 8" in captured.get("content", "")
 
 
 def test_tune_export_best_missing_file(tmp_path: Path) -> None:
@@ -186,11 +189,11 @@ def test_tune_export_best_prints_stdout(tmp_path: Path) -> None:
     best = out / "profile_tuning_best.json"
     best.write_text(
         '{'
-        '"yfinance_price":{"env":{"VF_CONCURRENCY":8}},'
-        '"yfinance_financials":{"env":{"VF_HTTP_TIMEOUT_S":30}}'
+        '"yfinance_price":{"client_config":{"concurrency":8}},'
+        '"yfinance_financials":{"client_config":{"http_timeout_s":30}}'
         '}'
     )
     runner = CliRunner()
     res = runner.invoke(cli_mod.main, ["tune", "export-best", "--output-dir", str(out)])
     assert res.exit_code == 0
-    assert "export VF_CONCURRENCY=8" in res.output
+    assert "create_client(..., **yfinance_price)" in res.output

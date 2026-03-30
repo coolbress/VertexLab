@@ -7,8 +7,6 @@ import json
 import logging
 import os
 from pathlib import Path
-import re
-import shlex
 import tempfile
 from typing import TYPE_CHECKING, Any, cast
 
@@ -37,6 +35,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
 def _atomic_write_bytes(path: Path, data: bytes) -> None:
     dir_path = path.parent
     dir_path.mkdir(parents=True, exist_ok=True)
@@ -60,8 +59,10 @@ def _atomic_write_bytes(path: Path, data: bytes) -> None:
                 tmp_path.unlink(missing_ok=True)
         raise
 
+
 def _atomic_write_json(path: Path, payload: object) -> None:
     _atomic_write_bytes(path, json.dumps(payload, indent=2, ensure_ascii=False).encode("utf-8"))
+
 
 def _atomic_write_text(path: Path, content: str) -> None:
     _atomic_write_bytes(path, content.encode("utf-8"))
@@ -202,7 +203,7 @@ def status() -> None:
     "--env-only",
     is_flag=True,
     default=False,
-    help="Show only keys overridden by environment variables (table format only)",
+    help="Show only environment-based entries (table format only)",
 )
 def constants(section: str, output_format: str, env_only: bool) -> None:
     """Preview centralized constants by section.
@@ -283,7 +284,6 @@ def tune_profile(
         db_path = out_dir / "profile_run.duckdb"
         if db_path.exists():
             db_path.unlink()
-        os.environ.setdefault("VF_METRICS_ENABLED", "1")
         client = YFinanceClient(rate_limit=60, metrics_enabled=True, structured_logs=False)
         _tickers = [t.strip().upper() for t in (tickers or "AAPL,MSFT,NVDA,GOOGL,AMZN").split(",")]
         run = client.get_price_data(
@@ -307,14 +307,13 @@ def tune_profile(
         db_path = out_dir / "profile_financials.duckdb"
         if db_path.exists():
             db_path.unlink()
-        os.environ.setdefault("VF_METRICS_ENABLED", "1")
         yf_tickers = [
             t.strip().upper()
             for t in (tickers or os.getenv("YF_TICKERS") or "AAPL,MSFT,NVDA,GOOGL,AMZN,META,TSLA,NFLX,ADBE,CSCO").split(
                 ","
             )
         ]
-        yfc = YFinanceClient(rate_limit=60, structured_logs=False)
+        yfc = YFinanceClient(rate_limit=60, metrics_enabled=True, structured_logs=False)
         yf_run = yfc.get_financials(
             kind="income_stmt",
             period="annual",
@@ -329,6 +328,7 @@ def tune_profile(
                 shc = SharadarClient(
                     api_key=sh_key,
                     rate_limit=60,
+                    metrics_enabled=True,
                     structured_logs=False,
                 )
                 sh_run = shc.get_fundamental_data(
@@ -480,8 +480,6 @@ def tune_sweep(
     report_path = out_dir / "profile_sweep_results.json"
     best_path = out_dir / "profile_tuning_best.json"
 
-    os.environ.setdefault("VF_METRICS_ENABLED", "1")
-
     # 1. Build combinations
     combos = _build_sweep_combinations(
         concurrency_list,
@@ -508,14 +506,14 @@ def tune_sweep(
 @click.option("--output-dir", type=click.Path(path_type=Path), default=None)
 @click.option("--write-file", type=click.Path(path_type=Path), default=None)
 def tune_export_best(output_dir: Path | None, write_file: Path | None) -> None:
-    """Export environment variables from best tuning results.
+    """Export create_client(...) configuration snippets from best tuning results.
 
     Args:
         output_dir: Directory containing profile_tuning_best.json.
         write_file: Optional file path to write export commands to.
 
     Returns:
-        None: Prints or writes export commands.
+        None: Prints or writes Python snippets containing explicit client kwargs.
     """
     out_dir = output_dir or Path(os.getenv("VF_PROFILE_OUTPUT_DIR") or (Path.cwd() / "output" / "forager-profiles"))
     best_path = out_dir / "profile_tuning_best.json"
@@ -526,12 +524,12 @@ def tune_export_best(output_dir: Path | None, write_file: Path | None) -> None:
 
     def _collect(label: str) -> None:
         entry = data.get(label) or {}
-        env = entry.get("env") or {}
-        lines.append(f"# {label} recommended exports")
-        for k, v in env.items():
-            if isinstance(k, str) and re.match(r"^[A-Z_][A-Z0-9_]*$", k):
-                sval = shlex.quote(str(v))
-                lines.append(f"export {k}={sval}")
+        client_config = entry.get("client_config") or {}
+        lines.append(f"# {label} recommended create_client(...) overrides")
+        if isinstance(client_config, dict) and client_config:
+            rendered = json.dumps(client_config, indent=4, ensure_ascii=False)
+            lines.append(f"{label} = {rendered}")
+            lines.append(f"# create_client(..., **{label})")
         lines.append("")
 
     _collect("yfinance_price")

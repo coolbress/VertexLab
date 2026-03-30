@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import AbstractContextManager, nullcontext
 
-from vertex_forager.core.config import EngineConfig
+from vertex_forager.core.config import AdvancedConfig, ResolvedClientConfig
 
 
 class StubTracer:
@@ -15,6 +15,9 @@ class StubTracer:
         return nullcontext()
 
 
-def test_engine_config_accepts_tracer_protocol() -> None:
-    cfg = EngineConfig(requests_per_minute=60, tracer=StubTracer(), otel_enabled=True)
-    assert cfg.tracer is not None
+def test_resolved_client_config_accepts_tracer_protocol() -> None:
+    cfg = ResolvedClientConfig(
+        requests_per_minute=60,
+        advanced=AdvancedConfig(tracer=StubTracer(), otel_enabled=True),
+    )
+    assert cfg.advanced.tracer is not None
