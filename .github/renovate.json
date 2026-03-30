@@ -49,7 +49,8 @@
       "matchUpdateTypes": [
         "major"
       ],
-      "enabled": false
+      "enabled": false,
+      "description": "Disabled while Python 3.9 is supported. Remove when minimum Python version raises to 3.10+."
     }
   ]
 }
