@@ -50,7 +50,7 @@
         "major"
       ],
       "enabled": false,
-      "description": "Disabled while minimum Python <3.11 is supported. Remove when vertex-forager baseline raises to >=3.11."
+      "description": "pandas 3.x and ipython 9.x require Python >=3.11. Remove this rule when vertex-forager min-Python raises to >=3.11."
     }
   ]
 }
