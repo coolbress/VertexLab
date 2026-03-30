@@ -1,62 +1,81 @@
-# EngineConfig Reference
+# Configuration Reference
 
-Core fields commonly used in production. See inline type hints in code for the full list.
+Public runtime configuration is now centered on `create_client(...)` plus grouped config models.
 
-## Core
+## Required Inputs
 
-- `requests_per_minute: int` — required, > 0
-- `concurrency: int | None` — explicit concurrency; if None, auto‑computed
+- `provider: str` — provider identifier such as `"sharadar"` or `"yfinance"`
+- `api_key: str | None` — required for Sharadar, unused for YFinance
+- `rate_limit: int` — requests per minute
 
-## Retry
+## Top-Level Client Parameters
 
-- `retry.max_attempts: int` — default conservative
-- `retry.base_backoff_s: float`
-- `retry.max_backoff_s: float` — must be >= base_backoff_s
-- `retry.enable_http_status_retry: bool` — default True
-- `retry.retry_status_codes: tuple[int, ...]` — default `(429, 503)`; optionally extend with idempotent codes only
+- `metrics_enabled: bool = False`
+- `structured_logs: bool = False`
+- `log_verbose: bool = False`
+- `dlq_enabled: bool = True`
+- `pagination_max_burst: int | None = None`
+- `concurrency: int | None = None`
+- `flush_threshold_rows: int`
+- `writer_chunk_rows: int | None = None`
+- `writer_concurrency: int = 1`
+- `persist_run_history: bool = True`
+- `http_timeout_s: float`
 
-## Flush & Writer
+## Grouped Public Config
 
-- `flush_threshold_rows: int` — rows per table before flush
-- `writer_chunk_rows: int | None` — per‑chunk row target during flush; when set must be `>= 10_000`
+### RetryConfig
 
-## DLQ
+- `max_attempts: int`
+- `base_backoff_s: float`
+- `max_backoff_s: float` — must be `>= base_backoff_s`
+- `enable_http_status_retry: bool`
+- `retry_status_codes: tuple[int, ...]`
 
-- `dlq_enabled: bool` — enable/disable DLQ spooling (default True)
+### DownshiftConfig
+
+- `enabled: bool`
+- `window_s: int`
+- `error_rate_threshold: float` — in `[0, 1]`
+- `rpm_floor: int`
+- `recovery_step: int`
+- `healthy_window_s: int`
+
+### HTTPConfig
+
+- `max_connections: int`
+- `max_keepalive_connections: int`
+
+### AdvancedConfig
+
 - `dlq_tmp_cleanup_on_error: bool`
 - `dlq_tmp_periodic_cleanup: bool`
 - `dlq_tmp_retention_s: int`
+- `tracer: Any | None`
+- `otel_enabled: bool | None`
+- `mem_threshold_ratio: float`
+- `mem_threshold_abs_mb: int | None`
 
-## Observability
-
-- `metrics_enabled: bool`
-- `structured_logs: bool`
-- `tracer: Any` — object with `start_span(name, attributes=...)` for optional spans
-
-## Pagination Fairness
-
-- `pagination_max_burst: int | None` — maximum consecutive same-symbol pagination pages before yielding to other symbols. `None` (default) disables the cap, allowing unlimited consecutive pages. When set (e.g., `2`), after processing *burst* pages for one symbol, the engine demotes remaining same-symbol pages and processes a different symbol first, then resumes. Recommended value: `2–5` for multi-symbol fetches.
-
-### Example
+## Example
 
 ```python
-config = EngineConfig(
-  requests_per_minute=300,
-  concurrency=4,
-  pagination_max_burst=3,
+from vertex_forager import AdvancedConfig, DownshiftConfig, HTTPConfig, RetryConfig, create_client
+
+client = create_client(
+    provider="sharadar",
+    api_key="...",
+    rate_limit=300,
+    metrics_enabled=True,
+    concurrency=4,
+    pagination_max_burst=3,
+    retry=RetryConfig(max_attempts=3),
+    downshift=DownshiftConfig(enabled=False),
+    limits=HTTPConfig(max_connections=200, max_keepalive_connections=100),
+    advanced=AdvancedConfig(),
 )
 ```
 
 With `pagination_max_burst=3`, if AAPL has 10 pages, the engine processes pages 1–3, then yields to MSFT/GOOG, then resumes AAPL pages 4–6, and so on.
-
-## Downshift (Rate)
-
-- `downshift_enabled: bool`
-- `downshift_window_s: int`
-- `error_rate_threshold: float (0..1)`
-- `rpm_floor: int`
-- `recovery_step: int`
-- `healthy_window_s: int`
 
 ## Shutdown Semantics
 

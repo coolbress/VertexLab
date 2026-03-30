@@ -102,6 +102,8 @@ def render_constants_preview(
     output_format: str,
     env_only: bool,
 ) -> str:
+    if env_only:
+        preview = {"env_overrides": preview.get("env_overrides", {})}
     if output_format == "json":
         return json.dumps(preview, indent=2, ensure_ascii=False)
     lines: list[str] = []

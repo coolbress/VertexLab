@@ -133,6 +133,6 @@ uv run python packages/vertex-forager/examples/advanced_duckdb_metrics.py
 
 ## Next Steps
 
-- Configure concurrency and retries: see [EngineConfig](../reference/config.md)
+- Configure concurrency, retries, and grouped runtime settings: see [Configuration](../reference/config.md)
 - Tune local collection behavior: see [Performance tuning](../how-to/performance-tuning.md)
 - Tune write batch sizes: see [Chunked flush tuning](../how-to/chunked-flush.md)

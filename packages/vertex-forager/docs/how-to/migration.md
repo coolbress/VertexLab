@@ -57,10 +57,10 @@ All primary classes and factories are now importable directly from `vertex_forag
 ```python
 # Before (0.1.x)
 from vertex_forager.clients.base import BaseClient
-from vertex_forager.core.config import EngineConfig
+from vertex_forager.core.config import RetryConfig
 
 # After (0.2.x)
-from vertex_forager import BaseClient, EngineConfig, create_client
+from vertex_forager import BaseClient, RetryConfig, create_client
 ```
 
 ### Centralized constants
@@ -73,11 +73,11 @@ The CLI now reads environment variables and supports `vertex-forager collect`, `
 
 ### DLQ spool
 
-Dead Letter Queue spooling is enabled by default. Failed write packets are persisted to disk with `fsync` and atomic replace. Disable it with `EngineConfig(dlq_enabled=False)`.
+Dead Letter Queue spooling is enabled by default. Failed write packets are persisted to disk with `fsync` and atomic replace. Disable it with `create_client(..., dlq_enabled=False)`.
 
 ### Writer chunked flush
 
-Writers support chunked flush via `EngineConfig(writer_chunk_rows=...)` to bound memory usage during large writes.
+Writers support chunked flush via `create_client(..., writer_chunk_rows=...)` to bound memory usage during large writes.
 
 ### RunResult summaries
 

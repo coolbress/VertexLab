@@ -36,4 +36,4 @@ Use the repository workflow when you are developing the package, running the exa
 
 - Run the tutorial: [Quickstart](tutorials/quickstart.md)
 - Learn the test workflow: [Testing Guide](how-to/testing.md)
-- Review configuration details: [EngineConfig](reference/config.md)
+- Review configuration details: [Configuration](reference/config.md)

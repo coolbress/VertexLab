@@ -8,8 +8,8 @@
   - Verify `requests_per_minute` and FlowController downshift settings.
   - Inspect structured logs for `http_retry_reason:*` and `record_feedback`.
 - Actions
-  - Lower `EngineConfig.requests_per_minute` or enable downshift:
-    - `downshift_enabled=True`, `error_rate_threshold` tuned conservatively, `rpm_floor` set to safe minimum.
+  - Lower `rate_limit` or enable downshift:
+    - `downshift=DownshiftConfig(enabled=True, error_rate_threshold=..., rpm_floor=...)`
   - Increase retry backoff within safe bounds (`base_backoff_s`, `max_backoff_s`).
 
 ## Memory peaks during flush
@@ -29,7 +29,7 @@
 - Symptoms
   - No DLQ files on failure; only summaries.
 - Checks
-  - Confirm `EngineConfig.dlq_enabled=False` intentionally set.
+  - Confirm `dlq_enabled=False` was intentionally passed to `create_client(...)`.
   - Inspect `RunResult.dlq_counts` and `RunResult.errors` for `DLQ=disabled` summary.
 - Actions
   - If persistence is required, set `dlq_enabled=True` and ensure app root is writable.
@@ -50,5 +50,5 @@
 - Symptoms
   - Timeouts or connection pool exhaustion.
 - Actions
-  - Tune HTTP: `timeout_s`, `max_connections`, `max_keepalive_connections`.
+  - Tune HTTP: `http_timeout_s`, `limits.max_connections`, `limits.max_keepalive_connections`.
   - Reduce concurrency or increase keepalive where appropriate.

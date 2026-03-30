@@ -44,9 +44,13 @@ Use these components when tuning throughput, concurrency, and request pacing.
 
 These types describe the request, retry, writer, and execution settings used throughout the pipeline.
 
-::: vertex_forager.core.config.EngineConfig
-
 ::: vertex_forager.core.config.RetryConfig
+
+::: vertex_forager.core.config.DownshiftConfig
+
+::: vertex_forager.core.config.HTTPConfig
+
+::: vertex_forager.core.config.AdvancedConfig
 
 ::: vertex_forager.core.config.RequestSpec
 
