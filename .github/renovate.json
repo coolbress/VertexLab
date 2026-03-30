@@ -4,6 +4,9 @@
     "github>astral-sh/renovate-config"
   ],
   "prConcurrentLimit": 5,
+  "semanticCommits": "enabled",
+  "semanticCommitType": "chore",
+  "semanticCommitScope": "deps",
   "schedule": [
     "before 9am on Monday"
   ],
@@ -19,15 +22,29 @@
       "automergeType": "pr"
     },
     {
+      "matchPackageNames": [
+        "uv-build",
+        "uv_build"
+      ],
+      "semanticCommitScope": "build"
+    },
+    {
+      "matchManagers": [
+        "github-actions"
+      ],
+      "pinDigests": true,
+      "semanticCommitScope": "ci"
+    },
+    {
       "matchManagers": [
         "github-actions"
       ],
       "matchUpdateTypes": [
         "digest"
       ],
+      "semanticCommitScope": "ci",
       "groupName": "GitHub Actions digests",
-      "groupSlug": "github-actions-digests",
-      "pinDigests": true
+      "groupSlug": "github-actions-digests"
     },
     {
       "matchManagers": [
@@ -38,6 +55,7 @@
         "minor",
         "patch"
       ],
+      "semanticCommitScope": "ci",
       "groupName": "GitHub Actions versions",
       "groupSlug": "github-actions-versions"
     },
@@ -51,6 +69,19 @@
       ],
       "enabled": false,
       "description": "pandas 3.x and ipython 9.x require Python >=3.11. Remove this rule when vertex-forager min-Python raises to >=3.11."
+    },
+    {
+      "matchManagers": [
+        "pyenv"
+      ],
+      "matchFileNames": [
+        ".python-version"
+      ],
+      "matchPackageNames": [
+        "python"
+      ],
+      "enabled": false,
+      "description": "Python baseline changes are handled manually so they stay aligned with CI, docs, and conventional-commit workflow."
     }
   ]
 }
