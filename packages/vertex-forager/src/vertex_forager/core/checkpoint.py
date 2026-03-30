@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from contextlib import closing
+from contextlib import closing, suppress
 import json
 import os
 from pathlib import Path
@@ -406,6 +406,12 @@ def delete_all_checkpoints() -> int:
 
 def register_dlq_entry(*, path: Path, table: str, provider: str | None, row_count: int) -> None:
     """Register a spooled DLQ file in the SQLite index."""
+    dlq_root = get_cache_dir() / "dlq"
+    resolved_path = path.resolve()
+    try:
+        resolved_path.relative_to(dlq_root)
+    except ValueError:
+        raise ValueError(f"DLQ path {path} is outside DLQ root {dlq_root}") from None
     created_at = time.time()
     with closing(_connect_state_db()) as conn:
         conn.execute(
@@ -424,7 +430,7 @@ def register_dlq_entry(*, path: Path, table: str, provider: str | None, row_coun
             VALUES (?, ?, ?, ?, ?, 'pending', 0, NULL, NULL)
             """,
             (
-                str(path),
+                str(resolved_path),
                 table,
                 provider,
                 int(row_count),
@@ -491,9 +497,19 @@ def mark_dlq_retry_result(*, path: Path, success: bool, error: str | None = None
 
 
 def delete_dlq_entry(path: Path) -> bool:
-    """Delete a DLQ index entry by spool path."""
+    """Delete a DLQ index entry and its payload file by spool path."""
+    resolved_path = path.resolve()
+    payload_path = resolved_path.with_suffix(".ipc")
+    with suppress(OSError):
+        if payload_path.exists():
+            payload_path.unlink(missing_ok=True)
+    dlq_root = get_cache_dir() / "dlq"
+    if not resolved_path.is_relative_to(dlq_root):
+        raise ValueError(f"DLQ path {path} is outside DLQ root {dlq_root}") from None
+    with suppress(OSError):
+        path.unlink(missing_ok=True)
     with closing(_connect_state_db()) as conn:
-        cursor = conn.execute("DELETE FROM dlq_index WHERE path = ?", (str(path),))
+        cursor = conn.execute("DELETE FROM dlq_index WHERE path = ?", (str(resolved_path),))
         conn.commit()
         return int(cursor.rowcount) > 0
 
@@ -503,6 +519,11 @@ def _remove_dlq_files(paths: list[Path]) -> int:
     deleted_files = 0
     dlq_root = get_cache_dir() / "dlq"
     for path in paths:
+        try:
+            resolved = path.resolve()
+            resolved.relative_to(dlq_root)
+        except ValueError:
+            continue
         try:
             if path.exists():
                 path.unlink(missing_ok=True)

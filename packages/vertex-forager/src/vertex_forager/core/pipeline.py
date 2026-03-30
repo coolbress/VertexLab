@@ -486,16 +486,7 @@ class VertexForager:
         Returns:
             The latest checkpoint if found, None otherwise
         """
-        try:
-            return find_latest_checkpoint(provider, dataset)
-        except sqlite3.OperationalError as exc:
-            logger.debug(
-                "PIPELINE: Failed to query latest checkpoint provider=%s dataset=%s: %s",
-                provider,
-                dataset,
-                exc,
-            )
-            return None
+        return find_latest_checkpoint(provider, dataset)
 
     async def run(
         self,
@@ -778,8 +769,8 @@ class VertexForager:
             queue_max=self._config.queue_max,
             checkpoint_retention_days=self._config.checkpoint_retention_days,
             run_history_retention_days=self._config.run_history_retention_days,
-            dlq_tmp_periodic_cleanup=self._config.advanced.dlq_tmp_periodic_cleanup,
-            dlq_tmp_retention_s=self._config.advanced.dlq_tmp_retention_s,
+            dlq_tmp_periodic_cleanup=self._config.dlq_tmp_periodic_cleanup,
+            dlq_tmp_retention_s=self._config.dlq_tmp_retention_s,
             cache_dir=get_cache_dir(),
             logger=logger,
         )
