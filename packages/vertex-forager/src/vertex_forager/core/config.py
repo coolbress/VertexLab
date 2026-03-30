@@ -114,18 +114,12 @@ class AdvancedConfig(BaseModel):
     """Advanced and transitional client settings.
 
     Attributes:
-        dlq_tmp_cleanup_on_error: Internal best-effort cleanup toggle for failed DLQ temp files.
-        dlq_tmp_periodic_cleanup: Internal startup cleanup toggle for stale DLQ temp files.
-        dlq_tmp_retention_s: Internal retention window for stale DLQ temp files.
         tracer: Optional tracing adapter implementing ``start_span``.
         otel_enabled: Optional tracing toggle.
         mem_threshold_ratio: Memory warning threshold as a ratio of available RAM.
         mem_threshold_abs_mb: Absolute memory warning threshold in MB.
     """
 
-    dlq_tmp_cleanup_on_error: bool = True
-    dlq_tmp_periodic_cleanup: bool = True
-    dlq_tmp_retention_s: int = Field(default=DLQ_TMP_RETENTION_S, ge=0)
     tracer: TracerProtocol | None = None
     otel_enabled: bool | None = None
     mem_threshold_ratio: float = Field(default=0.7, gt=0.0, le=1.0)
@@ -311,15 +305,15 @@ class ResolvedClientConfig(BaseModel):
 
     @property
     def dlq_tmp_cleanup_on_error(self) -> bool:
-        return self.advanced.dlq_tmp_cleanup_on_error
+        return getattr(self.advanced, "dlq_tmp_cleanup_on_error", True)
 
     @property
     def dlq_tmp_periodic_cleanup(self) -> bool:
-        return self.advanced.dlq_tmp_periodic_cleanup
+        return getattr(self.advanced, "dlq_tmp_periodic_cleanup", True)
 
     @property
     def dlq_tmp_retention_s(self) -> int:
-        return self.advanced.dlq_tmp_retention_s
+        return getattr(self.advanced, "dlq_tmp_retention_s", DLQ_TMP_RETENTION_S)
 
     @property
     def tracer(self) -> TracerProtocol | None:

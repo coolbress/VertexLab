@@ -23,10 +23,10 @@ from vertex_forager.core.errors import RunError
 
 
 def test_get_cache_dir() -> None:
-    with patch.dict("os.environ", {}, clear=True):
+    with tempfile.TemporaryDirectory() as tmpdir, patch.dict("os.environ", {"HOME": tmpdir}, clear=True):
         cache_dir = get_cache_dir()
-        assert cache_dir == Path.home() / ".cache" / "vertex-forager"
-    with tempfile.TemporaryDirectory() as tmpdir, patch.dict("os.environ", {"XDG_CACHE_HOME": tmpdir}):
+        assert cache_dir == Path(tmpdir) / ".cache" / "vertex-forager"
+    with tempfile.TemporaryDirectory() as tmpdir, patch.dict("os.environ", {"XDG_CACHE_HOME": tmpdir}, clear=True):
         cache_dir = get_cache_dir()
         assert cache_dir == Path(tmpdir) / "vertex-forager"
 

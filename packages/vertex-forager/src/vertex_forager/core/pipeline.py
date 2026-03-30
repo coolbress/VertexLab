@@ -30,6 +30,7 @@ import inspect
 import itertools
 import logging
 import os
+import sqlite3
 import time
 from typing import TYPE_CHECKING, Any, cast
 
@@ -487,7 +488,7 @@ class VertexForager:
         """
         try:
             return find_latest_checkpoint(provider, dataset)
-        except Exception as exc:
+        except sqlite3.OperationalError as exc:
             logger.debug(
                 "PIPELINE: Failed to query latest checkpoint provider=%s dataset=%s: %s",
                 provider,
@@ -1224,7 +1225,7 @@ class VertexForager:
                 req_q.task_done()
                 try:
                     await handler(job, payload, worker_exc, parse_result)
-                    await self._record_worker_symbol_state(job=job, worker_exc=worker_exc)
+                    await self._record_worker_symbol_state(job=job, worker_exc=worker_exc, parse_result=parse_result)
                 except Exception as e:
                     logger.error(
                         "[Worker-%s] Error in result handler for %s:%s:%s: %s",
@@ -1489,13 +1490,17 @@ class VertexForager:
             logger=logger,
         )
 
-    async def _record_worker_symbol_state(self, *, job: FetchJob, worker_exc: Exception | None) -> None:
+    async def _record_worker_symbol_state(
+        self, *, job: FetchJob, worker_exc: Exception | None, parse_result: Any = None
+    ) -> None:
         if not job.symbol:
             return
         async with self._checkpoint_lock:
             if worker_exc is None:
-                self._failed_symbols.discard(job.symbol)
-                self._completed_symbols.add(job.symbol)
+                has_more_pages = parse_result is not None and bool(parse_result.next_jobs)
+                if not has_more_pages:
+                    self._failed_symbols.discard(job.symbol)
+                    self._completed_symbols.add(job.symbol)
             else:
                 self._failed_symbols.add(job.symbol)
             if self._run_id and job.dataset:

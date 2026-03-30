@@ -4,17 +4,19 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from vertex_forager.clients.base import BaseClient
 from vertex_forager.constants import DEFAULT_RATE_LIMIT
-from vertex_forager.core.config import AdvancedConfig, DownshiftConfig, HTTPConfig, RetryConfig
 from vertex_forager.core.registries import (
     ClientRegistration,
 )
 from vertex_forager.core.registries import (
     clients as client_registry,
 )
+
+if TYPE_CHECKING:
+    from vertex_forager.core.config import AdvancedConfig, DownshiftConfig, HTTPConfig, RetryConfig
 
 
 def _register_sharadar() -> None:

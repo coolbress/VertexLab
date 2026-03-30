@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import asyncio
-from collections import deque
-from collections.abc import Callable
 from contextlib import suppress
-from pathlib import Path
 import time
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from collections import deque
+    from collections.abc import Callable
+    from pathlib import Path
 
 from vertex_forager.core.checkpoint import Checkpoint, cleanup_state_retention
 from vertex_forager.core.config import RunResult

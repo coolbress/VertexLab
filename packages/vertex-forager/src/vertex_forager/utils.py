@@ -633,10 +633,21 @@ def clear_app_cache() -> None:
     Raises:
         OSError: If deletion or re-creation of the cache directory fails.
     """
-    app_root = get_app_root().resolve()
-    cache_dir = get_cache_dir().resolve()
+    raw_cache_dir = get_cache_dir()
+    if raw_cache_dir.is_symlink():
+        logging.error("Safety check failed: Cache dir %s is a symlink, refusing to delete", raw_cache_dir)
+        return
     vertex_root = os.getenv("VERTEXFORAGER_ROOT")
+    if vertex_root and Path(vertex_root).is_symlink():
+        logging.error("Safety check failed: VERTEXFORAGER_ROOT %s is a symlink", vertex_root)
+        return
     cache_home = os.getenv("XDG_CACHE_HOME")
+    if cache_home and Path(cache_home).is_symlink():
+        logging.error("Safety check failed: XDG_CACHE_HOME %s is a symlink", cache_home)
+        return
+
+    app_root = get_app_root().resolve()
+    cache_dir = raw_cache_dir.resolve()
     expected_cache_dir = (
         (Path(vertex_root) / "cache").resolve()
         if vertex_root

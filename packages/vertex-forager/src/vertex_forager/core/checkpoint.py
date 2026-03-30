@@ -8,13 +8,15 @@ import os
 from pathlib import Path
 import sqlite3
 import time
-from typing import Literal, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 from pydantic import BaseModel, Field, ValidationError
 
-from vertex_forager.core.config import RunResult
+if TYPE_CHECKING:
+    from vertex_forager.core.config import RunResult
+    from vertex_forager.core.types import JSONValue
+
 from vertex_forager.core.errors import RunError
-from vertex_forager.core.types import JSONValue
 
 
 def get_cache_dir() -> Path:
@@ -72,7 +74,7 @@ def _initialize_schema(conn: sqlite3.Connection) -> None:
             dataset TEXT NOT NULL,
             completed_json TEXT NOT NULL,
             failed_json TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'completed',
+            status TEXT NOT NULL DEFAULT 'in_progress',
             created_at REAL NOT NULL,
             updated_at REAL NOT NULL
         );
@@ -127,7 +129,7 @@ def _json_loads(value: str | None, default: JSONValue) -> JSONValue:
     if value is None or value == "":
         return default
     try:
-        return cast(JSONValue, json.loads(value))
+        return cast("JSONValue", json.loads(value))
     except json.JSONDecodeError:
         return default
 
@@ -225,7 +227,7 @@ def load_checkpoint(run_id: str) -> Checkpoint | None:
     with closing(_connect_state_db()) as conn:
         row = conn.execute(
             """
-            SELECT run_id, provider, dataset, completed_json, failed_json
+            SELECT run_id, provider, dataset, completed_json, failed_json, status
             FROM checkpoints
             WHERE run_id = ?
             """,
@@ -238,8 +240,9 @@ def load_checkpoint(run_id: str) -> Checkpoint | None:
             run_id=str(row["run_id"]),
             provider=str(row["provider"]),
             dataset=str(row["dataset"]),
-            completed=list(cast(list[str], _json_loads(str(row["completed_json"]), []))),
-            failed=list(cast(list[str], _json_loads(str(row["failed_json"]), []))),
+            completed=list(cast("list[str]", _json_loads(str(row["completed_json"]), []))),
+            failed=list(cast("list[str]", _json_loads(str(row["failed_json"]), []))),
+            status=str(row["status"]) if row["status"] else "in_progress",
         )
     except (TypeError, ValueError, ValidationError):
         return None
@@ -250,9 +253,9 @@ def find_latest_checkpoint(provider: str, dataset: str) -> Checkpoint | None:
     with closing(_connect_state_db()) as conn:
         row = conn.execute(
             """
-            SELECT run_id, provider, dataset, completed_json, failed_json
+            SELECT run_id, provider, dataset, completed_json, failed_json, status
             FROM checkpoints
-            WHERE provider = ? AND dataset = ?
+            WHERE provider = ? AND dataset = ? AND status != 'completed'
             ORDER BY updated_at DESC, rowid DESC
             LIMIT 1
             """,
@@ -265,8 +268,9 @@ def find_latest_checkpoint(provider: str, dataset: str) -> Checkpoint | None:
             run_id=str(row["run_id"]),
             provider=str(row["provider"]),
             dataset=str(row["dataset"]),
-            completed=list(cast(list[str], _json_loads(str(row["completed_json"]), []))),
-            failed=list(cast(list[str], _json_loads(str(row["failed_json"]), []))),
+            completed=list(cast("list[str]", _json_loads(str(row["completed_json"]), []))),
+            failed=list(cast("list[str]", _json_loads(str(row["failed_json"]), []))),
+            status=str(row["status"]) if row["status"] else "in_progress",
         )
     except (TypeError, ValueError, ValidationError):
         return None
@@ -308,7 +312,7 @@ def save_run_history(run_result: RunResult, run_id: str) -> None:
                 payload["finished_at"],
                 payload["duration_s"],
                 _json_dumps(payload["tables"]),
-                int(cast(int, payload["error_count"])),
+                int(cast("int", payload["error_count"])),
                 _json_dumps(payload["errors"]),
                 _json_dumps(payload["quality_violations"]),
                 payload["coverage_pct"],
@@ -495,21 +499,29 @@ def delete_dlq_entry(path: Path) -> bool:
 
 
 def _remove_dlq_files(paths: list[Path]) -> int:
-    """Delete DLQ IPC files and return the number of removed files."""
+    """Delete DLQ IPC files and return the number of successfully removed files."""
     deleted_files = 0
     dlq_root = get_cache_dir() / "dlq"
     for path in paths:
-        if path.exists():
-            path.unlink(missing_ok=True)
-            deleted_files += 1
+        try:
+            if path.exists():
+                path.unlink(missing_ok=True)
+                deleted_files += 1
+        except OSError:
+            continue
         parent = path.parent
         while parent != dlq_root and parent.exists():
             try:
                 next(parent.iterdir())
                 break
             except StopIteration:
-                parent.rmdir()
+                try:
+                    parent.rmdir()
+                except OSError:
+                    break
                 parent = parent.parent
+            except OSError:
+                break
     return deleted_files
 
 

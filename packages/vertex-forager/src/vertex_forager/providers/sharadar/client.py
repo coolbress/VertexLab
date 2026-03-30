@@ -13,7 +13,6 @@ import polars as pl
 
 from vertex_forager.clients.base import BaseClient
 from vertex_forager.constants import PAGES_UNIT, RESERVED_PIPELINE_KEYS, TICKERS_UNIT
-from vertex_forager.core.config import AdvancedConfig, DownshiftConfig, HTTPConfig, RetryConfig
 from vertex_forager.core.types import JSONValue, SharadarDataset
 from vertex_forager.exceptions import InputError
 from vertex_forager.logging.constants import (
@@ -43,7 +42,7 @@ from vertex_forager.utils import (
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from vertex_forager.core.config import RunResult
+    from vertex_forager.core.config import AdvancedConfig, DownshiftConfig, HTTPConfig, RetryConfig, RunResult
 
 logger = logging.getLogger(__name__)
 
