@@ -576,14 +576,14 @@ def delete_dlq_entries_before(before_ts: float) -> dict[str, int]:
     deleted_files = _remove_dlq_files(paths)
     with closing(_connect_state_db()) as conn:
         deleted_paths = [str(p) for p in paths if not p.exists()]
+        deleted_rows = 0
         if deleted_paths:
             placeholders = ",".join("?" * len(deleted_paths))
             cursor = conn.execute(f"DELETE FROM dlq_index WHERE path IN ({placeholders})", deleted_paths)  # noqa: S608
             conn.commit()
-        else:
-            cursor = type("Cursor", (), {"rowcount": 0})()
+            deleted_rows = int(cursor.rowcount)
     return {
-        "rows": int(cursor.rowcount),
+        "rows": deleted_rows,
         "files": deleted_files,
     }
 
@@ -596,14 +596,14 @@ def delete_all_dlq_entries() -> dict[str, int]:
     deleted_files = _remove_dlq_files(paths)
     with closing(_connect_state_db()) as conn:
         deleted_paths = [str(p) for p in paths if not p.exists()]
+        deleted_rows = 0
         if deleted_paths:
             placeholders = ",".join("?" * len(deleted_paths))
             cursor = conn.execute(f"DELETE FROM dlq_index WHERE path IN ({placeholders})", deleted_paths)  # noqa: S608
             conn.commit()
-        else:
-            cursor = type("Cursor", (), {"rowcount": 0})()
+            deleted_rows = int(cursor.rowcount)
     return {
-        "rows": int(cursor.rowcount),
+        "rows": deleted_rows,
         "files": deleted_files,
     }
 

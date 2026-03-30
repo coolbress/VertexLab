@@ -6,6 +6,8 @@ from pathlib import Path
 import tempfile
 from unittest.mock import patch
 
+import pytest
+
 from vertex_forager.core.checkpoint import (
     Checkpoint,
     delete_dlq_entry,
@@ -216,12 +218,8 @@ def test_delete_dlq_entry_validates_root_and_deletes_db_row() -> None:
 
         outside_path = Path(tmpdir) / "outside.ipc"
         outside_path.write_bytes(b"ipc")
-        try:
+        with pytest.raises(ValueError, match="outside DLQ root"):
             delete_dlq_entry(outside_path)
-        except ValueError:
-            pass
-        else:
-            raise AssertionError("Expected ValueError for path outside dlq root")
 
 
 def test_run_result_coerces_legacy_string_errors() -> None:

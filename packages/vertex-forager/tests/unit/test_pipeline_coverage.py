@@ -12,7 +12,6 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 import itertools
-import os
 from pathlib import Path
 import time
 from typing import Any
@@ -524,22 +523,15 @@ async def test_finalize_run_keeps_checkpoint_resumable_when_failures_remain(
     async def _noop_flush(*, suppress: bool, consume: bool = True) -> None:
         return None
 
-    original_env = os.environ.get("VERTEXFORAGER_ROOT")
-    os.environ["VERTEXFORAGER_ROOT"] = str(root)
-    try:
-        engine._run_id = "rid"
-        result = RunResult(provider="stub")
-        monkeypatch.setattr(engine, "_try_flush_once", _noop_flush, raising=True)
-        await engine._finalize_run(result=result, dataset="d", run_id="rid", started_monotonic=time.monotonic() - 1.0)
-        checkpoint = engine._find_latest_checkpoint("stub", "d")
-        assert checkpoint is not None
-        assert checkpoint.status == "in_progress"
-        assert checkpoint.failed == ["MSFT"]
-    finally:
-        if original_env is None:
-            os.environ.pop("VERTEXFORAGER_ROOT", None)
-        else:
-            os.environ["VERTEXFORAGER_ROOT"] = original_env
+    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(root))
+    engine._run_id = "rid"
+    result = RunResult(provider="stub")
+    monkeypatch.setattr(engine, "_try_flush_once", _noop_flush, raising=True)
+    await engine._finalize_run(result=result, dataset="d", run_id="rid", started_monotonic=time.monotonic() - 1.0)
+    checkpoint = engine._find_latest_checkpoint("stub", "d")
+    assert checkpoint is not None
+    assert checkpoint.status == "in_progress"
+    assert checkpoint.failed == ["MSFT"]
 
 
 @pytest.mark.asyncio
