@@ -90,7 +90,7 @@ dev = [
     "pytest-asyncio>=0.23.5",
     "pytest-cov>=4.1.0",
     "hypothesis>=6.98.0",
-    "ruff==0.15.6",
+    "ruff==0.15.8",
     "mypy>=1.11.1",
     "vertex-forager",
     "pandas-stubs>=2.3.3.260113",
