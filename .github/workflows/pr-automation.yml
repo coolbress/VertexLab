@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Validate PR title
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        uses: actions/github-script@450193c5abd4cdb17ba9f3ffcfe8f635c4bb6c2a
         with:
           script: |
             const pr = context.payload.pull_request;
@@ -36,7 +36,7 @@ jobs:
             }
       - name: Sync type labels from title
         if: ${{ always() }}
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        uses: actions/github-script@450193c5abd4cdb17ba9f3ffcfe8f635c4bb6c2a
         with:
           script: |
             const pr = context.payload.pull_request;
@@ -93,7 +93,7 @@ jobs:
             }
       - name: Sync package labels from changed files
         if: ${{ always() }}
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        uses: actions/github-script@450193c5abd4cdb17ba9f3ffcfe8f635c4bb6c2a
         with:
           script: |
             const pr = context.payload.pull_request;
