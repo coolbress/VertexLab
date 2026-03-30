@@ -355,6 +355,20 @@ class ResolvedClientConfig(BaseModel):
         if wc <= 0:
             raise ValueError("writer_concurrency must be >= 1")
         self.writer_concurrency = wc
+        try:
+            checkpoint_retention_days = (
+                7 if self.checkpoint_retention_days is None else int(self.checkpoint_retention_days)
+            )
+        except (TypeError, ValueError) as e:
+            raise VertexForagerError(f"checkpoint_retention_days must be an integer >= 0: {e}") from e
+        self.checkpoint_retention_days = max(0, checkpoint_retention_days)
+        try:
+            run_history_retention_days = (
+                90 if self.run_history_retention_days is None else int(self.run_history_retention_days)
+            )
+        except (TypeError, ValueError) as e:
+            raise VertexForagerError(f"run_history_retention_days must be an integer >= 0: {e}") from e
+        self.run_history_retention_days = max(0, run_history_retention_days)
         if self.downshift.rpm_floor > self.requests_per_minute:
             raise ValueError("rpm_floor must be <= requests_per_minute")
 

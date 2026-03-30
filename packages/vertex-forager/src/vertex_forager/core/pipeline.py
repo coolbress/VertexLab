@@ -61,6 +61,7 @@ from vertex_forager.core.checkpoint import (
     save_checkpoint,
     save_run_history,
 )
+from vertex_forager.core.config import RunResult
 from vertex_forager.core.dlq import (
     build_writer_error_summary,
     spool_to_dlq_and_rescue,
@@ -140,13 +141,6 @@ try:
 except ImportError:
     _duckdb = cast("Any", None)
 
-from vertex_forager.core.config import (
-    FetchJob,
-    FramePacket,
-    ParseResult,
-    ResolvedClientConfig,
-    RunResult,
-)
 from vertex_forager.core.errors import (
     DLQSpoolError,
     FetchError,
@@ -161,6 +155,7 @@ from vertex_forager.utils import sanitize_field
 if TYPE_CHECKING:
     import polars as pl
 
+    from vertex_forager.core.config import FetchJob, FramePacket, ParseResult, ResolvedClientConfig
     from vertex_forager.core.contracts import IMapper, IRouter, IWriter
     from vertex_forager.core.controller import FlowController
     from vertex_forager.core.http import HttpExecutor
