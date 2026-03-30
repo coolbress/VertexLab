@@ -3,6 +3,7 @@
   "extends": [
     "github>astral-sh/renovate-config"
   ],
+  "prConcurrentLimit": 5,
   "schedule": [
     "before 9am on Monday"
   ],
@@ -21,7 +22,35 @@
       "matchManagers": [
         "github-actions"
       ],
+      "matchUpdateTypes": [
+        "digest"
+      ],
+      "groupName": "GitHub Actions digests",
+      "groupSlug": "github-actions-digests",
       "pinDigests": true
+    },
+    {
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchUpdateTypes": [
+        "major",
+        "minor",
+        "patch"
+      ],
+      "groupName": "GitHub Actions versions",
+      "groupSlug": "github-actions-versions"
+    },
+    {
+      "matchPackageNames": [
+        "pandas",
+        "ipython"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "enabled": false,
+      "description": "pandas 3.x and ipython 9.x require Python >=3.11. Remove this rule when vertex-forager min-Python raises to >=3.11."
     }
   ]
 }
