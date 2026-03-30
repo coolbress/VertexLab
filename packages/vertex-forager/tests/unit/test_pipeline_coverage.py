@@ -443,6 +443,32 @@ async def test_record_worker_symbol_state_persists_pending_pagination_jobs() -> 
 
 
 @pytest.mark.asyncio
+async def test_record_worker_symbol_state_keeps_pending_jobs_on_failure() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    engine._run_id = "rid"
+    engine._checkpoint_lock = asyncio.Lock()
+    pending_job = FetchJob(
+        provider="stub",
+        dataset="d",
+        symbol="AAPL",
+        spec=RequestSpec(url="https://x", params={"page": 2}),
+    )
+    engine._pending_symbol_jobs = {"AAPL": [pending_job]}
+    engine._completed_symbols = {"AAPL"}
+
+    await engine._record_worker_symbol_state(
+        job=FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x")),
+        worker_exc=RuntimeError("boom"),
+        parse_result=None,
+    )
+
+    assert "AAPL" not in engine._completed_symbols
+    assert "AAPL" in engine._failed_symbols
+    assert engine._pending_symbol_jobs["AAPL"][0].spec.params["page"] == 2
+
+
+@pytest.mark.asyncio
 async def test_finalize_run_metrics_sink_and_history_error_suppressed(monkeypatch: pytest.MonkeyPatch) -> None:
     router = _PaginatingRouter(pages=0)
     engine, _ = _make_engine(router)

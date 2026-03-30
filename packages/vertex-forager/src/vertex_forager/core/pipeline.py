@@ -1225,7 +1225,7 @@ class VertexForager:
             if job_count % 100 == 0:
                 logger.debug("[Worker-%s] Processed %s jobs so far...", worker_id, job_count)
             payload: bytes | None = None
-            worker_exc: Exception | None = None
+            worker_exc: BaseException | None = None
             parse_result: ParseResult | None = None
             try:
                 payload, worker_exc, parse_result = await self._process_worker_job(
@@ -1269,11 +1269,11 @@ class VertexForager:
     def _build_progress_handler(
         self,
         on_progress: Callable[..., Any] | None,
-    ) -> Callable[[FetchJob, bytes | None, Exception | None, ParseResult | None], Awaitable[None]]:
+    ) -> Callable[[FetchJob, bytes | None, BaseException | None, ParseResult | None], Awaitable[None]]:
         async def noop_handler(
             job: FetchJob,
             payload: bytes | None,
-            exc: Exception | None,
+            exc: BaseException | None,
             parse_result: ParseResult | None,
         ) -> None:
             return
@@ -1291,7 +1291,7 @@ class VertexForager:
         async def _progress_wrapper(
             job: FetchJob,
             payload: bytes | None,
-            exc: Exception | None,
+            exc: BaseException | None,
             parse_result: ParseResult | None,
         ) -> None:
             kwargs: dict[str, object] = {"job": job, "payload": payload, "exc": exc}
@@ -1402,9 +1402,9 @@ class VertexForager:
         result: RunResult,
         result_lock: asyncio.Lock,
         order_counter: itertools.count,
-    ) -> tuple[bytes | None, Exception | None, ParseResult | None]:
+    ) -> tuple[bytes | None, BaseException | None, ParseResult | None]:
         payload: bytes | None = None
-        worker_exc: Exception | None = None
+        worker_exc: BaseException | None = None
         parse_result: ParseResult | None = None
         try:
             payload = await self._fetch_payload(worker_id=worker_id, priority=priority, job=job)
@@ -1521,7 +1521,7 @@ class VertexForager:
         )
 
     async def _record_worker_symbol_state(
-        self, *, job: FetchJob, worker_exc: Exception | None, parse_result: Any = None
+        self, *, job: FetchJob, worker_exc: BaseException | None, parse_result: Any = None
     ) -> None:
         if not job.symbol:
             return
@@ -1540,7 +1540,6 @@ class VertexForager:
                     self._completed_symbols.add(job.symbol)
             else:
                 self._completed_symbols.discard(job.symbol)
-                self._pending_symbol_jobs.pop(job.symbol, None)
                 self._failed_symbols.add(job.symbol)
             if self._run_id and job.dataset:
                 self._update_checkpoint(

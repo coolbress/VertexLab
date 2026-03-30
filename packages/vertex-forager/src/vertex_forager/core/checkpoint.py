@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from contextlib import closing, suppress
+from contextlib import closing
 import json
 import os
 from pathlib import Path
@@ -518,16 +518,15 @@ def mark_dlq_retry_result(*, path: Path, success: bool, error: str | None = None
 def delete_dlq_entry(path: Path) -> bool:
     """Delete a DLQ index entry and its payload file by spool path."""
     resolved_path = path.resolve()
-    payload_path = resolved_path.with_suffix(".ipc")
-    if payload_path != resolved_path:
-        with suppress(OSError):
-            if payload_path.exists():
-                payload_path.unlink(missing_ok=True)
     dlq_root = get_cache_dir().resolve() / "dlq"
     if not resolved_path.is_relative_to(dlq_root):
         raise ValueError(f"DLQ path {path} is outside DLQ root {dlq_root}") from None
-    with suppress(OSError):
-        path.unlink(missing_ok=True)
+    payload_path = resolved_path.with_suffix(".ipc")
+    try:
+        if payload_path.exists():
+            payload_path.unlink(missing_ok=True)
+    except OSError:
+        return False
     with closing(_connect_state_db()) as conn:
         cursor = conn.execute("DELETE FROM dlq_index WHERE path = ?", (str(resolved_path),))
         conn.commit()

@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from vertex_forager.core.checkpoint import (
     Checkpoint,
+    delete_dlq_entry,
     find_latest_checkpoint,
     get_cache_dir,
     get_state_db_path,
@@ -190,6 +191,37 @@ def test_dlq_index_registration_roundtrip() -> None:
         assert entries[0]["table"] == "prices"
         assert entries[0]["row_count"] == 12
         assert entries[0]["path"] == str(path.resolve())
+
+
+def test_delete_dlq_entry_validates_root_and_deletes_db_row() -> None:
+    with (
+        tempfile.TemporaryDirectory() as tmpdir,
+        patch(
+            "vertex_forager.core.checkpoint.get_cache_dir",
+            return_value=Path(tmpdir),
+        ),
+        patch(
+            "vertex_forager.utils.get_cache_dir",
+            return_value=Path(tmpdir),
+        ),
+    ):
+        path = Path(tmpdir) / "dlq" / "prices" / "batch_1.ipc"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"ipc")
+        register_dlq_entry(path=path, table="prices", provider="stub", row_count=12)
+
+        assert delete_dlq_entry(path) is True
+        assert not path.exists()
+        assert list_pending_dlq_entries("prices") == []
+
+        outside_path = Path(tmpdir) / "outside.ipc"
+        outside_path.write_bytes(b"ipc")
+        try:
+            delete_dlq_entry(outside_path)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Expected ValueError for path outside dlq root")
 
 
 def test_run_result_coerces_legacy_string_errors() -> None:
