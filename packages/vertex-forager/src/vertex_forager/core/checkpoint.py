@@ -521,7 +521,7 @@ def delete_dlq_entry(path: Path) -> bool:
     dlq_root = get_cache_dir().resolve() / "dlq"
     if not resolved_path.is_relative_to(dlq_root):
         raise ValueError(f"DLQ path {path} is outside DLQ root {dlq_root}") from None
-    payload_path = resolved_path.with_suffix(".ipc")
+    payload_path = resolved_path if resolved_path.suffix == ".ipc" else Path(f"{resolved_path}.ipc")
     try:
         if payload_path.exists():
             payload_path.unlink(missing_ok=True)

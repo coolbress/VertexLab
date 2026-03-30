@@ -10,6 +10,7 @@ import polars as pl
 import pytest
 
 from vertex_forager import cli as cli_mod
+from vertex_forager.core.config import FramePacket
 from vertex_forager.utils import get_cache_dir
 
 
@@ -109,6 +110,66 @@ def test_dlq_list_outputs_entries(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result.exit_code == 0
     assert "table=prices" in result.output
     assert "path=batch_1.ipc" in result.output
+
+
+@pytest.mark.asyncio
+async def test_retry_pending_dlq_entries_marks_success_when_delete_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    target_path = tmp_path / "batch_1.ipc"
+    marks: list[tuple[bool, str | None]] = []
+
+    monkeypatch.setattr(
+        cli_mod,
+        "list_pending_dlq_entries",
+        lambda table=None: [
+            {
+                "path": str(target_path),
+                "table": "prices",
+                "provider": "stub",
+                "row_count": 1,
+            }
+        ],
+        raising=True,
+    )
+    monkeypatch.setattr(cli_mod.pl, "read_ipc", lambda path: pl.DataFrame({"x": [1]}), raising=True)
+
+    class _Writer:
+        def __init__(self, _db: Path) -> None:
+            pass
+
+        async def write(self, packet: FramePacket) -> None:
+            return None
+
+        async def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(cli_mod, "DuckDBWriter", _Writer, raising=True)
+    monkeypatch.setattr(
+        cli_mod,
+        "mark_dlq_retry_result",
+        lambda *, path, success, error=None: marks.append((success, error)),
+        raising=True,
+    )
+    monkeypatch.setattr(Path, "exists", lambda self: self == target_path, raising=True)
+    monkeypatch.setattr(
+        Path,
+        "unlink",
+        lambda self, missing_ok=True: (_ for _ in ()).throw(OSError("delete boom")) if self == target_path else None,
+        raising=True,
+    )
+
+    success_count, failure_count = await cli_mod._retry_pending_dlq_entries(
+        table_name="prices",
+        target_db=tmp_path / "test.duckdb",
+    )
+
+    assert success_count == 1
+    assert failure_count == 0
+    assert marks[-1][0] is True
+    assert marks[-1][1] is not None
+    assert marks[-1][1].startswith("delete_failed:")
 
 
 def test_collect_requires_symbol() -> None:

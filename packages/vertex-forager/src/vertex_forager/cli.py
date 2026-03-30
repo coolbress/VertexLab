@@ -308,8 +308,9 @@ async def _retry_pending_dlq_entries(*, table_name: str, target_db: Path) -> tup
             mark_dlq_retry_result(path=path, success=True, error=None)
             success_count += 1
         except Exception as exc:
-            mark_dlq_retry_result(path=path, success=False, error=f"delete_failed:{exc}")
-            failure_count += 1
+            logger.warning("DLQ retry payload cleanup failed for %s: %s", path, exc)
+            mark_dlq_retry_result(path=path, success=True, error=f"delete_failed:{exc}")
+            success_count += 1
     return success_count, failure_count
 
 

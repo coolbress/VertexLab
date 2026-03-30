@@ -864,14 +864,15 @@ class VertexForager:
         result.finished_at = time.time()
         result.duration_s = time.monotonic() - started_monotonic
         async with self._checkpoint_lock:
-            self._update_checkpoint(
+            await asyncio.to_thread(
+                self._update_checkpoint,
                 run_id,
                 self._router.provider,
                 dataset,
                 self._completed_symbols,
                 self._failed_symbols,
                 self._pending_symbol_jobs,
-                status="completed" if not self._failed_symbols and not self._pending_symbol_jobs else "in_progress",
+                "completed" if not self._failed_symbols and not self._pending_symbol_jobs else "in_progress",
             )
         try:
             save_run_history(result, run_id)
@@ -1062,8 +1063,14 @@ class VertexForager:
             len(symbols) if symbols else "all",
         )
 
-        pending_symbols = set(pending_symbol_jobs or {})
-        for pending_jobs in (pending_symbol_jobs or {}).values():
+        requested_symbols = set(symbols) if symbols else None
+        filtered_pending_symbol_jobs = {
+            symbol: jobs
+            for symbol, jobs in (pending_symbol_jobs or {}).items()
+            if requested_symbols is None or symbol in requested_symbols
+        }
+        pending_symbols = set(filtered_pending_symbol_jobs)
+        for pending_jobs in filtered_pending_symbol_jobs.values():
             for pending_job in pending_jobs:
                 await req_q.put((self.PRIORITY_PAGINATION, next(order_counter), pending_job))
                 job_count += 1
@@ -1542,7 +1549,8 @@ class VertexForager:
                 self._completed_symbols.discard(job.symbol)
                 self._failed_symbols.add(job.symbol)
             if self._run_id and job.dataset:
-                self._update_checkpoint(
+                await asyncio.to_thread(
+                    self._update_checkpoint,
                     self._run_id,
                     self._router.provider,
                     job.dataset,

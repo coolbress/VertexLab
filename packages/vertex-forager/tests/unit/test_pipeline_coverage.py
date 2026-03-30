@@ -417,7 +417,51 @@ async def test_producer_resumes_pending_pagination_jobs_without_restarting_symbo
 
 
 @pytest.mark.asyncio
-async def test_record_worker_symbol_state_persists_pending_pagination_jobs() -> None:
+async def test_producer_restores_only_requested_pending_jobs() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
+    pending_job = FetchJob(
+        provider="stub",
+        dataset="d",
+        symbol="AAPL",
+        spec=RequestSpec(url="https://x", params={"page": 2}),
+    )
+
+    async def _generate_jobs(**kwargs: Any):
+        yield FetchJob(
+            provider="stub",
+            dataset="d",
+            symbol="MSFT",
+            spec=RequestSpec(url="https://x"),
+        )
+
+    engine._router.generate_jobs = _generate_jobs  # type: ignore[method-assign]
+
+    await engine._producer(
+        req_q=req_q,
+        dataset="d",
+        symbols=["MSFT"],
+        order_counter=itertools.count(),
+        completed_symbols=set(),
+        pending_symbol_jobs={"AAPL": [pending_job]},
+    )
+
+    queued_jobs: list[FetchJob] = []
+    while not req_q.empty():
+        _priority, _order, queued_job = req_q.get_nowait()
+        if queued_job is not None:
+            queued_jobs.append(queued_job)
+
+    assert [job.symbol for job in queued_jobs] == ["MSFT"]
+
+
+@pytest.mark.asyncio
+async def test_record_worker_symbol_state_persists_pending_pagination_jobs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "vf-root"))
     router = _PaginatingRouter(pages=0)
     engine, _ = _make_engine(router)
     engine._run_id = "rid"
@@ -442,7 +486,11 @@ async def test_record_worker_symbol_state_persists_pending_pagination_jobs() -> 
 
 
 @pytest.mark.asyncio
-async def test_record_worker_symbol_state_keeps_pending_jobs_on_failure() -> None:
+async def test_record_worker_symbol_state_keeps_pending_jobs_on_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "vf-root"))
     router = _PaginatingRouter(pages=0)
     engine, _ = _make_engine(router)
     engine._run_id = "rid"
