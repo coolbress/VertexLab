@@ -331,6 +331,7 @@ class VertexForager:
         # For checkpoint tracking
         self._completed_symbols: set[str] = set()
         self._failed_symbols: set[str] = set()
+        self._pending_symbol_jobs: dict[str, list[FetchJob]] = {}
         self._checkpoint_lock = asyncio.Lock()
 
         if str(os.getenv("VF_ALLOW_PICKLE_COMPAT", "")).lower() in {"1", "true", "yes"}:
@@ -454,18 +455,21 @@ class VertexForager:
         dataset: str,
         completed_symbols: set[str],
         failed_symbols: set[str],
+        pending_symbol_jobs: dict[str, list[FetchJob]],
         status: Literal["in_progress", "completed"] = "in_progress",
     ) -> None:
         """Update checkpoint with completed and failed symbols."""
-        if not completed_symbols and not failed_symbols:
+        if not completed_symbols and not failed_symbols and not pending_symbol_jobs:
             return
 
+        pending_jobs = [job for jobs in pending_symbol_jobs.values() for job in jobs]
         checkpoint = Checkpoint(
             run_id=run_id,
             provider=provider,
             dataset=dataset,
             completed=list(completed_symbols),
             failed=list(failed_symbols),
+            pending_jobs=pending_jobs,
             status=status,
         )
 
@@ -634,6 +638,7 @@ class VertexForager:
                 symbols=symbols,
                 order_counter=order_counter,
                 completed_symbols=completed_symbols,
+                pending_symbol_jobs=self._pending_symbol_jobs,
                 **kwargs,
             ),
             name="vertex-forager:producer",
@@ -756,6 +761,13 @@ class VertexForager:
         self._run_id = run_id
         self._completed_symbols = set(completed_symbols)
         self._failed_symbols = set(failed_symbols)
+        self._pending_symbol_jobs = {}
+        if resume:
+            latest_checkpoint = self._find_latest_checkpoint(self._router.provider, dataset)
+            if latest_checkpoint is not None:
+                for pending_job in latest_checkpoint.pending_jobs:
+                    if pending_job.symbol:
+                        self._pending_symbol_jobs.setdefault(pending_job.symbol, []).append(pending_job)
         return run_id, completed_symbols
 
     def _create_run_queues(
@@ -858,7 +870,8 @@ class VertexForager:
                 dataset,
                 self._completed_symbols,
                 self._failed_symbols,
-                status="completed",
+                self._pending_symbol_jobs,
+                status="completed" if not self._failed_symbols and not self._pending_symbol_jobs else "in_progress",
             )
         try:
             save_run_history(result, run_id)
@@ -1034,6 +1047,7 @@ class VertexForager:
         symbols: Symbols | None,
         order_counter: itertools.count,
         completed_symbols: set[str] | None = None,
+        pending_symbol_jobs: dict[str, list[FetchJob]] | None = None,
         **kwargs: object,
     ) -> None:
         """Generate fetch jobs and push them to the request queue.
@@ -1048,10 +1062,20 @@ class VertexForager:
             len(symbols) if symbols else "all",
         )
 
+        pending_symbols = set(pending_symbol_jobs or {})
+        for pending_jobs in (pending_symbol_jobs or {}).values():
+            for pending_job in pending_jobs:
+                await req_q.put((self.PRIORITY_PAGINATION, next(order_counter), pending_job))
+                job_count += 1
+                self._inc("jobs_generated", 1)
+
         async for job in self._router.generate_jobs(dataset=dataset, symbols=symbols, **kwargs):
             # Skip already completed symbols if resume is enabled
             if completed_symbols and job.symbol and job.symbol in completed_symbols:
                 logger.debug("PRODUCER: Skipping already completed symbol %s", job.symbol)
+                continue
+            if job.symbol and job.symbol in pending_symbols:
+                logger.debug("PRODUCER: Resuming paginated symbol %s from pending checkpoint job", job.symbol)
                 continue
 
             await req_q.put((self.PRIORITY_NEW_JOB, next(order_counter), job))
@@ -1200,6 +1224,9 @@ class VertexForager:
             self._inc("jobs_processed", 1)
             if job_count % 100 == 0:
                 logger.debug("[Worker-%s] Processed %s jobs so far...", worker_id, job_count)
+            payload: bytes | None = None
+            worker_exc: Exception | None = None
+            parse_result: ParseResult | None = None
             try:
                 payload, worker_exc, parse_result = await self._process_worker_job(
                     worker_id=worker_id,
@@ -1211,6 +1238,9 @@ class VertexForager:
                     result_lock=result_lock,
                     order_counter=order_counter,
                 )
+            except asyncio.CancelledError as exc:
+                worker_exc = exc
+                raise
             finally:
                 req_q.task_done()
                 try:
@@ -1498,10 +1528,19 @@ class VertexForager:
         async with self._checkpoint_lock:
             if worker_exc is None:
                 has_more_pages = parse_result is not None and bool(parse_result.next_jobs)
-                if not has_more_pages:
+                if has_more_pages:
+                    self._completed_symbols.discard(job.symbol)
                     self._failed_symbols.discard(job.symbol)
+                    self._pending_symbol_jobs[job.symbol] = [
+                        next_job for next_job in parse_result.next_jobs if next_job.symbol == job.symbol
+                    ]
+                else:
+                    self._failed_symbols.discard(job.symbol)
+                    self._pending_symbol_jobs.pop(job.symbol, None)
                     self._completed_symbols.add(job.symbol)
             else:
+                self._completed_symbols.discard(job.symbol)
+                self._pending_symbol_jobs.pop(job.symbol, None)
                 self._failed_symbols.add(job.symbol)
             if self._run_id and job.dataset:
                 self._update_checkpoint(
@@ -1510,6 +1549,7 @@ class VertexForager:
                     job.dataset,
                     self._completed_symbols,
                     self._failed_symbols,
+                    self._pending_symbol_jobs,
                 )
 
     async def _validate_data_quality(

@@ -18,7 +18,7 @@ from vertex_forager.core.checkpoint import (
     save_checkpoint,
     save_run_history,
 )
-from vertex_forager.core.config import ResolvedClientConfig, RunResult
+from vertex_forager.core.config import FetchJob, RequestSpec, ResolvedClientConfig, RunResult
 from vertex_forager.core.errors import RunError
 
 
@@ -71,7 +71,36 @@ def test_save_and_load_checkpoint() -> None:
         assert loaded.run_id == "test_run_123"
         assert loaded.completed == ["AAPL", "MSFT"]
         assert loaded.failed == ["GOOG"]
+        assert loaded.pending_jobs == []
         assert load_checkpoint("non_existent") is None
+
+
+def test_save_and_load_checkpoint_with_pending_jobs() -> None:
+    with (
+        tempfile.TemporaryDirectory() as tmpdir,
+        patch(
+            "vertex_forager.core.checkpoint.get_cache_dir",
+            return_value=Path(tmpdir),
+        ),
+    ):
+        pending_job = FetchJob(
+            provider="test_provider",
+            dataset="test_dataset",
+            symbol="AAPL",
+            spec=RequestSpec(url="https://example.com", params={"page": 2}),
+        )
+        checkpoint = Checkpoint(
+            run_id="test_run_456",
+            provider="test_provider",
+            dataset="test_dataset",
+            pending_jobs=[pending_job],
+        )
+        save_checkpoint(checkpoint)
+        loaded = load_checkpoint("test_run_456")
+        assert loaded is not None
+        assert len(loaded.pending_jobs) == 1
+        assert loaded.pending_jobs[0].symbol == "AAPL"
+        assert loaded.pending_jobs[0].spec.params["page"] == 2
 
 
 def test_find_latest_checkpoint_uses_sqlite_ordering() -> None:

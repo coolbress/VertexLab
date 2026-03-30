@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 import itertools
+import os
 from pathlib import Path
 import time
 from typing import Any
@@ -170,9 +171,7 @@ async def test_fairness_sentinel_returns_already_done() -> None:
     req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
     await req_q.put((VertexForager.PRIORITY_SENTINEL, 0, None))
 
-    selected = await engine._dequeue_worker_job(
-        req_q=req_q, burst_cap=2
-    )
+    selected = await engine._dequeue_worker_job(req_q=req_q, burst_cap=2)
     assert selected.job is None
     assert selected.already_done is True
     assert selected.priority == VertexForager.PRIORITY_SENTINEL
@@ -194,9 +193,7 @@ async def test_fairness_burst_cap_demotes_and_finds_different_candidate() -> Non
     await req_q.put((VertexForager.PRIORITY_PAGINATION, 1, aapl_job))
     await req_q.put((VertexForager.PRIORITY_PAGINATION, 2, msft_job))
 
-    selected = await engine._dequeue_worker_job(
-        req_q=req_q, burst_cap=2
-    )
+    selected = await engine._dequeue_worker_job(req_q=req_q, burst_cap=2)
     assert selected.job is not None
     assert selected.job.symbol == "MSFT"
     assert len(selected.demoted) == 2
@@ -216,9 +213,7 @@ async def test_fairness_burst_cap_queue_empty_after_demotes() -> None:
     aapl_job = FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x"))
     await req_q.put((VertexForager.PRIORITY_PAGINATION, 0, aapl_job))
 
-    selected = await engine._dequeue_worker_job(
-        req_q=req_q, burst_cap=2
-    )
+    selected = await engine._dequeue_worker_job(req_q=req_q, burst_cap=2)
     assert selected.job is None
     assert len(selected.demoted) == 1
     assert selected.demoted[0].symbol == "AAPL"
@@ -240,9 +235,7 @@ async def test_fairness_sentinel_found_during_demote_drain() -> None:
     await req_q.put((VertexForager.PRIORITY_PAGINATION, 0, aapl_job))
     await req_q.put((VertexForager.PRIORITY_SENTINEL, 0, None))
 
-    selected = await engine._dequeue_worker_job(
-        req_q=req_q, burst_cap=2
-    )
+    selected = await engine._dequeue_worker_job(req_q=req_q, burst_cap=2)
     assert selected.job is None
     assert selected.already_done is False
     assert len(selected.demoted) == 1
@@ -393,6 +386,63 @@ def test_find_latest_checkpoint_returns_most_recent_by_timestamp(
 
 
 @pytest.mark.asyncio
+async def test_producer_resumes_pending_pagination_jobs_without_restarting_symbol() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
+    pending_job = FetchJob(
+        provider="stub",
+        dataset="d",
+        symbol="AAPL",
+        spec=RequestSpec(url="https://x", params={"page": 2}),
+    )
+    order_counter = itertools.count()
+
+    await engine._producer(
+        req_q=req_q,
+        dataset="d",
+        symbols=["AAPL", "MSFT"],
+        order_counter=order_counter,
+        completed_symbols=set(),
+        pending_symbol_jobs={"AAPL": [pending_job]},
+    )
+
+    queued_jobs: list[FetchJob] = []
+    while not req_q.empty():
+        _priority, _order, queued_job = req_q.get_nowait()
+        if queued_job is not None:
+            queued_jobs.append(queued_job)
+
+    assert [job.symbol for job in queued_jobs] == ["AAPL", "MSFT"]
+    assert queued_jobs[0].spec.params["page"] == 2
+
+
+@pytest.mark.asyncio
+async def test_record_worker_symbol_state_persists_pending_pagination_jobs() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    engine._run_id = "rid"
+    engine._checkpoint_lock = asyncio.Lock()
+    next_job = FetchJob(
+        provider="stub",
+        dataset="d",
+        symbol="AAPL",
+        spec=RequestSpec(url="https://x", params={"page": 2}),
+    )
+    parse_result = ParseResult(packets=[], next_jobs=[next_job])
+
+    await engine._record_worker_symbol_state(
+        job=FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x")),
+        worker_exc=None,
+        parse_result=parse_result,
+    )
+
+    assert "AAPL" not in engine._completed_symbols
+    assert "AAPL" not in engine._failed_symbols
+    assert engine._pending_symbol_jobs["AAPL"][0].spec.params["page"] == 2
+
+
+@pytest.mark.asyncio
 async def test_finalize_run_metrics_sink_and_history_error_suppressed(monkeypatch: pytest.MonkeyPatch) -> None:
     router = _PaginatingRouter(pages=0)
     engine, _ = _make_engine(router)
@@ -429,6 +479,41 @@ async def test_finalize_run_metrics_sink_and_history_error_suppressed(monkeypatc
     await engine._finalize_run(result=result, dataset="d", run_id="rid", started_monotonic=time.monotonic() - 1.0)
     assert result.metrics_summary.get("http_duration_s_p95") == 1.0
     assert result.finished_at is not None
+
+
+@pytest.mark.asyncio
+async def test_finalize_run_keeps_checkpoint_resumable_when_failures_remain(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    engine._metrics_enabled = False
+    engine._completed_symbols = {"AAPL"}
+    engine._failed_symbols = {"MSFT"}
+    engine._pending_symbol_jobs = {}
+    engine._checkpoint_lock = asyncio.Lock()
+    root = tmp_path / "vf-root"
+
+    async def _noop_flush(*, suppress: bool, consume: bool = True) -> None:
+        return None
+
+    original_env = os.environ.get("VERTEXFORAGER_ROOT")
+    os.environ["VERTEXFORAGER_ROOT"] = str(root)
+    try:
+        engine._run_id = "rid"
+        result = RunResult(provider="stub")
+        monkeypatch.setattr(engine, "_try_flush_once", _noop_flush, raising=True)
+        await engine._finalize_run(result=result, dataset="d", run_id="rid", started_monotonic=time.monotonic() - 1.0)
+        checkpoint = engine._find_latest_checkpoint("stub", "d")
+        assert checkpoint is not None
+        assert checkpoint.status == "in_progress"
+        assert checkpoint.failed == ["MSFT"]
+    finally:
+        if original_env is None:
+            os.environ.pop("VERTEXFORAGER_ROOT", None)
+        else:
+            os.environ["VERTEXFORAGER_ROOT"] = original_env
 
 
 @pytest.mark.asyncio
@@ -483,6 +568,65 @@ async def test_fetch_worker_handles_none_job_then_sentinel(monkeypatch: pytest.M
         on_progress=None,
     )
     assert sleep_calls["n"] == 1
+
+
+@pytest.mark.asyncio
+async def test_fetch_worker_cancelled_error_preserves_handler_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+
+    class _Req:
+        @staticmethod
+        def task_done() -> None:
+            return None
+
+    req_q = _Req()
+    pkt_q: asyncio.Queue[FramePacket | None] = asyncio.Queue()
+    result = RunResult(provider="stub")
+    lock = asyncio.Lock()
+    order_counter = itertools.count()
+    job = FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x"))
+    seen: dict[str, Any] = {}
+
+    async def _dequeue_worker_job(**kwargs: object):
+        return SchedulerResult(priority=engine.PRIORITY_NEW_JOB, job=job, demoted=[], already_done=False)
+
+    async def _process_worker_job(**kwargs: object):
+        raise asyncio.CancelledError()
+
+    async def on_progress(
+        *, job: FetchJob, payload: bytes | None, exc: Exception | None, parse_result: ParseResult | None
+    ) -> None:
+        seen["payload"] = payload
+        seen["exc"] = exc
+        seen["parse_result"] = parse_result
+
+    async def _record_worker_symbol_state(**kwargs: object) -> None:
+        seen["record_exc"] = kwargs["worker_exc"]
+        seen["record_parse_result"] = kwargs["parse_result"]
+
+    monkeypatch.setattr(engine, "_dequeue_worker_job", _dequeue_worker_job, raising=True)
+    monkeypatch.setattr(engine, "_drain_deferred_demotes", lambda **kwargs: None, raising=True)
+    monkeypatch.setattr(engine, "_requeue_demoted_jobs", lambda **kwargs: None, raising=True)
+    monkeypatch.setattr(engine, "_process_worker_job", _process_worker_job, raising=True)
+    monkeypatch.setattr(engine, "_record_worker_symbol_state", _record_worker_symbol_state, raising=True)
+
+    with pytest.raises(asyncio.CancelledError):
+        await engine._fetch_worker(
+            0,
+            req_q=req_q,  # type: ignore[arg-type]
+            pkt_q=pkt_q,
+            result=result,
+            result_lock=lock,
+            order_counter=order_counter,
+            on_progress=on_progress,
+        )
+
+    assert seen["payload"] is None
+    assert isinstance(seen["exc"], asyncio.CancelledError)
+    assert seen["parse_result"] is None
+    assert isinstance(seen["record_exc"], asyncio.CancelledError)
+    assert seen["record_parse_result"] is None
 
 
 @pytest.mark.asyncio

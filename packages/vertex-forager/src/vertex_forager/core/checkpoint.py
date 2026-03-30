@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from vertex_forager.core.config import RunResult
     from vertex_forager.core.types import JSONValue
 
+from vertex_forager.core.config import FetchJob
 from vertex_forager.core.errors import RunError
 
 
@@ -51,6 +52,7 @@ class Checkpoint(BaseModel):
     dataset: str
     completed: list[str] = Field(default_factory=list)
     failed: list[str] = Field(default_factory=list)
+    pending_jobs: list[FetchJob] = Field(default_factory=list)
     status: Literal["in_progress", "completed"] = "in_progress"
 
 
@@ -74,6 +76,7 @@ def _initialize_schema(conn: sqlite3.Connection) -> None:
             dataset TEXT NOT NULL,
             completed_json TEXT NOT NULL,
             failed_json TEXT NOT NULL,
+            pending_jobs_json TEXT NOT NULL DEFAULT '[]',
             status TEXT NOT NULL DEFAULT 'in_progress',
             created_at REAL NOT NULL,
             updated_at REAL NOT NULL
@@ -116,6 +119,9 @@ def _initialize_schema(conn: sqlite3.Connection) -> None:
             ON dlq_index(status, table_name, created_at DESC);
         """
     )
+    checkpoint_columns = {str(row["name"]) for row in conn.execute("PRAGMA table_info(checkpoints)").fetchall()}
+    if "pending_jobs_json" not in checkpoint_columns:
+        conn.execute("ALTER TABLE checkpoints ADD COLUMN pending_jobs_json TEXT NOT NULL DEFAULT '[]'")
     conn.commit()
 
 
@@ -188,16 +194,18 @@ def save_checkpoint(checkpoint: Checkpoint) -> None:
                 dataset,
                 completed_json,
                 failed_json,
+                pending_jobs_json,
                 status,
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(run_id) DO UPDATE SET
                 provider=excluded.provider,
                 dataset=excluded.dataset,
                 completed_json=excluded.completed_json,
                 failed_json=excluded.failed_json,
+                pending_jobs_json=excluded.pending_jobs_json,
                 status=excluded.status,
                 updated_at=excluded.updated_at
             """,
@@ -207,6 +215,7 @@ def save_checkpoint(checkpoint: Checkpoint) -> None:
                 checkpoint.dataset,
                 _json_dumps(checkpoint.completed),
                 _json_dumps(checkpoint.failed),
+                _json_dumps([job.model_dump(mode="json") for job in checkpoint.pending_jobs]),
                 checkpoint.status,
                 now,
                 now,
@@ -227,7 +236,7 @@ def load_checkpoint(run_id: str) -> Checkpoint | None:
     with closing(_connect_state_db()) as conn:
         row = conn.execute(
             """
-            SELECT run_id, provider, dataset, completed_json, failed_json, status
+            SELECT run_id, provider, dataset, completed_json, failed_json, pending_jobs_json, status
             FROM checkpoints
             WHERE run_id = ?
             """,
@@ -242,6 +251,11 @@ def load_checkpoint(run_id: str) -> Checkpoint | None:
             dataset=str(row["dataset"]),
             completed=list(cast("list[str]", _json_loads(str(row["completed_json"]), []))),
             failed=list(cast("list[str]", _json_loads(str(row["failed_json"]), []))),
+            pending_jobs=[
+                FetchJob.model_validate(item)
+                for item in cast("list[object]", _json_loads(str(row["pending_jobs_json"]), []))
+                if isinstance(item, dict)
+            ],
             status=str(row["status"]) if row["status"] else "in_progress",
         )
     except (TypeError, ValueError, ValidationError):
@@ -253,7 +267,7 @@ def find_latest_checkpoint(provider: str, dataset: str) -> Checkpoint | None:
     with closing(_connect_state_db()) as conn:
         row = conn.execute(
             """
-            SELECT run_id, provider, dataset, completed_json, failed_json, status
+            SELECT run_id, provider, dataset, completed_json, failed_json, pending_jobs_json, status
             FROM checkpoints
             WHERE provider = ? AND dataset = ? AND status != 'completed'
             ORDER BY updated_at DESC, rowid DESC
@@ -270,6 +284,11 @@ def find_latest_checkpoint(provider: str, dataset: str) -> Checkpoint | None:
             dataset=str(row["dataset"]),
             completed=list(cast("list[str]", _json_loads(str(row["completed_json"]), []))),
             failed=list(cast("list[str]", _json_loads(str(row["failed_json"]), []))),
+            pending_jobs=[
+                FetchJob.model_validate(item)
+                for item in cast("list[object]", _json_loads(str(row["pending_jobs_json"]), []))
+                if isinstance(item, dict)
+            ],
             status=str(row["status"]) if row["status"] else "in_progress",
         )
     except (TypeError, ValueError, ValidationError):
