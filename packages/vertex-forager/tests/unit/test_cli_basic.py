@@ -57,6 +57,60 @@ def test_clear_cancel(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result.output.strip() == ""
 
 
+def test_clear_runs_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(click, "confirm", lambda _: True, raising=True)
+    monkeypatch.setattr(cli_mod, "delete_all_run_history", lambda: 4, raising=True)
+    runner = CliRunner()
+    result = runner.invoke(cli_mod.main, ["clear", "--runs"])
+    assert result.exit_code == 0
+    assert "runs=4" in result.output
+
+
+def test_runs_list_outputs_entries(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        cli_mod,
+        "list_run_history",
+        lambda limit=20: [
+            {
+                "run_id": "run-1",
+                "provider": "yfinance",
+                "dataset": "price",
+                "total_rows": 123,
+                "error_count": 1,
+                "finished_at": 1_700_000_000.0,
+            }
+        ],
+        raising=True,
+    )
+    runner = CliRunner()
+    result = runner.invoke(cli_mod.main, ["runs", "list"])
+    assert result.exit_code == 0
+    assert "run_id=run-1" in result.output
+    assert "rows=123" in result.output
+
+
+def test_dlq_list_outputs_entries(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        cli_mod,
+        "list_pending_dlq_entries",
+        lambda table=None: [
+            {
+                "table": "prices",
+                "row_count": 7,
+                "created_at": 1_700_000_000.0,
+                "path": "cache/dlq/prices/batch_1.ipc",
+                "retry_count": 2,
+            }
+        ],
+        raising=True,
+    )
+    runner = CliRunner()
+    result = runner.invoke(cli_mod.main, ["dlq", "list"])
+    assert result.exit_code == 0
+    assert "table=prices" in result.output
+    assert "path=batch_1.ipc" in result.output
+
+
 def test_collect_requires_symbol() -> None:
     runner = CliRunner()
     result = runner.invoke(cli_mod.main, ["collect"])
@@ -144,16 +198,16 @@ def test_constants_queue_json() -> None:
     runner = CliRunner()
     res = runner.invoke(cli_mod.main, ["constants", "--section", "queue", "--format", "json"])
     assert res.exit_code == 0
-    assert "\"QUEUE_MIN\"" in res.output
-    assert "\"QUEUE_MAX\"" in res.output
+    assert '"QUEUE_MIN"' in res.output
+    assert '"QUEUE_MAX"' in res.output
 
 
 def test_constants_writers_json() -> None:
     runner = CliRunner()
     res = runner.invoke(cli_mod.main, ["constants", "--section", "writers", "--format", "json"])
     assert res.exit_code == 0
-    assert "\"WRITER_DUCKDB_MAX_WORKERS\"" in res.output
-    assert "\"WAL_AUTOCHECKPOINT_LIMIT\"" in res.output
+    assert '"WRITER_DUCKDB_MAX_WORKERS"' in res.output
+    assert '"WAL_AUTOCHECKPOINT_LIMIT"' in res.output
 
 
 def test_recover_table_specified_but_not_found(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -217,12 +271,13 @@ def test_constants_all_json_has_sections() -> None:
     runner = CliRunner()
     res = runner.invoke(cli_mod.main, ["constants", "--section", "all", "--format", "json"])
     assert res.exit_code == 0
-    assert "\"global\"" in res.output
-    assert "\"flow\"" in res.output
+    assert '"global"' in res.output
+    assert '"flow"' in res.output
 
 
 def test_constants_json_env_overrides_included(monkeypatch: pytest.MonkeyPatch) -> None:
     import json as _json
+
     monkeypatch.setenv("SHARADAR_API_KEY", "secret")
     runner = CliRunner()
     res = runner.invoke(cli_mod.main, ["constants", "--section", "global", "--format", "json"])
@@ -257,8 +312,10 @@ def test_collect_value_error_converted(monkeypatch: pytest.MonkeyPatch) -> None:
     class _BrokenCtx:
         async def __aenter__(self):
             raise ValueError("oops")
+
         async def __aexit__(self, exc_type, exc, tb):
             return False
+
     monkeypatch.setenv("SHARADAR_API_KEY", "x")
     monkeypatch.setattr(cli_mod, "create_client", lambda **_: _BrokenCtx(), raising=True)
     runner = CliRunner()
@@ -268,6 +325,7 @@ def test_collect_value_error_converted(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 # ===== Recover CLI tests merged from test_cli_recover_args.py =====
+
 
 def _make_dlq(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, table: str, rows: int = 3) -> Path:
     base = tmp_path / "app"

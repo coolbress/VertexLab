@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Mapping
 import contextlib
+from datetime import datetime, timezone
 import json
 import logging
 import os
@@ -15,17 +16,30 @@ import httpx
 import polars as pl
 
 from vertex_forager.clients import create_client
-from vertex_forager.constants import DEFAULT_RATE_LIMIT
+from vertex_forager.constants import DEFAULT_RATE_LIMIT, DLQ_TMP_RETENTION_S
 from vertex_forager.constants_view import (
     build_constants_preview,
     render_constants_preview,
 )
+from vertex_forager.core.checkpoint import (
+    delete_all_checkpoints,
+    delete_all_dlq_entries,
+    delete_all_run_history,
+    delete_dlq_entries_before,
+    delete_run_history_before,
+    get_state_db_path,
+    list_pending_dlq_entries,
+    list_run_history,
+    mark_dlq_retry_result,
+)
+from vertex_forager.core.config import FramePacket
 from vertex_forager.core.recover import build_summary_message, execute_recovery
 from vertex_forager.core.sweep import (
     build_sweep_combinations,
     run_sweep_measurements,
     score_and_rank_results,
 )
+from vertex_forager.writers.duckdb import DuckDBWriter
 
 from .utils import cleanup_dlq_tmp, clear_app_cache, get_app_root, get_cache_dir
 
@@ -170,8 +184,10 @@ def status() -> None:
         None: Status information is printed to stdout.
     """
     root: Path = get_app_root()
+    state_db = get_state_db_path()
     click.echo(f"📂 Data Root: {root}")
     click.echo(f"📦 Cache Dir: {get_cache_dir()}")
+    click.echo(f"🗄️ State DB: {state_db}")
 
     size = 0
     for f in root.glob("**/*"):
@@ -222,19 +238,216 @@ def constants(section: str, output_format: str, env_only: bool) -> None:
     click.echo(rendered)
 
 
+def _format_timestamp(value: object) -> str:
+    """Format a UNIX timestamp for CLI output."""
+    if value is None:
+        return "-"
+    try:
+        return datetime.fromtimestamp(float(value), tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")  # type: ignore[arg-type]
+    except (TypeError, ValueError, OSError):
+        return "-"
+
+
+def _parse_before_days(value: str) -> int:
+    """Parse CLI retention input of the form '<N>d'."""
+    raw = value.strip().lower()
+    if not raw.endswith("d"):
+        raise click.BadParameter("Expected <N>d format, for example 30d")
+    days_text = raw[:-1].strip()
+    if not days_text.isdigit():
+        raise click.BadParameter("Expected <N>d format, for example 30d")
+    return int(days_text)
+
+
+def _before_to_timestamp(value: str) -> float:
+    """Convert a before-window string to a cutoff timestamp."""
+    days = _parse_before_days(value)
+    return datetime.now(tz=timezone.utc).timestamp() - (days * 86_400)
+
+
+async def _retry_pending_dlq_entries(*, table_name: str, target_db: Path) -> tuple[int, int]:
+    """Retry pending DLQ entries for a table against the target DuckDB."""
+    entries = list_pending_dlq_entries(table_name)
+    if not entries:
+        return 0, 0
+    writer = DuckDBWriter(target_db)
+    succeeded_paths: list[Path] = []
+    success_count = 0
+    failure_count = 0
+    close_error: Exception | None = None
+    try:
+        for entry in entries:
+            path = Path(str(entry["path"]))
+            try:
+                if not path.exists():
+                    raise FileNotFoundError(f"DLQ file not found: {path}")
+                frame = pl.read_ipc(path)
+                packet = FramePacket(
+                    provider=str(entry.get("provider") or "dlq"),
+                    table=str(entry["table"]),
+                    frame=frame,
+                    observed_at=datetime.now(timezone.utc),
+                )
+                await writer.write(packet)
+                succeeded_paths.append(path)
+            except Exception as exc:
+                mark_dlq_retry_result(path=path, success=False, error=str(exc))
+                failure_count += 1
+    finally:
+        try:
+            await writer.close()
+        except Exception as exc:
+            close_error = exc
+    if close_error is not None:
+        for path in succeeded_paths:
+            mark_dlq_retry_result(path=path, success=True, error=f"writer_close:{close_error}")
+        raise click.ClickException(f"DLQ retry failed while closing writer: {close_error}") from None
+    for path in succeeded_paths:
+        try:
+            path.unlink(missing_ok=True)
+            mark_dlq_retry_result(path=path, success=True, error=None)
+            success_count += 1
+        except Exception as exc:
+            mark_dlq_retry_result(path=path, success=False, error=f"delete_failed:{exc}")
+            failure_count += 1
+    return success_count, failure_count
+
+
 @main.command()
-def clear() -> None:
-    """Clear all temporary cache data.
+@click.option("--checkpoints", is_flag=True, default=False, help="Clear checkpoint state only")
+@click.option("--runs", "clear_runs", is_flag=True, default=False, help="Clear run history only")
+@click.option("--dlq", "clear_dlq", is_flag=True, default=False, help="Clear DLQ index and spool files only")
+@click.option("--all", "clear_all", is_flag=True, default=False, help="Clear all cache state")
+def clear(checkpoints: bool, clear_runs: bool, clear_dlq: bool, clear_all: bool) -> None:
+    """Clear cached state selectively or remove the entire cache."""
+    if not any((checkpoints, clear_runs, clear_dlq, clear_all)):
+        clear_all = True
+    if clear_all:
+        if click.confirm("⚠️ Delete all cache data?"):
+            clear_app_cache()
+            click.echo("🧹 Cache cleared.")
+        return
+    selections: list[str] = []
+    if checkpoints:
+        selections.append("checkpoints")
+    if clear_runs:
+        selections.append("runs")
+    if clear_dlq:
+        selections.append("dlq")
+    if not click.confirm(f"⚠️ Delete selected cache state: {', '.join(selections)}?"):
+        return
+    messages: list[str] = []
+    if checkpoints:
+        deleted = delete_all_checkpoints()
+        messages.append(f"checkpoints={deleted}")
+    if clear_runs:
+        deleted = delete_all_run_history()
+        messages.append(f"runs={deleted}")
+    if clear_dlq:
+        dlq_result = delete_all_dlq_entries()
+        cleaned_tmp = cleanup_dlq_tmp(get_cache_dir() / "dlq", 0)
+        messages.append(f"dlq_rows={dlq_result['rows']}")
+        messages.append(f"dlq_files={dlq_result['files']}")
+        messages.append(f"dlq_tmp={cleaned_tmp}")
+    click.echo(f"🧹 Cache cleared: {' '.join(messages)}")
 
-    Args:
-        None
 
-    Returns:
-        None: Confirmation message is printed to stdout.
-    """
-    if click.confirm("⚠️ Delete all cache data?"):
-        clear_app_cache()
-        click.echo("🧹 Cache cleared.")
+@main.group()
+def runs() -> None:
+    """Inspect and manage persisted run history."""
+    pass
+
+
+@runs.command("list")
+@click.option("--limit", type=int, default=20, show_default=True, help="Maximum number of runs to show")
+def runs_list(limit: int) -> None:
+    """List recent run-history rows from SQLite."""
+    entries = list_run_history(limit=limit)
+    if not entries:
+        click.echo("No run history found.")
+        return
+    for entry in entries:
+        click.echo(
+            " ".join(
+                [
+                    f"run_id={entry['run_id']}",
+                    f"provider={entry['provider']}",
+                    f"dataset={entry['dataset'] or '-'}",
+                    f"rows={entry['total_rows']}",
+                    f"errors={entry['error_count']}",
+                    f"finished_at={_format_timestamp(entry['finished_at'])}",
+                ]
+            )
+        )
+
+
+@runs.command("clear")
+@click.option("--before", required=True, help="Delete run history older than this window, e.g. 30d")
+def runs_clear(before: str) -> None:
+    """Delete run history older than the provided window."""
+    cutoff = _before_to_timestamp(before)
+    deleted = delete_run_history_before(cutoff)
+    click.echo(f"🧹 Deleted {deleted} run history rows older than {before}.")
+
+
+@main.group()
+def dlq() -> None:
+    """Inspect and manage DLQ spool metadata."""
+    pass
+
+
+@dlq.command("list")
+def dlq_list() -> None:
+    """List pending DLQ entries from the SQLite index."""
+    entries = list_pending_dlq_entries()
+    if not entries:
+        click.echo("No pending DLQ entries.")
+        return
+    for entry in entries:
+        click.echo(
+            " ".join(
+                [
+                    f"table={entry['table']}",
+                    f"rows={entry['row_count']}",
+                    f"created_at={_format_timestamp(entry['created_at'])}",
+                    f"path={Path(str(entry['path'])).name}",
+                    f"retries={entry['retry_count']}",
+                ]
+            )
+        )
+
+
+@dlq.command("retry")
+@click.option("--table", "table_name", required=True, help="Retry pending DLQ entries for this table")
+@click.option(
+    "--db",
+    "db_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Target DuckDB file path (or set VF_RECOVER_DB)",
+)
+def dlq_retry(table_name: str, db_path: Path | None) -> None:
+    """Retry pending DLQ entries for a table."""
+    target_db = _resolve_target_db(db_path, False)
+    if target_db is None:
+        raise click.ClickException("Missing target DB. Provide --db or set VF_RECOVER_DB")
+    success_count, failure_count = asyncio.run(_retry_pending_dlq_entries(table_name=table_name, target_db=target_db))
+    if success_count == 0 and failure_count == 0:
+        click.echo(f"No pending DLQ entries for table {table_name}.")
+        return
+    click.echo(f"✅ DLQ retry finished: table={table_name} recovered={success_count} failed={failure_count}")
+
+
+@dlq.command("clear")
+@click.option("--before", required=True, help="Delete DLQ entries older than this window, e.g. 1d")
+def dlq_clear(before: str) -> None:
+    """Delete old DLQ index rows and their IPC files."""
+    cutoff = _before_to_timestamp(before)
+    deleted = delete_dlq_entries_before(cutoff)
+    cleaned_tmp = cleanup_dlq_tmp(get_cache_dir() / "dlq", 0)
+    click.echo(
+        f"🧹 Deleted DLQ state older than {before}: rows={deleted['rows']} files={deleted['files']} tmp={cleaned_tmp}"
+    )
 
 
 @main.group()
@@ -621,7 +834,13 @@ def _print_recover_details(summary: dict[str, Any]) -> None:
 @click.option("--dry-run", is_flag=True, default=False, help="Scan and report without writing")
 @click.option("--delete-on-success", is_flag=True, default=False, help="Delete IPC files after successful reinjection")
 @click.option("--clean-tmp", is_flag=True, default=False, help="Remove stale .ipc.tmp files before recovery")
-@click.option("--retention-s", type=int, default=86400, help="Retention window for .ipc.tmp cleanup (seconds)")
+@click.option(
+    "--retention-s",
+    type=int,
+    default=DLQ_TMP_RETENTION_S,
+    show_default=True,
+    help="Retention window for .ipc.tmp cleanup (seconds)",
+)
 @click.option("--report", type=click.Path(path_type=Path), default=None, help="Write JSON report to this path")
 @click.option("--progress", is_flag=True, default=False, help="Show per-file progress during recovery")
 @click.option("--verbose", is_flag=True, default=False, help="Print per-file details without requiring --report")

@@ -128,7 +128,8 @@ class SharadarClient(BaseClient[SharadarDataset]):
         flush_threshold_rows: int | None = None,
         writer_chunk_rows: int | None = None,
         writer_concurrency: int | None = None,
-        persist_run_history: bool | None = None,
+        checkpoint_retention_days: int | None = None,
+        run_history_retention_days: int | None = None,
         http_timeout_s: float | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
         advanced: AdvancedConfig | dict[str, Any] | None = None,
@@ -149,7 +150,8 @@ class SharadarClient(BaseClient[SharadarDataset]):
             flush_threshold_rows: Buffered row threshold before flush begins.
             writer_chunk_rows: Transitional write chunk-size tuning.
             writer_concurrency: Transitional writer worker count tuning.
-            persist_run_history: Transitional run-history persistence toggle.
+            checkpoint_retention_days: Retention window for completed checkpoints.
+            run_history_retention_days: Retention window for run-history records.
             http_timeout_s: HTTP request timeout in seconds.
             limits: Grouped HTTP connection-pool configuration.
             advanced: Grouped advanced and transitional settings.
@@ -174,7 +176,8 @@ class SharadarClient(BaseClient[SharadarDataset]):
             flush_threshold_rows=flush_threshold_rows,
             writer_chunk_rows=writer_chunk_rows,
             writer_concurrency=writer_concurrency,
-            persist_run_history=persist_run_history,
+            checkpoint_retention_days=checkpoint_retention_days,
+            run_history_retention_days=run_history_retention_days,
             http_timeout_s=http_timeout_s,
             limits=limits,
             advanced=advanced,

@@ -41,6 +41,16 @@ Common operations with both code and CLI.
   - `vertex-forager status`
 - Constants
   - `vertex-forager constants`
-- Queues
-  - `vertex-forager clear`
+- Run history
+  - `vertex-forager runs list --limit 10`
+  - `vertex-forager runs clear --before 90d`
+- DLQ
+  - `vertex-forager dlq list`
+  - `vertex-forager dlq retry --table sharadar_sep --db ./forager.duckdb`
+  - `vertex-forager dlq clear --before 1d`
+- Cache cleanup
+  - `vertex-forager clear --checkpoints`
+  - `vertex-forager clear --runs`
+  - `vertex-forager clear --dlq`
+  - `vertex-forager clear --all`
   - `vertex-forager recover`

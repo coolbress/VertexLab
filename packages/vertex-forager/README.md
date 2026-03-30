@@ -9,38 +9,11 @@ Provider-agnostic data collection for financial markets. Centralized transport, 
 
 Status: Alpha • Python 3.10+ • License: Apache-2.0
 
-## Table of Contents
-
-- Features
-- Installation
-- Quick Start
-- Providers
-- Configuration
-- Observability
-- Usage Patterns
-- Documentation
-- Versioning & Changelog
-- Examples
-- FAQ
-- Contributing
-- License
-
 ## Features
 
-- Transport and flow control
-  - Central HTTP executor with retry (Full Jitter), GCRA pacing, gradient concurrency control
-  - Adaptive RPM downshift/recovery with floor/threshold guards
-- Schema‑aware pipeline
-  - Polars normalization with central schema registry and PK validation
-  - Flexible schema opt‑in for evolving library providers
-  - Opt‑in strict validation for fast failure on invalid inputs
-- Resilient writing
-  - Chunked flush to bound memory peak; per‑chunk accounting
-  - DLQ spool with fsync and atomic replace; `dlq_enabled` toggle to disable spooling when required
-  - RunResult summaries and per‑table DLQ counts regardless of metrics settings
-- Writers
-  - DuckDB (unique index if PK known)
-  - In‑memory buffer with optional unique_key dedup/upsert
+- Unified `create_client(...)` API for YFinance and Sharadar
+- Polars-first data handling with optional DuckDB persistence
+- Built-in retry, flow control, and DLQ-backed write recovery
 
 ## Installation
 
@@ -62,29 +35,7 @@ pip install https://github.com/coolbress/VertexLab/releases/download/vertex-fora
 
 ## Quick Start
 
-Use provider‑specific clients directly (no manual router/writer setup).
-
-### Architecture (high‑level)
-
-```mermaid
-flowchart TD
-  A[Router Jobs] --> B[Throttle (GCRA) + Concurrency (Gradient)]
-  B --> C[HTTP / Library Fetch with Retry]
-  C --> D[Parse -> FramePackets]
-  D --> E[Normalize (Schemas, PK)]
-  E --> F{Flush threshold reached?}
-  F -- No --> E
-  F -- Yes --> G[Merge Frames, PK Checks]
-  G --> H{Write Chunk}
-  H -- Success --> I[Update RunResult & Metrics]
-  H -- Failure --> J[Per-packet Rescue]
-  J -- Partial Success --> K[DLQ Spool Failed Packets]
-  J -- All Fail --> K
-  K --> L[Operator Recovery CLI]
-  L --> H
-```
-
-### YFinance (library provider)
+### YFinance
 
 ```python
 from vertex_forager import create_client
@@ -104,7 +55,7 @@ res = client.get_price_data(tickers=["AAPL", "MSFT"], connect_db="duckdb://./for
 print(res)  # RunResult
 ```
 
-### Sharadar (HTTP provider)
+### Sharadar
 
 ```python
 import os
@@ -113,51 +64,6 @@ from vertex_forager import create_client
 client = create_client(provider="sharadar", api_key=os.environ["SHARADAR_API_KEY"], rate_limit=120)
 df = client.get_price_data(tickers=["AAPL", "MSFT"])
 print(df)
-```
-
-Persist to DuckDB:
-
-```python
-import os
-from vertex_forager import create_client
-
-client = create_client(provider="sharadar", api_key=os.environ["SHARADAR_API_KEY"], rate_limit=120)
-res = client.get_price_data(tickers=["AAPL", "MSFT"], connect_db="duckdb://./forager.duckdb")
-print(res)  # RunResult
-```
-
-## Providers
-
-- Sharadar (Nasdaq Data Link): HTTP JSON; datasets include `price`, `daily`, `fundamental`, `actions`, `tickers`, `sp500`
-- YFinance: library-backed data via `yfinance://` scheme; datasets include `info`, `price`, `dividends`, `splits`, `actions`, `calendar`, `news`
-
-## Provider Client Examples
-
-
-### YFinanceClient
-
-```python
-
-client = create_client(provider="yfinance", rate_limit=60)
-df = client.get_price_data(tickers=["AAPL", "MSFT"])
-print(df)
-
-res = client.get_price_data(tickers=["AAPL", "MSFT"], connect_db="duckdb://./forager.duckdb")
-print(res)  # RunResult
-```
-
-### SharadarClient
-
-```python
-import os
-from vertex_forager import create_client
-
-client = create_client(provider="sharadar", api_key=os.environ["SHARADAR_API_KEY"], rate_limit=120)
-df = client.get_price_data(tickers=["AAPL", "MSFT"])
-print(df)
-
-res = client.get_price_data(tickers=["AAPL", "MSFT"], connect_db="duckdb://./forager.duckdb")
-print(res)  # RunResult
 ```
 
 ## Configuration
@@ -165,78 +71,30 @@ print(res)  # RunResult
 - `create_client(...)`
   - required: `provider`, `api_key` (Sharadar), `rate_limit`
   - common runtime knobs: `concurrency`, `flush_threshold_rows`, `writer_chunk_rows`, `dlq_enabled`, `metrics_enabled`
+  - state retention knobs: `checkpoint_retention_days`, `run_history_retention_days`
   - grouped config: `retry=RetryConfig(...)`, `downshift=DownshiftConfig(...)`, `limits=HTTPConfig(...)`, `advanced=AdvancedConfig(...)`
-- Flow control
-  - Global rate limiting via `FlowController` (automatic in BaseClient)
-- Writers
-  - DuckDB: `duckdb://./path/to/db.duckdb` (unique index created if PK known)
-  - In-memory: `memory://`
-
-## Observability
-
-- Metrics (enabled via `create_client(..., metrics_enabled=True)`)
-  - Counters:
-    - `rows_written_total`
-    - `writer_flushes`
-    - `errors_total`
-    - `dlq_spooled_files_total`, `dlq_rescued_total`, `dlq_remaining_total`, `dlq_spool_failed_total`
-  - Histograms:
-    - `fetch_duration_s`, `parse_duration_s`, `http_duration_s`, `writer_flush_duration_s`
-    - Per table: `writer_flush_duration_s.{table}`, `writer_rows.{table}`
-  - Summary (selected percentiles):
-    - Global p95/p99 for durations
-    - Per table p50/p95/p99 for `writer_flush_duration_s.{table}` and `writer_rows.{table}`
-  - Queue snapshots:
-    - `req_q_len_after_producer`, `req_q_len_after_req_join`, `pkt_q_len_after_producer`, `pkt_q_len_after_pkt_join`
-- Optional spans (no hard dependency)
-  - Pass `advanced=AdvancedConfig(otel_enabled=True, tracer=...)` and provide a tracer with a `start_span(name, attributes=...)` method to receive spans for `pipeline`, `fetch`, `parse`, and `write_flush`.
-
-## Usage Patterns
-
-- Transport decoupling: Routers are transport-agnostic; normalize after decoding
-- Scheme-based fetchers: non-HTTP library calls routed via plugin registry
-- Error handling:
-  - Fetch/log errors recorded in `RunResult.errors`
-  - Writer validation errors surfaced (PK missing/nulls)
-  - Retry exhaustion categorized as fetch-specific error
+- persistence path: `connect_db="duckdb://./forager.duckdb"`
 
 ## Documentation
 
 - Tutorials
   - [Quickstart](docs/tutorials/quickstart.md)
 - How‑to Guides
+  - [Resume and recovery](docs/how-to/resume-and-recovery.md)
   - [Operate with DLQ disabled](docs/how-to/dlq-disabled.md)
-  - [Tune chunked flush thresholds](docs/how-to/chunked-flush.md)
+  - [Performance tuning](docs/how-to/performance-tuning.md)
   - [Data integrity controls](docs/how-to/data-integrity.md)
   - [Troubleshooting](docs/how-to/troubleshooting.md)
   - [CLI equivalents](docs/how-to/cli-equivalents.md)
 - Reference
   - [Configuration](docs/reference/config.md)
-  - [Metrics](docs/reference/metrics.md)
-  - [Constants](docs/reference/constants.md)
   - [API Reference](docs/reference/api.md)
-- Explanation
-  - [Pipeline architecture and design](docs/explanation/architecture.md)
-  - [How built-in providers work](docs/explanation/how-built-in-providers-work.md)
-  - [Data storage & DLQ](docs/explanation/data-storage-flow.md)
-  - [Writer security](docs/explanation/writer-security.md)
-  - [Writer fan‑out roadmap](docs/explanation/writer-fanout-roadmap.md)
 
 ## Examples
 
 - Scripts (uv):
-  - Minimal in‑memory (single ticker):
-    - `VF_TICKERS=AAPL uv run python packages/vertex-forager/examples/minimal_inmemory.py`
-      - `VF_TICKERS`: required (comma‑separated tickers; single ticker shown)
-  - Advanced (multi‑ticker, DuckDB, metrics, chunked flush):
-    - `VF_TICKERS="AAPL,MSFT" VF_DUCKDB_PATH=./forager.duckdb uv run python packages/vertex-forager/examples/advanced_duckdb_metrics.py`
-      - `VF_TICKERS`: required (multi‑ticker demo)
-      - `VF_DUCKDB_PATH`: optional (defaults to `./forager.duckdb`)
-- CLI equivalents:
-  - See [CLI Equivalents](docs/how-to/cli-equivalents.md)
-- Notebooks (optional):
-  - packages/vertex-forager/examples/sharadar.ipynb
-  - packages/vertex-forager/examples/yfinance_examples.ipynb
+  - `VF_TICKERS=AAPL uv run python packages/vertex-forager/examples/minimal_inmemory.py`
+  - `VF_TICKERS="AAPL,MSFT" VF_DUCKDB_PATH=./forager.duckdb uv run python packages/vertex-forager/examples/advanced_duckdb_metrics.py`
 
 ## Versioning & Changelog
 

@@ -56,8 +56,8 @@ from vertex_forager.constants import (
 )
 from vertex_forager.core.checkpoint import (
     Checkpoint,
+    find_latest_checkpoint,
     get_cache_dir,
-    load_checkpoint,
     save_checkpoint,
     save_run_history,
 )
@@ -448,7 +448,13 @@ class VertexForager:
             logger.debug(msg)
 
     def _update_checkpoint(
-        self, run_id: str, provider: str, dataset: str, completed_symbols: set[str], failed_symbols: set[str]
+        self,
+        run_id: str,
+        provider: str,
+        dataset: str,
+        completed_symbols: set[str],
+        failed_symbols: set[str],
+        status: str = "in_progress",
     ) -> None:
         """Update checkpoint with completed and failed symbols."""
         if not completed_symbols and not failed_symbols:
@@ -460,6 +466,7 @@ class VertexForager:
             dataset=dataset,
             completed=list(completed_symbols),
             failed=list(failed_symbols),
+            status=status,
         )
 
         try:
@@ -478,37 +485,16 @@ class VertexForager:
         Returns:
             The latest checkpoint if found, None otherwise
         """
-        cache_dir = get_cache_dir()
-        checkpoints_dir = cache_dir / "checkpoints"
-
-        if not checkpoints_dir.exists():
+        try:
+            return find_latest_checkpoint(provider, dataset)
+        except Exception as exc:
+            logger.debug(
+                "PIPELINE: Failed to query latest checkpoint provider=%s dataset=%s: %s",
+                provider,
+                dataset,
+                exc,
+            )
             return None
-
-        latest_checkpoint = None
-        latest_mtime = 0.0
-
-        # Look for checkpoint directories that match the provider and dataset pattern
-        for checkpoint_dir in checkpoints_dir.iterdir():
-            if not checkpoint_dir.is_dir():
-                continue
-
-            # Check if this checkpoint matches our provider and dataset
-            checkpoint_file = checkpoint_dir / "progress.json"
-            if checkpoint_file.exists():
-                try:
-                    checkpoint = load_checkpoint(checkpoint_dir.name)
-                    if checkpoint and checkpoint.provider == provider and checkpoint.dataset == dataset:
-                        # Get modification time to find the latest
-                        mtime = checkpoint_file.stat().st_mtime
-                        if mtime > latest_mtime:
-                            latest_mtime = mtime
-                            latest_checkpoint = checkpoint
-                except Exception as e:
-                    # Skip corrupted checkpoint files
-                    logger.debug("PIPELINE: Skipping corrupted checkpoint %s: %s", checkpoint_dir.name, e)
-                    continue
-
-        return latest_checkpoint
 
     async def run(
         self,
@@ -557,7 +543,7 @@ class VertexForager:
             - Callers should inspect `RunResult.errors` for per-task failures and
               only expect orchestration-level issues to raise.
             - When `resume=True`, symbols already completed in previous runs will be skipped
-              based on checkpoint files in ~/.cache/vertex-forager/checkpoints/<run_id>/.
+              based on checkpoint rows stored in ~/.cache/vertex-forager/state.db.
         """
         if self._running:
             raise RuntimeError("Pipeline is already running; concurrent run() calls are not supported")
@@ -789,6 +775,8 @@ class VertexForager:
     ]:
         req_q, pkt_q = create_run_queues_impl(
             queue_max=self._config.queue_max,
+            checkpoint_retention_days=self._config.checkpoint_retention_days,
+            run_history_retention_days=self._config.run_history_retention_days,
             dlq_tmp_periodic_cleanup=self._config.advanced.dlq_tmp_periodic_cleanup,
             dlq_tmp_retention_s=self._config.advanced.dlq_tmp_retention_s,
             cache_dir=get_cache_dir(),
@@ -879,13 +867,13 @@ class VertexForager:
                 dataset,
                 self._completed_symbols,
                 self._failed_symbols,
+                status="completed",
             )
-        if self._config.persist_run_history:
-            try:
-                save_run_history(result, run_id)
-                logger.debug("PIPELINE: Run history saved for run %s", run_id)
-            except Exception as e:
-                logger.warning("PIPELINE: Failed to save run history: %s", e)
+        try:
+            save_run_history(result, run_id)
+            logger.debug("PIPELINE: Run history saved for run %s", run_id)
+        except Exception as e:
+            logger.warning("PIPELINE: Failed to save run history: %s", e)
 
     def _merge_component_counters(self) -> None:
         self._run_finalizer.merge_component_counters()

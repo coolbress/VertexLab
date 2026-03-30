@@ -33,7 +33,8 @@ def test_create_client_accepts_grouped_public_configs() -> None:
         flush_threshold_rows=10_000,
         writer_chunk_rows=20_000,
         writer_concurrency=2,
-        persist_run_history=False,
+        checkpoint_retention_days=5,
+        run_history_retention_days=45,
         http_timeout_s=15.0,
         limits=HTTPConfig(max_connections=50, max_keepalive_connections=25),
         advanced=AdvancedConfig(otel_enabled=True, mem_threshold_ratio=0.5, mem_threshold_abs_mb=None),
@@ -52,7 +53,8 @@ def test_create_client_accepts_grouped_public_configs() -> None:
     assert client.config.flush_threshold_rows == 10_000
     assert client.config.writer_chunk_rows == 20_000
     assert client.config.writer_concurrency == 2
-    assert client.config.persist_run_history is False
+    assert client.config.checkpoint_retention_days == 5
+    assert client.config.run_history_retention_days == 45
     assert client.config.otel_enabled is True
     assert client._http_timeout_s == 15.0
     assert client._http_limits.max_connections == 50
@@ -79,17 +81,6 @@ def test_removed_legacy_advanced_kwargs_are_rejected() -> None:
         )
 
 
-def test_persist_run_history_string_false_normalizes_correctly() -> None:
-    client = create_client(
-        provider="yfinance",
-        rate_limit=60,
-        persist_run_history="false",  # type: ignore[arg-type]
-    )
-
-    assert isinstance(client, YFinanceClient)
-    assert client.config.persist_run_history is False
-
-
 def test_string_flag_inputs_normalize_correctly() -> None:
     client = create_client(
         provider="yfinance",
@@ -98,7 +89,6 @@ def test_string_flag_inputs_normalize_correctly() -> None:
         structured_logs="0",  # type: ignore[arg-type]
         log_verbose="no",  # type: ignore[arg-type]
         dlq_enabled="true",  # type: ignore[arg-type]
-        persist_run_history="1",  # type: ignore[arg-type]
     )
 
     assert isinstance(client, YFinanceClient)
@@ -106,7 +96,6 @@ def test_string_flag_inputs_normalize_correctly() -> None:
     assert client.config.structured_logs is False
     assert client.config.log_verbose is False
     assert client.config.dlq_enabled is True
-    assert client.config.persist_run_history is True
 
 
 def test_non_auth_env_vars_no_longer_backfill_client_config(monkeypatch: pytest.MonkeyPatch) -> None:

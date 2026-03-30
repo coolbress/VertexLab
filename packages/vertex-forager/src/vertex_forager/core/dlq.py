@@ -8,7 +8,7 @@ from typing import Any
 
 import polars as pl
 
-from vertex_forager.core.checkpoint import get_cache_dir
+from vertex_forager.core.checkpoint import get_cache_dir, register_dlq_entry
 from vertex_forager.core.config import FramePacket, RunResult
 from vertex_forager.core.errors import DLQSpoolError, RunError
 from vertex_forager.core.types import DLQStatus
@@ -132,6 +132,16 @@ def _spool_failed_packets(
             os.fsync(dir_fd)
         finally:
             os.close(dir_fd)
+    try:
+        register_dlq_entry(
+            path=fpath,
+            table=table,
+            provider=failed_packets[0].provider if failed_packets else None,
+            row_count=int(merged.height),
+        )
+    except Exception:
+        fpath.unlink(missing_ok=True)
+        raise
     return str(fpath)
 
 

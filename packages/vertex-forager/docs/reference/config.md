@@ -19,7 +19,8 @@ Public runtime configuration is now centered on `create_client(...)` plus groupe
 - `flush_threshold_rows: int`
 - `writer_chunk_rows: int | None = None`
 - `writer_concurrency: int = 1`
-- `persist_run_history: bool = True`
+- `checkpoint_retention_days: int = 7`
+- `run_history_retention_days: int = 90`
 - `http_timeout_s: float`
 
 ## Grouped Public Config
@@ -48,13 +49,12 @@ Public runtime configuration is now centered on `create_client(...)` plus groupe
 
 ### AdvancedConfig
 
-- `dlq_tmp_cleanup_on_error: bool`
-- `dlq_tmp_periodic_cleanup: bool`
-- `dlq_tmp_retention_s: int`
 - `tracer: Any | None`
 - `otel_enabled: bool | None`
 - `mem_threshold_ratio: float`
 - `mem_threshold_abs_mb: int | None`
+
+DLQ temporary-file cleanup remains an internal housekeeping behavior. `dlq_tmp_cleanup_on_error`, `dlq_tmp_periodic_cleanup`, and `dlq_tmp_retention_s` are not intended as user-facing tuning knobs.
 
 ## Example
 
@@ -67,6 +67,8 @@ client = create_client(
     rate_limit=300,
     metrics_enabled=True,
     concurrency=4,
+    checkpoint_retention_days=7,
+    run_history_retention_days=90,
     pagination_max_burst=3,
     retry=RetryConfig(max_attempts=3),
     downshift=DownshiftConfig(enabled=False),

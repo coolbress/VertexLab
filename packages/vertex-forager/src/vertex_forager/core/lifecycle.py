@@ -8,7 +8,7 @@ from pathlib import Path
 import time
 from typing import Any, Protocol, runtime_checkable
 
-from vertex_forager.core.checkpoint import Checkpoint
+from vertex_forager.core.checkpoint import Checkpoint, cleanup_state_retention
 from vertex_forager.core.config import RunResult
 from vertex_forager.utils import cleanup_dlq_tmp
 
@@ -48,6 +48,8 @@ def initialize_run_state(
 def create_run_queues(
     *,
     queue_max: int,
+    checkpoint_retention_days: int,
+    run_history_retention_days: int,
     dlq_tmp_periodic_cleanup: bool,
     dlq_tmp_retention_s: int,
     cache_dir: Path,
@@ -58,6 +60,14 @@ def create_run_queues(
 ]:
     req_q: asyncio.PriorityQueue[tuple[int, int, Any | None]] = asyncio.PriorityQueue(maxsize=queue_max)
     pkt_q: asyncio.Queue[Any | None] = asyncio.Queue(maxsize=queue_max)
+    try:
+        cleanup_state_retention(
+            checkpoint_retention_days=checkpoint_retention_days,
+            run_history_retention_days=run_history_retention_days,
+            dlq_retention_s=dlq_tmp_retention_s,
+        )
+    except Exception as cleanup_error:
+        logger.warning("PIPELINE: State retention cleanup failed: %s", cleanup_error)
     if dlq_tmp_periodic_cleanup:
         try:
             cleanup_dlq_tmp(cache_dir / "dlq", dlq_tmp_retention_s)

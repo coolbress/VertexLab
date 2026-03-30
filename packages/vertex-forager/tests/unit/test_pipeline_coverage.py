@@ -18,6 +18,7 @@ from typing import Any
 
 import pytest
 
+from vertex_forager.core.checkpoint import Checkpoint, save_checkpoint
 from vertex_forager.core.config import (
     FetchJob,
     FramePacket,
@@ -364,7 +365,7 @@ async def test_concurrent_run_raises() -> None:
         await task
 
 
-def test_find_latest_checkpoint_skips_corrupted_and_uses_latest(
+def test_find_latest_checkpoint_returns_most_recent_by_timestamp(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -372,32 +373,20 @@ def test_find_latest_checkpoint_skips_corrupted_and_uses_latest(
     engine, _ = _make_engine(router)
     root = tmp_path / "vf-root"
     monkeypatch.setenv("VERTEXFORAGER_ROOT", str(root))
-    cache_root = root / "cache"
-    checkpoints_dir = cache_root / "checkpoints"
-    checkpoints_dir.mkdir(parents=True, exist_ok=True)
-    bad = checkpoints_dir / "bad_checkpoint"
-    old = checkpoints_dir / "stub_d_100"
-    new = checkpoints_dir / "stub_d_200"
-    bad.mkdir(exist_ok=True)
-    old.mkdir(exist_ok=True)
-    new.mkdir(exist_ok=True)
-    (bad / "progress.json").write_text("{invalid-json")
-    (old / "progress.json").write_text(
-        '{"run_id":"stub_d_100","provider":"stub","dataset":"d","completed":[],"failed":[]}'
-    )
-    (new / "progress.json").write_text(
-        '{"run_id":"stub_d_200","provider":"stub","dataset":"d","completed":[],"failed":[]}'
-    )
-    old_ts = time.time() - 10
-    new_ts = time.time()
-    os_old = old / "progress.json"
-    os_new = new / "progress.json"
-    os_old.touch()
-    os_new.touch()
-    import os
-
-    os.utime(os_old, (old_ts, old_ts))
-    os.utime(os_new, (new_ts, new_ts))
+    with monkeypatch.context() as context:
+        context.setattr(
+            "vertex_forager.core.checkpoint.time.time",
+            lambda: 100.0,
+            raising=False,
+        )
+        save_checkpoint(Checkpoint(run_id="stub_d_100", provider="stub", dataset="d"))
+    with monkeypatch.context() as context:
+        context.setattr(
+            "vertex_forager.core.checkpoint.time.time",
+            lambda: 200.0,
+            raising=False,
+        )
+        save_checkpoint(Checkpoint(run_id="stub_d_200", provider="stub", dataset="d"))
     cp = engine._find_latest_checkpoint("stub", "d")
     assert cp is not None
     assert cp.run_id == "stub_d_200"
@@ -421,7 +410,6 @@ async def test_finalize_run_metrics_sink_and_history_error_suppressed(monkeypatc
             raise RuntimeError("sink boom")
 
     engine._metrics_sink = _Sink()
-    engine._config.persist_run_history = True
 
     async def _noop_flush(*, suppress: bool, consume: bool = True) -> None:
         return None
