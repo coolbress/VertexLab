@@ -516,7 +516,7 @@ async def test_record_worker_symbol_state_keeps_pending_jobs_on_failure(
 
 
 @pytest.mark.asyncio
-async def test_record_worker_symbol_state_preserves_next_jobs_after_emit_failure(
+async def test_record_worker_symbol_state_retries_current_job_after_emit_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -532,16 +532,17 @@ async def test_record_worker_symbol_state_preserves_next_jobs_after_emit_failure
         spec=RequestSpec(url="https://x", params={"page": 2}),
     )
     parse_result = ParseResult(packets=[], next_jobs=[next_job])
+    current_job = FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x"))
 
     await engine._record_worker_symbol_state(
-        job=FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x")),
+        job=current_job,
         worker_exc=RuntimeError("emit failed"),
         parse_result=parse_result,
     )
 
     assert "AAPL" not in engine._completed_symbols
-    assert "AAPL" not in engine._failed_symbols
-    assert engine._pending_symbol_jobs["AAPL"][0].spec.params["page"] == 2
+    assert "AAPL" in engine._failed_symbols
+    assert engine._pending_symbol_jobs["AAPL"] == [current_job]
 
 
 @pytest.mark.asyncio

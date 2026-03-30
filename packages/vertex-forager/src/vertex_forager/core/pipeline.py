@@ -1528,12 +1528,12 @@ class VertexForager:
         if not job.symbol:
             return
         async with self._checkpoint_lock:
-            pending_jobs = [
-                next_job
-                for next_job in (parse_result.next_jobs if parse_result is not None else [])
-                if next_job.symbol == job.symbol
-            ]
-            if worker_exc is None or pending_jobs:
+            if worker_exc is None:
+                pending_jobs = [
+                    next_job
+                    for next_job in (parse_result.next_jobs if parse_result is not None else [])
+                    if next_job.symbol == job.symbol
+                ]
                 if pending_jobs:
                     self._completed_symbols.discard(job.symbol)
                     self._failed_symbols.discard(job.symbol)
@@ -1544,6 +1544,7 @@ class VertexForager:
                     self._completed_symbols.add(job.symbol)
             else:
                 self._completed_symbols.discard(job.symbol)
+                self._pending_symbol_jobs.setdefault(job.symbol, [job])
                 self._failed_symbols.add(job.symbol)
             if self._run_id and job.dataset:
                 await asyncio.to_thread(
