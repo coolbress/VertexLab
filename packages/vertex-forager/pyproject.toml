@@ -51,7 +51,7 @@ build-backend = "uv_build"
 [project.optional-dependencies]
 notebook = [
     "ipywidgets>=8.1.8",
-    "ipython>=8.0.0,<9.0.0",
+    "ipython>=9.11.0,<9.12.0",
     "nest-asyncio>=1.6.0,<2.0.0",
 ]
 yfinance = [
