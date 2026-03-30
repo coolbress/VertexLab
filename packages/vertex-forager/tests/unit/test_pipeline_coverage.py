@@ -516,6 +516,35 @@ async def test_record_worker_symbol_state_keeps_pending_jobs_on_failure(
 
 
 @pytest.mark.asyncio
+async def test_record_worker_symbol_state_preserves_next_jobs_after_emit_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "vf-root"))
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    engine._run_id = "rid"
+    engine._checkpoint_lock = asyncio.Lock()
+    next_job = FetchJob(
+        provider="stub",
+        dataset="d",
+        symbol="AAPL",
+        spec=RequestSpec(url="https://x", params={"page": 2}),
+    )
+    parse_result = ParseResult(packets=[], next_jobs=[next_job])
+
+    await engine._record_worker_symbol_state(
+        job=FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x")),
+        worker_exc=RuntimeError("emit failed"),
+        parse_result=parse_result,
+    )
+
+    assert "AAPL" not in engine._completed_symbols
+    assert "AAPL" not in engine._failed_symbols
+    assert engine._pending_symbol_jobs["AAPL"][0].spec.params["page"] == 2
+
+
+@pytest.mark.asyncio
 async def test_finalize_run_metrics_sink_and_history_error_suppressed(monkeypatch: pytest.MonkeyPatch) -> None:
     router = _PaginatingRouter(pages=0)
     engine, _ = _make_engine(router)

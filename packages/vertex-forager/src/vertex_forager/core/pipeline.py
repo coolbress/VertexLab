@@ -1528,14 +1528,16 @@ class VertexForager:
         if not job.symbol:
             return
         async with self._checkpoint_lock:
-            if worker_exc is None:
-                has_more_pages = parse_result is not None and bool(parse_result.next_jobs)
-                if has_more_pages:
+            pending_jobs = [
+                next_job
+                for next_job in (parse_result.next_jobs if parse_result is not None else [])
+                if next_job.symbol == job.symbol
+            ]
+            if worker_exc is None or pending_jobs:
+                if pending_jobs:
                     self._completed_symbols.discard(job.symbol)
                     self._failed_symbols.discard(job.symbol)
-                    self._pending_symbol_jobs[job.symbol] = [
-                        next_job for next_job in parse_result.next_jobs if next_job.symbol == job.symbol
-                    ]
+                    self._pending_symbol_jobs[job.symbol] = pending_jobs
                 else:
                     self._failed_symbols.discard(job.symbol)
                     self._pending_symbol_jobs.pop(job.symbol, None)

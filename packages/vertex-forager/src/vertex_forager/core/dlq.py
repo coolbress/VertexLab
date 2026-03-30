@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from contextlib import suppress
 import os
 import time
@@ -13,6 +12,8 @@ from vertex_forager.core.errors import DLQSpoolError, RunError
 from vertex_forager.schema.registry import get_table_schema
 
 if TYPE_CHECKING:
+    import asyncio
+
     from vertex_forager.core.config import FramePacket, RunResult
     from vertex_forager.core.types import DLQStatus
 
