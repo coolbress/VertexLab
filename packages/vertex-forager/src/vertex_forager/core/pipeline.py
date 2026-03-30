@@ -155,7 +155,6 @@ from vertex_forager.core.errors import (
     RunError,
     ValidationError,
 )
-from vertex_forager.core.types import Symbols
 from vertex_forager.schema.registry import get_table_schema
 from vertex_forager.utils import sanitize_field
 
@@ -183,6 +182,8 @@ except (ImportError, ModuleNotFoundError):
     DuckDBWriterType = None
 
 logger = logging.getLogger("vertex_forager.debug")
+
+Symbols = Sequence[str]
 
 
 class VertexForager:
@@ -1214,10 +1215,20 @@ class VertexForager:
                 req_q.task_done()
                 try:
                     await handler(job, payload, worker_exc, parse_result)
-                    await self._record_worker_symbol_state(job=job, worker_exc=worker_exc, parse_result=parse_result)
                 except Exception as e:
                     logger.error(
                         "[Worker-%s] Error in result handler for %s:%s:%s: %s",
+                        worker_id,
+                        job.provider,
+                        job.dataset,
+                        job.symbol,
+                        e,
+                    )
+                try:
+                    await self._record_worker_symbol_state(job=job, worker_exc=worker_exc, parse_result=parse_result)
+                except Exception as e:
+                    logger.error(
+                        "[Worker-%s] Error recording symbol state for %s:%s:%s: %s",
                         worker_id,
                         job.provider,
                         job.dataset,
