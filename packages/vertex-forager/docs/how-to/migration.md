@@ -4,6 +4,25 @@ Use this guide when upgrading between `vertex-forager` releases and checking for
 
 ## Upcoming release
 
+### `RetryConfig.enable_http_status_retry` removed
+
+`RetryConfig.enable_http_status_retry` has been removed from the public retry API.
+Disable HTTP status retries by passing an empty tuple instead:
+
+```python
+from vertex_forager import RetryConfig
+
+retry = RetryConfig(retry_status_codes=())
+```
+
+`Retry-After` integer headers are now honored automatically and capped by `max_backoff_s` before falling back to jitter backoff.
+
+**Action required**:
+
+- Remove `enable_http_status_retry` from `RetryConfig(...)` construction.
+- Use `retry_status_codes=()` to disable status-based retry.
+- Review provider-specific retry expectations if your upstream returns `Retry-After` headers.
+
 ### Local state storage moved to SQLite
 
 Checkpoint state and run history now live in a single SQLite database:

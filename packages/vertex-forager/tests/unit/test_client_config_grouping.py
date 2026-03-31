@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterator, Mapping
 import importlib.util
 import warnings
 
@@ -128,6 +129,25 @@ def test_client_creation_ignores_non_auth_env_vars_without_warnings(monkeypatch:
     assert client._http_timeout_s == HTTP_TIMEOUT_S
     assert client._memory_threshold_ratio == AdvancedConfig().mem_threshold_ratio
     assert not any(issubclass(w.category, DeprecationWarning) for w in caught)
+
+
+def test_create_client_rejects_removed_retry_flag_in_mapping_subclass() -> None:
+    class _RetryMapping(Mapping[str, object]):
+        def __iter__(self) -> Iterator[str]:
+            yield from ("enable_http_status_retry", "retry_status_codes")
+
+        def __len__(self) -> int:
+            return 2
+
+        def __getitem__(self, key: str) -> object:
+            values = {
+                "enable_http_status_retry": False,
+                "retry_status_codes": (429, 503),
+            }
+            return values[key]
+
+    with pytest.raises(ValueError, match="has been removed"):
+        create_client(provider="yfinance", rate_limit=60, retry=_RetryMapping())
 
 
 def test_build_http_client_uses_normalized_defaults_without_rereading_env(monkeypatch: pytest.MonkeyPatch) -> None:

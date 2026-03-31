@@ -30,7 +30,7 @@ Public runtime configuration is now centered on `create_client(...)` plus groupe
 - `max_attempts: int`
 - `base_backoff_s: float`
 - `max_backoff_s: float` — must be `>= base_backoff_s`
-- `enable_http_status_retry: bool`
+- `backoff_mode: Literal["full_jitter", "equal"]`
 - `retry_status_codes: tuple[int, ...]`
 
 ### DownshiftConfig

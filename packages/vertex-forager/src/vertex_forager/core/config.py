@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 import polars as pl
 import psutil
-from pydantic import BaseModel, Field, ValidationInfo, field_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
 from vertex_forager.constants import (
     DEFAULT_RETRY_BASE_BACKOFF_S,
@@ -37,12 +37,15 @@ class RetryConfig(BaseModel):
         max_attempts (int): Maximum number of retry attempts (default: 3).
         base_backoff_s (float): Initial backoff duration in seconds (default: 1.0).
         max_backoff_s (float): Maximum backoff duration in seconds (default: 30.0).
-        enable_http_status_retry (bool): Toggle retry-on-HTTP-status behavior (default: True).
+        backoff_mode (Literal["full_jitter", "equal"]): Backoff distribution strategy (default: "full_jitter").
         retry_status_codes (tuple[int, ...]): Tuple of HTTP status codes to trigger retries (default: (429, 503)).
 
     Notes:
-        - Backoff uses Full Jitter: sleep is drawn uniformly from
-          [0, min(max_backoff_s, base_backoff_s * 2^(attempt-1))].
+        - Two backoff modes are supported:
+          - "full_jitter" (default): sleep is drawn uniformly from
+            [0, min(max_backoff_s, base_backoff_s * 2^(attempt-1))].
+          - "equal": sleep is drawn from [cap/2, cap] where cap = min(max_backoff_s, base_backoff_s * 2^(attempt-1)).
+        - Retry-After response headers (integer seconds) take priority over backoff when present.
         - Defaults are conservative: retries on 429 (Too Many Requests) and 503 (Service Unavailable).
         - Opt-in to broader server errors (e.g., 500, 502, 504) ONLY when requests are idempotent.
           Non-idempotent operations (e.g., POST/PUT without idempotency keys) may cause duplicate side effects.
@@ -52,8 +55,18 @@ class RetryConfig(BaseModel):
     max_attempts: int = Field(default=DEFAULT_RETRY_MAX_ATTEMPTS, ge=1)
     base_backoff_s: float = Field(default=DEFAULT_RETRY_BASE_BACKOFF_S, ge=0.0)
     max_backoff_s: float = Field(default=DEFAULT_RETRY_MAX_BACKOFF_S, ge=0.0)
-    enable_http_status_retry: bool = True
+    backoff_mode: Literal["full_jitter", "equal"] = "full_jitter"
     retry_status_codes: tuple[int, ...] = (429, 503)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_removed_enable_http_status_retry(cls, data: Any) -> Any:
+        if not isinstance(data, Mapping) or "enable_http_status_retry" not in data:
+            return data
+        raise ValueError(
+            "RetryConfig.enable_http_status_retry has been removed; "
+            "use retry_status_codes=() to disable HTTP status retries."
+        )
 
     @field_validator("max_backoff_s")
     @classmethod

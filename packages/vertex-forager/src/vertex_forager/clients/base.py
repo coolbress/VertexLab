@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from abc import ABC
 import asyncio
+from collections.abc import Mapping
 from contextlib import AsyncExitStack, asynccontextmanager, nullcontext
 from dataclasses import dataclass
 from functools import partial
@@ -62,7 +63,7 @@ def _coerce_grouped_config(value: Any, model_cls: type[Any]) -> Any:
         return None
     if isinstance(value, model_cls):
         return value
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):
         return model_cls(**value)
     return model_cls.model_validate(value)
 

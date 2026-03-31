@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable, Callable
-from contextlib import AbstractAsyncContextManager
 import logging
-import secrets
+import random
 import time
 from typing import TYPE_CHECKING, Protocol
 
@@ -19,6 +18,8 @@ from tenacity import (
 )
 
 if TYPE_CHECKING:
+    from contextlib import AbstractAsyncContextManager
+
     from vertex_forager.core.config import FetchJob, RequestSpec, RetryConfig
 
 from vertex_forager.core.errors import FetchError
@@ -48,7 +49,7 @@ def create_retry_controller(
     def _should_retry(exc: BaseException) -> bool:
         if isinstance(exc, retry_on):
             return True
-        if config.enable_http_status_retry and isinstance(exc, httpx.HTTPStatusError):
+        if isinstance(exc, httpx.HTTPStatusError):
             resp = getattr(exc, "response", None)
             status = getattr(resp, "status_code", None)
             if status in set(config.retry_status_codes):
@@ -56,13 +57,24 @@ def create_retry_controller(
         return False
 
     def _wait_capped(retry_state: RetryCallState) -> float:
+        exc = retry_state.outcome.exception() if retry_state.outcome else None
+        if isinstance(exc, httpx.HTTPStatusError):
+            retry_after = exc.response.headers.get("Retry-After")
+            if retry_after:
+                try:
+                    retry_after_int = int(retry_after)
+                    return max(0.0, min(config.max_backoff_s, float(retry_after_int)))
+                except ValueError:
+                    pass
         att = retry_state.attempt_number
         expo = config.base_backoff_s * (2 ** max(0, att - 1))
         cap = max(0.0, min(config.max_backoff_s, expo))
         if cap <= 0.0:
             return 0.0
-        rnd = secrets.SystemRandom()
-        return float(rnd.uniform(0.0, cap))
+        if config.backoff_mode == "equal":
+            half_cap = cap / 2.0
+            return float(half_cap + random.uniform(0.0, half_cap))  # noqa: S311
+        return float(random.uniform(0.0, cap))  # noqa: S311
 
     # For non-idempotent requests, guard against repeats by forcing a single attempt.
     stop_policy = stop_after_attempt(1 if not idempotent else config.max_attempts)
