@@ -16,6 +16,20 @@ members = [
     "vertex-workspace",
 ]
 
+[manifest.dependency-groups]
+dev = [
+    { name = "detect-secrets", specifier = ">=1.5.0" },
+    { name = "hypothesis", specifier = ">=6.98.0" },
+    { name = "mypy", specifier = ">=1.11.1" },
+    { name = "pandas-stubs", specifier = ">=2.3.3.260113" },
+    { name = "pytest", specifier = ">=9.0.2" },
+    { name = "pytest-asyncio", specifier = ">=0.23.5" },
+    { name = "pytest-cov", specifier = ">=4.1.0" },
+    { name = "ruff", specifier = "==0.15.8" },
+    { name = "types-psutil", specifier = ">=7.2.2.20260130" },
+    { name = "types-tqdm", specifier = ">=4.67.3.20260205" },
+]
+
 [[package]]
 name = "annotated-types"
 version = "0.7.0"
@@ -3018,7 +3032,7 @@ wheels = [
 
 [[package]]
 name = "vertex-forager"
-version = "2.0.0"
+version = "0.14.1"
 source = { editable = "packages/vertex-forager" }
 dependencies = [
     { name = "click" },
@@ -3101,28 +3115,12 @@ dev = [
 
 [[package]]
 name = "vertex-lab"
-version = "2.0.0"
-source = { editable = "." }
+version = "0.1.0"
+source = { editable = "packages/vertex-lab" }
 dependencies = [
     { name = "vertex-forager" },
     { name = "vertex-qt" },
     { name = "vertex-workspace" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "detect-secrets" },
-    { name = "hypothesis" },
-    { name = "mypy" },
-    { name = "pandas-stubs", version = "2.3.3.260113", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "pandas-stubs", version = "3.0.0.260204", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-    { name = "types-psutil" },
-    { name = "types-tqdm" },
-    { name = "vertex-forager" },
 ]
 
 [package.metadata]
@@ -3130,21 +3128,6 @@ requires-dist = [
     { name = "vertex-forager", editable = "packages/vertex-forager" },
     { name = "vertex-qt", editable = "packages/vertex-qt" },
     { name = "vertex-workspace", editable = "packages/vertex-workspace" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "detect-secrets", specifier = ">=1.5.0" },
-    { name = "hypothesis", specifier = ">=6.98.0" },
-    { name = "mypy", specifier = ">=1.11.1" },
-    { name = "pandas-stubs", specifier = ">=2.3.3.260113" },
-    { name = "pytest", specifier = ">=9.0.2" },
-    { name = "pytest-asyncio", specifier = ">=0.23.5" },
-    { name = "pytest-cov", specifier = ">=4.1.0" },
-    { name = "ruff", specifier = "==0.15.8" },
-    { name = "types-psutil", specifier = ">=7.2.2.20260130" },
-    { name = "types-tqdm", specifier = ">=4.67.3.20260205" },
-    { name = "vertex-forager", editable = "packages/vertex-forager" },
 ]
 
 [[package]]

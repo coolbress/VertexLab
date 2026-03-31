@@ -56,7 +56,7 @@ jobs:
             "package:vertex-forager|c5def5|Vertex Forager package",
             "package:vertex-qt|c5def5|Vertex Qt package",
             "package:vertex-workspace|c5def5|Vertex Workspace package",
-            "package:vertex-lab|d4c5f9|Root meta-package and infra changes",
+            "package:vertex-lab|d4c5f9|Thin orchestration package and package-owned docs",
             "no-changelog|d1d4f2|Exclude from changelog aggregation"
           ]))' | while IFS='|' read -r n c d; do
             create_or_update "$n" "$c" "$d"

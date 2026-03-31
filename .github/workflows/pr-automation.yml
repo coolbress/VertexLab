@@ -118,9 +118,7 @@ jobs:
               const isQt = p.startsWith("packages/vertex-qt/");
               const isWorkspace = p.startsWith("packages/vertex-workspace/");
               const isLab =
-                p.startsWith("src/vertex_lab/") ||
-                p.startsWith("docs/") ||
-                ["pyproject.toml", "README.md", "LICENSE", "SECURITY.md", "mkdocs.yml", "CHANGELOG.md"].includes(p);
+                p.startsWith("packages/vertex-lab/");
               if (isForager) labels.add("package:vertex-forager");
               if (isQt) labels.add("package:vertex-qt");
               if (isWorkspace) labels.add("package:vertex-workspace");

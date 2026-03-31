@@ -1,0 +1,11 @@
+---
+site_name: vertex-lab
+
+docs_dir: docs
+
+nav:
+  - Overview: index.md
+  - Installation: installation.md
+  - Quickstart: quickstart.md
+  - Changelog: changelog.md
+  - Contributing: https://github.com/coolbress/VertexLab/blob/main/CONTRIBUTING.md

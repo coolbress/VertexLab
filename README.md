@@ -1,141 +1,48 @@
-# Vertex Lab - Data Science Platform
+# VertexLab
 
 [![Docs](https://img.shields.io/badge/docs-online-blue)](https://coolbress.github.io/VertexLab/)
 [![Coverage](https://raw.githubusercontent.com/coolbress/VertexLab/python-coverage-comment-action-data/badge.svg)](https://github.com/coolbress/VertexLab/tree/python-coverage-comment-action-data)
 
-Modern Python monorepo for financial data collection, analysis, and visualization.
+Modern Python monorepo for financial data collection, orchestration, analysis, and visualization.
 
-## 🏗️ Architecture
+## Repository layout
 
 ```text
-vertex-lab/                    # Monorepo root
-├── packages/                  # All packages
-│   ├── vertex-forager/        # Data collection
-│   ├── vertex-qt/             # Analysis
-│   └── vertex-workspace/      # UI dashboard to operate vertex-forager and vertex-qt
-├── .github/workflows/         # CI/CD pipelines
-└── pyproject.toml            # Root dependencies & workspace config
+vertex-lab/
+├── .github/                  # Workflows and automation
+├── docs/                     # Shared repository docs
+├── packages/
+│   ├── vertex-lab/           # Thin orchestration package and CLI shell
+│   ├── vertex-forager/       # Data collection engine
+│   ├── vertex-qt/            # Quant analysis package
+│   └── vertex-workspace/     # Workspace/dashboard package
+├── scripts/                  # Repository helpers
+├── mkdocs.yml                # Shared docs site navigation
+├── pyproject.toml            # Workspace configuration and dev tooling
+└── uv.lock                   # Shared workspace lockfile
 ```
 
-## 🚀 Getting Started
-
-### Prerequisites
-
-- Python 3.10+
-- [uv](https://github.com/astral-sh/uv) - Fast Python package manager
-
-### Installation
+## Development setup
 
 ```bash
-# Clone the repository
-git clone <repository-url>
+git clone https://github.com/coolbress/VertexLab.git vertex-lab
 cd vertex-lab
-
-# Install dependencies
-uv sync
-
-# Install vertex-forager in development mode
-uv add --editable packages/vertex-forager
+uv sync --group dev
 ```
 
-### Development Workflow
+## Packages
 
-1. **Create an Issue**: Plan what to build
-2. **Create a Branch**: `git checkout -b feature/description`
-3. **Develop**: Work in the appropriate package directory
-4. **Test**: `uv run pytest packages/`
-5. **Lint**: `uv run ruff check packages/ --fix`
-6. **Commit**: `git commit -m "feat: description (#issue-number)"`
-7. **Push & Create PR**: `git push -u origin feature/description`
+- `vertex-lab`: thin user-facing orchestration package and future app entrypoint
+- `vertex-forager`: production-ready data collection package
+- `vertex-qt`: quantitative analysis package
+- `vertex-workspace`: workspace/dashboard package
 
-## 📦 Packages
+## Documentation
 
-### vertex-forager
+- Shared docs portal: <https://coolbress.github.io/VertexLab/>
+- `vertex-lab` package docs: <https://coolbress.github.io/VertexLab/vertex-lab/>
+- `vertex-forager` package docs: <https://coolbress.github.io/VertexLab/vertex-forager/>
 
-Data collection framework for financial markets.
+## License
 
-```python
-from vertex_forager.clients import create_client
-from vertex_forager.core.models import FetchJob
-
-client = create_client("sharadar")
-job = FetchJob(
-    dataset="price",
-    symbols=["AAPL", "MSFT"],
-    start_date="2024-01-01",
-    end_date="2024-12-31"
-)
-result = client.fetch(job)
-```
-
-### vertex-workspace
-
-Data analysis and quantitative research tools.
-
-### vertex-viz
-
-Interactive data visualization components.
-
-## 🧪 Testing
-
-```bash
-# Run all tests
-uv run pytest packages/ -v
-
-# Run specific package tests
-uv run pytest packages/vertex-forager/tests/ -v
-
-# Run with coverage
-uv run pytest packages/ --cov=packages/ --cov-report=html
-```
-
-## 🔧 Code Quality
-
-```bash
-# Lint all code
-uv run ruff check packages/ --fix
-
-# Format code
-uv run ruff format packages/
-
-# Type checking (if configured)
-uv run mypy packages/
-```
-
-## 🔐 CI Policy (Actions Pinning)
-
-- Pin GitHub Actions by SHA; annotate the upstream major in the inline comment (e.g., checkout v5 SHA).
-- Prefer Node 24‑compatible action versions; avoid floating tags.
-
-## 📁 Project Structure
-
-Each package follows the modern Python `src` layout:
-
-```text
-packages/vertex-forager/
-├── src/
-│   └── vertex_forager/
-│       ├── clients/          # Data source clients
-│       ├── connectors/       # API connectors
-│       ├── core/            # Core interfaces & models
-│       ├── schema/          # Data schemas
-│       ├── writers/         # Data writers
-│       └── __init__.py
-├── tests/                   # Package tests
-└── pyproject.toml          # Package dependencies
-```
-
-## 🤝 Contributing
-
-1. Follow the [development workflow](#development-workflow)
-2. Ensure all tests pass before creating PR
-3. Include issue number in commit messages
-4. Keep PRs focused and well-documented
-5. Documentation:
-   - Site: <https://coolbress.github.io/VertexLab/>
-   - Repo index: [packages/vertex-forager/docs/index.md](packages/vertex-forager/docs/index.md)
-
-## 📄 License
-
-Apache-2.0 License - see LICENSE file for details.
-Open Core: this repository contains the Apache-2.0 core; proprietary extensions are distributed separately.
+Apache-2.0 License - see LICENSE for details.
