@@ -7,6 +7,7 @@
       "package-name": "vertex-forager",
       "component": "vertex-forager",
       "version-file": "packages/vertex-forager/src/vertex_forager/__init__.py",
+      "bump-minor-pre-major": true,
       "extra-files": [
         "packages/vertex-forager/pyproject.toml"
       ]
@@ -36,6 +37,16 @@
       "version-file": "src/vertex_lab/__init__.py",
       "extra-files": [
         "pyproject.toml"
+      ],
+      "paths": [
+        "src/vertex_lab",
+        "pyproject.toml",
+        "README.md",
+        "LICENSE",
+        "SECURITY.md",
+        "mkdocs.yml",
+        "CHANGELOG.md",
+        "docs"
       ]
     }
   }
