@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.11.7...vertex-forager-v1.0.0) (2026-03-31)
+
+
+### ⚠ BREAKING CHANGES
+
+* **vertex-forager:** move checkpoints and run history into SQLite state.db with DLQ index, retention  cleanup, and CLI state commands ([#383](https://github.com/coolbress/VertexLab/issues/383))
+
+### Features
+
+* **vertex-forager:** move checkpoints and run history into SQLite state.db with DLQ index, retention  cleanup, and CLI state commands ([#383](https://github.com/coolbress/VertexLab/issues/383)) ([8739cfc](https://github.com/coolbress/VertexLab/commit/8739cfc9eea8497d73bd9a9de1818ea4eb8a998c))
+
 ## [0.11.7](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.11.6...vertex-forager-v0.11.7) (2026-03-28)
 
 
