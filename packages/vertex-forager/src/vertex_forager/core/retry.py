@@ -62,7 +62,8 @@ def create_retry_controller(
             retry_after = exc.response.headers.get("Retry-After")
             if retry_after:
                 try:
-                    return max(0.0, min(config.max_backoff_s, float(retry_after)))
+                    retry_after_int = int(retry_after)
+                    return max(0.0, min(config.max_backoff_s, float(retry_after_int)))
                 except ValueError:
                     pass
         att = retry_state.attempt_number

@@ -227,6 +227,20 @@ def test_wait_falls_back_to_jitter_without_retry_after(monkeypatch: pytest.Monke
 
     monkeypatch.setattr("vertex_forager.core.retry.random.uniform", _uniform)
     assert controller.wait(state) == 1.25
+
+
+def test_wait_retry_after_non_integer_falls_back_to_jitter(monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = RetryConfig(max_attempts=3, base_backoff_s=2.0, max_backoff_s=30.0)
+    controller = create_retry_controller(cfg)
+    state = _retry_state(_status_error_with_headers(429, {"Retry-After": "0.5"}))
+    called: dict[str, tuple[float, float]] = {}
+
+    def _uniform(low: float, high: float) -> float:
+        called["args"] = (low, high)
+        return 1.5
+
+    monkeypatch.setattr("vertex_forager.core.retry.random.uniform", _uniform)
+    assert controller.wait(state) == 1.5
     assert called["args"] == (0.0, 4.0)
 
 
