@@ -16,7 +16,7 @@ from vertex_forager.core.registries import (
 )
 
 if TYPE_CHECKING:
-    from vertex_forager.core.config import AdvancedConfig, DownshiftConfig, HTTPConfig, RetryConfig
+    from vertex_forager.core.config import AdaptiveThrottleConfig, AdvancedConfig, HTTPConfig, RetryConfig
 
 
 def _register_sharadar() -> None:
@@ -32,7 +32,7 @@ def _register_sharadar() -> None:
         dlq_enabled: bool | None = None,
         pagination_max_burst: int | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
-        downshift: DownshiftConfig | dict[str, Any] | None = None,
+        adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
         concurrency: int | None = None,
         flush_threshold_rows: int | None = None,
         writer_chunk_rows: int | None = None,
@@ -52,7 +52,7 @@ def _register_sharadar() -> None:
             dlq_enabled=dlq_enabled,
             pagination_max_burst=pagination_max_burst,
             retry=retry,
-            downshift=downshift,
+            adaptive_throttle=adaptive_throttle,
             concurrency=concurrency,
             flush_threshold_rows=flush_threshold_rows,
             writer_chunk_rows=writer_chunk_rows,
@@ -87,7 +87,7 @@ def _register_yfinance() -> None:
         dlq_enabled: bool | None = None,
         pagination_max_burst: int | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
-        downshift: DownshiftConfig | dict[str, Any] | None = None,
+        adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
         concurrency: int | None = None,
         flush_threshold_rows: int | None = None,
         writer_chunk_rows: int | None = None,
@@ -107,7 +107,7 @@ def _register_yfinance() -> None:
             dlq_enabled=dlq_enabled,
             pagination_max_burst=pagination_max_burst,
             retry=retry,
-            downshift=downshift,
+            adaptive_throttle=adaptive_throttle,
             concurrency=concurrency,
             flush_threshold_rows=flush_threshold_rows,
             writer_chunk_rows=writer_chunk_rows,
@@ -139,7 +139,7 @@ def create_client(
     dlq_enabled: bool | None = None,
     pagination_max_burst: int | None = None,
     retry: RetryConfig | dict[str, Any] | None = None,
-    downshift: DownshiftConfig | dict[str, Any] | None = None,
+    throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
     concurrency: int | None = None,
     flush_threshold_rows: int | None = None,
     writer_chunk_rows: int | None = None,
@@ -163,7 +163,7 @@ def create_client(
         dlq_enabled: Enables DLQ spooling when True.
         pagination_max_burst: Pagination fairness burst cap.
         retry: Grouped retry policy configuration.
-        downshift: Grouped adaptive downshift policy configuration.
+        throttle: Grouped adaptive throttle policy configuration.
         concurrency: Explicit fetch concurrency limit.
         flush_threshold_rows: Buffered row threshold before flush.
         writer_chunk_rows: Transitional write chunk-size tuning.
@@ -219,7 +219,7 @@ def create_client(
             dlq_enabled=dlq_enabled,
             pagination_max_burst=pagination_max_burst,
             retry=retry,
-            downshift=downshift,
+            adaptive_throttle=throttle,
             concurrency=concurrency,
             flush_threshold_rows=flush_threshold_rows,
             writer_chunk_rows=writer_chunk_rows,
@@ -241,7 +241,7 @@ def create_client(
         dlq_enabled=dlq_enabled,
         pagination_max_burst=pagination_max_burst,
         retry=retry,
-        downshift=downshift,
+        adaptive_throttle=throttle,
         concurrency=concurrency,
         flush_threshold_rows=flush_threshold_rows,
         writer_chunk_rows=writer_chunk_rows,

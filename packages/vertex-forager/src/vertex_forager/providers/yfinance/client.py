@@ -13,7 +13,7 @@ from vertex_forager.constants import (
     DEFAULT_RETRY_MAX_BACKOFF_S,
     RESERVED_PIPELINE_KEYS,
 )
-from vertex_forager.core.config import AdvancedConfig, DownshiftConfig, HTTPConfig, RetryConfig, RunResult
+from vertex_forager.core.config import AdaptiveThrottleConfig, AdvancedConfig, HTTPConfig, RetryConfig, RunResult
 from vertex_forager.core.types import YFinanceDataset
 from vertex_forager.exceptions import InputError
 from vertex_forager.logging.constants import (
@@ -66,7 +66,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         dlq_enabled: bool | None = None,
         pagination_max_burst: int | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
-        downshift: DownshiftConfig | dict[str, Any] | None = None,
+        adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
         concurrency: int | None = None,
         flush_threshold_rows: int | None = None,
         writer_chunk_rows: int | None = None,
@@ -88,7 +88,9 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             dlq_enabled (bool | None): Preserve failed write batches for recovery when True. Default is None.
             pagination_max_burst (int | None): Maximum pagination burst before fairness demotion. Default is None.
             retry (RetryConfig | dict[str, Any] | None): Retry settings for fetch failures. Default is None.
-            downshift (DownshiftConfig | dict[str, Any] | None): Adaptive rate downshift settings. Default is None.
+            adaptive_throttle (
+                AdaptiveThrottleConfig | dict[str, Any] | None,
+            ): Adaptive throttle settings. Default is None.
             concurrency (int | None): Maximum concurrent fetch workers. Default is None.
             flush_threshold_rows (int | None): Buffered row threshold before writer flush. Default is None.
             writer_chunk_rows (int | None): Per-table flush chunk size in rows. Default is None.
@@ -126,7 +128,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             dlq_enabled=dlq_enabled,
             pagination_max_burst=pagination_max_burst,
             retry=retry,
-            downshift=downshift,
+            adaptive_throttle=adaptive_throttle,
             concurrency=concurrency,
             flush_threshold_rows=flush_threshold_rows,
             writer_chunk_rows=writer_chunk_rows,

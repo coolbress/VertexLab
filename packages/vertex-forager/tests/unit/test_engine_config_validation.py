@@ -1,7 +1,13 @@
 from pydantic import ValidationError
 import pytest
 
-from vertex_forager.core.config import AdvancedConfig, DownshiftConfig, HTTPConfig, ResolvedClientConfig, RetryConfig
+from vertex_forager.core.config import (
+    AdaptiveThrottleConfig,
+    AdvancedConfig,
+    HTTPConfig,
+    ResolvedClientConfig,
+    RetryConfig,
+)
 
 
 def test_runtime_config_requests_per_minute_positive() -> None:
@@ -38,7 +44,7 @@ def test_runtime_config_concurrency_validation() -> None:
 
 def test_grouped_public_configs_forbid_unknown_fields() -> None:
     with pytest.raises(ValidationError):
-        DownshiftConfig(extra_field=True)
+        AdaptiveThrottleConfig(extra_field=True)
     with pytest.raises(ValidationError):
         HTTPConfig(extra_field=True)
     with pytest.raises(ValidationError):

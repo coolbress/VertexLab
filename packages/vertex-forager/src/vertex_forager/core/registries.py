@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from vertex_forager.clients.base import BaseClient
-    from vertex_forager.core.config import AdvancedConfig, DownshiftConfig, HTTPConfig, RetryConfig
+    from vertex_forager.core.config import AdaptiveThrottleConfig, AdvancedConfig, HTTPConfig, RetryConfig
     from vertex_forager.routers.base import BaseRouter
     from vertex_forager.writers.base import BaseWriter
 
@@ -207,7 +207,7 @@ class ClientFactory(Protocol):
         dlq_enabled: bool | None = None,
         pagination_max_burst: int | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
-        downshift: DownshiftConfig | dict[str, Any] | None = None,
+        adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
         concurrency: int | None = None,
         flush_threshold_rows: int | None = None,
         writer_chunk_rows: int | None = None,
@@ -229,7 +229,7 @@ class ClientFactory(Protocol):
             dlq_enabled: Enables DLQ spooling when True.
             pagination_max_burst: Pagination fairness burst cap.
             retry: Grouped retry policy configuration.
-            downshift: Grouped adaptive downshift policy configuration.
+            adaptive_throttle: Grouped adaptive throttle policy configuration.
             concurrency: Explicit fetch concurrency limit.
             flush_threshold_rows: Buffered row threshold before flush.
             writer_chunk_rows: Transitional write chunk-size tuning.

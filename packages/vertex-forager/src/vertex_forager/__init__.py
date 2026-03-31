@@ -7,8 +7,8 @@ from vertex_forager.api import (
     create_router,
 )
 from vertex_forager.core import (
+    AdaptiveThrottleConfig,
     AdvancedConfig,
-    DownshiftConfig,
     HTTPConfig,
     RetryConfig,
     RunResult,
@@ -29,11 +29,11 @@ from vertex_forager.exceptions import (
 __version__ = "0.13.0"
 
 __all__ = [
+    "AdaptiveThrottleConfig",
     "AdvancedConfig",
     "BaseClient",
     "BaseRouter",
     "DataQualityRule",
-    "DownshiftConfig",
     "FetchError",
     "HTTPConfig",
     "NoDuplicateRows",
