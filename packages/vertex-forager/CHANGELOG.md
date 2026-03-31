@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.14.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.13.0...vertex-forager-v0.14.0) (2026-03-31)
+
+
+### ⚠ BREAKING CHANGES
+
+* **vertex-forager:** rename DownshiftConfig to AdaptiveThrottleConfig with ratio-based rpm floor and recovery ([#395](https://github.com/coolbress/VertexLab/issues/395))
+
+### Bug Fixes
+
+* **vertex-forager:** rename DownshiftConfig to AdaptiveThrottleConfig with ratio-based rpm floor and recovery ([#395](https://github.com/coolbress/VertexLab/issues/395)) ([0b7ce22](https://github.com/coolbress/VertexLab/commit/0b7ce222406491fff6be348a3dd947b2bd976ccd))
+
 ## [0.13.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.12.0...vertex-forager-v0.13.0) (2026-03-31)
 
 
