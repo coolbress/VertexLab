@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.0](https://github.com/coolbress/VertexLab/compare/vertex-lab-v1.0.0...vertex-lab-v2.0.0) (2026-03-31)
+
+
+### ⚠ BREAKING CHANGES
+
+* **vertex-forager:** remove enable_http_status_retry, migrate to retry_status_codes ([#391](https://github.com/coolbress/VertexLab/issues/391))
+
+### Bug Fixes
+
+* **vertex-forager:** remove enable_http_status_retry, migrate to retry_status_codes ([#391](https://github.com/coolbress/VertexLab/issues/391)) ([ecf00cf](https://github.com/coolbress/VertexLab/commit/ecf00cfb8fc6f53ac4fa1cc1cb438055263698a8))
+
 ## [1.0.0](https://github.com/coolbress/VertexLab/compare/vertex-lab-v0.3.11...vertex-lab-v1.0.0) (2026-03-31)
 
 
