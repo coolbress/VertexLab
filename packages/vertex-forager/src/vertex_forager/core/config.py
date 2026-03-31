@@ -87,26 +87,46 @@ class RetryConfig(BaseModel):
         return v
 
 
-class DownshiftConfig(BaseModel):
-    """Adaptive RPM downshift policy exposed on the client boundary.
+class AdaptiveThrottleConfig(BaseModel):
+    """Adaptive throttle policy for dynamic RPM adjustment based on error rate.
 
     Attributes:
-        enabled: Enables adaptive downshift and recovery behavior.
+        enabled: Enables adaptive throttle behavior.
         window_s: Sliding window in seconds used to evaluate recent error rate.
-        error_rate_threshold: Error ratio that triggers downshift.
-        rpm_floor: Minimum RPM maintained while downshift is active.
-        recovery_step: RPM added back during healthy recovery.
+        error_rate_threshold: Error ratio that triggers throttle decrease.
+        rpm_floor_ratio: Minimum RPM as a ratio of ceiling (0.0-1.0) maintained while throttled.
+        recovery_factor: RPM added as a fraction of ceiling during healthy recovery (0.0-1.0).
         healthy_window_s: Healthy period required before recovering RPM upward.
+
+    Notes:
+        - Uses AIMD (Additive Increase/Multiplicative Decrease) pattern.
+        - Multiplicative decrease: new_rpm = effective_rpm * 0.8 when error threshold exceeded.
+        - Additive increase: new_rpm = effective_rpm + max(1, ceiling * recovery_factor) when healthy.
+        - rpm_floor is resolved to an absolute value at init: floor = max(1, ceiling * rpm_floor_ratio).
     """
 
     enabled: bool = False
     window_s: int = Field(default=60, ge=1)
     error_rate_threshold: float = Field(default=0.2, ge=0.0, le=1.0)
-    rpm_floor: int = Field(default=1, ge=1)
-    recovery_step: int = Field(default=5, ge=1)
+    rpm_floor_ratio: float = Field(default=0.10, ge=0.0, le=1.0)
+    recovery_factor: float = Field(default=0.05, ge=0.0, le=1.0)
     healthy_window_s: int = Field(default=60, ge=1)
 
     model_config = {"extra": "forbid"}
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_legacy_downshift_fields(cls, data: Any) -> Any:
+        if not isinstance(data, Mapping):
+            return data
+        legacy_keys = {"downshift_enabled", "downshift_window_s", "rpm_floor", "recovery_step"}
+        if legacy_keys & data.keys():
+            raise TypeError(
+                "DownshiftConfig has been renamed to AdaptiveThrottleConfig. "
+                "Use adaptive_throttle=AdaptiveThrottleConfig(...) instead. "
+                "rpm_floor has been replaced by rpm_floor_ratio, and recovery_step by recovery_factor."
+            )
+        return data
 
 
 class HTTPConfig(BaseModel):
@@ -264,7 +284,7 @@ class ResolvedClientConfig(BaseModel):
     client settings after `create_client(...)` inputs have been normalized.
 
     Public callers should set configuration through `create_client(...)` and the
-    grouped public config objects (`RetryConfig`, `DownshiftConfig`, `HTTPConfig`,
+    grouped public config objects (`RetryConfig`, `AdaptiveThrottleConfig`, `HTTPConfig`,
     `AdvancedConfig`) rather than constructing this model directly.
     """
 
@@ -275,7 +295,7 @@ class ResolvedClientConfig(BaseModel):
     dlq_enabled: bool = True
     pagination_max_burst: int | None = Field(default=None, ge=1)
     retry: RetryConfig = Field(default_factory=RetryConfig)
-    downshift: DownshiftConfig = Field(default_factory=DownshiftConfig)
+    adaptive_throttle: AdaptiveThrottleConfig = Field(default_factory=AdaptiveThrottleConfig)
     concurrency: int | None = Field(default=None, gt=0)
     flush_threshold_rows: int = FLUSH_THRESHOLD_ROWS
     writer_chunk_rows: int | None = None
@@ -293,28 +313,28 @@ class ResolvedClientConfig(BaseModel):
         return self.concurrency
 
     @property
-    def downshift_enabled(self) -> bool:
-        return self.downshift.enabled
+    def adaptive_throttle_enabled(self) -> bool:
+        return self.adaptive_throttle.enabled
 
     @property
-    def downshift_window_s(self) -> int:
-        return self.downshift.window_s
+    def adaptive_throttle_window_s(self) -> int:
+        return self.adaptive_throttle.window_s
 
     @property
     def error_rate_threshold(self) -> float:
-        return self.downshift.error_rate_threshold
+        return self.adaptive_throttle.error_rate_threshold
 
     @property
-    def rpm_floor(self) -> int:
-        return self.downshift.rpm_floor
+    def rpm_floor_ratio(self) -> float:
+        return self.adaptive_throttle.rpm_floor_ratio
 
     @property
-    def recovery_step(self) -> int:
-        return self.downshift.recovery_step
+    def recovery_factor(self) -> float:
+        return self.adaptive_throttle.recovery_factor
 
     @property
     def healthy_window_s(self) -> int:
-        return self.downshift.healthy_window_s
+        return self.adaptive_throttle.healthy_window_s
 
     @property
     def dlq_tmp_cleanup_on_error(self) -> bool:
@@ -382,8 +402,6 @@ class ResolvedClientConfig(BaseModel):
         except (TypeError, ValueError) as e:
             raise VertexForagerError(f"run_history_retention_days must be an integer >= 0: {e}") from e
         self.run_history_retention_days = max(0, run_history_retention_days)
-        if self.downshift.rpm_floor > self.requests_per_minute:
-            raise ValueError("rpm_floor must be <= requests_per_minute")
 
 
 class RunResult(BaseModel):
@@ -477,8 +495,8 @@ class ParseResult:
 
 
 __all__ = [
+    "AdaptiveThrottleConfig",
     "AdvancedConfig",
-    "DownshiftConfig",
     "FetchJob",
     "FramePacket",
     "HTTPConfig",

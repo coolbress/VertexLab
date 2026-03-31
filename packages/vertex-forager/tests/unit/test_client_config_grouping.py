@@ -6,7 +6,7 @@ import warnings
 
 import pytest
 
-from vertex_forager import AdvancedConfig, DownshiftConfig, HTTPConfig, RetryConfig, create_client
+from vertex_forager import AdaptiveThrottleConfig, AdvancedConfig, HTTPConfig, RetryConfig, create_client
 import vertex_forager.clients.base as base_mod
 from vertex_forager.constants import HTTP_TIMEOUT_S
 
@@ -29,7 +29,7 @@ def test_create_client_accepts_grouped_public_configs() -> None:
         dlq_enabled=False,
         pagination_max_burst=3,
         retry=RetryConfig(max_attempts=5),
-        downshift=DownshiftConfig(enabled=True, window_s=30, recovery_step=2),
+        throttle=AdaptiveThrottleConfig(enabled=True, window_s=30, recovery_factor=0.05),
         concurrency=4,
         flush_threshold_rows=10_000,
         writer_chunk_rows=20_000,
@@ -47,9 +47,9 @@ def test_create_client_accepts_grouped_public_configs() -> None:
     assert client.config.dlq_enabled is False
     assert client.config.pagination_max_burst == 3
     assert client.config.retry.max_attempts == 5
-    assert client.config.downshift_enabled is True
-    assert client.config.downshift_window_s == 30
-    assert client.config.recovery_step == 2
+    assert client.config.adaptive_throttle_enabled is True
+    assert client.config.adaptive_throttle_window_s == 30
+    assert client.config.recovery_factor == 0.05
     assert client.config.concurrency == 4
     assert client.config.flush_threshold_rows == 10_000
     assert client.config.writer_chunk_rows == 20_000
@@ -64,12 +64,12 @@ def test_create_client_accepts_grouped_public_configs() -> None:
     assert client._memory_threshold_absolute is None
 
 
-def test_removed_legacy_downshift_kwargs_are_rejected() -> None:
+def test_removed_legacy_adaptive_throttle_kwargs_are_rejected() -> None:
     with pytest.raises(TypeError):
         create_client(
             provider="yfinance",
             rate_limit=60,
-            downshift_enabled=True,
+            adaptive_throttle_enabled=True,
         )
 
 
@@ -182,10 +182,10 @@ def test_build_http_client_uses_normalized_defaults_without_rereading_env(monkey
     }
 
 
-def test_invalid_cross_field_settings_fail_during_client_creation() -> None:
-    with pytest.raises(ValueError, match="rpm_floor must be <= requests_per_minute"):
-        create_client(
-            provider="yfinance",
-            rate_limit=60,
-            downshift=DownshiftConfig(rpm_floor=100),
-        )
+def test_rpm_floor_ratio_resolves_to_absolute_floor() -> None:
+    client = create_client(
+        provider="yfinance",
+        rate_limit=60,
+        throttle=AdaptiveThrottleConfig(rpm_floor_ratio=0.10),
+    )
+    assert client.config.rpm_floor_ratio == 0.10

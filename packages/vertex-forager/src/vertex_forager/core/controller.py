@@ -180,11 +180,11 @@ class FlowController:
         requests_per_minute: int,
         concurrency_limit: int | None = None,
         *,
-        downshift_enabled: bool = False,
-        downshift_window_s: int = 60,
+        adaptive_throttle_enabled: bool = False,
+        adaptive_throttle_window_s: int = 60,
         error_rate_threshold: float = 0.2,
-        rpm_floor: int = 1,
-        recovery_step: int = 5,
+        rpm_floor_ratio: float = 0.10,
+        recovery_factor: float = 0.05,
         healthy_window_s: int = 60,
     ) -> None:
         """Initialize the unified Flow Controller.
@@ -192,11 +192,11 @@ class FlowController:
         Args:
             requests_per_minute: int — Allowed requests per minute (RPM).
             concurrency_limit: int | None — Optional max concurrent requests; if None, auto-computed.
-            downshift_enabled: bool — Enable adaptive RPM downshift/recovery.
-            downshift_window_s: int — Sliding window (seconds) for error-rate calculation.
-            error_rate_threshold: float — Error/retry ratio threshold to trigger downshift.
-            rpm_floor: int — Minimum RPM allowed during downshift.
-            recovery_step: int — RPM increment applied during each healthy recovery step.
+            adaptive_throttle_enabled: bool — Enable adaptive throttle.
+            adaptive_throttle_window_s: int — Sliding window (seconds) for error-rate calculation.
+            error_rate_threshold: float — Error/retry ratio threshold to trigger throttle decrease.
+            rpm_floor_ratio: float — Minimum RPM as a ratio of ceiling (0.0-1.0) during throttle.
+            recovery_factor: float — RPM increment as a fraction of ceiling during recovery (0.0-1.0).
             healthy_window_s: int — Duration (seconds) of healthy period required to upshift.
 
         Raises:
@@ -241,8 +241,8 @@ class FlowController:
         )
         self._rpm_ceiling = int(requests_per_minute)
         self._effective_rpm = int(requests_per_minute)
-        self._downshift_enabled = bool(downshift_enabled)
-        win = float(downshift_window_s)
+        self._adaptive_throttle_enabled = bool(adaptive_throttle_enabled)
+        win = float(adaptive_throttle_window_s)
         if not math.isfinite(win) or win < 1.0:
             win = 1.0
         if win > 3600.0:
@@ -252,11 +252,14 @@ class FlowController:
         if not math.isfinite(thr):
             thr = 0.0
         self._error_threshold = min(1.0, max(0.0, thr))
-        floor = int(max(1, rpm_floor))
-        if floor > self._rpm_ceiling:
-            floor = self._rpm_ceiling
-        self._rpm_floor = floor
-        self._recovery_step = int(max(1, recovery_step))
+        floor_ratio = float(rpm_floor_ratio)
+        if not math.isfinite(floor_ratio):
+            floor_ratio = 0.10
+        self._rpm_floor = max(1, int(self._rpm_ceiling * min(1.0, max(0.0, floor_ratio))))
+        recovery_frac = float(recovery_factor)
+        if not math.isfinite(recovery_frac):
+            recovery_frac = 0.05
+        self._recovery_step = max(1, int(self._rpm_ceiling * min(1.0, max(0.0, recovery_frac))))
         healthy = float(healthy_window_s)
         if not math.isfinite(healthy) or healthy < 1.0:
             healthy = 1.0
@@ -342,7 +345,7 @@ class FlowController:
             await self._concurrency_limiter.release(rtt)
 
     def record_feedback(self, *, status_code: int | None = None, retried: bool = False) -> None:
-        if not self._downshift_enabled:
+        if not self._adaptive_throttle_enabled:
             return
         now = time.monotonic()
         is_error = retried or (status_code in (429, 503))

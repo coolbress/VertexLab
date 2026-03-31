@@ -12,8 +12,8 @@ This module contains the fundamental components of the scraping engine:
 from typing import TYPE_CHECKING, Any
 
 from vertex_forager.core.config import (
+    AdaptiveThrottleConfig,
     AdvancedConfig,
-    DownshiftConfig,
     FetchJob,
     FramePacket,
     HTTPConfig,
@@ -49,8 +49,8 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
+    "AdaptiveThrottleConfig",
     "AdvancedConfig",
-    "DownshiftConfig",
     "FetchJob",
     "FlowController",
     "FramePacket",

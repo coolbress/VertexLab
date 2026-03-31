@@ -14,8 +14,8 @@ from tqdm.auto import tqdm
 
 from vertex_forager.constants import FLUSH_THRESHOLD_ROWS, HTTP_TIMEOUT_S
 from vertex_forager.core.config import (
+    AdaptiveThrottleConfig,
     AdvancedConfig,
-    DownshiftConfig,
     HTTPConfig,
     ResolvedClientConfig,
     RetryConfig,
@@ -104,7 +104,7 @@ def _normalize_client_settings(
     dlq_enabled: bool | None,
     pagination_max_burst: int | None,
     retry: RetryConfig | dict[str, Any] | None,
-    downshift: DownshiftConfig | dict[str, Any] | None,
+    adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None,
     concurrency: int | None,
     flush_threshold_rows: int | None,
     writer_chunk_rows: int | None,
@@ -115,7 +115,9 @@ def _normalize_client_settings(
     limits: HTTPConfig | dict[str, Any] | None,
     advanced: AdvancedConfig | dict[str, Any] | None,
 ) -> _NormalizedClientSettings:
-    downshift_config = _coerce_grouped_config(downshift, DownshiftConfig) or DownshiftConfig()
+    adaptive_throttle_config = (
+        _coerce_grouped_config(adaptive_throttle, AdaptiveThrottleConfig) or AdaptiveThrottleConfig()
+    )
     limits_config = _coerce_grouped_config(limits, HTTPConfig) or HTTPConfig()
     advanced_config = _coerce_grouped_config(advanced, AdvancedConfig) or AdvancedConfig()
     retry_config = _coerce_grouped_config(retry, RetryConfig) or RetryConfig()
@@ -128,7 +130,7 @@ def _normalize_client_settings(
         dlq_enabled=_parse_flag(dlq_enabled, True),
         pagination_max_burst=pagination_max_burst,
         retry=retry_config,
-        downshift=downshift_config,
+        adaptive_throttle=adaptive_throttle_config,
         concurrency=concurrency,
         flush_threshold_rows=flush_threshold_rows if flush_threshold_rows is not None else FLUSH_THRESHOLD_ROWS,
         writer_chunk_rows=writer_chunk_rows,
@@ -216,7 +218,7 @@ class BaseClient(ABC, Generic[T]):
         dlq_enabled: bool | None = None,
         pagination_max_burst: int | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
-        downshift: DownshiftConfig | dict[str, Any] | None = None,
+        adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
         concurrency: int | None = None,
         flush_threshold_rows: int | None = None,
         writer_chunk_rows: int | None = None,
@@ -238,7 +240,7 @@ class BaseClient(ABC, Generic[T]):
             dlq_enabled: Enables DLQ spooling on persistence failures.
             pagination_max_burst: Pagination fairness burst cap.
             retry: Grouped retry policy configuration.
-            downshift: Grouped adaptive downshift policy configuration.
+            adaptive_throttle: Grouped adaptive throttle policy configuration.
             concurrency: Explicit fetch concurrency limit.
             flush_threshold_rows: Buffered row threshold before flush begins.
             writer_chunk_rows: Transitional write chunk-size tuning.
@@ -258,7 +260,7 @@ class BaseClient(ABC, Generic[T]):
             dlq_enabled=dlq_enabled,
             pagination_max_burst=pagination_max_burst,
             retry=retry,
-            downshift=downshift,
+            adaptive_throttle=adaptive_throttle,
             concurrency=concurrency,
             flush_threshold_rows=flush_threshold_rows,
             writer_chunk_rows=writer_chunk_rows,
@@ -281,12 +283,12 @@ class BaseClient(ABC, Generic[T]):
         self.controller = FlowController(
             requests_per_minute=self._config.requests_per_minute,
             concurrency_limit=self._config.fetch_concurrency,
-            downshift_enabled=self._config.downshift.enabled,
-            downshift_window_s=self._config.downshift.window_s,
-            error_rate_threshold=self._config.downshift.error_rate_threshold,
-            rpm_floor=self._config.downshift.rpm_floor,
-            recovery_step=self._config.downshift.recovery_step,
-            healthy_window_s=self._config.downshift.healthy_window_s,
+            adaptive_throttle_enabled=self._config.adaptive_throttle_enabled,
+            adaptive_throttle_window_s=self._config.adaptive_throttle_window_s,
+            error_rate_threshold=self._config.error_rate_threshold,
+            rpm_floor_ratio=self._config.rpm_floor_ratio,
+            recovery_factor=self._config.recovery_factor,
+            healthy_window_s=self._config.healthy_window_s,
         )
         self.last_run: RunResult | None = None
         self._client: httpx.AsyncClient | None = None

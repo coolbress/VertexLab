@@ -3018,7 +3018,7 @@ wheels = [
 
 [[package]]
 name = "vertex-forager"
-version = "1.0.0"
+version = "2.0.0"
 source = { editable = "packages/vertex-forager" }
 dependencies = [
     { name = "click" },
@@ -3101,7 +3101,7 @@ dev = [
 
 [[package]]
 name = "vertex-lab"
-version = "1.0.0"
+version = "2.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "vertex-forager" },
