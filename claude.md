@@ -54,15 +54,15 @@ This document defines repository-level guardrails for using Claude Code CLI in V
 ```text
 vertex-lab/
 ├── .github/                   # Workflows, issue templates, release automation
-├── docs/                      # Root docs, policies, ADRs
+├── docs/                      # Shared docs, policies, ADRs
 ├── packages/
+│   ├── vertex-lab/            # Thin orchestration package and app shell
 │   ├── vertex-forager/        # Data ingestion package
 │   ├── vertex-qt/             # Quant analysis package
 │   └── vertex-workspace/      # Workspace/dashboard package
 ├── scripts/                   # Repository verification helpers
-├── src/vertex_lab/            # Root meta-package
 ├── mkdocs.yml                 # Root docs navigation
-├── pyproject.toml             # Workspace configuration
+├── pyproject.toml             # Workspace configuration and dev tooling
 └── claude.md                  # Repository guardrails for Claude Code CLI
 ```
 

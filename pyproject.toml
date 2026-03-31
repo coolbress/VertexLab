@@ -1,24 +1,5 @@
-[project]
-name = "vertex-lab"
-version = "1.0.1"
-description = "Vertex Investment Framework Monorepo"
-readme = "README.md"
-requires-python = ">=3.10"
-license = { text = "Apache-2.0" }
-dependencies = [
-    "vertex-forager==0.11.2",
-    "vertex-qt==0.1.0",
-    "vertex-workspace==0.1.0",
-]
-
-[project.scripts]
-vertex-lab = "vertex_lab.app:main"
-
-[build-system]
-requires = ["uv-build>=0.10.12,<0.11.0"]
-build-backend = "uv_build"
-
 [tool.uv]
+package = false
 # packages 폴더 아래에 있는 애들을 내 식구로 인정한다.
 workspace = { members = ["packages/*"] }
 
@@ -92,7 +73,6 @@ dev = [
     "hypothesis>=6.98.0",
     "ruff==0.15.8",
     "mypy>=1.11.1",
-    "vertex-forager",
     "pandas-stubs>=2.3.3.260113",
     "types-tqdm>=4.67.3.20260205",
     "types-psutil>=7.2.2.20260130",

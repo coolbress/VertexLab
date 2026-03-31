@@ -22,8 +22,8 @@ jobs:
       vertex_qt_tag_name: ${{ steps.release.outputs['packages/vertex-qt--tag_name'] }}
       vertex_workspace_release_created: ${{ steps.release.outputs['packages/vertex-workspace--release_created'] }}
       vertex_workspace_tag_name: ${{ steps.release.outputs['packages/vertex-workspace--tag_name'] }}
-      vertex_lab_release_created: ${{ steps.release.outputs['.--release_created'] }}
-      vertex_lab_tag_name: ${{ steps.release.outputs['.--tag_name'] }}
+      vertex_lab_release_created: ${{ steps.release.outputs['packages/vertex-lab--release_created'] }}
+      vertex_lab_tag_name: ${{ steps.release.outputs['packages/vertex-lab--tag_name'] }}
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
       - uses: googleapis/release-please-action@16a9c90856f42705d54a6fda1823352bdc62cf38
@@ -40,6 +40,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - component: vertex-lab
+            package_dir: packages/vertex-lab
+            release_key: vertex_lab_release_created
+            tag_key: vertex_lab_tag_name
           - component: vertex-forager
             package_dir: packages/vertex-forager
             release_key: vertex_release_created
@@ -80,30 +84,4 @@ jobs:
         with:
           files: dist/${{ matrix.component }}/*
           tag_name: ${{ needs.release.outputs[matrix.tag_key] }}
-          fail_on_unmatched_files: true
-
-  publish-vertex-lab:
-    needs: [release, publish-packages]
-    if: ${{ needs.release.outputs.vertex_lab_release_created == 'true' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
-        with:
-          python-version: "3.14"
-      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
-      - name: Build wheel/sdist (vertex-lab)
-        run: |
-          OUT="${GITHUB_WORKSPACE}/dist/vertex-lab"
-          rm -rf "$OUT"
-          mkdir -p "$OUT"
-          uv build . --out-dir "$OUT"
-          ls -l "$OUT"
-      - name: Upload assets to GitHub Release
-        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe
-        with:
-          files: dist/vertex-lab/*
-          tag_name: ${{ needs.release.outputs.vertex_lab_tag_name }}
           fail_on_unmatched_files: true

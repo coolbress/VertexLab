@@ -1,9 +1,9 @@
 site_name: VertexLab Docs
 site_url: https://coolbress.github.io/VertexLab/
 repo_url: https://github.com/coolbress/VertexLab
-edit_uri: edit/main/docs/
+edit_uri: edit/main/packages/vertex-lab/docs/
 
-docs_dir: docs
+docs_dir: packages/vertex-lab/docs
 site_dir: site
 
 theme:
@@ -64,5 +64,4 @@ nav:
   - Quickstart: quickstart.md
   - Components:
       - vertex-forager: '!include packages/vertex-forager/mkdocs.yml'
-  - Contributing: contributing.md
-  - Changelog: changelog.md
+  - Contributing: https://github.com/coolbress/VertexLab/blob/main/CONTRIBUTING.md

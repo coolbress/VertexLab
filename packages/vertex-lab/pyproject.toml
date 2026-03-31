@@ -1,0 +1,22 @@
+[project]
+name = "vertex-lab"
+version = "0.1.0" # x-release-please-version
+description = "Thin orchestration package and CLI shell for the VertexLab workspace."
+readme = "README.md"
+authors = [
+    { name = "coolbress", email = "81678322+coolbress@users.noreply.github.com" }
+]
+requires-python = ">=3.10"
+license = "Apache-2.0"
+dependencies = [
+    "vertex-forager>=0.14.1,<0.15.0",
+    "vertex-qt>=0.1.0,<0.2.0",
+    "vertex-workspace>=0.1.0,<0.2.0",
+]
+
+[project.scripts]
+vertex-lab = "vertex_lab.app:main"
+
+[build-system]
+requires = ["uv-build>=0.10.12,<0.11.0"]
+build-backend = "uv_build"
