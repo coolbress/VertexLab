@@ -38,8 +38,8 @@ Public runtime configuration is now centered on `create_client(...)` plus groupe
 - `enabled: bool`
 - `window_s: int`
 - `error_rate_threshold: float` — in `[0, 1]`
-- `rpm_floor: int`
-- `recovery_step: int`
+- `rpm_floor_ratio: float` — in `[0, 1]`
+- `recovery_factor: float` — in `[0, 1]`
 - `healthy_window_s: int`
 
 ### HTTPConfig
