@@ -164,7 +164,7 @@ jobs:
             --cov-fail-under=80 \
             -m "not manual"
       - name: Upload coverage data
-        if: ${{ matrix.python-version == '3.10' }}
+        if: ${{ matrix.python-version == '3.10' && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) }}
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0 pinned
         with:
           name: coverage-data
@@ -216,6 +216,38 @@ jobs:
           # Tracking: remove this allowlist once upstream ships a fixed pygments release (CVE-2026-4539).
           ignore-vulns: |
             CVE-2026-4539
+
+  coverage-report:
+    name: Coverage Report
+    runs-on: ubuntu-latest
+    needs: [quality-check]
+    if: ${{ needs.quality-check.result == 'success' && (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) }}
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 pinned
+        with:
+          persist-credentials: true
+      - name: Download coverage data artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1 pinned
+        with:
+          name: coverage-data
+          path: .
+      - name: Publish PR coverage comment
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: py-cov-action/python-coverage-comment-action@7188638f871f721a365d644f505d1ff3df20d683  # v3.40 pinned
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Update coverage badge data
+        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        continue-on-error: true
+        uses: py-cov-action/python-coverage-comment-action@7188638f871f721a365d644f505d1ff3df20d683  # v3.40 pinned
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # Aggregator job with a stable check name to satisfy branch protection rules.
   # This job succeeds only if all matrix jobs in "quality-check" succeed.
