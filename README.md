@@ -5,12 +5,12 @@
 | Name                                                                |    Stmts |     Miss |   Cover |   Missing |
 |-------------------------------------------------------------------- | -------: | -------: | ------: | --------: |
 | packages/vertex-forager/src/vertex\_forager/clients/\_\_init\_\_.py |       43 |        2 |     95% |  207, 234 |
-| packages/vertex-forager/src/vertex\_forager/clients/base.py         |      198 |       57 |     71% |65-67, 71, 77-85, 355, 364-366, 373-375, 394-395, 398-402, 453-464, 485-497, 508-509, 624, 641-646, 654-664 |
+| packages/vertex-forager/src/vertex\_forager/clients/base.py         |      199 |       57 |     71% |66-68, 72, 78-86, 356, 365-367, 374-376, 395-396, 399-403, 454-465, 486-498, 509-510, 625, 642-647, 655-665 |
 | packages/vertex-forager/src/vertex\_forager/clients/dispatcher.py   |       21 |        0 |    100% |           |
 | packages/vertex-forager/src/vertex\_forager/clients/validation.py   |        5 |        0 |    100% |           |
 | packages/vertex-forager/src/vertex\_forager/core/\_\_init\_\_.py    |       11 |        0 |    100% |           |
 | packages/vertex-forager/src/vertex\_forager/core/checkpoint.py      |      222 |       68 |     69% |124, 136, 139-140, 154, 261-262, 279, 294-295, 401-404, 420-423, 432-433, 474, 496-515, 528-529, 541-564, 581-584, 593-605 |
-| packages/vertex-forager/src/vertex\_forager/core/config.py          |      237 |       27 |     89% |63, 70, 73, 193, 196, 199, 202, 284, 288, 292, 296, 300, 304, 320, 324, 332, 335-336, 340, 342, 356, 362-363, 369-370, 428, 447 |
+| packages/vertex-forager/src/vertex\_forager/core/config.py          |      243 |       26 |     89% |76, 86, 206, 209, 212, 215, 297, 301, 305, 309, 313, 317, 333, 337, 345, 348-349, 353, 355, 369, 375-376, 382-383, 441, 460 |
 | packages/vertex-forager/src/vertex\_forager/core/contracts.py       |       21 |        0 |    100% |           |
 | packages/vertex-forager/src/vertex\_forager/core/controller.py      |      205 |       35 |     83% |121, 247, 249, 262, 264, 278-280, 298-301, 304-310, 354-356, 379-382, 387-396 |
 | packages/vertex-forager/src/vertex\_forager/core/dlq.py             |      168 |       23 |     86% |47-48, 97-98, 120-121, 146-148, 174-175, 210-220, 282-284, 289-292 |
@@ -23,7 +23,7 @@
 | packages/vertex-forager/src/vertex\_forager/core/quality.py         |       90 |        4 |     96% |120-121, 228-229 |
 | packages/vertex-forager/src/vertex\_forager/core/recover.py         |      114 |       18 |     84% |42-45, 89, 94, 144-146, 156-158, 178, 199, 221-224 |
 | packages/vertex-forager/src/vertex\_forager/core/registries.py      |       44 |        5 |     89% |79, 84, 107, 111, 115 |
-| packages/vertex-forager/src/vertex\_forager/core/retry.py           |       84 |        6 |     93% |63, 176-179, 190 |
+| packages/vertex-forager/src/vertex\_forager/core/retry.py           |       94 |        6 |     94% |73, 188-191, 202 |
 | packages/vertex-forager/src/vertex\_forager/core/scheduler.py       |       57 |        2 |     96% |   135-136 |
 | packages/vertex-forager/src/vertex\_forager/core/sweep.py           |      143 |      104 |     27% |20, 64, 68, 83-95, 104-116, 128-140, 159-201, 211-240, 252-279, 291-319, 330-348 |
 | packages/vertex-forager/src/vertex\_forager/core/types.py           |       61 |        0 |    100% |           |
@@ -39,7 +39,7 @@
 | packages/vertex-forager/src/vertex\_forager/writers/constants.py    |       24 |        0 |    100% |           |
 | packages/vertex-forager/src/vertex\_forager/writers/duckdb.py       |      308 |       41 |     87% |141-142, 163, 242-243, 251-257, 313, 325-326, 348-350, 355-356, 386-387, 461-462, 486-493, 503-507, 513, 544-554, 636-637 |
 | packages/vertex-forager/src/vertex\_forager/writers/memory.py       |       60 |        8 |     87% |56, 111-118 |
-| **TOTAL**                                                           | **3660** |  **662** | **82%** |           |
+| **TOTAL**                                                           | **3677** |  **661** | **82%** |           |
 
 
 ## Setup coverage badge
