@@ -26,7 +26,7 @@ from vertex_forager.exceptions import (
     WriterError,
 )
 
-__version__ = "2.0.0"
+__version__ = "0.13.0"
 
 __all__ = [
     "AdaptiveThrottleConfig",
