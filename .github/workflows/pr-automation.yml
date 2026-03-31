@@ -124,7 +124,7 @@ jobs:
               if (isLab) {
                 labels.add("package:vertex-lab");
               }
-              if (!p.startsWith("packages/") || (!isForager && !isQt && !isWorkspace)) {
+              if (!p.startsWith("packages/") || (!isForager && !isQt && !isWorkspace && !isLab)) {
                 labels.add("package:vertex-lab");
               }
             }
