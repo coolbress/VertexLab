@@ -10,7 +10,7 @@ Modern Python monorepo for financial data collection, orchestration, analysis, a
 ```text
 vertex-lab/
 ├── .github/                  # Workflows and automation
-├── docs/                     # Shared repository docs
+├── CONTRIBUTING.md           # Contribution guide
 ├── packages/
 │   ├── vertex-lab/           # Thin orchestration package and CLI shell
 │   ├── vertex-forager/       # Data collection engine

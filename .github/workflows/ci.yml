@@ -122,7 +122,6 @@ jobs:
         if: ${{ failure() }}
         run: |
           echo "::group::Remediation Guidance"
-          echo "See docs/ci-security.md for triage, severity thresholds, and SLA."
           echo "Common fixes:"
           echo " - Secrets/config: move to env/CI secrets, rotate, remove from history"
           echo " - Dependencies: upgrade vulnerable packages"

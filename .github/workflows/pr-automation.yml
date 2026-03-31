@@ -121,12 +121,7 @@ jobs:
               if (isForager) labels.add("package:vertex-forager");
               if (isQt) labels.add("package:vertex-qt");
               if (isWorkspace) labels.add("package:vertex-workspace");
-              if (isLab) {
-                labels.add("package:vertex-lab");
-              }
-              if (!p.startsWith("packages/") || (!isForager && !isQt && !isWorkspace && !isLab)) {
-                labels.add("package:vertex-lab");
-              }
+              if (isLab) labels.add("package:vertex-lab");
             }
             const managed = [
               "package:vertex-forager",
