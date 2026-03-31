@@ -52,5 +52,5 @@ print(result)
 
 - [YFinance notebook](https://github.com/coolbress/VertexLab/blob/main/packages/vertex-forager/examples/yfinance_examples.ipynb)
 - [Sharadar notebook](https://github.com/coolbress/VertexLab/blob/main/packages/vertex-forager/examples/sharadar.ipynb)
-- [Changelog](changelog.md)
+- [Changelog](https://github.com/coolbress/VertexLab/releases?q=package%3Avertex-forager)
 - [Contributing](https://coolbress.github.io/VertexLab/contributing/)

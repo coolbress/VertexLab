@@ -62,7 +62,6 @@ nav:
   - Overview: index.md
   - Installation: installation.md
   - Quickstart: quickstart.md
-  - Changelog: changelog.md
   - Components:
       - vertex-forager: '!include packages/vertex-forager/mkdocs.yml'
   - Contributing: https://github.com/coolbress/VertexLab/blob/main/CONTRIBUTING.md

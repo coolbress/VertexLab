@@ -17,3 +17,7 @@ The package currently ships as a thin shell. The first real app-oriented workflo
 If you need the production-ready workflow right now, use the `vertex-forager` package docs:
 
 - [vertex-forager docs](https://coolbress.github.io/VertexLab/vertex-forager/)
+
+## Changelog
+
+- [Changelog](https://github.com/coolbress/VertexLab/releases?q=package%3Avertex-lab)

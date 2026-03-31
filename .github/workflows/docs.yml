@@ -5,7 +5,6 @@ on:
   pull_request:
     paths:
       - "mkdocs.yml"
-      - "docs/**"
       - "README.md"
       - "CONTRIBUTING.md"
       - "packages/**/mkdocs.yml"
