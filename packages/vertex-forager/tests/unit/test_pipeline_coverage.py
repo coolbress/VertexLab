@@ -403,7 +403,7 @@ async def test_producer_resumes_pending_pagination_jobs_without_restarting_symbo
         symbols=["AAPL", "MSFT"],
         order_counter=order_counter,
         completed_symbols=set(),
-        pending_symbol_jobs={"AAPL": [pending_job]},
+        pending_jobs=[pending_job],
     )
 
     queued_jobs: list[FetchJob] = []
@@ -444,7 +444,7 @@ async def test_producer_restores_only_requested_pending_jobs() -> None:
         symbols=["MSFT"],
         order_counter=itertools.count(),
         completed_symbols=set(),
-        pending_symbol_jobs={"AAPL": [pending_job]},
+        pending_jobs=[pending_job],
     )
 
     queued_jobs: list[FetchJob] = []
@@ -454,6 +454,83 @@ async def test_producer_restores_only_requested_pending_jobs() -> None:
             queued_jobs.append(queued_job)
 
     assert [job.symbol for job in queued_jobs] == ["MSFT"]
+
+
+@pytest.mark.asyncio
+async def test_producer_preserves_symbolless_pending_jobs_on_resume() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
+    pending_job = FetchJob(
+        provider="stub",
+        dataset="d",
+        symbol=None,
+        spec=RequestSpec(url="https://x", params={"cursor": "abc"}),
+    )
+
+    async def _generate_jobs(**kwargs: Any):
+        yield FetchJob(
+            provider="stub",
+            dataset="d",
+            symbol="MSFT",
+            spec=RequestSpec(url="https://x"),
+        )
+
+    engine._router.generate_jobs = _generate_jobs  # type: ignore[method-assign]
+
+    await engine._producer(
+        req_q=req_q,
+        dataset="d",
+        symbols=["MSFT"],
+        order_counter=itertools.count(),
+        completed_symbols=set(),
+        pending_jobs=[pending_job],
+    )
+
+    queued_jobs: list[FetchJob] = []
+    while not req_q.empty():
+        _priority, _order, queued_job = req_q.get_nowait()
+        if queued_job is not None:
+            queued_jobs.append(queued_job)
+
+    assert [job.symbol for job in queued_jobs] == [None, "MSFT"]
+
+
+@pytest.mark.asyncio
+async def test_initialize_run_state_preserves_flat_pending_jobs_on_resume(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "vf-root"))
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    dataset_job = FetchJob(
+        provider="stub",
+        dataset="d",
+        symbol=None,
+        spec=RequestSpec(url="https://x", params={"cursor": "abc"}),
+    )
+    symbol_job = FetchJob(
+        provider="stub",
+        dataset="d",
+        symbol="AAPL",
+        spec=RequestSpec(url="https://x", params={"page": 2}),
+    )
+    save_checkpoint(
+        Checkpoint(
+            run_id="rid",
+            provider="stub",
+            dataset="d",
+            pending_jobs=[dataset_job, symbol_job],
+            status="in_progress",
+        )
+    )
+
+    run_id, completed_symbols = engine._initialize_run_state(dataset="d", resume=True)
+
+    assert run_id == "rid"
+    assert completed_symbols == set()
+    assert engine._pending_jobs == [dataset_job, symbol_job]
 
 
 @pytest.mark.asyncio
@@ -482,7 +559,48 @@ async def test_record_worker_symbol_state_persists_pending_pagination_jobs(
 
     assert "AAPL" not in engine._completed_symbols
     assert "AAPL" not in engine._failed_symbols
-    assert engine._pending_symbol_jobs["AAPL"][0].spec.params["page"] == 2
+    assert engine._pending_jobs[0].spec.params["page"] == 2
+
+
+@pytest.mark.asyncio
+async def test_record_worker_symbol_state_merges_next_jobs_with_existing_pending(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "vf-root"))
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    engine._run_id = "rid"
+    engine._checkpoint_lock = asyncio.Lock()
+    current_job = FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x"))
+    existing_job = FetchJob(
+        provider="stub",
+        dataset="d",
+        symbol=None,
+        spec=RequestSpec(url="https://x", params={"cursor": "prev"}),
+    )
+    next_job_symbol = FetchJob(
+        provider="stub",
+        dataset="d",
+        symbol="AAPL",
+        spec=RequestSpec(url="https://x", params={"page": 2}),
+    )
+    next_job_dataset = FetchJob(
+        provider="stub",
+        dataset="d",
+        symbol=None,
+        spec=RequestSpec(url="https://x", params={"cursor": "next"}),
+    )
+    engine._pending_jobs = [current_job, existing_job]
+    parse_result = ParseResult(packets=[], next_jobs=[next_job_symbol, next_job_dataset])
+
+    await engine._record_worker_symbol_state(
+        job=current_job,
+        worker_exc=None,
+        parse_result=parse_result,
+    )
+
+    assert engine._pending_jobs == [existing_job, next_job_symbol, next_job_dataset]
 
 
 @pytest.mark.asyncio
@@ -501,7 +619,7 @@ async def test_record_worker_symbol_state_keeps_pending_jobs_on_failure(
         symbol="AAPL",
         spec=RequestSpec(url="https://x", params={"page": 2}),
     )
-    engine._pending_symbol_jobs = {"AAPL": [pending_job]}
+    engine._pending_jobs = [pending_job]
     engine._completed_symbols = {"AAPL"}
 
     await engine._record_worker_symbol_state(
@@ -512,7 +630,7 @@ async def test_record_worker_symbol_state_keeps_pending_jobs_on_failure(
 
     assert "AAPL" not in engine._completed_symbols
     assert "AAPL" in engine._failed_symbols
-    assert engine._pending_symbol_jobs["AAPL"][0].spec.params["page"] == 2
+    assert engine._pending_jobs[0].spec.params["page"] == 2
 
 
 @pytest.mark.asyncio
@@ -542,7 +660,7 @@ async def test_record_worker_symbol_state_retries_current_job_after_emit_failure
 
     assert "AAPL" not in engine._completed_symbols
     assert "AAPL" in engine._failed_symbols
-    assert engine._pending_symbol_jobs["AAPL"] == [current_job]
+    assert engine._pending_jobs == [current_job]
 
 
 @pytest.mark.asyncio
@@ -594,7 +712,7 @@ async def test_finalize_run_keeps_checkpoint_resumable_when_failures_remain(
     engine._metrics_enabled = False
     engine._completed_symbols = {"AAPL"}
     engine._failed_symbols = {"MSFT"}
-    engine._pending_symbol_jobs = {}
+    engine._pending_jobs = []
     engine._checkpoint_lock = asyncio.Lock()
     root = tmp_path / "vf-root"
 
