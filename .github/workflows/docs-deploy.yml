@@ -7,9 +7,6 @@ on:
     paths:
       - "mkdocs.yml"
       - "packages/vertex-lab/**"
-      - "packages/vertex-forager/docs/**"
-      - "packages/vertex-forager/src/**"
-      - "packages/vertex-forager/pyproject.toml"
       - "packages/vertex-forager/**"
       - "README.md"
 

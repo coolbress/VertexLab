@@ -117,12 +117,14 @@ jobs:
               const isForager = p.startsWith("packages/vertex-forager/");
               const isQt = p.startsWith("packages/vertex-qt/");
               const isWorkspace = p.startsWith("packages/vertex-workspace/");
-              const isLab =
-                p.startsWith("packages/vertex-lab/");
+              const isLab = p.startsWith("packages/vertex-lab/");
               if (isForager) labels.add("package:vertex-forager");
               if (isQt) labels.add("package:vertex-qt");
               if (isWorkspace) labels.add("package:vertex-workspace");
               if (isLab) {
+                labels.add("package:vertex-lab");
+              }
+              if (!p.startsWith("packages/") || (!isForager && !isQt && !isWorkspace)) {
                 labels.add("package:vertex-lab");
               }
             }

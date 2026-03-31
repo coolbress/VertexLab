@@ -40,7 +40,7 @@ uv sync --group dev
 ## Documentation
 
 - Shared docs portal: <https://coolbress.github.io/VertexLab/>
-- `vertex-lab` package docs: <https://coolbress.github.io/VertexLab/vertex-lab/>
+- `vertex-lab` package docs: <https://coolbress.github.io/VertexLab/>
 - `vertex-forager` package docs: <https://coolbress.github.io/VertexLab/vertex-forager/>
 
 ## License

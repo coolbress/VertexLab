@@ -32,4 +32,4 @@ nav:
       - Writer security: explanation/writer-security.md
       - Writer fan-out roadmap: explanation/writer-fanout-roadmap.md
       - Writer upsert behavior: explanation/writer-upsert-behavior.md
-  - Changelog: changelog.md
+  - Changelog: '!include ../CHANGELOG.md'

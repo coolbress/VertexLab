@@ -6,10 +6,11 @@ on:
     paths:
       - "mkdocs.yml"
       - "docs/**"
+      - "README.md"
       - "CONTRIBUTING.md"
       - "packages/**/mkdocs.yml"
       - "packages/vertex-lab/**"
-      - "packages/vertex-forager/docs/**"
+      - "packages/vertex-forager/**"
       - ".github/workflows/docs.yml"
 
 permissions:
