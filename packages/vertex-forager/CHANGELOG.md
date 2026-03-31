@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.1](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.15.0...vertex-forager-v0.15.1) (2026-03-31)
+
+
+### Bug Fixes
+
+* **vertex-forager:** update contributing link in testing.md to GitHub URL ([#406](https://github.com/coolbress/VertexLab/issues/406)) ([aba66f4](https://github.com/coolbress/VertexLab/commit/aba66f4c5194432b1f7a83406b981fdd585bd098))
+
 ## [0.15.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.14.1...vertex-forager-v0.15.0) (2026-03-31)
 
 
