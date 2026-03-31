@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.1](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.14.0...vertex-forager-v0.14.1) (2026-03-31)
+
+
+### Documentation
+
+* **vertex-forager:** fix mkdocs adaptive throttle references ([#402](https://github.com/coolbress/VertexLab/issues/402)) ([78bb168](https://github.com/coolbress/VertexLab/commit/78bb168e59ce43ed9159c56452fcc3cbd7f66250))
+
 ## [0.14.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.13.0...vertex-forager-v0.14.0) (2026-03-31)
 
 
