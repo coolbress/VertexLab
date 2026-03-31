@@ -227,6 +227,7 @@ def test_wait_falls_back_to_jitter_without_retry_after(monkeypatch: pytest.Monke
 
     monkeypatch.setattr("vertex_forager.core.retry.random.uniform", _uniform)
     assert controller.wait(state) == 1.25
+    assert called["args"] == (0.0, 4.0)
 
 
 def test_wait_retry_after_non_integer_falls_back_to_jitter(monkeypatch: pytest.MonkeyPatch) -> None:
