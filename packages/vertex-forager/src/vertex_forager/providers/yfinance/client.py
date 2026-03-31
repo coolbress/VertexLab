@@ -88,7 +88,9 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             dlq_enabled (bool | None): Preserve failed write batches for recovery when True. Default is None.
             pagination_max_burst (int | None): Maximum pagination burst before fairness demotion. Default is None.
             retry (RetryConfig | dict[str, Any] | None): Retry settings for fetch failures. Default is None.
-            adaptive_throttle (AdaptiveThrottleConfig | dict[str, Any] | None): Adaptive throttle settings. Default is None.
+            adaptive_throttle (
+                AdaptiveThrottleConfig | dict[str, Any] | None,
+            ): Adaptive throttle settings. Default is None.
             concurrency (int | None): Maximum concurrent fetch workers. Default is None.
             flush_threshold_rows (int | None): Buffered row threshold before writer flush. Default is None.
             writer_chunk_rows (int | None): Per-table flush chunk size in rows. Default is None.
