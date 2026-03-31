@@ -1,6 +1,6 @@
 {
-  "packages/vertex-forager": "1.0.0",
+  "packages/vertex-forager": "2.0.0",
   "packages/vertex-qt": "0.1.0",
   "packages/vertex-workspace": "0.1.0",
-  ".": "1.0.0"
+  ".": "2.0.0"
 }
