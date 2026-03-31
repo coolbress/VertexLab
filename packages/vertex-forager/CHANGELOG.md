@@ -1,16 +1,5 @@
 # Changelog
 
-## [Unreleased]
-
-### Features
-
-* **state:** move checkpoints and run history into `state.db`, add DLQ index tracking, retention cleanup, and CLI state management commands ([#331](https://github.com/coolbress/VertexLab/issues/331))
-
-### Breaking Changes
-
-* JSON checkpoint and run-history files under the cache directory are no longer read
-* `persist_run_history` removed; run history now always persists to `state.db`
-
 ## [0.11.7](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.11.6...vertex-forager-v0.11.7) (2026-03-28)
 
 
