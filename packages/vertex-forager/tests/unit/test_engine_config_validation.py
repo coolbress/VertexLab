@@ -43,3 +43,12 @@ def test_grouped_public_configs_forbid_unknown_fields() -> None:
         HTTPConfig(extra_field=True)
     with pytest.raises(ValidationError):
         AdvancedConfig(extra_field=True)
+
+
+def test_runtime_config_retention_days_are_coerced_and_clamped() -> None:
+    cfg = ResolvedClientConfig(requests_per_minute=60, retry=RetryConfig())
+    cfg.checkpoint_retention_days = -5
+    cfg.run_history_retention_days = "12"  # type: ignore[assignment]
+    cfg.assert_valid()
+    assert cfg.checkpoint_retention_days == 0
+    assert cfg.run_history_retention_days == 12

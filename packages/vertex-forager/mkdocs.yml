@@ -10,6 +10,7 @@ nav:
   - How-to Guides:
       - Troubleshooting: how-to/troubleshooting.md
       - CLI equivalents: how-to/cli-equivalents.md
+      - Resume and recovery: how-to/resume-and-recovery.md
       - Data integrity controls: how-to/data-integrity.md
       - Operate with DLQ disabled: how-to/dlq-disabled.md
       - Tune chunked flush thresholds: how-to/chunked-flush.md

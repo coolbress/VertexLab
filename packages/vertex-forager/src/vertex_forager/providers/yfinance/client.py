@@ -71,11 +71,36 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         flush_threshold_rows: int | None = None,
         writer_chunk_rows: int | None = None,
         writer_concurrency: int | None = None,
-        persist_run_history: bool | None = None,
+        checkpoint_retention_days: int | None = None,
+        run_history_retention_days: int | None = None,
         http_timeout_s: float | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
         advanced: AdvancedConfig | dict[str, Any] | None = None,
     ) -> None:
+        """Initialize the YFinance client.
+
+        Args:
+            api_key (str | None): Unused for yfinance. Kept for API symmetry. Default is None.
+            rate_limit (int): Requests per minute cap. Default is 60.
+            metrics_enabled (bool | None): Enable metrics collection when True. Default is None.
+            structured_logs (bool | None): Enable structured logs when True. Default is None.
+            log_verbose (bool | None): Enable verbose client logging when True. Default is None.
+            dlq_enabled (bool | None): Preserve failed write batches for recovery when True. Default is None.
+            pagination_max_burst (int | None): Maximum pagination burst before fairness demotion. Default is None.
+            retry (RetryConfig | dict[str, Any] | None): Retry settings for fetch failures. Default is None.
+            downshift (DownshiftConfig | dict[str, Any] | None): Adaptive rate downshift settings. Default is None.
+            concurrency (int | None): Maximum concurrent fetch workers. Default is None.
+            flush_threshold_rows (int | None): Buffered row threshold before writer flush. Default is None.
+            writer_chunk_rows (int | None): Per-table flush chunk size in rows. Default is None.
+            writer_concurrency (int | None): Number of writer workers. Default is None.
+            checkpoint_retention_days (int | None): Days to retain completed checkpoint state before pruning.
+                Default is None, which resolves to the runtime default of 7 days.
+            run_history_retention_days (int | None): Days to retain persisted run history before pruning.
+                Default is None, which resolves to the runtime default of 90 days.
+            http_timeout_s (float | None): HTTP request timeout in seconds. Default is None.
+            limits (HTTPConfig | dict[str, Any] | None): HTTP connection pool settings. Default is None.
+            advanced (AdvancedConfig | dict[str, Any] | None): Advanced runtime options. Default is None.
+        """
         normalized = rate_limit
         if isinstance(normalized, int):
             if normalized <= 0:
@@ -106,7 +131,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             flush_threshold_rows=flush_threshold_rows,
             writer_chunk_rows=writer_chunk_rows,
             writer_concurrency=writer_concurrency,
-            persist_run_history=persist_run_history,
+            checkpoint_retention_days=checkpoint_retention_days,
+            run_history_retention_days=run_history_retention_days,
             http_timeout_s=http_timeout_s,
             limits=limits,
             advanced=advanced,

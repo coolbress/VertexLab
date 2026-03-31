@@ -609,13 +609,18 @@ def sanitize_field(v: object) -> str:
 
 
 def get_cache_dir() -> Path:
-    """Return the temporary cache directory under the app root.
+    """Return the application cache directory.
 
     Returns:
         Path: Absolute path to the cache directory. Created if missing.
     """
-    cache_path = get_app_root() / "cache"
-    cache_path.mkdir(exist_ok=True)
+    app_root = os.getenv("VERTEXFORAGER_ROOT")
+    if app_root:
+        cache_path = Path(app_root) / "cache"
+    else:
+        cache_home = os.getenv("XDG_CACHE_HOME")
+        cache_path = Path(cache_home) / "vertex-forager" if cache_home else Path.home() / ".cache" / "vertex-forager"
+    cache_path.mkdir(parents=True, exist_ok=True)
     return cache_path
 
 
@@ -628,29 +633,55 @@ def clear_app_cache() -> None:
     Raises:
         OSError: If deletion or re-creation of the cache directory fails.
     """
-    app_root = get_app_root().resolve()
-    cache_dir = get_cache_dir().resolve()
+    raw_cache_dir = get_cache_dir()
+    if raw_cache_dir.is_symlink():
+        logging.error("Safety check failed: Cache dir %s is a symlink, refusing to delete", raw_cache_dir)
+        return
+    vertex_root = os.getenv("VERTEXFORAGER_ROOT")
+    if vertex_root and Path(vertex_root).is_symlink():
+        logging.error("Safety check failed: VERTEXFORAGER_ROOT %s is a symlink", vertex_root)
+        return
+    cache_home = os.getenv("XDG_CACHE_HOME")
+    if cache_home and Path(cache_home).is_symlink():
+        logging.error("Safety check failed: XDG_CACHE_HOME %s is a symlink", cache_home)
+        return
 
-    # 1. Check existence and type
+    app_root = get_app_root().resolve()
+    cache_dir = raw_cache_dir.resolve()
+    expected_cache_dir = (
+        (Path(vertex_root) / "cache").resolve()
+        if vertex_root
+        else (
+            (Path(cache_home) / "vertex-forager").resolve()
+            if cache_home
+            else (Path.home() / ".cache" / "vertex-forager").resolve()
+        )
+    )
+
     if not cache_dir.exists():
         return
     if not cache_dir.is_dir():
         logging.error("Cache path exists but is not a directory: %s", cache_dir)
         return
 
-    # 2. Safety check: ensure cache_dir is a descendant of app_root
+    within_app_root = False
     try:
         cache_dir.relative_to(app_root)
+        within_app_root = True
     except ValueError:
-        logging.error("Safety check failed: Cache dir %s is not inside app root %s", cache_dir, app_root)
+        within_app_root = False
+    if not within_app_root and cache_dir != expected_cache_dir:
+        logging.error(
+            "Safety check failed: Cache dir %s is outside app root %s and not the expected cache path %s",
+            cache_dir,
+            app_root,
+            expected_cache_dir,
+        )
         return
-
-    # 3. Safety check: prevent deleting root or home
     if cache_dir == Path("/").resolve() or cache_dir == Path.home().resolve():
         logging.error("Safety check failed: Attempting to delete root or home directory: %s", cache_dir)
         return
 
-    # Safe to delete
     shutil.rmtree(cache_dir)
     cache_dir.mkdir(parents=True, exist_ok=True)
 

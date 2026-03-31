@@ -1,18 +1,22 @@
 from __future__ import annotations
 
-import asyncio
 from contextlib import suppress
 import os
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
+from uuid import uuid4
 
 import polars as pl
 
-from vertex_forager.core.checkpoint import get_cache_dir
-from vertex_forager.core.config import FramePacket, RunResult
+from vertex_forager.core.checkpoint import get_cache_dir, register_dlq_entry
 from vertex_forager.core.errors import DLQSpoolError, RunError
-from vertex_forager.core.types import DLQStatus
 from vertex_forager.schema.registry import get_table_schema
+
+if TYPE_CHECKING:
+    import asyncio
+
+    from vertex_forager.core.config import FramePacket, RunResult
+    from vertex_forager.core.types import DLQStatus
 
 
 async def _update_dlq_counts(
@@ -118,7 +122,7 @@ def _spool_failed_packets(
     dlq_dir = get_cache_dir() / "dlq" / table
     dlq_dir.mkdir(parents=True, exist_ok=True)
     ts_ns = time.time_ns()
-    fpath = dlq_dir / f"batch_{ts_ns}.ipc"
+    fpath = dlq_dir / f"batch_{ts_ns}_{uuid4().hex}.ipc"
     tmp_path = fpath.parent / (f"{fpath.name}.tmp")
     fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "wb") as fh:
@@ -132,6 +136,16 @@ def _spool_failed_packets(
             os.fsync(dir_fd)
         finally:
             os.close(dir_fd)
+    try:
+        register_dlq_entry(
+            path=fpath,
+            table=table,
+            provider=failed_packets[0].provider if failed_packets else None,
+            row_count=int(merged.height),
+        )
+    except Exception:
+        fpath.unlink(missing_ok=True)
+        raise
     return str(fpath)
 
 

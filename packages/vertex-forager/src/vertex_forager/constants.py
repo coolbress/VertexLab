@@ -38,6 +38,7 @@ HTTP_TIMEOUT_S: Final[float] = 30.0
 HTTP_MAX_KEEPALIVE_CONNECTIONS: Final[int] = 100
 HTTP_MAX_CONNECTIONS: Final[int] = 200
 HTTP_USER_AGENT: Final[str] = "vertex-forager"
+DLQ_TMP_RETENTION_S: Final[int] = 86_400
 
 FLUSH_THRESHOLD_ROWS: Final[int] = 500_000
 

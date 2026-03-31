@@ -18,6 +18,7 @@ from typing import Any
 
 import pytest
 
+from vertex_forager.core.checkpoint import Checkpoint, save_checkpoint
 from vertex_forager.core.config import (
     FetchJob,
     FramePacket,
@@ -169,9 +170,7 @@ async def test_fairness_sentinel_returns_already_done() -> None:
     req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
     await req_q.put((VertexForager.PRIORITY_SENTINEL, 0, None))
 
-    selected = await engine._dequeue_worker_job(
-        req_q=req_q, burst_cap=2
-    )
+    selected = await engine._dequeue_worker_job(req_q=req_q, burst_cap=2)
     assert selected.job is None
     assert selected.already_done is True
     assert selected.priority == VertexForager.PRIORITY_SENTINEL
@@ -193,9 +192,7 @@ async def test_fairness_burst_cap_demotes_and_finds_different_candidate() -> Non
     await req_q.put((VertexForager.PRIORITY_PAGINATION, 1, aapl_job))
     await req_q.put((VertexForager.PRIORITY_PAGINATION, 2, msft_job))
 
-    selected = await engine._dequeue_worker_job(
-        req_q=req_q, burst_cap=2
-    )
+    selected = await engine._dequeue_worker_job(req_q=req_q, burst_cap=2)
     assert selected.job is not None
     assert selected.job.symbol == "MSFT"
     assert len(selected.demoted) == 2
@@ -215,9 +212,7 @@ async def test_fairness_burst_cap_queue_empty_after_demotes() -> None:
     aapl_job = FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x"))
     await req_q.put((VertexForager.PRIORITY_PAGINATION, 0, aapl_job))
 
-    selected = await engine._dequeue_worker_job(
-        req_q=req_q, burst_cap=2
-    )
+    selected = await engine._dequeue_worker_job(req_q=req_q, burst_cap=2)
     assert selected.job is None
     assert len(selected.demoted) == 1
     assert selected.demoted[0].symbol == "AAPL"
@@ -239,9 +234,7 @@ async def test_fairness_sentinel_found_during_demote_drain() -> None:
     await req_q.put((VertexForager.PRIORITY_PAGINATION, 0, aapl_job))
     await req_q.put((VertexForager.PRIORITY_SENTINEL, 0, None))
 
-    selected = await engine._dequeue_worker_job(
-        req_q=req_q, burst_cap=2
-    )
+    selected = await engine._dequeue_worker_job(req_q=req_q, burst_cap=2)
     assert selected.job is None
     assert selected.already_done is False
     assert len(selected.demoted) == 1
@@ -364,7 +357,7 @@ async def test_concurrent_run_raises() -> None:
         await task
 
 
-def test_find_latest_checkpoint_skips_corrupted_and_uses_latest(
+def test_find_latest_checkpoint_returns_most_recent_by_timestamp(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -372,35 +365,302 @@ def test_find_latest_checkpoint_skips_corrupted_and_uses_latest(
     engine, _ = _make_engine(router)
     root = tmp_path / "vf-root"
     monkeypatch.setenv("VERTEXFORAGER_ROOT", str(root))
-    cache_root = root / "cache"
-    checkpoints_dir = cache_root / "checkpoints"
-    checkpoints_dir.mkdir(parents=True, exist_ok=True)
-    bad = checkpoints_dir / "bad_checkpoint"
-    old = checkpoints_dir / "stub_d_100"
-    new = checkpoints_dir / "stub_d_200"
-    bad.mkdir(exist_ok=True)
-    old.mkdir(exist_ok=True)
-    new.mkdir(exist_ok=True)
-    (bad / "progress.json").write_text("{invalid-json")
-    (old / "progress.json").write_text(
-        '{"run_id":"stub_d_100","provider":"stub","dataset":"d","completed":[],"failed":[]}'
-    )
-    (new / "progress.json").write_text(
-        '{"run_id":"stub_d_200","provider":"stub","dataset":"d","completed":[],"failed":[]}'
-    )
-    old_ts = time.time() - 10
-    new_ts = time.time()
-    os_old = old / "progress.json"
-    os_new = new / "progress.json"
-    os_old.touch()
-    os_new.touch()
-    import os
-
-    os.utime(os_old, (old_ts, old_ts))
-    os.utime(os_new, (new_ts, new_ts))
+    with monkeypatch.context() as context:
+        context.setattr(
+            "vertex_forager.core.checkpoint.time.time",
+            lambda: 100.0,
+            raising=False,
+        )
+        save_checkpoint(Checkpoint(run_id="stub_d_100", provider="stub", dataset="d"))
+    with monkeypatch.context() as context:
+        context.setattr(
+            "vertex_forager.core.checkpoint.time.time",
+            lambda: 200.0,
+            raising=False,
+        )
+        save_checkpoint(Checkpoint(run_id="stub_d_200", provider="stub", dataset="d"))
     cp = engine._find_latest_checkpoint("stub", "d")
     assert cp is not None
     assert cp.run_id == "stub_d_200"
+
+
+@pytest.mark.asyncio
+async def test_producer_resumes_pending_pagination_jobs_without_restarting_symbol() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
+    pending_job = FetchJob(
+        provider="stub",
+        dataset="d",
+        symbol="AAPL",
+        spec=RequestSpec(url="https://x", params={"page": 2}),
+    )
+    order_counter = itertools.count()
+
+    await engine._producer(
+        req_q=req_q,
+        dataset="d",
+        symbols=["AAPL", "MSFT"],
+        order_counter=order_counter,
+        completed_symbols=set(),
+        pending_jobs=[pending_job],
+    )
+
+    queued_jobs: list[FetchJob] = []
+    while not req_q.empty():
+        _priority, _order, queued_job = req_q.get_nowait()
+        if queued_job is not None:
+            queued_jobs.append(queued_job)
+
+    assert [job.symbol for job in queued_jobs] == ["AAPL", "MSFT"]
+    assert queued_jobs[0].spec.params["page"] == 2
+
+
+@pytest.mark.asyncio
+async def test_producer_restores_only_requested_pending_jobs() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
+    pending_job = FetchJob(
+        provider="stub",
+        dataset="d",
+        symbol="AAPL",
+        spec=RequestSpec(url="https://x", params={"page": 2}),
+    )
+
+    async def _generate_jobs(**kwargs: Any):
+        yield FetchJob(
+            provider="stub",
+            dataset="d",
+            symbol="MSFT",
+            spec=RequestSpec(url="https://x"),
+        )
+
+    engine._router.generate_jobs = _generate_jobs  # type: ignore[method-assign]
+
+    await engine._producer(
+        req_q=req_q,
+        dataset="d",
+        symbols=["MSFT"],
+        order_counter=itertools.count(),
+        completed_symbols=set(),
+        pending_jobs=[pending_job],
+    )
+
+    queued_jobs: list[FetchJob] = []
+    while not req_q.empty():
+        _priority, _order, queued_job = req_q.get_nowait()
+        if queued_job is not None:
+            queued_jobs.append(queued_job)
+
+    assert [job.symbol for job in queued_jobs] == ["MSFT"]
+
+
+@pytest.mark.asyncio
+async def test_producer_preserves_symbolless_pending_jobs_on_resume() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
+    pending_job = FetchJob(
+        provider="stub",
+        dataset="d",
+        symbol=None,
+        spec=RequestSpec(url="https://x", params={"cursor": "abc"}),
+    )
+
+    async def _generate_jobs(**kwargs: Any):
+        yield FetchJob(
+            provider="stub",
+            dataset="d",
+            symbol="MSFT",
+            spec=RequestSpec(url="https://x"),
+        )
+
+    engine._router.generate_jobs = _generate_jobs  # type: ignore[method-assign]
+
+    await engine._producer(
+        req_q=req_q,
+        dataset="d",
+        symbols=["MSFT"],
+        order_counter=itertools.count(),
+        completed_symbols=set(),
+        pending_jobs=[pending_job],
+    )
+
+    queued_jobs: list[FetchJob] = []
+    while not req_q.empty():
+        _priority, _order, queued_job = req_q.get_nowait()
+        if queued_job is not None:
+            queued_jobs.append(queued_job)
+
+    assert [job.symbol for job in queued_jobs] == [None, "MSFT"]
+
+
+@pytest.mark.asyncio
+async def test_initialize_run_state_preserves_flat_pending_jobs_on_resume(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "vf-root"))
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    dataset_job = FetchJob(
+        provider="stub",
+        dataset="d",
+        symbol=None,
+        spec=RequestSpec(url="https://x", params={"cursor": "abc"}),
+    )
+    symbol_job = FetchJob(
+        provider="stub",
+        dataset="d",
+        symbol="AAPL",
+        spec=RequestSpec(url="https://x", params={"page": 2}),
+    )
+    save_checkpoint(
+        Checkpoint(
+            run_id="rid",
+            provider="stub",
+            dataset="d",
+            pending_jobs=[dataset_job, symbol_job],
+            status="in_progress",
+        )
+    )
+
+    run_id, completed_symbols = engine._initialize_run_state(dataset="d", resume=True)
+
+    assert run_id == "rid"
+    assert completed_symbols == set()
+    assert engine._pending_jobs == [dataset_job, symbol_job]
+
+
+@pytest.mark.asyncio
+async def test_record_worker_symbol_state_persists_pending_pagination_jobs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "vf-root"))
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    engine._run_id = "rid"
+    engine._checkpoint_lock = asyncio.Lock()
+    next_job = FetchJob(
+        provider="stub",
+        dataset="d",
+        symbol="AAPL",
+        spec=RequestSpec(url="https://x", params={"page": 2}),
+    )
+    parse_result = ParseResult(packets=[], next_jobs=[next_job])
+
+    await engine._record_worker_symbol_state(
+        job=FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x")),
+        worker_exc=None,
+        parse_result=parse_result,
+    )
+
+    assert "AAPL" not in engine._completed_symbols
+    assert "AAPL" not in engine._failed_symbols
+    assert engine._pending_jobs[0].spec.params["page"] == 2
+
+
+@pytest.mark.asyncio
+async def test_record_worker_symbol_state_merges_next_jobs_with_existing_pending(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "vf-root"))
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    engine._run_id = "rid"
+    engine._checkpoint_lock = asyncio.Lock()
+    current_job = FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x"))
+    existing_job = FetchJob(
+        provider="stub",
+        dataset="d",
+        symbol=None,
+        spec=RequestSpec(url="https://x", params={"cursor": "prev"}),
+    )
+    next_job_symbol = FetchJob(
+        provider="stub",
+        dataset="d",
+        symbol="AAPL",
+        spec=RequestSpec(url="https://x", params={"page": 2}),
+    )
+    next_job_dataset = FetchJob(
+        provider="stub",
+        dataset="d",
+        symbol=None,
+        spec=RequestSpec(url="https://x", params={"cursor": "next"}),
+    )
+    engine._pending_jobs = [current_job, existing_job]
+    parse_result = ParseResult(packets=[], next_jobs=[next_job_symbol, next_job_dataset])
+
+    await engine._record_worker_symbol_state(
+        job=current_job,
+        worker_exc=None,
+        parse_result=parse_result,
+    )
+
+    assert engine._pending_jobs == [existing_job, next_job_symbol, next_job_dataset]
+
+
+@pytest.mark.asyncio
+async def test_record_worker_symbol_state_keeps_pending_jobs_on_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "vf-root"))
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    engine._run_id = "rid"
+    engine._checkpoint_lock = asyncio.Lock()
+    pending_job = FetchJob(
+        provider="stub",
+        dataset="d",
+        symbol="AAPL",
+        spec=RequestSpec(url="https://x", params={"page": 2}),
+    )
+    engine._pending_jobs = [pending_job]
+    engine._completed_symbols = {"AAPL"}
+
+    await engine._record_worker_symbol_state(
+        job=FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x")),
+        worker_exc=RuntimeError("boom"),
+        parse_result=None,
+    )
+
+    assert "AAPL" not in engine._completed_symbols
+    assert "AAPL" in engine._failed_symbols
+    assert engine._pending_jobs[0].spec.params["page"] == 2
+
+
+@pytest.mark.asyncio
+async def test_record_worker_symbol_state_retries_current_job_after_emit_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "vf-root"))
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    engine._run_id = "rid"
+    engine._checkpoint_lock = asyncio.Lock()
+    next_job = FetchJob(
+        provider="stub",
+        dataset="d",
+        symbol="AAPL",
+        spec=RequestSpec(url="https://x", params={"page": 2}),
+    )
+    parse_result = ParseResult(packets=[], next_jobs=[next_job])
+    current_job = FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x"))
+
+    await engine._record_worker_symbol_state(
+        job=current_job,
+        worker_exc=RuntimeError("emit failed"),
+        parse_result=parse_result,
+    )
+
+    assert "AAPL" not in engine._completed_symbols
+    assert "AAPL" in engine._failed_symbols
+    assert engine._pending_jobs == [current_job]
 
 
 @pytest.mark.asyncio
@@ -421,7 +681,6 @@ async def test_finalize_run_metrics_sink_and_history_error_suppressed(monkeypatc
             raise RuntimeError("sink boom")
 
     engine._metrics_sink = _Sink()
-    engine._config.persist_run_history = True
 
     async def _noop_flush(*, suppress: bool, consume: bool = True) -> None:
         return None
@@ -441,6 +700,34 @@ async def test_finalize_run_metrics_sink_and_history_error_suppressed(monkeypatc
     await engine._finalize_run(result=result, dataset="d", run_id="rid", started_monotonic=time.monotonic() - 1.0)
     assert result.metrics_summary.get("http_duration_s_p95") == 1.0
     assert result.finished_at is not None
+
+
+@pytest.mark.asyncio
+async def test_finalize_run_keeps_checkpoint_resumable_when_failures_remain(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    engine._metrics_enabled = False
+    engine._completed_symbols = {"AAPL"}
+    engine._failed_symbols = {"MSFT"}
+    engine._pending_jobs = []
+    engine._checkpoint_lock = asyncio.Lock()
+    root = tmp_path / "vf-root"
+
+    async def _noop_flush(*, suppress: bool, consume: bool = True) -> None:
+        return None
+
+    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(root))
+    engine._run_id = "rid"
+    result = RunResult(provider="stub")
+    monkeypatch.setattr(engine, "_try_flush_once", _noop_flush, raising=True)
+    await engine._finalize_run(result=result, dataset="d", run_id="rid", started_monotonic=time.monotonic() - 1.0)
+    checkpoint = engine._find_latest_checkpoint("stub", "d")
+    assert checkpoint is not None
+    assert checkpoint.status == "in_progress"
+    assert checkpoint.failed == ["MSFT"]
 
 
 @pytest.mark.asyncio
@@ -495,6 +782,65 @@ async def test_fetch_worker_handles_none_job_then_sentinel(monkeypatch: pytest.M
         on_progress=None,
     )
     assert sleep_calls["n"] == 1
+
+
+@pytest.mark.asyncio
+async def test_fetch_worker_cancelled_error_preserves_handler_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+
+    class _Req:
+        @staticmethod
+        def task_done() -> None:
+            return None
+
+    req_q = _Req()
+    pkt_q: asyncio.Queue[FramePacket | None] = asyncio.Queue()
+    result = RunResult(provider="stub")
+    lock = asyncio.Lock()
+    order_counter = itertools.count()
+    job = FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x"))
+    seen: dict[str, Any] = {}
+
+    async def _dequeue_worker_job(**kwargs: object):
+        return SchedulerResult(priority=engine.PRIORITY_NEW_JOB, job=job, demoted=[], already_done=False)
+
+    async def _process_worker_job(**kwargs: object):
+        raise asyncio.CancelledError()
+
+    async def on_progress(
+        *, job: FetchJob, payload: bytes | None, exc: Exception | None, parse_result: ParseResult | None
+    ) -> None:
+        seen["payload"] = payload
+        seen["exc"] = exc
+        seen["parse_result"] = parse_result
+
+    async def _record_worker_symbol_state(**kwargs: object) -> None:
+        seen["record_exc"] = kwargs["worker_exc"]
+        seen["record_parse_result"] = kwargs["parse_result"]
+
+    monkeypatch.setattr(engine, "_dequeue_worker_job", _dequeue_worker_job, raising=True)
+    monkeypatch.setattr(engine, "_drain_deferred_demotes", lambda **kwargs: None, raising=True)
+    monkeypatch.setattr(engine, "_requeue_demoted_jobs", lambda **kwargs: None, raising=True)
+    monkeypatch.setattr(engine, "_process_worker_job", _process_worker_job, raising=True)
+    monkeypatch.setattr(engine, "_record_worker_symbol_state", _record_worker_symbol_state, raising=True)
+
+    with pytest.raises(asyncio.CancelledError):
+        await engine._fetch_worker(
+            0,
+            req_q=req_q,  # type: ignore[arg-type]
+            pkt_q=pkt_q,
+            result=result,
+            result_lock=lock,
+            order_counter=order_counter,
+            on_progress=on_progress,
+        )
+
+    assert seen["payload"] is None
+    assert isinstance(seen["exc"], asyncio.CancelledError)
+    assert seen["parse_result"] is None
+    assert isinstance(seen["record_exc"], asyncio.CancelledError)
+    assert seen["record_parse_result"] is None
 
 
 @pytest.mark.asyncio

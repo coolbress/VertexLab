@@ -14,6 +14,7 @@ from vertex_forager.constants import (
     DEFAULT_RETRY_BASE_BACKOFF_S,
     DEFAULT_RETRY_MAX_ATTEMPTS,
     DEFAULT_RETRY_MAX_BACKOFF_S,
+    DLQ_TMP_RETENTION_S,
     FLUSH_THRESHOLD_ROWS,
     HTTP_TIMEOUT_S,
     PACKET_SIZE_EST_BYTES,
@@ -113,18 +114,12 @@ class AdvancedConfig(BaseModel):
     """Advanced and transitional client settings.
 
     Attributes:
-        dlq_tmp_cleanup_on_error: Best-effort cleanup toggle for failed DLQ temp files.
-        dlq_tmp_periodic_cleanup: Startup cleanup toggle for stale DLQ temp files.
-        dlq_tmp_retention_s: Retention window for stale DLQ temp files.
         tracer: Optional tracing adapter implementing ``start_span``.
         otel_enabled: Optional tracing toggle.
         mem_threshold_ratio: Memory warning threshold as a ratio of available RAM.
         mem_threshold_abs_mb: Absolute memory warning threshold in MB.
     """
 
-    dlq_tmp_cleanup_on_error: bool = True
-    dlq_tmp_periodic_cleanup: bool = True
-    dlq_tmp_retention_s: int = Field(default=86_400, ge=0)
     tracer: TracerProtocol | None = None
     otel_enabled: bool | None = None
     mem_threshold_ratio: float = Field(default=0.7, gt=0.0, le=1.0)
@@ -275,7 +270,8 @@ class ResolvedClientConfig(BaseModel):
     http_timeout_s: float = Field(default=HTTP_TIMEOUT_S, gt=0)
     limits: HTTPConfig = Field(default_factory=HTTPConfig)
     advanced: AdvancedConfig = Field(default_factory=AdvancedConfig)
-    persist_run_history: bool = True
+    checkpoint_retention_days: int = Field(default=7, ge=0)
+    run_history_retention_days: int = Field(default=90, ge=0)
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -309,15 +305,15 @@ class ResolvedClientConfig(BaseModel):
 
     @property
     def dlq_tmp_cleanup_on_error(self) -> bool:
-        return self.advanced.dlq_tmp_cleanup_on_error
+        return getattr(self.advanced, "dlq_tmp_cleanup_on_error", True)
 
     @property
     def dlq_tmp_periodic_cleanup(self) -> bool:
-        return self.advanced.dlq_tmp_periodic_cleanup
+        return getattr(self.advanced, "dlq_tmp_periodic_cleanup", True)
 
     @property
     def dlq_tmp_retention_s(self) -> int:
-        return self.advanced.dlq_tmp_retention_s
+        return getattr(self.advanced, "dlq_tmp_retention_s", DLQ_TMP_RETENTION_S)
 
     @property
     def tracer(self) -> TracerProtocol | None:
@@ -359,6 +355,20 @@ class ResolvedClientConfig(BaseModel):
         if wc <= 0:
             raise ValueError("writer_concurrency must be >= 1")
         self.writer_concurrency = wc
+        try:
+            checkpoint_retention_days = (
+                7 if self.checkpoint_retention_days is None else int(self.checkpoint_retention_days)
+            )
+        except (TypeError, ValueError) as e:
+            raise VertexForagerError(f"checkpoint_retention_days must be an integer >= 0: {e}") from e
+        self.checkpoint_retention_days = max(0, checkpoint_retention_days)
+        try:
+            run_history_retention_days = (
+                90 if self.run_history_retention_days is None else int(self.run_history_retention_days)
+            )
+        except (TypeError, ValueError) as e:
+            raise VertexForagerError(f"run_history_retention_days must be an integer >= 0: {e}") from e
+        self.run_history_retention_days = max(0, run_history_retention_days)
         if self.downshift.rpm_floor > self.requests_per_minute:
             raise ValueError("rpm_floor must be <= requests_per_minute")
 

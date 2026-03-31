@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from vertex_forager.core.checkpoint import Checkpoint
 from vertex_forager.core.lifecycle import (
     create_run_queues,
@@ -43,6 +45,8 @@ def test_initialize_run_state_with_checkpoint() -> None:
 def test_create_run_queues_and_metrics_and_result() -> None:
     req_q, pkt_q = create_run_queues(
         queue_max=10,
+        checkpoint_retention_days=7,
+        run_history_retention_days=90,
         dlq_tmp_periodic_cleanup=False,
         dlq_tmp_retention_s=86400,
         cache_dir=Path("."),
@@ -61,6 +65,35 @@ def test_create_run_queues_and_metrics_and_result() -> None:
     assert result.run_id == "rid"
     assert result.dataset == "price"
     assert lock is not None
+
+
+def test_create_run_queues_passes_dlq_tmp_retention_s_to_cleanup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, int] = {}
+
+    def _fake_cleanup(*, checkpoint_retention_days: int, run_history_retention_days: int, dlq_retention_s: int) -> None:
+        captured["checkpoint_retention_days"] = checkpoint_retention_days
+        captured["run_history_retention_days"] = run_history_retention_days
+        captured["dlq_retention_s"] = dlq_retention_s
+
+    monkeypatch.setattr("vertex_forager.core.lifecycle.cleanup_state_retention", _fake_cleanup)
+
+    custom_checkpoint_retention = 14
+    custom_run_history_retention = 180
+    custom_dlq_retention = 3600
+    create_run_queues(
+        queue_max=10,
+        checkpoint_retention_days=custom_checkpoint_retention,
+        run_history_retention_days=custom_run_history_retention,
+        dlq_tmp_periodic_cleanup=False,
+        dlq_tmp_retention_s=custom_dlq_retention,
+        cache_dir=Path("."),
+        logger=type("L", (), {"warning": lambda *args, **kwargs: None})(),
+    )
+    assert captured.get("checkpoint_retention_days") == custom_checkpoint_retention
+    assert captured.get("run_history_retention_days") == custom_run_history_retention
+    assert captured.get("dlq_retention_s") == custom_dlq_retention
 
 
 def test_merge_component_counters_merges_from_mapper_and_writer() -> None:

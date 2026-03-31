@@ -2,6 +2,35 @@
 
 Use this guide when upgrading between `vertex-forager` releases and checking for behavior changes that may affect your pipelines.
 
+## Upcoming release
+
+### Local state storage moved to SQLite
+
+Checkpoint state and run history now live in a single SQLite database:
+
+```text
+~/.cache/vertex-forager/state.db
+```
+
+DLQ payloads stay as Arrow IPC files under `~/.cache/vertex-forager/dlq/<table>/`, but each spool file is now tracked in the `dlq_index` table inside `state.db`.
+
+**Action required**:
+
+- If you upgrade while a run is in progress, restart that run from scratch. Existing JSON checkpoint and run-history files are not migrated.
+- Use `vertex-forager runs list` and `vertex-forager dlq list` to inspect local operational state.
+- Use `vertex-forager clear --checkpoints`, `--runs`, `--dlq`, or `--all` for selective cleanup.
+
+### `persist_run_history` removed
+
+`persist_run_history` has been removed from `create_client(...)`. Run history is always inserted into `state.db`.
+
+**Action required**:
+
+- Remove `persist_run_history` from `create_client(...)` calls.
+- Replace it with retention controls when needed:
+  - `checkpoint_retention_days`
+  - `run_history_retention_days`
+
 ## 0.3.x → 0.4.x
 
 ### `RequestSpec.idempotent` flag

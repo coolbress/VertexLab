@@ -10,6 +10,7 @@ import polars as pl
 import pytest
 
 from vertex_forager import cli as cli_mod
+from vertex_forager.core.config import FramePacket
 from vertex_forager.utils import get_cache_dir
 
 
@@ -55,6 +56,120 @@ def test_clear_cancel(monkeypatch: pytest.MonkeyPatch) -> None:
     result = runner.invoke(cli_mod.main, ["clear"])
     assert result.exit_code == 0
     assert result.output.strip() == ""
+
+
+def test_clear_runs_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(click, "confirm", lambda _: True, raising=True)
+    monkeypatch.setattr(cli_mod, "delete_all_run_history", lambda: 4, raising=True)
+    runner = CliRunner()
+    result = runner.invoke(cli_mod.main, ["clear", "--runs"])
+    assert result.exit_code == 0
+    assert "runs=4" in result.output
+
+
+def test_runs_list_outputs_entries(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        cli_mod,
+        "list_run_history",
+        lambda limit=20: [
+            {
+                "run_id": "run-1",
+                "provider": "yfinance",
+                "dataset": "price",
+                "total_rows": 123,
+                "error_count": 1,
+                "finished_at": 1_700_000_000.0,
+            }
+        ],
+        raising=True,
+    )
+    runner = CliRunner()
+    result = runner.invoke(cli_mod.main, ["runs", "list"])
+    assert result.exit_code == 0
+    assert "run_id=run-1" in result.output
+    assert "rows=123" in result.output
+
+
+def test_dlq_list_outputs_entries(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        cli_mod,
+        "list_pending_dlq_entries",
+        lambda table=None: [
+            {
+                "table": "prices",
+                "row_count": 7,
+                "created_at": 1_700_000_000.0,
+                "path": "cache/dlq/prices/batch_1.ipc",
+                "retry_count": 2,
+            }
+        ],
+        raising=True,
+    )
+    runner = CliRunner()
+    result = runner.invoke(cli_mod.main, ["dlq", "list"])
+    assert result.exit_code == 0
+    assert "table=prices" in result.output
+    assert "path=batch_1.ipc" in result.output
+
+
+@pytest.mark.asyncio
+async def test_retry_pending_dlq_entries_marks_success_when_delete_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    target_path = tmp_path / "batch_1.ipc"
+    marks: list[tuple[bool, str | None]] = []
+
+    monkeypatch.setattr(
+        cli_mod,
+        "list_pending_dlq_entries",
+        lambda table=None: [
+            {
+                "path": str(target_path),
+                "table": "prices",
+                "provider": "stub",
+                "row_count": 1,
+            }
+        ],
+        raising=True,
+    )
+    monkeypatch.setattr(cli_mod.pl, "read_ipc", lambda path: pl.DataFrame({"x": [1]}), raising=True)
+
+    class _Writer:
+        def __init__(self, _db: Path) -> None:
+            pass
+
+        async def write(self, packet: FramePacket) -> None:
+            return None
+
+        async def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(cli_mod, "DuckDBWriter", _Writer, raising=True)
+    monkeypatch.setattr(
+        cli_mod,
+        "mark_dlq_retry_result",
+        lambda *, path, success, error=None: marks.append((success, error)),
+        raising=True,
+    )
+    monkeypatch.setattr(Path, "exists", lambda self: self == target_path, raising=True)
+    monkeypatch.setattr(
+        Path,
+        "unlink",
+        lambda self, missing_ok=True: (_ for _ in ()).throw(OSError("delete boom")) if self == target_path else None,
+        raising=True,
+    )
+
+    success_count, failure_count = await cli_mod._retry_pending_dlq_entries(
+        table_name="prices",
+        target_db=tmp_path / "test.duckdb",
+    )
+
+    assert success_count == 1
+    assert failure_count == 0
+    assert marks[-1][0] is True
+    assert marks[-1][1] is not None
+    assert marks[-1][1].startswith("delete_failed:")
 
 
 def test_collect_requires_symbol() -> None:
@@ -144,16 +259,16 @@ def test_constants_queue_json() -> None:
     runner = CliRunner()
     res = runner.invoke(cli_mod.main, ["constants", "--section", "queue", "--format", "json"])
     assert res.exit_code == 0
-    assert "\"QUEUE_MIN\"" in res.output
-    assert "\"QUEUE_MAX\"" in res.output
+    assert '"QUEUE_MIN"' in res.output
+    assert '"QUEUE_MAX"' in res.output
 
 
 def test_constants_writers_json() -> None:
     runner = CliRunner()
     res = runner.invoke(cli_mod.main, ["constants", "--section", "writers", "--format", "json"])
     assert res.exit_code == 0
-    assert "\"WRITER_DUCKDB_MAX_WORKERS\"" in res.output
-    assert "\"WAL_AUTOCHECKPOINT_LIMIT\"" in res.output
+    assert '"WRITER_DUCKDB_MAX_WORKERS"' in res.output
+    assert '"WAL_AUTOCHECKPOINT_LIMIT"' in res.output
 
 
 def test_recover_table_specified_but_not_found(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -217,12 +332,13 @@ def test_constants_all_json_has_sections() -> None:
     runner = CliRunner()
     res = runner.invoke(cli_mod.main, ["constants", "--section", "all", "--format", "json"])
     assert res.exit_code == 0
-    assert "\"global\"" in res.output
-    assert "\"flow\"" in res.output
+    assert '"global"' in res.output
+    assert '"flow"' in res.output
 
 
 def test_constants_json_env_overrides_included(monkeypatch: pytest.MonkeyPatch) -> None:
     import json as _json
+
     monkeypatch.setenv("SHARADAR_API_KEY", "secret")
     runner = CliRunner()
     res = runner.invoke(cli_mod.main, ["constants", "--section", "global", "--format", "json"])
@@ -257,8 +373,10 @@ def test_collect_value_error_converted(monkeypatch: pytest.MonkeyPatch) -> None:
     class _BrokenCtx:
         async def __aenter__(self):
             raise ValueError("oops")
+
         async def __aexit__(self, exc_type, exc, tb):
             return False
+
     monkeypatch.setenv("SHARADAR_API_KEY", "x")
     monkeypatch.setattr(cli_mod, "create_client", lambda **_: _BrokenCtx(), raising=True)
     runner = CliRunner()
@@ -268,6 +386,7 @@ def test_collect_value_error_converted(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 # ===== Recover CLI tests merged from test_cli_recover_args.py =====
+
 
 def _make_dlq(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, table: str, rows: int = 3) -> Path:
     base = tmp_path / "app"
