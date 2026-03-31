@@ -37,6 +37,7 @@ class RetryConfig(BaseModel):
         max_attempts (int): Maximum number of retry attempts (default: 3).
         base_backoff_s (float): Initial backoff duration in seconds (default: 1.0).
         max_backoff_s (float): Maximum backoff duration in seconds (default: 30.0).
+        backoff_mode (Literal["full_jitter", "equal"]): Backoff distribution strategy (default: "full_jitter").
         retry_status_codes (tuple[int, ...]): Tuple of HTTP status codes to trigger retries (default: (429, 503)).
 
     Notes:
@@ -52,12 +53,13 @@ class RetryConfig(BaseModel):
     max_attempts: int = Field(default=DEFAULT_RETRY_MAX_ATTEMPTS, ge=1)
     base_backoff_s: float = Field(default=DEFAULT_RETRY_BASE_BACKOFF_S, ge=0.0)
     max_backoff_s: float = Field(default=DEFAULT_RETRY_MAX_BACKOFF_S, ge=0.0)
+    backoff_mode: Literal["full_jitter", "equal"] = "full_jitter"
     retry_status_codes: tuple[int, ...] = (429, 503)
 
     @model_validator(mode="before")
     @classmethod
     def _reject_removed_enable_http_status_retry(cls, data: Any) -> Any:
-        if not isinstance(data, dict) or "enable_http_status_retry" not in data:
+        if not isinstance(data, Mapping) or "enable_http_status_retry" not in data:
             return data
         raise ValueError(
             "RetryConfig.enable_http_status_retry has been removed; "

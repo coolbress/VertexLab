@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable, Callable
-from contextlib import AbstractAsyncContextManager
 import logging
 import random
 import time
@@ -19,6 +18,8 @@ from tenacity import (
 )
 
 if TYPE_CHECKING:
+    from contextlib import AbstractAsyncContextManager
+
     from vertex_forager.core.config import FetchJob, RequestSpec, RetryConfig
 
 from vertex_forager.core.errors import FetchError
@@ -69,6 +70,9 @@ def create_retry_controller(
         cap = max(0.0, min(config.max_backoff_s, expo))
         if cap <= 0.0:
             return 0.0
+        if config.backoff_mode == "equal":
+            half_cap = cap / 2.0
+            return float(half_cap + random.uniform(0.0, half_cap))  # noqa: S311
         return float(random.uniform(0.0, cap))  # noqa: S311
 
     # For non-idempotent requests, guard against repeats by forcing a single attempt.
