@@ -85,6 +85,6 @@ Use Hypothesis when testing functions that should satisfy invariants for any val
 
 ## Next Steps
 
-- Review contributor workflow: [Contributing](https://coolbress.github.io/VertexLab/contributing/)
+- Review contributor workflow: [Contributing](https://github.com/coolbress/VertexLab/blob/main/CONTRIBUTING.md)
 - Read the tutorial: [Quickstart](../tutorials/quickstart.md)
 - Check architecture details: [Pipeline architecture](../explanation/architecture.md)
