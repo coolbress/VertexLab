@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.15.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.14.1...vertex-forager-v0.15.0) (2026-03-31)
+
+
+### ⚠ BREAKING CHANGES
+
+* migrate package into workspace path ([#404](https://github.com/coolbress/VertexLab/issues/404))
+
+### Code Refactoring
+
+* migrate package into workspace path ([#404](https://github.com/coolbress/VertexLab/issues/404)) ([0f46c04](https://github.com/coolbress/VertexLab/commit/0f46c04f4d3aa26ee79b590f9db283adec826466))
+
 ## [0.14.1](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.14.0...vertex-forager-v0.14.1) (2026-03-31)
 
 
