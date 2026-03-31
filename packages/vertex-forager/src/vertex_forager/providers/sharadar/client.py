@@ -144,7 +144,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             dlq_enabled: Enables DLQ spooling on persistence failures.
             pagination_max_burst: Pagination fairness burst cap.
             retry: Grouped retry policy configuration.
-            adaptive_throttle: Grouped adaptive downshift policy configuration.
+            adaptive_throttle: Grouped adaptive throttle policy configuration.
             concurrency: Explicit fetch concurrency limit.
             flush_threshold_rows: Buffered row threshold before flush begins.
             writer_chunk_rows: Transitional write chunk-size tuning.

@@ -182,10 +182,11 @@ def test_build_http_client_uses_normalized_defaults_without_rereading_env(monkey
     }
 
 
-def test_rpm_floor_ratio_resolves_to_absolute_floor() -> None:
+def test_rpm_floor_ratio_stored_in_config_and_resolves_in_controller() -> None:
     client = create_client(
         provider="yfinance",
         rate_limit=60,
         throttle=AdaptiveThrottleConfig(rpm_floor_ratio=0.10),
     )
     assert client.config.rpm_floor_ratio == 0.10
+    assert client.controller._rpm_floor == 6
