@@ -5,11 +5,11 @@
 - Symptoms
   - Frequent 429 responses, long waits between requests.
 - Checks
-  - Verify `requests_per_minute` and FlowController downshift settings.
+  - Verify `requests_per_minute` and FlowController adaptive throttle settings.
   - Inspect structured logs for `http_retry_reason:*` and `record_feedback`.
 - Actions
-  - Lower `rate_limit` or enable downshift:
-    - `downshift=DownshiftConfig(enabled=True, error_rate_threshold=..., rpm_floor=...)`
+  - Lower `rate_limit` or enable adaptive throttle:
+    - `throttle=AdaptiveThrottleConfig(enabled=True, error_rate_threshold=..., rpm_floor_ratio=...)`
   - Increase retry backoff within safe bounds (`base_backoff_s`, `max_backoff_s`).
 
 ## Memory peaks during flush
