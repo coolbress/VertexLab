@@ -72,7 +72,7 @@ print(df)
   - required: `provider`, `api_key` (Sharadar), `rate_limit`
   - common runtime knobs: `concurrency`, `flush_threshold_rows`, `writer_chunk_rows`, `dlq_enabled`, `metrics_enabled`
   - state retention knobs: `checkpoint_retention_days`, `run_history_retention_days`
-  - grouped config: `retry=RetryConfig(...)`, `downshift=DownshiftConfig(...)`, `limits=HTTPConfig(...)`, `advanced=AdvancedConfig(...)`
+  - grouped config: `retry=RetryConfig(...)`, `throttle=AdaptiveThrottleConfig(...)`, `limits=HTTPConfig(...)`, `advanced=AdvancedConfig(...)`
 - persistence path: `connect_db="duckdb://./forager.duckdb"`
 
 ## Documentation

@@ -123,7 +123,7 @@ class AdaptiveThrottleConfig(BaseModel):
         if legacy_keys & data.keys():
             raise TypeError(
                 "DownshiftConfig has been renamed to AdaptiveThrottleConfig. "
-                "Use adaptive_throttle=AdaptiveThrottleConfig(...) instead. "
+                "Use throttle=AdaptiveThrottleConfig(...) instead. "
                 "rpm_floor has been replaced by rpm_floor_ratio, and recovery_step by recovery_factor."
             )
         return data

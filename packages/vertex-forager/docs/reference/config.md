@@ -33,13 +33,13 @@ Public runtime configuration is now centered on `create_client(...)` plus groupe
 - `backoff_mode: Literal["full_jitter", "equal"]`
 - `retry_status_codes: tuple[int, ...]`
 
-### DownshiftConfig
+### AdaptiveThrottleConfig
 
 - `enabled: bool`
 - `window_s: int`
 - `error_rate_threshold: float` — in `[0, 1]`
-- `rpm_floor: int`
-- `recovery_step: int`
+- `rpm_floor_ratio: float` — in `[0, 1]`
+- `recovery_factor: float` — in `[0, 1]`
 - `healthy_window_s: int`
 
 ### HTTPConfig
@@ -59,7 +59,7 @@ DLQ temporary-file cleanup remains an internal housekeeping behavior. `dlq_tmp_c
 ## Example
 
 ```python
-from vertex_forager import AdvancedConfig, DownshiftConfig, HTTPConfig, RetryConfig, create_client
+from vertex_forager import AdaptiveThrottleConfig, AdvancedConfig, HTTPConfig, RetryConfig, create_client
 
 client = create_client(
     provider="sharadar",
@@ -71,7 +71,7 @@ client = create_client(
     run_history_retention_days=90,
     pagination_max_burst=3,
     retry=RetryConfig(max_attempts=3),
-    downshift=DownshiftConfig(enabled=False),
+    throttle=AdaptiveThrottleConfig(enabled=False),
     limits=HTTPConfig(max_connections=200, max_keepalive_connections=100),
     advanced=AdvancedConfig(),
 )

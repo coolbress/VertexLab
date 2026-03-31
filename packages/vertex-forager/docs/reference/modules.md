@@ -54,7 +54,7 @@ vertex_forager/
 |----------|--------|---------|
 | Create a client | `from vertex_forager import create_client` | [API Reference → Factories](api.md#factories) |
 | Pipeline engine | `from vertex_forager.core import VertexForager` | [API Reference → Pipeline Engine](api.md#pipeline-engine) |
-| Configuration | `from vertex_forager import RetryConfig, DownshiftConfig, HTTPConfig, AdvancedConfig` | [API Reference → Configuration](api.md#configuration) |
+| Configuration | `from vertex_forager import RetryConfig, AdaptiveThrottleConfig, HTTPConfig, AdvancedConfig` | [API Reference → Configuration](api.md#configuration) |
 | Flow control | `from vertex_forager.core.controller import FlowController` | [API Reference → Flow Control](api.md#flow-control) |
 | Retry runtime | `from vertex_forager.core.retry import RetryExecutor` | [API Reference → Retry](api.md#retry) |
 | Lifecycle helpers | `from vertex_forager.core.lifecycle import RunFinalizer` | [API Reference → Lifecycle](api.md#lifecycle) |
