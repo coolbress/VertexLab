@@ -1,24 +1,5 @@
 # Changelog
 
-## [1.0.0](https://github.com/coolbress/VertexLab/compare/vertex-lab-v0.3.11...vertex-lab-v1.0.0) (2026-03-31)
-
-
-### ⚠ BREAKING CHANGES
-
-* **vertex-forager:** rename DownshiftConfig to AdaptiveThrottleConfig with ratio-based rpm floor and recovery ([#395](https://github.com/coolbress/VertexLab/issues/395))
-* **vertex-forager:** remove enable_http_status_retry, migrate to retry_status_codes ([#391](https://github.com/coolbress/VertexLab/issues/391))
-* **vertex-forager:** move checkpoints and run history into SQLite state.db with DLQ index, retention  cleanup, and CLI state commands ([#383](https://github.com/coolbress/VertexLab/issues/383))
-
-### Features
-
-* **vertex-forager:** move checkpoints and run history into SQLite state.db with DLQ index, retention  cleanup, and CLI state commands ([#383](https://github.com/coolbress/VertexLab/issues/383)) ([8739cfc](https://github.com/coolbress/VertexLab/commit/8739cfc9eea8497d73bd9a9de1818ea4eb8a998c))
-
-
-### Bug Fixes
-
-* **vertex-forager:** remove enable_http_status_retry, migrate to retry_status_codes ([#391](https://github.com/coolbress/VertexLab/issues/391)) ([ecf00cf](https://github.com/coolbress/VertexLab/commit/ecf00cfb8fc6f53ac4fa1cc1cb438055263698a8))
-* **vertex-forager:** rename DownshiftConfig to AdaptiveThrottleConfig with ratio-based rpm floor and recovery ([#395](https://github.com/coolbress/VertexLab/issues/395)) ([0b7ce22](https://github.com/coolbress/VertexLab/commit/0b7ce222406491fff6be348a3dd947b2bd976ccd))
-
 ## [0.3.11](https://github.com/coolbress/VertexLab/compare/vertex-lab-v0.3.10...vertex-lab-v0.3.11) (2026-03-28)
 
 
