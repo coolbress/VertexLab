@@ -78,6 +78,7 @@ dev = [
 
 [tool.coverage.run]
 branch = true
+relative_files = true
 source = [
     "packages/vertex-forager/src/vertex_forager/core",
     "packages/vertex-forager/src/vertex_forager/clients",
