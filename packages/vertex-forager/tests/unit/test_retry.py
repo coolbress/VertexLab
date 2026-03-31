@@ -110,7 +110,7 @@ async def test_disabled_http_status_retry():
 
 
 def test_removed_enable_http_status_retry_raises_error() -> None:
-    with pytest.raises(ValueError, match="has been removed"):
+    with pytest.raises(ValueError, match=r"has been removed.*retry_status_codes=\(\)"):
         RetryConfig(enable_http_status_retry=False, retry_status_codes=(429, 503))
 
 
