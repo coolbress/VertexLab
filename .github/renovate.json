@@ -10,7 +10,25 @@
   "schedule": [
     "before 9am on Monday"
   ],
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": [
+      "before 9am on Monday"
+    ]
+  },
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "schedule": [
+      "at any time"
+    ]
+  },
   "packageRules": [
+    {
+      "matchDatasources": [
+        "pypi"
+      ],
+      "minimumReleaseAge": "7 days"
+    },
     {
       "matchManagers": [
         "uv"
