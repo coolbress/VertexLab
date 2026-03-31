@@ -32,7 +32,8 @@ jobs:
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
     permissions:
-      contents: read
+      contents: write
+      pull-requests: write
       security-events: write
       actions: read
     env:
@@ -163,14 +164,17 @@ jobs:
             --cov-report=term \
             --cov-fail-under=80 \
             -m "not manual"
-      - name: Upload coverage data
-        if: ${{ matrix.python-version == '3.10' }}
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0 pinned
+      - name: Publish PR coverage comment
+        if: ${{ matrix.python-version == '3.10' && github.event_name == 'pull_request' }}
+        uses: py-cov-action/python-coverage-comment-action@7188638f871f721a365d644f505d1ff3df20d683  # v3.40 pinned
         with:
-          name: coverage-data
-          path: .coverage
-          include-hidden-files: true
-          if-no-files-found: error
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Update coverage badge data
+        if: ${{ matrix.python-version == '3.10' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        continue-on-error: true
+        uses: py-cov-action/python-coverage-comment-action@7188638f871f721a365d644f505d1ff3df20d683  # v3.40 pinned
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Run Tests (manual only)
         if: ${{ matrix.python-version == '3.10' && github.event_name == 'workflow_dispatch' && github.event.inputs.include_manual == 'true' }}
         run: |
