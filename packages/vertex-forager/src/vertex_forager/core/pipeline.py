@@ -616,6 +616,7 @@ class VertexForager:
         result_lock: asyncio.Lock | None = None
         progress_bar: tqdm | None = None
         final_progress_emitted = False
+        progress_runtime_initialized = False
         completed_symbols: set[str] = set()
 
         try:
@@ -633,6 +634,7 @@ class VertexForager:
                 else 0
             )
             self._reset_progress_runtime(jobs_total=jobs_total, jobs_done_initial=jobs_done_initial)
+            progress_runtime_initialized = True
             progress_bar = (
                 tqdm(total=jobs_total, initial=jobs_done_initial, unit="jobs", desc=dataset, leave=True)
                 if progress
@@ -689,7 +691,7 @@ class VertexForager:
             try:
                 if not final_progress_emitted:
                     try:
-                        if self._progress_started_at == 0.0:
+                        if not progress_runtime_initialized:
                             self._reset_progress_runtime(
                                 jobs_total=_count_requested_symbol_units(symbols),
                                 jobs_done_initial=_count_completed_symbol_units(
