@@ -648,7 +648,7 @@ class VertexForager:
 
         try:
             run_id, completed_symbols = self._initialize_run_state(dataset=dataset, resume=resume)
-            req_q, pkt_q = await self._create_run_queues()
+            req_q, pkt_q = self._create_run_queues()
             self._init_metrics_for_run()
             t_run0 = time.monotonic()
             result, result_lock = self._create_run_result(run_id=run_id, dataset=dataset)
@@ -932,13 +932,13 @@ class VertexForager:
                 self._merge_pending_jobs(latest_checkpoint.pending_jobs)
         return run_id, completed_symbols
 
-    async def _create_run_queues(
+    def _create_run_queues(
         self,
     ) -> tuple[
         asyncio.PriorityQueue[tuple[int, int, FetchJob | None]],
         asyncio.Queue[FramePacket | None],
     ]:
-        req_q, pkt_q = await create_run_queues_impl(
+        req_q, pkt_q = create_run_queues_impl(
             queue_max=self._config.queue_max,
             checkpoint_retention_days=self._config.checkpoint_retention_days,
             run_history_retention_days=self._config.run_history_retention_days,
@@ -1037,7 +1037,7 @@ class VertexForager:
                 "completed" if not self._failed_symbols and not self._pending_jobs else "in_progress",
             )
         try:
-            await asyncio.to_thread(save_run_history, result, run_id)
+            save_run_history(result, run_id)
             logger.debug("PIPELINE: Run history saved for run %s", run_id)
         except Exception as e:
             logger.warning("PIPELINE: Failed to save run history: %s", e)

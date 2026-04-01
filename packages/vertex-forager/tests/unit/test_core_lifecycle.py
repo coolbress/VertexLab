@@ -42,9 +42,8 @@ def test_initialize_run_state_with_checkpoint() -> None:
     assert failed == {"MSFT"}
 
 
-@pytest.mark.asyncio
-async def test_create_run_queues_and_metrics_and_result() -> None:
-    req_q, pkt_q = await create_run_queues(
+def test_create_run_queues_and_metrics_and_result() -> None:
+    req_q, pkt_q = create_run_queues(
         queue_max=10,
         checkpoint_retention_days=7,
         run_history_retention_days=90,
@@ -68,8 +67,7 @@ async def test_create_run_queues_and_metrics_and_result() -> None:
     assert lock is not None
 
 
-@pytest.mark.asyncio
-async def test_create_run_queues_passes_dlq_tmp_retention_s_to_cleanup(
+def test_create_run_queues_passes_dlq_tmp_retention_s_to_cleanup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: dict[str, int] = {}
@@ -84,7 +82,7 @@ async def test_create_run_queues_passes_dlq_tmp_retention_s_to_cleanup(
     custom_checkpoint_retention = 14
     custom_run_history_retention = 180
     custom_dlq_retention = 3600
-    await create_run_queues(
+    create_run_queues(
         queue_max=10,
         checkpoint_retention_days=custom_checkpoint_retention,
         run_history_retention_days=custom_run_history_retention,
@@ -96,43 +94,6 @@ async def test_create_run_queues_passes_dlq_tmp_retention_s_to_cleanup(
     assert captured.get("checkpoint_retention_days") == custom_checkpoint_retention
     assert captured.get("run_history_retention_days") == custom_run_history_retention
     assert captured.get("dlq_retention_s") == custom_dlq_retention
-
-
-@pytest.mark.asyncio
-async def test_create_run_queues_uses_to_thread_for_cleanup(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[str] = []
-
-    def _fake_state_cleanup(
-        *,
-        checkpoint_retention_days: int,
-        run_history_retention_days: int,
-        dlq_retention_s: int,
-    ) -> None:
-        calls.append(f"state:{checkpoint_retention_days}:{run_history_retention_days}:{dlq_retention_s}")
-
-    def _fake_dlq_cleanup(base: Path, retention_s: int) -> None:
-        calls.append(f"dlq:{base.name}:{retention_s}")
-
-    async def _fake_to_thread(func, /, *args, **kwargs):  # type: ignore[no-untyped-def]
-        calls.append(getattr(func, "__name__", "call"))
-        return func(*args, **kwargs)
-
-    monkeypatch.setattr("vertex_forager.core.lifecycle.cleanup_state_retention", _fake_state_cleanup)
-    monkeypatch.setattr("vertex_forager.core.lifecycle.cleanup_dlq_tmp", _fake_dlq_cleanup)
-    monkeypatch.setattr("vertex_forager.core.lifecycle.asyncio.to_thread", _fake_to_thread)
-
-    await create_run_queues(
-        queue_max=10,
-        checkpoint_retention_days=7,
-        run_history_retention_days=90,
-        dlq_tmp_periodic_cleanup=True,
-        dlq_tmp_retention_s=123,
-        cache_dir=Path("."),
-        logger=type("L", (), {"warning": lambda *args, **kwargs: None})(),
-    )
-
-    assert calls[:2] == ["_fake_state_cleanup", "state:7:90:123"]
-    assert calls[2:] == ["_fake_dlq_cleanup", "dlq:dlq:123"]
 
 
 def test_merge_component_counters_merges_from_mapper_and_writer() -> None:

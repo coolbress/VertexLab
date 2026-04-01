@@ -265,7 +265,7 @@ async def test_progress_snapshot_preserves_completed_logical_units_on_early_init
     def _init_then_fail(dataset: str, resume: bool) -> tuple[str, set[str]]:
         return "run-id", {"AAPL,MSFT"}
 
-    async def _fail_queues() -> tuple[
+    def _fail_queues() -> tuple[
         asyncio.PriorityQueue[tuple[int, int, FetchJob | None]],
         asyncio.Queue[FramePacket | None],
     ]:
@@ -1384,32 +1384,6 @@ async def test_finalize_run_keeps_checkpoint_resumable_when_failures_remain(
     assert checkpoint is not None
     assert checkpoint.status == "in_progress"
     assert checkpoint.failed == ["MSFT"]
-
-
-@pytest.mark.asyncio
-async def test_finalize_run_uses_to_thread_for_run_history(monkeypatch: pytest.MonkeyPatch) -> None:
-    router = _PaginatingRouter(pages=0)
-    engine, _ = _make_engine(router)
-    engine._metrics_enabled = False
-    called: list[str] = []
-
-    async def _noop_flush(*, suppress: bool, consume: bool = True) -> None:
-        return None
-
-    async def _fake_to_thread(func, /, *args, **kwargs):  # type: ignore[no-untyped-def]
-        called.append(getattr(func, "__name__", "call"))
-        return func(*args, **kwargs)
-
-    monkeypatch.setattr(engine, "_try_flush_once", _noop_flush, raising=True)
-    monkeypatch.setattr(engine, "_update_checkpoint", lambda *args, **kwargs: None, raising=True)
-    monkeypatch.setattr("vertex_forager.core.pipeline.asyncio.to_thread", _fake_to_thread)
-
-    result = RunResult(provider="stub")
-    await engine._finalize_run(result=result, dataset="d", run_id="rid", started_monotonic=time.monotonic() - 1.0)
-
-    assert "<lambda>" in called
-    assert "save_run_history" in called
-    assert result.finished_at is not None
 
 
 @pytest.mark.asyncio
