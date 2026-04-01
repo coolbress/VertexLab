@@ -11,7 +11,12 @@ if TYPE_CHECKING:
 
 @dataclass
 class FairnessState:
-    """Mutable DRR pagination scheduling state."""
+    """Mutable DRR pagination scheduling state.
+
+    available is level-triggered state, not an edge-triggered wakeup signal.
+    It stays set while any active symbol still has pending pagination work and
+    is cleared only when the DRR lane becomes empty.
+    """
 
     queues: dict[str, deque[FetchJob]] = field(default_factory=dict)
     deficit: dict[str, float] = field(default_factory=dict)
