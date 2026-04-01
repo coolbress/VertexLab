@@ -309,6 +309,33 @@ async def test_progress_snapshot_exceptional_shutdown_emits_terminal_after_stop(
 
 
 @pytest.mark.asyncio
+async def test_progress_snapshot_prints_summary_when_progress_enabled_without_bar(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    result = RunResult(provider="stub", dataset="ignored")
+
+    engine._reset_progress_runtime(jobs_total=1)
+
+    await engine._emit_progress_snapshot(
+        result=result,
+        result_lock=asyncio.Lock(),
+        req_q=asyncio.PriorityQueue(),
+        on_progress=None,
+        progress_bar=None,
+        terminal_count=1,
+        finished=True,
+        show_summary=True,
+        summary_dataset="d",
+    )
+
+    output = capsys.readouterr().out
+    assert "vertex-forager run complete" in output
+    assert "dataset=d" in output
+
+
+@pytest.mark.asyncio
 async def test_progress_snapshot_counts_completed_symbols_on_resume() -> None:
     router = _PaginatingRouter(pages=0)
     engine, _ = _make_engine(router)
@@ -395,6 +422,8 @@ async def test_progress_snapshot_uses_progress_counters_when_metrics_disabled() 
         progress_bar=None,
         terminal_count=1,
         finished=False,
+        show_summary=False,
+        summary_dataset="d",
     )
 
     assert snapshots
@@ -430,6 +459,8 @@ async def test_emit_progress_snapshot_short_circuits_without_consumers() -> None
         progress_bar=None,
         terminal_count=1,
         finished=False,
+        show_summary=False,
+        summary_dataset="d",
     )
 
     assert engine._progress_done == 1
@@ -463,6 +494,8 @@ async def test_progress_snapshot_uses_retained_sample_window_for_throughput(
         progress_bar=None,
         terminal_count=0,
         finished=False,
+        show_summary=False,
+        summary_dataset="d",
     )
 
     assert snapshots
@@ -896,8 +929,7 @@ async def test_producer_resumes_batched_pending_jobs_without_restarting_componen
     order_counter = itertools.count()
 
     async def _generate_jobs(**kwargs: Any):
-        yield FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x"))
-        yield FetchJob(provider="stub", dataset="d", symbol="MSFT", spec=RequestSpec(url="https://y"))
+        yield FetchJob(provider="stub", dataset="d", symbol="AAPL,MSFT", spec=RequestSpec(url="https://x"))
         yield FetchJob(provider="stub", dataset="d", symbol="NVDA", spec=RequestSpec(url="https://z"))
 
     engine._router.generate_jobs = _generate_jobs  # type: ignore[method-assign]
@@ -1038,8 +1070,7 @@ async def test_producer_preserves_symbolless_pending_jobs_on_resume() -> None:
             queued_jobs.append(queued_job)
 
     assert [job.symbol for job in queued_jobs] == ["MSFT"]
-    resumed = list(engine._fair_state.queues[""])
-    assert [job.symbol for job in resumed] == [None]
+    assert list(engine._fair_state.queues.get("", [])) == []
 
 
 @pytest.mark.asyncio

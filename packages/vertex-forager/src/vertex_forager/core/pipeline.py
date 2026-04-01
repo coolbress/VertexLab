@@ -684,6 +684,8 @@ class VertexForager:
                 progress_bar=progress_bar,
                 terminal_count=0,
                 finished=True,
+                show_summary=progress,
+                summary_dataset=dataset,
             )
             final_progress_emitted = True
             return result
@@ -710,6 +712,8 @@ class VertexForager:
                             progress_bar=progress_bar,
                             terminal_count=0,
                             finished=True,
+                            show_summary=progress,
+                            summary_dataset=dataset,
                         )
                         final_progress_emitted = True
                     except Exception:
@@ -1199,7 +1203,7 @@ class VertexForager:
             pending_job
             for pending_job in (pending_jobs or [])
             if requested_symbols is None
-            or pending_job.symbol is None
+            or (pending_job.symbol is None and requested_symbols is None)
             or pending_job.symbol in requested_symbols
             or (
                 bool(_symbol_tokens(pending_job.symbol))
@@ -1210,9 +1214,11 @@ class VertexForager:
         pending_symbols = {
             pending_job.symbol for pending_job in filtered_pending_jobs if pending_job.symbol is not None
         }
-        pending_symbol_tokens = {
-            token for pending_job in filtered_pending_jobs for token in _symbol_tokens(pending_job.symbol)
-        }
+        pending_token_sets = [
+            set(_symbol_tokens(pending_job.symbol))
+            for pending_job in filtered_pending_jobs
+            if _symbol_tokens(pending_job.symbol)
+        ]
         for pending_job in filtered_pending_jobs:
             await enqueue_pagination_job_impl(
                 fair_lock=self._fair_lock,
@@ -1232,9 +1238,10 @@ class VertexForager:
             if self._job_signature(job) in pending_job_signatures:
                 logger.debug("PRODUCER: Skipping duplicate pending checkpoint job %s", job)
                 continue
+            job_token_set = set(_symbol_tokens(job.symbol)) if job.symbol else set()
             if job.symbol and (
                 job.symbol in pending_symbols
-                or any(token in pending_symbol_tokens for token in _symbol_tokens(job.symbol))
+                or any(pending_tokens.issubset(job_token_set) for pending_tokens in pending_token_sets)
             ):
                 logger.debug("PRODUCER: Resuming paginated symbol %s from pending checkpoint job", job.symbol)
                 continue
@@ -1412,6 +1419,8 @@ class VertexForager:
                         progress_bar=progress_bar,
                         terminal_count=terminal_count,
                         finished=False,
+                        show_summary=False,
+                        summary_dataset=job.dataset,
                     )
                 except Exception as e:
                     logger.error(
@@ -1461,6 +1470,8 @@ class VertexForager:
         progress_bar: tqdm | None,
         terminal_count: int,
         finished: bool,
+        show_summary: bool,
+        summary_dataset: str | None,
     ) -> None:
         now = time.monotonic()
         if terminal_count > 0:
@@ -1513,10 +1524,12 @@ class VertexForager:
         )
         self._update_progress_bar(progress_bar=progress_bar, snapshot=snapshot)
         if on_progress is None:
-            if finished and progress_bar is not None:
+            if finished and show_summary:
                 print(
                     _format_progress_summary(
-                        provider=self._router.provider, dataset=result.dataset or "", snapshot=snapshot
+                        provider=self._router.provider,
+                        dataset=summary_dataset or result.dataset or "",
+                        snapshot=snapshot,
                     )
                 )
             return
@@ -1526,10 +1539,12 @@ class VertexForager:
                 await maybe_awaitable
         except Exception as e:
             logger.error("Error in on_progress callback: %s", e)
-        if finished and progress_bar is not None:
+        if finished and show_summary:
             print(
                 _format_progress_summary(
-                    provider=self._router.provider, dataset=result.dataset or "", snapshot=snapshot
+                    provider=self._router.provider,
+                    dataset=summary_dataset or result.dataset or "",
+                    snapshot=snapshot,
                 )
             )
 
