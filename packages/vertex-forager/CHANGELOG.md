@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.18.0...vertex-forager-v0.19.0) (2026-04-01)
+
+
+### Features
+
+* async queue creation and thread-safe history save ([#418](https://github.com/coolbress/VertexLab/issues/418)) ([4213112](https://github.com/coolbress/VertexLab/commit/42131121e59872373f001ff3ecf82c650f9ce307))
+
 ## [0.18.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.17.0...vertex-forager-v0.18.0) (2026-04-01)
 
 
