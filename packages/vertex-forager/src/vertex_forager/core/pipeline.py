@@ -203,6 +203,13 @@ def _count_requested_symbol_units(symbols: Symbols | None) -> int | None:
 
 
 def _count_pending_request_jobs(req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] | None) -> int:
+    """Count pending (non-sentinel) jobs in a request queue.
+
+    Note: Reading req_q._queue relies on CPython implementation details and may
+    break on other Python implementations. The qsize() fallback provides only an
+    approximate count because it cannot filter sentinel entries (items where
+    item[2] is None). Callers should treat qsize() results as best-effort.
+    """
     if req_q is None:
         return 0
     queue_items = getattr(req_q, "_queue", None)
