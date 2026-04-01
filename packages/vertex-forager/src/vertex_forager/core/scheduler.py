@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 from dataclasses import dataclass, field
+import math
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -30,6 +31,8 @@ class FairnessState:
     def __post_init__(self) -> None:
         if self.unfinished_jobs == 0:
             self.drained.set()
+        if not math.isfinite(self.quantum) or self.quantum <= 0:
+            raise ValueError(f"quantum must be a finite positive number, got {self.quantum}")
 
 
 @dataclass(frozen=True)
@@ -100,8 +103,8 @@ async def pop_next_job_respecting_fairness(
             if not symbol_queue:
                 fairness_state.active.popleft()
                 fairness_state.active_symbols.discard(symbol)
-                fairness_state.deficit[symbol] = 0
                 fairness_state.queues.pop(symbol, None)
+                fairness_state.deficit.pop(symbol, None)
                 continue
             if fairness_state.deficit.get(symbol, 0.0) < 1.0:
                 fairness_state.deficit[symbol] = fairness_state.deficit.get(symbol, 0.0) + fairness_state.quantum
@@ -117,7 +120,7 @@ async def pop_next_job_respecting_fairness(
                 fairness_state.active.popleft()
                 fairness_state.active_symbols.discard(symbol)
                 fairness_state.queues.pop(symbol, None)
-                fairness_state.deficit[symbol] = 0.0
+                fairness_state.deficit.pop(symbol, None)
             if not fairness_state.active:
                 fairness_state.available.clear()
             return SchedulerResult(priority=priority_pagination, job=job, demoted=[], already_done=False)
