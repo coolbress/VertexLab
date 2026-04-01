@@ -1239,10 +1239,7 @@ class VertexForager:
                 logger.debug("PRODUCER: Skipping duplicate pending checkpoint job %s", job)
                 continue
             job_token_set = set(_symbol_tokens(job.symbol)) if job.symbol else set()
-            if job.symbol and (
-                job.symbol in pending_symbols
-                or any(pending_tokens.issubset(job_token_set) for pending_tokens in pending_token_sets)
-            ):
+            if job.symbol and (job.symbol in pending_symbols or job_token_set in pending_token_sets):
                 logger.debug("PRODUCER: Resuming paginated symbol %s from pending checkpoint job", job.symbol)
                 continue
 
@@ -1411,6 +1408,8 @@ class VertexForager:
                         worker_exc is None and not next_jobs
                     ):
                         terminal_count = _logical_symbol_count(job)
+                    elif job.symbol is None and next_jobs:
+                        terminal_count = 1
                     await self._emit_progress_snapshot(
                         result=result,
                         result_lock=result_lock,
