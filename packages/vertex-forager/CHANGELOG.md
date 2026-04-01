@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.1](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.19.0...vertex-forager-v0.19.1) (2026-04-01)
+
+
+### Reverts
+
+* **vertex-forager:** revert async SQLite wrapping from [#418](https://github.com/coolbress/VertexLab/issues/418) ([#420](https://github.com/coolbress/VertexLab/issues/420)) ([986d886](https://github.com/coolbress/VertexLab/commit/986d886f577a58cebfd7f9f7040fcf912aa826ea))
+
 ## [0.19.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.18.0...vertex-forager-v0.19.0) (2026-04-01)
 
 
