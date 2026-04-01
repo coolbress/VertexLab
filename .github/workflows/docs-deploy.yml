@@ -9,6 +9,8 @@ on:
       - "packages/vertex-lab/**"
       - "packages/vertex-forager/**"
       - "README.md"
+      - "CONTRIBUTING.md"
+      - ".github/workflows/docs-deploy.yml"
 
 permissions:
   contents: read

@@ -98,6 +98,8 @@ async def emit_packets_and_next_jobs(
     normalize_packet: Callable[..., FramePacket],
     inc: Callable[[str, int], None],
     priority_pagination: int,
+    pagination_max_burst: int | None,
+    enqueue_pagination_job: Callable[[FetchJob], Awaitable[None]],
     logger: Any,
 ) -> None:
     for packet in parse_result.packets:
@@ -116,7 +118,10 @@ async def emit_packets_and_next_jobs(
             job.symbol,
         )
         for next_job in parse_result.next_jobs:
-            await req_q.put((priority_pagination, next(order_counter), next_job))
+            if pagination_max_burst is None:
+                await req_q.put((priority_pagination, next(order_counter), next_job))
+            else:
+                await enqueue_pagination_job(next_job)
 
 
 async def record_worker_error(

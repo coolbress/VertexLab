@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from collections import deque
+from dataclasses import dataclass, field
+import math
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -10,15 +12,27 @@ if TYPE_CHECKING:
 
 @dataclass
 class FairnessState:
-    """Mutable pagination fairness state.
+    """Mutable DRR pagination scheduling state.
 
-    last_symbol stores the symbol selected most recently from the pagination
-    priority lane. burst_count stores how many consecutive selections were made
-    for last_symbol from that same lane.
+    available is level-triggered state, not an edge-triggered wakeup signal.
+    It stays set while any active symbol still has pending pagination work and
+    is cleared only when the DRR lane becomes empty.
     """
 
-    last_symbol: str | None = None
-    burst_count: int = 0
+    queues: dict[str, deque[FetchJob]] = field(default_factory=dict)
+    deficit: dict[str, float] = field(default_factory=dict)
+    active: deque[str] = field(default_factory=deque)
+    active_symbols: set[str] = field(default_factory=set)
+    quantum: float = 3.0
+    unfinished_jobs: int = 0
+    drained: asyncio.Event = field(default_factory=asyncio.Event, repr=False)
+    available: asyncio.Event = field(default_factory=asyncio.Event, repr=False)
+
+    def __post_init__(self) -> None:
+        if self.unfinished_jobs == 0:
+            self.drained.set()
+        if not math.isfinite(self.quantum) or self.quantum <= 0:
+            raise ValueError(f"quantum must be a finite positive number, got {self.quantum}")
 
 
 @dataclass(frozen=True)
@@ -29,115 +43,87 @@ class SchedulerResult:
     already_done: bool
 
 
+def _symbol_key(job: FetchJob) -> str:
+    return job.symbol or ""
+
+
+async def enqueue_pagination_job(
+    *,
+    fair_lock: asyncio.Lock,
+    fairness_state: FairnessState,
+    job: FetchJob,
+) -> None:
+    async with fair_lock:
+        symbol = _symbol_key(job)
+        q = fairness_state.queues.get(symbol)
+        if q is None:
+            q = deque()
+            fairness_state.queues[symbol] = q
+        q.append(job)
+        if symbol not in fairness_state.active_symbols:
+            fairness_state.active.append(symbol)
+            fairness_state.active_symbols.add(symbol)
+        fairness_state.unfinished_jobs += 1
+        fairness_state.drained.clear()
+        fairness_state.available.set()
+
+
+async def mark_pagination_job_done(
+    *,
+    fair_lock: asyncio.Lock,
+    fairness_state: FairnessState,
+) -> None:
+    async with fair_lock:
+        if fairness_state.unfinished_jobs <= 0:
+            raise RuntimeError("pagination fairness accounting underflow")
+        fairness_state.unfinished_jobs -= 1
+        if fairness_state.unfinished_jobs == 0:
+            fairness_state.drained.set()
+
+
+async def wait_for_pagination_drain(*, fairness_state: FairnessState) -> None:
+    await fairness_state.drained.wait()
+
+
+async def wait_for_pagination_availability(*, fairness_state: FairnessState) -> None:
+    await fairness_state.available.wait()
+
+
 async def pop_next_job_respecting_fairness(
     *,
-    req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]],
     fair_lock: asyncio.Lock,
-    burst_cap: int,
     priority_pagination: int,
-    priority_new_job: int,
     fairness_state: FairnessState,
 ) -> SchedulerResult:
-    """Select the next queue item while enforcing pagination burst fairness.
-
-    Args:
-        req_q: PriorityQueue of (priority:int, seq:int, FetchJob|None). None is
-            treated as a sentinel.
-        fair_lock: Async lock guarding fair state updates and fairness dequeue
-            logic.
-        burst_cap: Maximum consecutive picks allowed for the same symbol from
-            the pagination priority lane.
-        priority_pagination: Priority value used for paginated follow-up jobs.
-        priority_new_job: Priority value used when demoted jobs should be
-            requeued as normal jobs.
-        fairness_state: Shared mutable fairness state, updated in-place under
-            fair_lock.
-
-    Returns:
-        SchedulerResult:
-        - priority: selected priority
-        - job: selected FetchJob or None (sentinel/defer path)
-        - demoted: jobs caller should requeue at priority_new_job
-        - already_done: True when task_done was already called for selected
-          sentinel
-
-    Side effects:
-        - Reads/removes items from req_q.
-        - Updates fairness_state in-place.
-        - Calls req_q.task_done() for consumed sentinels.
-    """
-    demote_jobs: list[FetchJob] = []
-    already_done = False
-    state = fairness_state
+    """Select the next paginated job using Deficit Round Robin."""
     async with fair_lock:
-        priority, _, job = await req_q.get()
-        if job is None:
-            req_q.task_done()
-            return SchedulerResult(priority=priority, job=None, demoted=demote_jobs, already_done=True)
-        if priority != priority_pagination:
-            state.last_symbol = None
-            state.burst_count = 0
-            return SchedulerResult(priority=priority, job=job, demoted=demote_jobs, already_done=already_done)
-        if state.last_symbol == job.symbol:
-            state.burst_count += 1
-        else:
-            state.last_symbol = job.symbol
-            state.burst_count = 1
-        if state.burst_count <= burst_cap:
-            return SchedulerResult(priority=priority, job=job, demoted=demote_jobs, already_done=already_done)
-        demote_jobs.append(job)
-        return _pick_after_demotion(
-            req_q=req_q,
-            demote_jobs=demote_jobs,
-            already_done=already_done,
-            priority_pagination=priority_pagination,
-            priority_new_job=priority_new_job,
-            fairness_state=state,
-        )
-
-
-def _pick_after_demotion(
-    *,
-    req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]],
-    demote_jobs: list[FetchJob],
-    already_done: bool,
-    priority_pagination: int,
-    priority_new_job: int,
-    fairness_state: FairnessState,
-) -> SchedulerResult:
-    # O(N) over currently queued items in the worst case when many consecutive
-    # pagination jobs for the same symbol are demoted in a single selection pass.
-    while True:
-        try:
-            p2, order2, cand = req_q.get_nowait()
-        except asyncio.QueueEmpty:
-            return SchedulerResult(
-                priority=priority_new_job,
-                job=None,
-                demoted=demote_jobs,
-                already_done=already_done,
-            )
-        if p2 == priority_pagination and cand is not None and cand.symbol == fairness_state.last_symbol:
-            # Do not call req_q.task_done() here: demoted jobs are acknowledged after requeue in
-            # pipeline._requeue_demoted_jobs, which owns the task_done lifecycle for demotions.
-            demote_jobs.append(cand)
-            continue
-        if cand is None:
-            if demote_jobs:
-                req_q.task_done()
-                req_q.put_nowait((p2, order2, None))
-                return SchedulerResult(
-                    priority=priority_new_job,
-                    job=None,
-                    demoted=demote_jobs,
-                    already_done=already_done,
-                )
-            req_q.task_done()
-            return SchedulerResult(priority=p2, job=None, demoted=demote_jobs, already_done=True)
-        if p2 == priority_pagination:
-            fairness_state.last_symbol = cand.symbol
-            fairness_state.burst_count = 1
-        else:
-            fairness_state.last_symbol = None
-            fairness_state.burst_count = 0
-        return SchedulerResult(priority=p2, job=cand, demoted=demote_jobs, already_done=already_done)
+        while fairness_state.active:
+            symbol = fairness_state.active[0]
+            symbol_queue = fairness_state.queues.get(symbol)
+            if not symbol_queue:
+                fairness_state.active.popleft()
+                fairness_state.active_symbols.discard(symbol)
+                fairness_state.queues.pop(symbol, None)
+                fairness_state.deficit.pop(symbol, None)
+                continue
+            current_deficit = fairness_state.deficit.get(symbol, 0.0)
+            if current_deficit < 1.0:
+                fairness_state.deficit[symbol] = current_deficit + fairness_state.quantum
+            if fairness_state.deficit[symbol] < 1.0:
+                fairness_state.active.rotate(-1)
+                continue
+            job = symbol_queue.popleft()
+            fairness_state.deficit[symbol] -= 1.0
+            if symbol_queue:
+                if fairness_state.deficit[symbol] < 1.0:
+                    fairness_state.active.rotate(-1)
+            else:
+                fairness_state.active.popleft()
+                fairness_state.active_symbols.discard(symbol)
+                fairness_state.queues.pop(symbol, None)
+                fairness_state.deficit.pop(symbol, None)
+            if not fairness_state.active:
+                fairness_state.available.clear()
+            return SchedulerResult(priority=priority_pagination, job=job, demoted=[], already_done=False)
+        fairness_state.available.clear()
+        return SchedulerResult(priority=priority_pagination, job=None, demoted=[], already_done=False)

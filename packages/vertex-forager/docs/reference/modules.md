@@ -14,7 +14,7 @@ vertex_forager/
 ├── core/
 │   ├── pipeline.py     # VertexForager (main async pipeline engine)
 │   ├── lifecycle.py    # Run setup/finalize lifecycle helpers
-│   ├── scheduler.py    # Fair scheduling helpers
+│   ├── scheduler.py    # DRR pagination fairness helpers and per-symbol queues
 │   ├── workerio.py     # Worker fetch/parse/emit helpers
 │   ├── writerflush.py  # Writer buffering/flush/error handling
 │   ├── retry.py        # Retry policy + runtime retry executor

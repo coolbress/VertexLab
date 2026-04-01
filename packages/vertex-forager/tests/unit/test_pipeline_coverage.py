@@ -18,6 +18,7 @@ from typing import Any
 
 import pytest
 
+from vertex_forager.core import pipeline as pipeline_module
 from vertex_forager.core.checkpoint import Checkpoint, save_checkpoint
 from vertex_forager.core.config import (
     FetchJob,
@@ -30,7 +31,12 @@ from vertex_forager.core.config import (
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor
 from vertex_forager.core.pipeline import VertexForager
-from vertex_forager.core.scheduler import FairnessState, SchedulerResult
+from vertex_forager.core.scheduler import (
+    FairnessState,
+    SchedulerResult,
+    enqueue_pagination_job,
+    mark_pagination_job_done,
+)
 
 # ─── Stubs ──────────────────────────────────────────────────────────────
 
@@ -161,11 +167,11 @@ async def test_no_burst_cap_allows_all_consecutive_pages() -> None:
 
 @pytest.mark.asyncio
 async def test_fairness_sentinel_returns_already_done() -> None:
-    """Sentinel consumed by _pop_next_job_respecting_fairness sets already_done=True."""
+    """When DRR is idle, sentinel still comes from the main request queue."""
     router = _PaginatingRouter(pages=0)
     engine, _ = _make_engine(router)
     engine._fair_lock = asyncio.Lock()
-    engine._fair_state = FairnessState(last_symbol=None, burst_count=0)
+    engine._fair_state = FairnessState(quantum=3)
 
     req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
     await req_q.put((VertexForager.PRIORITY_SENTINEL, 0, None))
@@ -179,69 +185,139 @@ async def test_fairness_sentinel_returns_already_done() -> None:
 
 @pytest.mark.asyncio
 async def test_fairness_burst_cap_demotes_and_finds_different_candidate() -> None:
-    """When burst_cap is exceeded, same-symbol jobs are demoted and a different candidate is returned."""
+    """DRR rotates to a different symbol after the configured quantum."""
     router = _PaginatingRouter(pages=0)
     engine, _ = _make_engine(router)
     engine._fair_lock = asyncio.Lock()
-    engine._fair_state = FairnessState(last_symbol="AAPL", burst_count=2)
+    engine._fair_state = FairnessState(quantum=2)
 
     req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
     aapl_job = FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x"))
     msft_job = FetchJob(provider="stub", dataset="d", symbol="MSFT", spec=RequestSpec(url="https://y"))
-    await req_q.put((VertexForager.PRIORITY_PAGINATION, 0, aapl_job))
-    await req_q.put((VertexForager.PRIORITY_PAGINATION, 1, aapl_job))
-    await req_q.put((VertexForager.PRIORITY_PAGINATION, 2, msft_job))
+    await enqueue_pagination_job(fair_lock=engine._fair_lock, fairness_state=engine._fair_state, job=aapl_job)
+    await enqueue_pagination_job(fair_lock=engine._fair_lock, fairness_state=engine._fair_state, job=aapl_job)
+    await enqueue_pagination_job(fair_lock=engine._fair_lock, fairness_state=engine._fair_state, job=aapl_job)
+    await enqueue_pagination_job(fair_lock=engine._fair_lock, fairness_state=engine._fair_state, job=msft_job)
+
+    first = await engine._dequeue_worker_job(req_q=req_q, burst_cap=2)
+    second = await engine._dequeue_worker_job(req_q=req_q, burst_cap=2)
+    await mark_pagination_job_done(fair_lock=engine._fair_lock, fairness_state=engine._fair_state)
+    await mark_pagination_job_done(fair_lock=engine._fair_lock, fairness_state=engine._fair_state)
 
     selected = await engine._dequeue_worker_job(req_q=req_q, burst_cap=2)
+    assert first.job is not None
+    assert first.job.symbol == "AAPL"
+    assert second.job is not None
+    assert second.job.symbol == "AAPL"
     assert selected.job is not None
     assert selected.job.symbol == "MSFT"
-    assert len(selected.demoted) == 2
-    assert all(dj.symbol == "AAPL" for dj in selected.demoted)
+    assert selected.demoted == []
     assert not selected.already_done
+    await mark_pagination_job_done(fair_lock=engine._fair_lock, fairness_state=engine._fair_state)
 
 
 @pytest.mark.asyncio
 async def test_fairness_burst_cap_queue_empty_after_demotes() -> None:
-    """When burst_cap exceeded and queue empties during demote drain, return with no candidate."""
+    """When DRR is enabled and idle, dequeue falls back to the main queue."""
     router = _PaginatingRouter(pages=0)
     engine, _ = _make_engine(router)
     engine._fair_lock = asyncio.Lock()
-    engine._fair_state = FairnessState(last_symbol="AAPL", burst_count=2)
+    engine._fair_state = FairnessState(quantum=2)
 
     req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
-    aapl_job = FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x"))
-    await req_q.put((VertexForager.PRIORITY_PAGINATION, 0, aapl_job))
+    await req_q.put(
+        (
+            VertexForager.PRIORITY_NEW_JOB,
+            0,
+            FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x")),
+        )
+    )
 
     selected = await engine._dequeue_worker_job(req_q=req_q, burst_cap=2)
-    assert selected.job is None
-    assert len(selected.demoted) == 1
-    assert selected.demoted[0].symbol == "AAPL"
+    assert selected.job is not None
+    assert selected.job.symbol == "AAPL"
+    assert selected.demoted == []
     assert not selected.already_done
     assert selected.priority == VertexForager.PRIORITY_NEW_JOB
 
 
 @pytest.mark.asyncio
 async def test_fairness_sentinel_found_during_demote_drain() -> None:
-    """Sentinel is deferred when demoted jobs exist so requeue can happen first."""
+    """Main-queue sentinels take priority over DRR work during shutdown-style dequeue."""
     router = _PaginatingRouter(pages=0)
     engine, _ = _make_engine(router)
     engine._fair_lock = asyncio.Lock()
-    engine._fair_state = FairnessState(last_symbol="AAPL", burst_count=2)
+    engine._fair_state = FairnessState(quantum=2)
 
     req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
     aapl_job = FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x"))
-    # AAPL pagination followed by sentinel
-    await req_q.put((VertexForager.PRIORITY_PAGINATION, 0, aapl_job))
+    await enqueue_pagination_job(fair_lock=engine._fair_lock, fairness_state=engine._fair_state, job=aapl_job)
     await req_q.put((VertexForager.PRIORITY_SENTINEL, 0, None))
 
+    first = await engine._dequeue_worker_job(req_q=req_q, burst_cap=2)
+    assert first.job is None
+    assert first.already_done is True
+    assert first.priority == VertexForager.PRIORITY_SENTINEL
+
+
+@pytest.mark.asyncio
+async def test_fairness_prefers_req_get_when_both_waits_complete(monkeypatch: pytest.MonkeyPatch) -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    engine._fair_lock = asyncio.Lock()
+    engine._fair_state = FairnessState(quantum=2)
+
+    req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
+
+    async def _immediate_pagination_wait(*, fairness_state: FairnessState) -> None:
+        return None
+
+    async def _immediate_req_get(
+        *,
+        req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]],
+    ) -> tuple[int, int, FetchJob | None]:
+        return (VertexForager.PRIORITY_SENTINEL, 0, None)
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "wait_for_pagination_availability_impl",
+        _immediate_pagination_wait,
+        raising=True,
+    )
+    monkeypatch.setattr(engine, "_get_request_queue", _immediate_req_get, raising=True)
+    monkeypatch.setattr(req_q, "task_done", lambda: None, raising=True)
+
     selected = await engine._dequeue_worker_job(req_q=req_q, burst_cap=2)
+
     assert selected.job is None
-    assert selected.already_done is False
-    assert len(selected.demoted) == 1
-    assert selected.demoted[0].symbol == "AAPL"
-    p2, _ord, sentinel = req_q.get_nowait()
-    assert p2 == VertexForager.PRIORITY_SENTINEL
-    assert sentinel is None
+    assert selected.already_done is True
+    assert selected.priority == VertexForager.PRIORITY_SENTINEL
+
+
+@pytest.mark.asyncio
+async def test_fairness_dataset_level_pagination_with_symbol_none() -> None:
+    """DRR handles dataset-level pagination resume when job.symbol is None."""
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    engine._fair_lock = asyncio.Lock()
+    engine._fair_state = FairnessState(quantum=3)
+
+    req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
+    dataset_job = FetchJob(provider="stub", dataset="d", symbol=None, spec=RequestSpec(url="https://x"))
+
+    await enqueue_pagination_job(
+        fair_lock=engine._fair_lock,
+        fairness_state=engine._fair_state,
+        job=dataset_job,
+    )
+
+    selected = await engine._dequeue_worker_job(req_q=req_q, burst_cap=3)
+
+    assert selected.job is not None
+    assert selected.job.symbol is None
+    assert selected.demoted == []
+    assert not selected.already_done
+    assert selected.priority == VertexForager.PRIORITY_PAGINATION
 
 
 # ─── Test 3: _try_flush_once idempotency ───────────────────────────────

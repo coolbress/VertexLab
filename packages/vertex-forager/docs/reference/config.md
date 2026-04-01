@@ -14,7 +14,7 @@ Public runtime configuration is now centered on `create_client(...)` plus groupe
 - `structured_logs: bool = False`
 - `log_verbose: bool = False`
 - `dlq_enabled: bool = True`
-- `pagination_max_burst: int | None = None`
+- `pagination_max_burst: int | None = 3`
 - `concurrency: int | None = None`
 - `flush_threshold_rows: int`
 - `writer_chunk_rows: int | None = None`
@@ -79,6 +79,25 @@ client = create_client(
 
 With `pagination_max_burst=3`, if AAPL has 10 pages, the engine processes pages 1–3, then yields to MSFT/GOOG, then resumes AAPL pages 4–6, and so on.
 
+## Pagination Fairness
+
+`pagination_max_burst` now maps to the DRR quantum used for pagination follow-up jobs.
+
+- Initial jobs still enter the main request queue first.
+- Pagination follow-up jobs are grouped into per-symbol queues and scheduled with Deficit Round Robin.
+- A larger value favors deeper progress for one symbol before rotation.
+- A smaller value rotates more often across symbols with pagination backlog.
+- `None` disables DRR fairness and pushes pagination follow-up jobs directly into the main queue.
+
+Practical examples:
+
+- `pagination_max_burst=3`
+  - AAPL can spend up to 3 pagination credits in one DRR round, then rotation moves to the next symbol with pending pages.
+- `pagination_max_burst=1`
+  - Pagination backlog behaves like strict symbol-by-symbol round robin.
+- `pagination_max_burst=None`
+  - Fairness is disabled, so follow-up pages compete directly in the main queue and can run consecutively.
+
 ## Shutdown Semantics
 
 The pipeline has two shutdown paths. See `_stop_impl()`, `stop()`, `_try_flush_once()`, and `_persist_packets_with_dlq()` in `pipeline.py` for implementation details.
@@ -86,8 +105,8 @@ The pipeline has two shutdown paths. See `_stop_impl()`, `stop()`, `_try_flush_o
 ### Normal completion (`run()` → `_pipeline_orchestration()`)
 
 1. Producer finishes generating jobs and completes.
-2. `req_q.join()` waits for all jobs to be processed by fetch workers.
-3. One sentinel per worker is pushed to `req_q`; each fetch worker exits after receiving its sentinel. Deferred demoted jobs are logged and dropped.
+2. `req_q.join()` waits for the request queue to drain, and the DRR pagination state also drains before shutdown continues.
+3. One sentinel per worker is pushed to `req_q`; each fetch worker exits after receiving its sentinel.
 4. `pkt_q.join()` waits for all packets to be consumed by writers.
 5. Writer sentinels are pushed to `pkt_q`; writers exit normally.
 6. `_try_flush_once(consume=True)` flushes any buffered data in the writer.
