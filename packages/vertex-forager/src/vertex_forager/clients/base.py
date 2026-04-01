@@ -20,6 +20,7 @@ from vertex_forager.core.config import (
     ResolvedClientConfig,
     RetryConfig,
     RunResult,
+    SchedulerConfig,
 )
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor as _HttpExecutor
@@ -102,7 +103,7 @@ def _normalize_client_settings(
     structured_logs: bool | None,
     log_verbose: bool | None,
     dlq_enabled: bool | None,
-    pagination_max_burst: int | None,
+    schedule: SchedulerConfig | dict[str, Any] | None,
     retry: RetryConfig | dict[str, Any] | None,
     adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None,
     concurrency: int | None,
@@ -118,6 +119,7 @@ def _normalize_client_settings(
     adaptive_throttle_config = (
         _coerce_grouped_config(adaptive_throttle, AdaptiveThrottleConfig) or AdaptiveThrottleConfig()
     )
+    schedule_config = _coerce_grouped_config(schedule, SchedulerConfig) or SchedulerConfig()
     limits_config = _coerce_grouped_config(limits, HTTPConfig) or HTTPConfig()
     advanced_config = _coerce_grouped_config(advanced, AdvancedConfig) or AdvancedConfig()
     retry_config = _coerce_grouped_config(retry, RetryConfig) or RetryConfig()
@@ -128,7 +130,7 @@ def _normalize_client_settings(
         structured_logs=_parse_flag(structured_logs, False),
         log_verbose=_parse_flag(log_verbose, False),
         dlq_enabled=_parse_flag(dlq_enabled, True),
-        pagination_max_burst=pagination_max_burst,
+        schedule=schedule_config,
         retry=retry_config,
         adaptive_throttle=adaptive_throttle_config,
         concurrency=concurrency,
@@ -216,7 +218,7 @@ class BaseClient(ABC, Generic[T]):
         structured_logs: bool | None = None,
         log_verbose: bool | None = None,
         dlq_enabled: bool | None = None,
-        pagination_max_burst: int | None = 3,
+        schedule: SchedulerConfig | dict[str, Any] | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
         adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
         concurrency: int | None = None,
@@ -238,7 +240,7 @@ class BaseClient(ABC, Generic[T]):
             structured_logs: Enables structured stage logs when True.
             log_verbose: Promotes structured logs to INFO when True.
             dlq_enabled: Enables DLQ spooling on persistence failures.
-            pagination_max_burst: DRR pagination quantum. Defaults to 3.
+            schedule: Grouped scheduler configuration for always-on DRR fairness.
             retry: Grouped retry policy configuration.
             adaptive_throttle: Grouped adaptive throttle policy configuration.
             concurrency: Explicit fetch concurrency limit.
@@ -258,7 +260,7 @@ class BaseClient(ABC, Generic[T]):
             structured_logs=structured_logs,
             log_verbose=log_verbose,
             dlq_enabled=dlq_enabled,
-            pagination_max_burst=pagination_max_burst,
+            schedule=schedule,
             retry=retry,
             adaptive_throttle=adaptive_throttle,
             concurrency=concurrency,

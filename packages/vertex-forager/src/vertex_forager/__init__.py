@@ -12,6 +12,7 @@ from vertex_forager.core import (
     HTTPConfig,
     RetryConfig,
     RunResult,
+    SchedulerConfig,
 )
 from vertex_forager.core.errors import RunError
 from vertex_forager.core.quality import (
@@ -42,6 +43,7 @@ __all__ = [
     "RetryConfig",
     "RunError",
     "RunResult",
+    "SchedulerConfig",
     "SharadarClient",
     "ValidationError",
     "WriterError",

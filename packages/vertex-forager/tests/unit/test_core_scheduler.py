@@ -137,3 +137,47 @@ async def test_drr_drained_event_tracks_unfinished_jobs() -> None:
     await mark_pagination_job_done(fair_lock=lock, fairness_state=state)
 
     assert state.drained.is_set() is True
+
+
+@pytest.mark.asyncio
+async def test_enqueue_blocks_when_symbol_queue_reaches_capacity() -> None:
+    state = FairnessState(quantum=3, max_pending_per_symbol=1)
+    lock = asyncio.Lock()
+    await enqueue_pagination_job(fair_lock=lock, fairness_state=state, job=_job("AAPL", 1))
+
+    blocked = asyncio.create_task(enqueue_pagination_job(fair_lock=lock, fairness_state=state, job=_job("AAPL", 2)))
+    await asyncio.sleep(0)
+
+    assert blocked.done() is False
+
+    first = await pop_next_job_respecting_fairness(
+        fair_lock=lock,
+        priority_pagination=1,
+        fairness_state=state,
+    )
+    assert first.job is not None
+    assert first.job.symbol == "AAPL"
+
+    await asyncio.wait_for(blocked, timeout=1)
+
+
+@pytest.mark.asyncio
+async def test_enqueue_blocks_until_backpressure_drops_below_threshold() -> None:
+    state = FairnessState(quantum=3, backpressure_threshold=1)
+    lock = asyncio.Lock()
+    await enqueue_pagination_job(fair_lock=lock, fairness_state=state, job=_job("AAPL", 1))
+
+    blocked = asyncio.create_task(enqueue_pagination_job(fair_lock=lock, fairness_state=state, job=_job("MSFT", 1)))
+    await asyncio.sleep(0)
+
+    assert blocked.done() is False
+
+    first = await pop_next_job_respecting_fairness(
+        fair_lock=lock,
+        priority_pagination=1,
+        fairness_state=state,
+    )
+    assert first.job is not None
+    await mark_pagination_job_done(fair_lock=lock, fairness_state=state)
+
+    await asyncio.wait_for(blocked, timeout=1)

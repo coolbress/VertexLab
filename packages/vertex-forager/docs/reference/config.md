@@ -14,7 +14,7 @@ Public runtime configuration is now centered on `create_client(...)` plus groupe
 - `structured_logs: bool = False`
 - `log_verbose: bool = False`
 - `dlq_enabled: bool = True`
-- `pagination_max_burst: int | None = 3`
+- `schedule: SchedulerConfig = SchedulerConfig()`
 - `concurrency: int | None = None`
 - `flush_threshold_rows: int`
 - `writer_chunk_rows: int | None = None`
@@ -54,12 +54,25 @@ Public runtime configuration is now centered on `create_client(...)` plus groupe
 - `mem_threshold_ratio: float`
 - `mem_threshold_abs_mb: int | None`
 
+### SchedulerConfig
+
+- `quantum: int = 3`
+- `max_pending_per_symbol: int | None = None`
+- `backpressure_threshold: int | None = None`
+
 DLQ temporary-file cleanup remains an internal housekeeping behavior. `dlq_tmp_cleanup_on_error`, `dlq_tmp_periodic_cleanup`, and `dlq_tmp_retention_s` are not intended as user-facing tuning knobs.
 
 ## Example
 
 ```python
-from vertex_forager import AdaptiveThrottleConfig, AdvancedConfig, HTTPConfig, RetryConfig, create_client
+from vertex_forager import (
+    AdaptiveThrottleConfig,
+    AdvancedConfig,
+    HTTPConfig,
+    RetryConfig,
+    SchedulerConfig,
+    create_client,
+)
 
 client = create_client(
     provider="sharadar",
@@ -69,7 +82,11 @@ client = create_client(
     concurrency=4,
     checkpoint_retention_days=7,
     run_history_retention_days=90,
-    pagination_max_burst=3,
+    schedule=SchedulerConfig(
+        quantum=3,
+        max_pending_per_symbol=50,
+        backpressure_threshold=120,
+    ),
     retry=RetryConfig(max_attempts=3),
     throttle=AdaptiveThrottleConfig(enabled=False),
     limits=HTTPConfig(max_connections=200, max_keepalive_connections=100),
@@ -77,26 +94,27 @@ client = create_client(
 )
 ```
 
-With `pagination_max_burst=3`, if AAPL has 10 pages, the engine processes pages 1–3, then yields to MSFT/GOOG, then resumes AAPL pages 4–6, and so on.
+With `schedule=SchedulerConfig(quantum=3)`, if AAPL has 10 pages, the engine processes up to 3 pagination follow-ups in one DRR round, then rotates to the next symbol with pending pages.
 
 ## Pagination Fairness
 
-`pagination_max_burst` now maps to the DRR quantum used for pagination follow-up jobs.
+`SchedulerConfig.quantum` controls the DRR credits issued to each symbol per round.
 
 - Initial jobs still enter the main request queue first.
 - Pagination follow-up jobs are grouped into per-symbol queues and scheduled with Deficit Round Robin.
 - A larger value favors deeper progress for one symbol before rotation.
 - A smaller value rotates more often across symbols with pagination backlog.
-- `None` disables DRR fairness and pushes pagination follow-up jobs directly into the main queue.
+- `max_pending_per_symbol` blocks enqueue when one symbol's DRR queue reaches the configured depth.
+- `backpressure_threshold` blocks new pagination enqueue once total pending DRR work reaches the configured threshold.
 
 Practical examples:
 
-- `pagination_max_burst=3`
+- `schedule=SchedulerConfig(quantum=3)`
   - AAPL can spend up to 3 pagination credits in one DRR round, then rotation moves to the next symbol with pending pages.
-- `pagination_max_burst=1`
+- `schedule=SchedulerConfig(quantum=1)`
   - Pagination backlog behaves like strict symbol-by-symbol round robin.
-- `pagination_max_burst=None`
-  - Fairness is disabled, so follow-up pages compete directly in the main queue and can run consecutively.
+- `schedule=SchedulerConfig(quantum=3, backpressure_threshold=concurrency * 3 * 10)`
+  - Use `concurrency × quantum × 10` as a starting point for total DRR backlog control.
 
 ## Shutdown Semantics
 

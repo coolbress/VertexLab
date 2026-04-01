@@ -245,10 +245,14 @@ class VertexForager:
             max_workers=w_int,
             thread_name_prefix="vertex-forager:parse",
         )
-        quantum = float(getattr(config, "pagination_max_burst", 3) or 3)
+        quantum = float(config.quantum)
         # Global pagination fairness bookkeeping
         self._fair_lock = asyncio.Lock()
-        self._fair_state = FairnessState(quantum=quantum)
+        self._fair_state = FairnessState(
+            quantum=quantum,
+            max_pending_per_symbol=config.max_pending_per_symbol,
+            backpressure_threshold=config.backpressure_threshold,
+        )
         # Writer flush idempotence
         self._writer_flushed: bool = False
         self._writer_flush_attempted: bool = False
@@ -640,8 +644,12 @@ class VertexForager:
         self._req_q = req_q
         self._pkt_q = pkt_q
         self._writer_tasks = writer_tasks
-        quantum = float(getattr(self._config, "pagination_max_burst", 3) or 3)
-        self._fair_state = FairnessState(quantum=quantum)
+        quantum = float(self._config.quantum)
+        self._fair_state = FairnessState(
+            quantum=quantum,
+            max_pending_per_symbol=self._config.max_pending_per_symbol,
+            backpressure_threshold=self._config.backpressure_threshold,
+        )
         self._writer_flush_attempted = False
         self._writer_flushed = False
         self._flush_lock = asyncio.Lock()
@@ -678,8 +686,7 @@ class VertexForager:
                     self._summary["req_q_len_after_producer"] = float(req_q.qsize())
                     self._summary["pkt_q_len_after_producer"] = float(pkt_q.qsize())
         await req_q.join()
-        if self._config.pagination_max_burst is not None:
-            await wait_for_pagination_drain_impl(fairness_state=self._fair_state)
+        await wait_for_pagination_drain_impl(fairness_state=self._fair_state)
         logger.info("PIPELINE: Request queue joined, sending sentinel signals...")
         if self._metrics_enabled:
             with suppress(Exception):
@@ -1057,17 +1064,11 @@ class VertexForager:
             pending_job.symbol for pending_job in filtered_pending_jobs if pending_job.symbol is not None
         }
         for pending_job in filtered_pending_jobs:
-            if self._config.pagination_max_burst is None:
-                await self._put_request_queue(
-                    req_q=req_q,
-                    item=(self.PRIORITY_PAGINATION, next(order_counter), pending_job),
-                )
-            else:
-                await enqueue_pagination_job_impl(
-                    fair_lock=self._fair_lock,
-                    fairness_state=self._fair_state,
-                    job=pending_job,
-                )
+            await enqueue_pagination_job_impl(
+                fair_lock=self._fair_lock,
+                fairness_state=self._fair_state,
+                job=pending_job,
+            )
 
         async for job in self._router.generate_jobs(dataset=dataset, symbols=symbols, **kwargs):
             # Skip already completed symbols if resume is enabled
@@ -1192,12 +1193,8 @@ class VertexForager:
         """
         handler = self._build_progress_handler(on_progress)
         job_count = 0
-        burst_cap = getattr(self._config, "pagination_max_burst", None)
         while True:
-            selected = await self._dequeue_worker_job(
-                req_q=req_q,
-                burst_cap=burst_cap,
-            )
+            selected = await self._dequeue_worker_job(req_q=req_q)
             priority = selected.priority
             job = selected.job
             already_done = selected.already_done
@@ -1234,7 +1231,7 @@ class VertexForager:
                 worker_exc = exc
                 raise
             finally:
-                if priority == self.PRIORITY_PAGINATION and burst_cap is not None:
+                if priority == self.PRIORITY_PAGINATION:
                     await mark_pagination_job_done_impl(
                         fair_lock=self._fair_lock,
                         fairness_state=self._fair_state,
@@ -1330,7 +1327,6 @@ class VertexForager:
         self,
         *,
         req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]],
-        burst_cap: int | None,
     ) -> SchedulerResult:
         async def _cancel_pending(tasks: tuple[asyncio.Task[object], ...]) -> None:
             for task in tasks:
@@ -1339,47 +1335,36 @@ class VertexForager:
                 with suppress(asyncio.CancelledError):
                     await task
 
-        if burst_cap is not None:
-            if not isinstance(burst_cap, int):
-                raise RuntimeError("pagination_max_burst must be int when fairness dequeue is enabled")
-            while True:
-                if req_q.qsize() > 0:
-                    priority, _, job = await self._get_request_queue(req_q=req_q)
-                    already_done = False
-                    if job is None:
-                        req_q.task_done()
-                        already_done = True
-                    return SchedulerResult(priority=priority, job=job, demoted=[], already_done=already_done)
-                selected = await pop_next_job_respecting_fairness_impl(
-                    fair_lock=self._fair_lock,
-                    priority_pagination=self.PRIORITY_PAGINATION,
-                    fairness_state=self._fair_state,
-                )
-                if selected.job is not None:
-                    return selected
-                pagination_wait = asyncio.create_task(
-                    wait_for_pagination_availability_impl(fairness_state=self._fair_state)
-                )
-                req_get = asyncio.create_task(self._get_request_queue(req_q=req_q))
-                done, pending = await asyncio.wait({pagination_wait, req_get}, return_when=asyncio.FIRST_COMPLETED)
-                await _cancel_pending(tuple(pending))
-                if req_get in done:
-                    priority, _, job = req_get.result()
-                    already_done = False
-                    if job is None:
-                        req_q.task_done()
-                        already_done = True
-                    return SchedulerResult(priority=priority, job=job, demoted=[], already_done=already_done)
-                if pagination_wait in done:
-                    continue
-        if burst_cap is None:
-            priority, _, job = await self._get_request_queue(req_q=req_q)
-            already_done = False
-            if job is None:
-                req_q.task_done()
-                already_done = True
-            return SchedulerResult(priority=priority, job=job, demoted=[], already_done=already_done)
-        raise RuntimeError("unreachable dequeue state")
+        while True:
+            if req_q.qsize() > 0:
+                priority, _, job = await self._get_request_queue(req_q=req_q)
+                already_done = False
+                if job is None:
+                    req_q.task_done()
+                    already_done = True
+                return SchedulerResult(priority=priority, job=job, demoted=[], already_done=already_done)
+            selected = await pop_next_job_respecting_fairness_impl(
+                fair_lock=self._fair_lock,
+                priority_pagination=self.PRIORITY_PAGINATION,
+                fairness_state=self._fair_state,
+            )
+            if selected.job is not None:
+                return selected
+            pagination_wait = asyncio.create_task(
+                wait_for_pagination_availability_impl(fairness_state=self._fair_state)
+            )
+            req_get = asyncio.create_task(self._get_request_queue(req_q=req_q))
+            done, pending = await asyncio.wait({pagination_wait, req_get}, return_when=asyncio.FIRST_COMPLETED)
+            await _cancel_pending(tuple(pending))
+            if req_get in done:
+                priority, _, job = req_get.result()
+                already_done = False
+                if job is None:
+                    req_q.task_done()
+                    already_done = True
+                return SchedulerResult(priority=priority, job=job, demoted=[], already_done=already_done)
+            if pagination_wait in done:
+                continue
 
     def _should_exit_worker_for_sentinel(
         self,
@@ -1512,7 +1497,6 @@ class VertexForager:
             normalize_packet=self._mapper.normalize if self._mapper is not None else (lambda *, packet: packet),
             inc=self._inc,
             priority_pagination=self.PRIORITY_PAGINATION,
-            pagination_max_burst=self._config.pagination_max_burst,
             enqueue_pagination_job=enqueue_pagination_job,
             logger=logger,
         )
