@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.17.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.16.0...vertex-forager-v0.17.0) (2026-04-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* **vertex-forager:** replace pagination_max_burst with SchedulerConfig for always-on DRR ([#412](https://github.com/coolbress/VertexLab/issues/412))
+
+### Features
+
+* **vertex-forager:** replace pagination_max_burst with SchedulerConfig for always-on DRR ([#412](https://github.com/coolbress/VertexLab/issues/412)) ([4988fc3](https://github.com/coolbress/VertexLab/commit/4988fc3f56f9e8726556b507eccaa996d84d83e7))
+
 ## [0.16.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.15.1...vertex-forager-v0.16.0) (2026-04-01)
 
 
