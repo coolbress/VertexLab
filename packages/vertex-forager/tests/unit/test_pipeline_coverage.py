@@ -294,6 +294,32 @@ async def test_fairness_prefers_req_get_when_both_waits_complete(monkeypatch: py
     assert selected.priority == VertexForager.PRIORITY_SENTINEL
 
 
+@pytest.mark.asyncio
+async def test_fairness_dataset_level_pagination_with_symbol_none() -> None:
+    """DRR handles dataset-level pagination resume when job.symbol is None."""
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    engine._fair_lock = asyncio.Lock()
+    engine._fair_state = FairnessState(quantum=3)
+
+    req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
+    dataset_job = FetchJob(provider="stub", dataset="d", symbol=None, spec=RequestSpec(url="https://x"))
+
+    await enqueue_pagination_job(
+        fair_lock=engine._fair_lock,
+        fairness_state=engine._fair_state,
+        job=dataset_job,
+    )
+
+    selected = await engine._dequeue_worker_job(req_q=req_q, burst_cap=3)
+
+    assert selected.job is not None
+    assert selected.job.symbol is None
+    assert selected.demoted == []
+    assert not selected.already_done
+    assert selected.priority == VertexForager.PRIORITY_PAGINATION
+
+
 # ─── Test 3: _try_flush_once idempotency ───────────────────────────────
 
 
