@@ -151,11 +151,55 @@ logger = logging.getLogger("vertex_forager.debug")
 Symbols = Sequence[str]
 
 
-def _logical_symbol_count(job: FetchJob) -> int:
-    symbol = job.symbol
+def _symbol_tokens(symbol: str | None) -> list[str]:
     if not isinstance(symbol, str) or not symbol:
+        return []
+    return [token for token in (part.strip() for part in symbol.split(",")) if token]
+
+
+def _logical_symbol_count(job: FetchJob) -> int:
+    tokens = _symbol_tokens(job.symbol)
+    if not tokens:
         return 1
-    return len([token for token in (part.strip() for part in symbol.split(",")) if token])
+    return len(tokens)
+
+
+def _count_completed_symbol_units(*, requested_symbols: Symbols | None, completed_symbols: set[str]) -> int:
+    if not completed_symbols:
+        return 0
+    if requested_symbols is None:
+        return sum(max(1, len(_symbol_tokens(symbol))) for symbol in completed_symbols)
+    remaining: dict[str, int] = {}
+    for symbol in requested_symbols:
+        tokens = _symbol_tokens(symbol)
+        if not tokens:
+            remaining[symbol] = remaining.get(symbol, 0) + 1
+            continue
+        for token in tokens:
+            remaining[token] = remaining.get(token, 0) + 1
+    completed = 0
+    for symbol in completed_symbols:
+        tokens = _symbol_tokens(symbol)
+        if not tokens:
+            if remaining.get(symbol, 0) > 0:
+                completed += 1
+                remaining[symbol] -= 1
+            continue
+        for token in tokens:
+            if remaining.get(token, 0) > 0:
+                completed += 1
+                remaining[token] -= 1
+    return completed
+
+
+def _count_requested_symbol_units(symbols: Symbols | None) -> int | None:
+    if symbols is None:
+        return None
+    total = 0
+    for symbol in symbols:
+        tokens = _symbol_tokens(symbol)
+        total += len(tokens) if tokens else 1
+    return total
 
 
 def _format_progress_summary(*, provider: str, dataset: str, snapshot: ProgressSnapshot) -> str:
@@ -579,14 +623,12 @@ class VertexForager:
             result, result_lock = self._create_run_result(run_id=run_id, dataset=dataset)
             concurrency = self._resolve_concurrency()
             self._ensure_parse_executor(concurrency)
-            jobs_total = len(symbols) if symbols is not None else None
-            if resume and symbols is not None:
-                requested_symbols = set(symbols)
-                jobs_done_initial = len(completed_symbols & requested_symbols)
-            elif resume:
-                jobs_done_initial = len(completed_symbols)
-            else:
-                jobs_done_initial = 0
+            jobs_total = _count_requested_symbol_units(symbols)
+            jobs_done_initial = (
+                _count_completed_symbol_units(requested_symbols=symbols, completed_symbols=completed_symbols)
+                if resume
+                else 0
+            )
             self._reset_progress_runtime(jobs_total=jobs_total, jobs_done_initial=jobs_done_initial)
             progress_bar = (
                 tqdm(total=jobs_total, initial=jobs_done_initial, unit="jobs", desc=dataset, leave=True)
@@ -646,8 +688,13 @@ class VertexForager:
                     try:
                         if self._progress_started_at == 0.0:
                             self._reset_progress_runtime(
-                                jobs_total=len(symbols) if symbols is not None else None,
-                                jobs_done_initial=0,
+                                jobs_total=_count_requested_symbol_units(symbols),
+                                jobs_done_initial=_count_completed_symbol_units(
+                                    requested_symbols=symbols,
+                                    completed_symbols=completed_symbols,
+                                )
+                                if resume
+                                else 0,
                             )
                         await self._emit_progress_snapshot(
                             result=result,
@@ -1140,6 +1187,7 @@ class VertexForager:
         )
 
         requested_symbols = set(symbols) if symbols else None
+        completed_symbol_tokens = {token for symbol in (completed_symbols or set()) for token in _symbol_tokens(symbol)}
         filtered_pending_jobs = [
             pending_job
             for pending_job in (pending_jobs or [])
@@ -1158,9 +1206,13 @@ class VertexForager:
 
         async for job in self._router.generate_jobs(dataset=dataset, symbols=symbols, **kwargs):
             # Skip already completed symbols if resume is enabled
-            if completed_symbols and job.symbol and job.symbol in completed_symbols:
-                logger.debug("PRODUCER: Skipping already completed symbol %s", job.symbol)
-                continue
+            if completed_symbols and job.symbol:
+                job_tokens = _symbol_tokens(job.symbol)
+                if job.symbol in completed_symbols or (
+                    job_tokens and all(token in completed_symbol_tokens for token in job_tokens)
+                ):
+                    logger.debug("PRODUCER: Skipping already completed symbol %s", job.symbol)
+                    continue
             if self._job_signature(job) in pending_job_signatures:
                 logger.debug("PRODUCER: Skipping duplicate pending checkpoint job %s", job)
                 continue
@@ -1329,10 +1381,9 @@ class VertexForager:
                     await self._record_worker_symbol_state(job=job, worker_exc=worker_exc, parse_result=parse_result)
                     terminal_count = 0
                     next_jobs = list(parse_result.next_jobs if parse_result is not None else [])
-                    if (
-                        worker_exc is not None
-                        and not isinstance(worker_exc, asyncio.CancelledError)
-                    ) or (worker_exc is None and not next_jobs):
+                    if (worker_exc is not None and not isinstance(worker_exc, asyncio.CancelledError)) or (
+                        worker_exc is None and not next_jobs
+                    ):
                         terminal_count = _logical_symbol_count(job)
                     await self._emit_progress_snapshot(
                         result=result,
@@ -1400,9 +1451,7 @@ class VertexForager:
             self._progress_history.popleft()
         elapsed_s = max(0.0, now - self._progress_started_at)
         window_events = sum(count for _, count in self._progress_history)
-        window_span = (
-            min(30.0, max(0.0, now - self._progress_history[0][0])) if self._progress_history else 0.0
-        )
+        window_span = min(30.0, max(0.0, now - self._progress_history[0][0])) if self._progress_history else 0.0
         throughput = float(window_events / window_span) if window_span > 0.0 else 0.0
         jobs_total = self._progress_total
         if jobs_total not in (None, 0):

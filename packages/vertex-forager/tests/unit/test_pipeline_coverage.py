@@ -219,6 +219,39 @@ async def test_progress_snapshot_emits_finished_true_on_early_init_failure() -> 
 
 
 @pytest.mark.asyncio
+async def test_progress_snapshot_preserves_completed_logical_units_on_early_init_failure() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    snapshots: list[ProgressSnapshot] = []
+
+    def _init_then_fail(dataset: str, resume: bool) -> tuple[str, set[str]]:
+        return "run-id", {"AAPL,MSFT"}
+
+    def _fail_queues() -> tuple[
+        asyncio.PriorityQueue[tuple[int, int, FetchJob | None]],
+        asyncio.Queue[FramePacket | None],
+    ]:
+        raise RuntimeError("queue boom")
+
+    engine._initialize_run_state = _init_then_fail  # type: ignore[method-assign]
+    engine._create_run_queues = _fail_queues  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="queue boom"):
+        await engine.run(
+            dataset="d",
+            symbols=["AAPL", "MSFT"],
+            resume=True,
+            on_progress=lambda snapshot: snapshots.append(snapshot),
+        )
+
+    finished = [snapshot for snapshot in snapshots if snapshot.finished]
+    assert len(finished) == 1
+    assert finished[0].jobs_total == 2
+    assert finished[0].jobs_done == 2
+    assert finished[0].pct == 100.0
+
+
+@pytest.mark.asyncio
 async def test_progress_snapshot_counts_completed_symbols_on_resume() -> None:
     router = _PaginatingRouter(pages=0)
     engine, _ = _make_engine(router)
@@ -241,12 +274,34 @@ async def test_progress_snapshot_counts_completed_symbols_on_resume() -> None:
 
 
 @pytest.mark.asyncio
+async def test_progress_snapshot_counts_batched_completed_symbols_on_resume() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    snapshots: list[ProgressSnapshot] = []
+
+    engine._initialize_run_state = lambda dataset, resume: ("run-id", {"AAPL,MSFT"})  # type: ignore[method-assign]
+    engine._record_worker_symbol_state = lambda **kwargs: asyncio.sleep(0)  # type: ignore[method-assign]
+
+    await engine.run(
+        dataset="d",
+        symbols=["AAPL", "MSFT"],
+        resume=True,
+        on_progress=lambda snapshot: snapshots.append(snapshot),
+    )
+
+    assert snapshots
+    assert snapshots[-1].jobs_total == 2
+    assert snapshots[-1].jobs_done == 2
+    assert snapshots[-1].pct == 100.0
+
+
+@pytest.mark.asyncio
 async def test_progress_snapshot_intersects_completed_symbols_with_requested_resume_set() -> None:
     router = _PaginatingRouter(pages=0)
     engine, _ = _make_engine(router)
     snapshots: list[ProgressSnapshot] = []
 
-    engine._initialize_run_state = lambda dataset, resume: ("run-id", {"AAPL", "MSFT"})  # type: ignore[method-assign]
+    engine._initialize_run_state = lambda dataset, resume: ("run-id", {"AAPL,MSFT"})  # type: ignore[method-assign]
     engine._record_worker_symbol_state = lambda **kwargs: asyncio.sleep(0)  # type: ignore[method-assign]
 
     await engine.run(
