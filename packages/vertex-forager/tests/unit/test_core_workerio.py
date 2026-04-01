@@ -36,6 +36,9 @@ async def test_emit_packets_and_next_jobs_emits_and_enqueues() -> None:
     def _inc(name: str, amount: int) -> None:
         counters[name] = counters.get(name, 0) + amount
 
+    async def _noop_enqueue(job: FetchJob) -> None:
+        pass
+
     await emit_packets_and_next_jobs(
         parse_result=parse_result,
         req_q=req_q,
@@ -47,6 +50,8 @@ async def test_emit_packets_and_next_jobs_emits_and_enqueues() -> None:
         normalize_packet=lambda packet: packet,
         inc=_inc,
         priority_pagination=1,
+        pagination_max_burst=None,
+        enqueue_pagination_job=_noop_enqueue,
         logger=type("L", (), {"debug": lambda *args, **kwargs: None})(),
     )
     assert counters["packets_emitted"] == 1

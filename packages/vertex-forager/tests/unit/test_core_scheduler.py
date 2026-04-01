@@ -5,116 +5,135 @@ import asyncio
 import pytest
 
 from vertex_forager.core.config import FetchJob, RequestSpec
-from vertex_forager.core.scheduler import FairnessState, pop_next_job_respecting_fairness
+from vertex_forager.core.scheduler import (
+    FairnessState,
+    enqueue_pagination_job,
+    mark_pagination_job_done,
+    pop_next_job_respecting_fairness,
+)
 
 
-def _job(symbol: str) -> FetchJob:
+def _job(symbol: str, page: int) -> FetchJob:
     return FetchJob(
         provider="sharadar",
         dataset="price",
         symbol=symbol,
-        spec=RequestSpec(url=f"https://example.test/{symbol}", params={"ticker": symbol}),
+        spec=RequestSpec(url=f"https://example.test/{symbol}/{page}", params={"ticker": symbol, "page": page}),
     )
 
 
 @pytest.mark.asyncio
-async def test_pop_next_job_respecting_fairness_consumes_sentinel() -> None:
-    req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
-    req_q.put_nowait((99, 0, None))
-    state = FairnessState()
-    result = await pop_next_job_respecting_fairness(
-        req_q=req_q,
-        fair_lock=asyncio.Lock(),
-        burst_cap=2,
-        priority_pagination=1,
-        priority_new_job=0,
-        fairness_state=state,
-    )
-    assert result.priority == 99
-    assert result.job is None
-    assert result.demoted == []
-    assert result.already_done is True
-    assert state.last_symbol is None
-    assert state.burst_count == 0
+async def test_drr_rotates_symbols_after_quantum() -> None:
+    state = FairnessState(quantum=3)
+    lock = asyncio.Lock()
+    for page in range(1, 5):
+        await enqueue_pagination_job(fair_lock=lock, fairness_state=state, job=_job("AAPL", page))
+        await enqueue_pagination_job(fair_lock=lock, fairness_state=state, job=_job("MSFT", page))
+
+    seen: list[str] = []
+    for _ in range(8):
+        result = await pop_next_job_respecting_fairness(
+            fair_lock=lock,
+            priority_pagination=1,
+            fairness_state=state,
+        )
+        assert result.job is not None
+        seen.append(result.job.symbol or "")
+        await mark_pagination_job_done(fair_lock=lock, fairness_state=state)
+
+    assert seen == ["AAPL", "AAPL", "AAPL", "MSFT", "MSFT", "MSFT", "AAPL", "MSFT"]
 
 
 @pytest.mark.asyncio
-async def test_pop_next_job_respecting_fairness_demotes_excess_burst() -> None:
-    req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
-    req_q.put_nowait((1, 0, _job("AAPL")))
-    req_q.put_nowait((1, 1, _job("AAPL")))
-    req_q.put_nowait((2, 2, _job("MSFT")))
-    state = FairnessState(last_symbol="AAPL", burst_count=2)
-    result = await pop_next_job_respecting_fairness(
-        req_q=req_q,
-        fair_lock=asyncio.Lock(),
-        burst_cap=2,
+async def test_single_symbol_finishes_without_free_credit_carryover() -> None:
+    state = FairnessState(quantum=3)
+    lock = asyncio.Lock()
+    await enqueue_pagination_job(fair_lock=lock, fairness_state=state, job=_job("AAPL", 1))
+    await enqueue_pagination_job(fair_lock=lock, fairness_state=state, job=_job("AAPL", 2))
+
+    first = await pop_next_job_respecting_fairness(
+        fair_lock=lock,
         priority_pagination=1,
-        priority_new_job=0,
         fairness_state=state,
     )
-    assert result.priority == 2
+    second = await pop_next_job_respecting_fairness(
+        fair_lock=lock,
+        priority_pagination=1,
+        fairness_state=state,
+    )
+    await mark_pagination_job_done(fair_lock=lock, fairness_state=state)
+    await mark_pagination_job_done(fair_lock=lock, fairness_state=state)
+
+    assert first.job is not None
+    assert first.job.symbol == "AAPL"
+    assert second.job is not None
+    assert second.job.symbol == "AAPL"
+    assert state.deficit.get("AAPL", 0.0) == 0.0
+    assert list(state.active) == []
+
+
+@pytest.mark.asyncio
+async def test_new_symbol_enters_active_list_mid_run() -> None:
+    state = FairnessState(quantum=3)
+    lock = asyncio.Lock()
+    for page in range(1, 6):
+        await enqueue_pagination_job(fair_lock=lock, fairness_state=state, job=_job("AAPL", page))
+
+    first = await pop_next_job_respecting_fairness(
+        fair_lock=lock,
+        priority_pagination=1,
+        fairness_state=state,
+    )
+    second = await pop_next_job_respecting_fairness(
+        fair_lock=lock,
+        priority_pagination=1,
+        fairness_state=state,
+    )
+    assert first.job is not None
+    assert first.job.symbol == "AAPL"
+    assert second.job is not None
+    assert second.job.symbol == "AAPL"
+    await mark_pagination_job_done(fair_lock=lock, fairness_state=state)
+    await mark_pagination_job_done(fair_lock=lock, fairness_state=state)
+
+    await enqueue_pagination_job(fair_lock=lock, fairness_state=state, job=_job("MSFT", 1))
+
+    third = await pop_next_job_respecting_fairness(
+        fair_lock=lock,
+        priority_pagination=1,
+        fairness_state=state,
+    )
+    fourth = await pop_next_job_respecting_fairness(
+        fair_lock=lock,
+        priority_pagination=1,
+        fairness_state=state,
+    )
+    await mark_pagination_job_done(fair_lock=lock, fairness_state=state)
+    await mark_pagination_job_done(fair_lock=lock, fairness_state=state)
+
+    assert third.job is not None
+    assert third.job.symbol == "AAPL"
+    assert fourth.job is not None
+    assert fourth.job.symbol == "MSFT"
+
+
+@pytest.mark.asyncio
+async def test_drr_drained_event_tracks_unfinished_jobs() -> None:
+    state = FairnessState(quantum=3)
+    lock = asyncio.Lock()
+    await enqueue_pagination_job(fair_lock=lock, fairness_state=state, job=_job("TSLA", 1))
+
+    assert state.drained.is_set() is False
+
+    result = await pop_next_job_respecting_fairness(
+        fair_lock=lock,
+        priority_pagination=1,
+        fairness_state=state,
+    )
+
     assert result.job is not None
-    assert result.job.symbol == "MSFT"
-    assert [d.symbol for d in result.demoted] == ["AAPL", "AAPL"]
-    assert result.already_done is False
-    assert state.last_symbol is None
-    assert state.burst_count == 0
+    assert result.job.symbol == "TSLA"
 
+    await mark_pagination_job_done(fair_lock=lock, fairness_state=state)
 
-@pytest.mark.asyncio
-async def test_pop_next_job_symbol_change_resets_burst_to_one() -> None:
-    req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
-    req_q.put_nowait((1, 0, _job("MSFT")))
-    state = FairnessState(last_symbol="AAPL", burst_count=3)
-    result = await pop_next_job_respecting_fairness(
-        req_q=req_q,
-        fair_lock=asyncio.Lock(),
-        burst_cap=10,
-        priority_pagination=1,
-        priority_new_job=0,
-        fairness_state=state,
-    )
-    assert result.job is not None
-    assert result.job.symbol == "MSFT"
-    assert state.last_symbol == "MSFT"
-    assert state.burst_count == 1
-
-
-@pytest.mark.asyncio
-async def test_pop_next_job_empty_queue_after_demotion_returns_no_candidate() -> None:
-    req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
-    req_q.put_nowait((1, 0, _job("AAPL")))
-    req_q.put_nowait((1, 1, _job("AAPL")))
-    state = FairnessState(last_symbol="AAPL", burst_count=2)
-    result = await pop_next_job_respecting_fairness(
-        req_q=req_q,
-        fair_lock=asyncio.Lock(),
-        burst_cap=2,
-        priority_pagination=1,
-        priority_new_job=0,
-        fairness_state=state,
-    )
-    assert result.priority == 0
-    assert result.job is None
-    assert [d.symbol for d in result.demoted] == ["AAPL", "AAPL"]
-    assert result.already_done is False
-
-
-@pytest.mark.asyncio
-async def test_pop_next_job_mutates_fairness_state_in_place() -> None:
-    req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
-    req_q.put_nowait((1, 0, _job("TSLA")))
-    state = FairnessState(last_symbol=None, burst_count=0)
-    original_id = id(state)
-    _ = await pop_next_job_respecting_fairness(
-        req_q=req_q,
-        fair_lock=asyncio.Lock(),
-        burst_cap=3,
-        priority_pagination=1,
-        priority_new_job=0,
-        fairness_state=state,
-    )
-    assert id(state) == original_id
-    assert state.last_symbol == "TSLA"
-    assert state.burst_count == 1
+    assert state.drained.is_set() is True

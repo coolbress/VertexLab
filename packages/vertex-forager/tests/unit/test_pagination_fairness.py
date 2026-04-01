@@ -71,15 +71,24 @@ class StubClient:
 
 
 @pytest.mark.asyncio
-async def test_pagination_fairness_cap_prevents_long_bursts() -> None:
+async def test_pagination_fairness_serves_new_symbol_before_long_tail(monkeypatch: pytest.MonkeyPatch) -> None:
     router = FairnessRouter(pages_for_aapl=5)
     http = HttpExecutor(client=StubClient())
     writer = StubWriter()
     config = ResolvedClientConfig(
-        requests_per_minute=60, concurrency=1, metrics_enabled=False, structured_logs=False, pagination_max_burst=2
+        requests_per_minute=60,
+        concurrency=1,
+        metrics_enabled=False,
+        structured_logs=False,
+        pagination_max_burst=2,
     )
     controller = FlowController(requests_per_minute=60, concurrency_limit=1)
     engine = VertexForager(router=router, http=http, writer=writer, mapper=None, config=config, controller=controller)
+
+    async def _fast_fetch(_: FetchJob) -> bytes:
+        return b"ok"
+
+    monkeypatch.setattr(engine, "_fetch_with_retry", _fast_fetch)
 
     order: list[str] = []
 
@@ -95,17 +104,6 @@ async def test_pagination_fairness_cap_prevents_long_bursts() -> None:
 
     res: RunResult = await engine.run(dataset="d", symbols=["AAPL", "MSFT"], on_progress=on_progress)
     assert isinstance(res, RunResult)
-    # Ensure we never see more than 2 consecutive AAPL before MSFT appears at least once
-    max_consec = 0
-    current = ""
-    streak = 0
-    for s in order:
-        if s == current:
-            streak += 1
-        else:
-            current = s
-            streak = 1
-        max_consec = max(max_consec, streak)
-    assert len(order) >= 2, "Expected progress events from pagination"
-    # Allow initial new-job + burst of 2 pages => max 3 in a row
-    assert max_consec <= 3
+    assert order[:2] == ["AAPL", "MSFT"]
+    assert order.count("MSFT") == 1
+    assert order.count("AAPL") == 5

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import itertools
 
 import pytest
 
@@ -9,6 +8,7 @@ from vertex_forager.core.config import FetchJob, RequestSpec, ResolvedClientConf
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor
 from vertex_forager.core.pipeline import VertexForager
+from vertex_forager.core.scheduler import enqueue_pagination_job, mark_pagination_job_done
 
 
 class _StubClient:
@@ -17,8 +17,8 @@ class _StubClient:
 
 
 @pytest.mark.asyncio
-async def test_pop_next_job_respecting_fairness_demotes_excess_burst() -> None:
-    config = ResolvedClientConfig(requests_per_minute=60, concurrency=1)
+async def test_drr_handles_large_page_count_disparity_without_scan() -> None:
+    config = ResolvedClientConfig(requests_per_minute=60, concurrency=1, pagination_max_burst=3)
     controller = FlowController(requests_per_minute=60, concurrency_limit=1)
     eng = VertexForager(
         router=None,  # type: ignore[arg-type]
@@ -29,27 +29,24 @@ async def test_pop_next_job_respecting_fairness_demotes_excess_burst() -> None:
         controller=controller,
     )
     q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
-    counter = itertools.count()
 
-    def job(sym: str) -> FetchJob:
-        return FetchJob(provider="p", dataset="d", symbol=sym, spec=RequestSpec(url="http://example.com"))
+    def job(sym: str, page: int) -> FetchJob:
+        return FetchJob(
+            provider="p",
+            dataset="d",
+            symbol=sym,
+            spec=RequestSpec(url=f"http://example.com/{sym}/{page}"),
+        )
 
-    # Queue: pagination A, pagination A, pagination B
-    await q.put((eng.PRIORITY_PAGINATION, next(counter), job("A")))
-    await q.put((eng.PRIORITY_PAGINATION, next(counter), job("A")))
-    await q.put((eng.PRIORITY_PAGINATION, next(counter), job("B")))
+    for page in range(1, 31):
+        await enqueue_pagination_job(fair_lock=eng._fair_lock, fairness_state=eng._fair_state, job=job("A", page))
+    await enqueue_pagination_job(fair_lock=eng._fair_lock, fairness_state=eng._fair_state, job=job("B", 1))
 
-    # With burst_cap=1, picking should demote the second A and return first A,
-    # then on next pick it should return B (since A burst exceeded)
-    selected = await eng._dequeue_worker_job(req_q=q, burst_cap=1)  # type: ignore[attr-defined]
-    assert selected.job is not None
-    assert selected.job.symbol == "A"
-    # Requeue demotes at NEW_JOB priority
-    for d in selected.demoted:
-        await q.put((eng.PRIORITY_NEW_JOB, next(counter), d))
-    # Next pick
-    selected2 = await eng._dequeue_worker_job(req_q=q, burst_cap=1)  # type: ignore[attr-defined]
-    assert selected2.job is not None
-    assert selected2.job.symbol in {"A", "B"}
-    # If fairness enforced, B should appear before the demoted A
-    assert selected2.job.symbol == "B"
+    first_round = []
+    for _ in range(4):
+        selected = await eng._dequeue_worker_job(req_q=q, burst_cap=3)  # type: ignore[attr-defined]
+        assert selected.job is not None
+        first_round.append(selected.job.symbol)
+        await mark_pagination_job_done(fair_lock=eng._fair_lock, fairness_state=eng._fair_state)
+
+    assert first_round == ["A", "A", "A", "B"]

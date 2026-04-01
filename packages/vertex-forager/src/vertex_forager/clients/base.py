@@ -216,7 +216,7 @@ class BaseClient(ABC, Generic[T]):
         structured_logs: bool | None = None,
         log_verbose: bool | None = None,
         dlq_enabled: bool | None = None,
-        pagination_max_burst: int | None = None,
+        pagination_max_burst: int | None = 3,
         retry: RetryConfig | dict[str, Any] | None = None,
         adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
         concurrency: int | None = None,
@@ -238,7 +238,7 @@ class BaseClient(ABC, Generic[T]):
             structured_logs: Enables structured stage logs when True.
             log_verbose: Promotes structured logs to INFO when True.
             dlq_enabled: Enables DLQ spooling on persistence failures.
-            pagination_max_burst: Pagination fairness burst cap.
+            pagination_max_burst: DRR pagination quantum. Defaults to 3.
             retry: Grouped retry policy configuration.
             adaptive_throttle: Grouped adaptive throttle policy configuration.
             concurrency: Explicit fetch concurrency limit.

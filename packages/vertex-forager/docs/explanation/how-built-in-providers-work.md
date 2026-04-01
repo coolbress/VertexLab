@@ -150,6 +150,13 @@ These keys are explicitly passed into `pipeline.run` and should be removed from 
   - Single ticker: `single_symbol_job(provider=provider, dataset=dataset, symbol=symbol, url=url, params=params, auth=None, context={"symbol": symbol})`
   - Pagination: `pagination_job(provider=provider, dataset=dataset, url=url, params=params, auth=auth, context=make_pagination_context(meta_key=meta_key, cursor_param=cursor_param, max_pages=max_pages))`
 
+Pagination follow-up jobs do not bypass pipeline fairness:
+
+- The initial request enters the main request queue.
+- Follow-up page jobs enter the pagination scheduler lane.
+- When `pagination_max_burst` is set, that lane uses Deficit Round Robin per symbol.
+- When `pagination_max_burst=None`, pagination follow-up jobs fall back to the main queue and can run consecutively.
+
 ## Diagrams
 
 ### Flowchart — Router → Pipeline

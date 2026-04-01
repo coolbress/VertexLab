@@ -12,6 +12,7 @@
 - `flush_threshold_rows`: Buffer rows per table before flush.
 - `metrics_enabled`: Enable metrics collection.
 - `http_timeout_s`: HTTP request timeout in seconds.
+- `pagination_max_burst`: DRR quantum for pagination fairness across symbols.
 - `limits=HTTPConfig(...)`: HTTP client max keepalive and total connection counts.
 - `advanced=AdvancedConfig(...)`: Advanced resource controls such as `mem_threshold_ratio` and `mem_threshold_abs_mb`.
 
@@ -61,6 +62,7 @@ client = create_client(
 ## Tuning Strategy
 
 - Start `concurrency` in [8, 12, 16, 20, 24]; calibrate by provider latency.
+- Keep `pagination_max_burst=3` as the default baseline, then lower it for more symbol interleaving or raise it when deep pagination dominates and fairness is less important.
 - Increase `flush_threshold_rows` to reduce flush frequency on large tables.
 - Tune `limits.max_keepalive_connections` and `limits.max_connections` to match concurrency and provider behavior.
 - Split processes per dataset if optimal parameters differ significantly.

@@ -293,7 +293,7 @@ class ResolvedClientConfig(BaseModel):
     structured_logs: bool = False
     log_verbose: bool = False
     dlq_enabled: bool = True
-    pagination_max_burst: int | None = Field(default=None, ge=1)
+    pagination_max_burst: int | None = Field(default=3, ge=1)
     retry: RetryConfig = Field(default_factory=RetryConfig)
     adaptive_throttle: AdaptiveThrottleConfig = Field(default_factory=AdaptiveThrottleConfig)
     concurrency: int | None = Field(default=None, gt=0)

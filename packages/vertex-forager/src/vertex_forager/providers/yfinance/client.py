@@ -64,7 +64,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         structured_logs: bool | None = None,
         log_verbose: bool | None = None,
         dlq_enabled: bool | None = None,
-        pagination_max_burst: int | None = None,
+        pagination_max_burst: int | None = 3,
         retry: RetryConfig | dict[str, Any] | None = None,
         adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
         concurrency: int | None = None,
@@ -86,7 +86,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             structured_logs (bool | None): Enable structured logs when True. Default is None.
             log_verbose (bool | None): Enable verbose client logging when True. Default is None.
             dlq_enabled (bool | None): Preserve failed write batches for recovery when True. Default is None.
-            pagination_max_burst (int | None): Maximum pagination burst before fairness demotion. Default is None.
+            pagination_max_burst (int | None): DRR pagination quantum. Default is 3.
             retry (RetryConfig | dict[str, Any] | None): Retry settings for fetch failures. Default is None.
             adaptive_throttle (
                 AdaptiveThrottleConfig | dict[str, Any] | None,
