@@ -282,6 +282,33 @@ async def test_progress_snapshot_preserves_completed_logical_units_on_early_init
 
 
 @pytest.mark.asyncio
+async def test_progress_snapshot_exceptional_shutdown_emits_terminal_after_stop() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    events: list[str] = []
+
+    async def _boom(**_: object) -> None:
+        raise RuntimeError("pipeline boom")
+
+    async def _stop() -> None:
+        events.append("stop")
+
+    async def _emit(**kwargs: object) -> None:
+        if kwargs["finished"]:
+            assert events == ["stop"]
+            events.append("finished")
+
+    engine._await_pipeline_completion = _boom  # type: ignore[method-assign]
+    engine.stop = _stop  # type: ignore[method-assign]
+    engine._emit_progress_snapshot = _emit  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="pipeline boom"):
+        await engine.run(dataset="d", symbols=["AAPL"], on_progress=lambda snapshot: None)
+
+    assert events == ["stop", "finished"]
+
+
+@pytest.mark.asyncio
 async def test_progress_snapshot_counts_completed_symbols_on_resume() -> None:
     router = _PaginatingRouter(pages=0)
     engine, _ = _make_engine(router)
@@ -894,6 +921,43 @@ async def test_producer_resumes_batched_pending_jobs_without_restarting_componen
     resumed = list(engine._fair_state.queues["AAPL,MSFT"])
     assert [job.symbol for job in resumed] == ["AAPL,MSFT"]
     assert resumed[0].spec.params["page"] == 2
+
+
+@pytest.mark.asyncio
+async def test_producer_does_not_resume_batched_pending_job_on_partial_overlap() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
+    pending_job = FetchJob(
+        provider="stub",
+        dataset="d",
+        symbol="AAPL,MSFT",
+        spec=RequestSpec(url="https://x", params={"page": 2}),
+    )
+
+    async def _generate_jobs(**kwargs: Any):
+        yield FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x"))
+        yield FetchJob(provider="stub", dataset="d", symbol="NVDA", spec=RequestSpec(url="https://z"))
+
+    engine._router.generate_jobs = _generate_jobs  # type: ignore[method-assign]
+
+    await engine._producer(
+        req_q=req_q,
+        dataset="d",
+        symbols=["AAPL", "NVDA"],
+        order_counter=itertools.count(),
+        completed_symbols=set(),
+        pending_jobs=[pending_job],
+    )
+
+    queued_jobs: list[FetchJob] = []
+    while not req_q.empty():
+        _priority, _order, queued_job = req_q.get_nowait()
+        if queued_job is not None:
+            queued_jobs.append(queued_job)
+
+    assert [job.symbol for job in queued_jobs] == ["AAPL", "NVDA"]
+    assert list(engine._fair_state.queues.get("AAPL,MSFT", [])) == []
 
 
 @pytest.mark.asyncio

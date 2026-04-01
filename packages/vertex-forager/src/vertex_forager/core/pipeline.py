@@ -689,6 +689,7 @@ class VertexForager:
             return result
         finally:
             try:
+                await self.stop()
                 if not final_progress_emitted:
                     try:
                         if not progress_runtime_initialized:
@@ -710,9 +711,9 @@ class VertexForager:
                             terminal_count=0,
                             finished=True,
                         )
+                        final_progress_emitted = True
                     except Exception:
                         logger.exception("PIPELINE: Failed to emit final progress snapshot during exceptional shutdown")
-                await self.stop()
             finally:
                 self._running = False
 
@@ -1200,7 +1201,10 @@ class VertexForager:
             if requested_symbols is None
             or pending_job.symbol is None
             or pending_job.symbol in requested_symbols
-            or any(token in requested_symbol_tokens for token in _symbol_tokens(pending_job.symbol))
+            or (
+                bool(_symbol_tokens(pending_job.symbol))
+                and set(_symbol_tokens(pending_job.symbol)).issubset(requested_symbol_tokens)
+            )
         ]
         pending_job_signatures = {self._job_signature(pending_job) for pending_job in filtered_pending_jobs}
         pending_symbols = {
