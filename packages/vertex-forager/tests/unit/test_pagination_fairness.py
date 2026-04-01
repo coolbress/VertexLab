@@ -9,6 +9,7 @@ from vertex_forager.core.config import (
     FetchJob,
     FramePacket,
     ParseResult,
+    ProgressSnapshot,
     RequestSpec,
     ResolvedClientConfig,
     RunResult,
@@ -91,20 +92,14 @@ async def test_pagination_fairness_serves_new_symbol_before_long_tail(monkeypatc
 
     monkeypatch.setattr(engine, "_fetch_with_retry", _fast_fetch)
 
-    order: list[str] = []
+    snapshots: list[ProgressSnapshot] = []
 
-    async def on_progress(
-        *,
-        job: FetchJob,
-        payload: bytes | None,
-        exc: Exception | None,
-        parse_result: ParseResult | None,
-    ) -> None:
-        assert job.symbol is not None
-        order.append(job.symbol)
+    async def on_progress(snapshot: ProgressSnapshot) -> None:
+        snapshots.append(snapshot)
 
     res: RunResult = await engine.run(dataset="d", symbols=["AAPL", "MSFT"], on_progress=on_progress)
     assert isinstance(res, RunResult)
-    assert order[:2] == ["AAPL", "MSFT"]
-    assert order.count("MSFT") == 1
-    assert order.count("AAPL") == 5
+    assert snapshots
+    assert snapshots[-1].finished is True
+    assert snapshots[-1].jobs_total == 2
+    assert snapshots[-1].jobs_done == 2

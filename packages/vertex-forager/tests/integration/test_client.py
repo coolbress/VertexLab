@@ -22,56 +22,28 @@ from vertex_forager.core.config import RunResult
 
 
 class TestClientVisualization:
-    """Tests for client progress visualization (Spinner/Tqdm)."""
+    """Tests for client progress visualization."""
 
     @pytest.mark.asyncio
-    async def test_get_ticker_info_uses_spinner(self, sharadar_client):
-        """Test that get_ticker_info (ambiguous task) uses Spinner."""
-
-        # Patch dependencies
-        # 1. Pipeline run to avoid actual execution
-        # 2. Spinner to verify usage
-        with (
-            patch("vertex_forager.clients.base.VertexForager") as MockPipeline,
-            patch("vertex_forager.providers.sharadar.client.Spinner") as MockSpinner,
-        ):
-            # Setup mock pipeline run return value
-            mock_pipeline_instance = MockPipeline.return_value
-            dummy_result = MagicMock()
-            mock_pipeline_instance.run = AsyncMock(
-                return_value=dummy_result
-            )  # Return dummy result
-
-            # Setup mock spinner context manager
-            mock_spinner_instance = MockSpinner.return_value
-            mock_spinner_instance.__enter__.return_value = mock_spinner_instance
-
-            # Act
-            await sharadar_client._get_ticker_info_async()
-
-            # Assert
-            # Verify Spinner was initialized
-            MockSpinner.assert_called()
-            # Verify Spinner was used as context manager
-            mock_spinner_instance.__enter__.assert_called()
-            mock_spinner_instance.__exit__.assert_called()
-
-    @pytest.mark.asyncio
-    async def test_get_price_data_uses_tqdm(self, sharadar_client, tmp_path):
-        """Test that get_price_data (per-ticker task) uses tqdm."""
-
-        # Patch dependencies
-        with (
-            patch("vertex_forager.clients.base.VertexForager") as MockPipeline,
-            patch("vertex_forager.clients.base.tqdm") as MockTqdm,
-        ):
-            # Setup mock pipeline run return value
+    async def test_get_ticker_info_defaults_to_silent_progress(self, sharadar_client):
+        """Collect calls are silent unless progress=True is requested."""
+        with patch("vertex_forager.clients.base.VertexForager") as MockPipeline:
             mock_pipeline_instance = MockPipeline.return_value
             mock_pipeline_instance.run = AsyncMock(return_value=MagicMock())
 
-            # Setup mock tqdm context manager
-            mock_tqdm_instance = MockTqdm.return_value
-            mock_tqdm_instance.__enter__.return_value = mock_tqdm_instance
+            await sharadar_client._get_ticker_info_async()
+
+            assert mock_pipeline_instance.run.await_args.kwargs["progress"] is False
+
+    @pytest.mark.asyncio
+    async def test_get_price_data_uses_tqdm(self, sharadar_client, tmp_path):
+        """progress=True is threaded through to the pipeline."""
+
+        # Patch dependencies
+        with patch("vertex_forager.clients.base.VertexForager") as MockPipeline:
+            # Setup mock pipeline run return value
+            mock_pipeline_instance = MockPipeline.return_value
+            mock_pipeline_instance.run = AsyncMock(return_value=MagicMock())
 
             # Act
             tickers = ["AAPL", "GOOGL"]
@@ -79,31 +51,13 @@ class TestClientVisualization:
                 tickers=tickers,
                 start_date="2024-01-01",
                 end_date="2024-01-10",
+                progress=True,
                 persist=True,
                 db_path=str(tmp_path / "test.db"),
             )
 
             # Assert
-            # Verify tqdm was initialized
-            MockTqdm.assert_called()
-            # We expect at least one call related to price data
-            # Metadata fetching might trigger another one
-            # Check if any call has the correct total
-            # Note: total is now number of TICKERS (2), not batches (1).
-            calls = MockTqdm.call_args_list
-            price_call_found = False
-            for call in calls:
-                # With 2 tickers, we expect total=2
-                if call.kwargs.get("total") == 2:
-                    price_call_found = True
-                    break
-            assert price_call_found
-
-            # Verify tqdm was used
-            # Refactored implementation does not use context manager
-            # It uses try/finally with close()
-            # mock_tqdm_instance.__enter__.assert_called()
-            mock_tqdm_instance.close.assert_called()
+            assert mock_pipeline_instance.run.await_args.kwargs["progress"] is True
 
 
 class TestClientIntegration:

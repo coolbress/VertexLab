@@ -84,14 +84,14 @@ def _run_mocked_price_collection(
         client.get_price_data(
             tickers=tickers,
             connect_db=warmup_db_path,
-            show_progress=False,
+            progress=False,
         )
         if warmup_db_path.exists():
             warmup_db_path.unlink()
         return client.get_price_data(
             tickers=tickers,
             connect_db=db_path,
-            show_progress=False,
+            progress=False,
         )
 
 

@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Sequence
     from contextlib import AbstractContextManager
 
-    from vertex_forager.core.config import FetchJob, FramePacket, ParseResult, RunResult
+    from vertex_forager.core.config import FetchJob, FramePacket, ParseResult, ProgressSnapshot, RunResult
     from vertex_forager.writers.base import WriteResult
 
 
@@ -93,7 +93,8 @@ class IClient(Protocol, Generic[T]):
         symbols: list[str] | None,
         writer: IWriter,
         mapper: IMapper,
-        on_progress: Callable[..., None] | None = None,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
+        progress: bool = False,
         **kwargs: JSONValue,
     ) -> RunResult:
         """Execute the VertexForager pipeline.
@@ -104,7 +105,8 @@ class IClient(Protocol, Generic[T]):
             symbols: List of symbols, or None for provider-wide fetch.
             writer: Destination writer for normalized frames.
             mapper: Schema mapper used to enforce target types/columns.
-            on_progress: Optional callback invoked per completed job.
+            on_progress: Optional callback invoked with ProgressSnapshot per completed job.
+            progress: Whether to show built-in progress output and final summary.
             **kwargs: Additional pipeline options (JSONValue-safe).
 
         Returns:

@@ -23,9 +23,8 @@ def mock_client() -> SharadarClient:
 
 
 @pytest.mark.asyncio
-async def test_fetch_pagination_show_progress_true(mock_client):
+async def test_fetch_pagination_progress_true(mock_client):
     with (
-        patch.object(base_module, "tqdm") as mock_tqdm,
         patch.object(base_module, "create_writer") as mock_create_writer,
         patch("vertex_forager.providers.sharadar.client.create_router"),
     ):
@@ -41,7 +40,7 @@ async def test_fetch_pagination_show_progress_true(mock_client):
             connect_db=":memory:",
             desc="test",
             table_name="test",
-            show_progress=True,
+            progress=True,
             total_items=None,
             unit="pages",
             start_date=None,
@@ -49,17 +48,12 @@ async def test_fetch_pagination_show_progress_true(mock_client):
             extra={},
         )
         await mock_client._fetch_pagination(cfg)
-        # Check if tqdm was called with disable=False (or disable=not True -> False)
-        # Note: disable=False is default, but we passed disable=not show_progress
-        assert mock_tqdm.called, "tqdm should have been called"
-        call_kwargs = mock_tqdm.call_args.kwargs
-        assert call_kwargs.get("disable") is False
+        assert mock_client.run_pipeline.await_args.kwargs["progress"] is True
 
 
 @pytest.mark.asyncio
-async def test_fetch_pagination_show_progress_false(mock_client):
+async def test_fetch_pagination_progress_false(mock_client):
     with (
-        patch.object(base_module, "tqdm") as mock_tqdm,
         patch.object(base_module, "create_writer") as mock_create_writer,
         patch("vertex_forager.providers.sharadar.client.create_router"),
     ):
@@ -75,7 +69,7 @@ async def test_fetch_pagination_show_progress_false(mock_client):
             connect_db=":memory:",
             desc="test",
             table_name="test",
-            show_progress=False,
+            progress=False,
             total_items=None,
             unit="pages",
             start_date=None,
@@ -83,5 +77,4 @@ async def test_fetch_pagination_show_progress_false(mock_client):
             extra={},
         )
         await mock_client._fetch_pagination(cfg)
-        # Check if tqdm was NOT called (implementation skips it entirely if False)
-        mock_tqdm.assert_not_called()
+        assert mock_client.run_pipeline.await_args.kwargs["progress"] is False

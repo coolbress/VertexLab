@@ -10,7 +10,7 @@ from vertex_forager.core.types import JSONValue, SharadarDataset, YFinanceDatase
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from vertex_forager.core.config import RunResult
+    from vertex_forager.core.config import ProgressSnapshot, RunResult
     from vertex_forager.core.contracts import IMapper, IRouter, IWriter
 
 T = TypeVar("T", bound=SharadarDataset | YFinanceDataset | str)
@@ -24,7 +24,8 @@ async def run_pipeline_for(
     symbols: list[str] | None,
     writer: IWriter,
     mapper: IMapper,
-    on_progress: Callable[..., None] | None = None,
+    on_progress: Callable[[ProgressSnapshot], None] | None = None,
+    progress: bool = False,
     http_executor_cls: type[Any] | None = None,
     vertex_forager_cls: type[Any] | None = None,
     **kwargs: JSONValue,
@@ -41,7 +42,8 @@ async def run_pipeline_for(
         symbols: Optional list of symbols to fetch.
         writer: Destination writer used by the pipeline.
         mapper: Schema mapper to normalize frames.
-        on_progress: Optional callback invoked on job completion.
+        on_progress: Optional callback invoked with ProgressSnapshot on job completion.
+        progress: Whether to show built-in progress output.
         **kwargs: Additional pipeline options; reserved keys are filtered.
 
     Returns:
@@ -85,6 +87,11 @@ async def run_pipeline_for(
                 module=r"yfinance(\.|$)",
             )
             client.last_run = await pipeline.run(
-                dataset=dataset, symbols=symbols, on_progress=on_progress, resume=resume, **run_kwargs
+                dataset=dataset,
+                symbols=symbols,
+                on_progress=on_progress,
+                progress=progress,
+                resume=resume,
+                **run_kwargs,
             )
         return cast("RunResult", client.last_run)

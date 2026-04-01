@@ -28,6 +28,8 @@ These result models summarize parsed packets, table counts, and run-level outcom
 
 ::: vertex_forager.core.config.RunResult
 
+::: vertex_forager.core.config.ProgressSnapshot
+
 ::: vertex_forager.core.config.ParseResult
 
 ## Flow Control

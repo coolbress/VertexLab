@@ -71,7 +71,7 @@ async def main_async() -> None:
                 period="annual",
                 tickers=yf_tickers,
                 connect_db=db_path,
-                show_progress=False,
+                progress=False,
             )
         except ImportError as err:
             if err.name in {"pandas", "yfinance"}:

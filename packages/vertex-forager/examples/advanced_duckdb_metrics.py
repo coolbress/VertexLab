@@ -30,7 +30,7 @@ def main() -> None:
     tickers = _tickers_from_env()
     db = _db_path()
     uri = f"duckdb://{db}"
-    run = client.get_price_data(tickers=tickers, connect_db=uri, show_progress=False)
+    run = client.get_price_data(tickers=tickers, connect_db=uri, progress=False)
     print(getattr(run, "tables", run))
     if not db.exists():
         raise SystemExit("Expected DuckDB file was not created")

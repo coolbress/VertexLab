@@ -8,6 +8,7 @@ import warnings
 import pytest
 from tqdm import tqdm
 
+from vertex_forager.core.config import ProgressSnapshot
 from vertex_forager.core.errors import RunError
 from vertex_forager.core.http import _redact_urls
 from vertex_forager.exceptions import InputError
@@ -39,49 +40,99 @@ from vertex_forager.utils import (  # type: ignore[attr-defined]
 
 class TestPbarUpdater:
     def test_update_pbar_counts_symbols_correctly(self):
-        """update_pbar counts symbols in a comma-separated string."""
+        """update_pbar reflects jobs_done deltas from ProgressSnapshot."""
         mock_pbar = MagicMock(spec=tqdm)
         updater = create_pbar_updater(mock_pbar)
 
-        # Mock job and parse_result
-        mock_job = MagicMock()
-        mock_job.symbol = "AAPL,MSFT,GOOG"
-
-        # Case 1: Normal batch
-        updater(job=mock_job, parse_result=None)
+        updater(
+            ProgressSnapshot(
+                jobs_done=3,
+                jobs_total=5,
+                pct=60.0,
+                throughput_sym_per_s=2.5,
+                eta_s=1.0,
+                errors=0,
+                retries=0,
+                rows_written=10,
+                elapsed_s=1.2,
+                active_workers=1,
+                pending_jobs=2,
+                throttle_events=0,
+                dlq_spooled=0,
+                memory_mb=100.0,
+                cpu_pct=5.0,
+            )
+        )
         mock_pbar.update.assert_called_with(3)
-        # Verify display string
-        args, _ = mock_pbar.set_postfix_str.call_args
-        assert "Done: AAPL (+2).." in args[0]
+        mock_pbar.set_postfix.assert_called()
 
-        # Case 2: Empty string in batch (e.g. trailing comma or double comma)
-        mock_job.symbol = "AAPL,,MSFT, ,GOOG"
         mock_pbar.reset_mock()
-        updater(job=mock_job, parse_result=None)
-        # Should count "AAPL", "MSFT", "GOOG" -> 3
-        mock_pbar.update.assert_called_with(3)
-        args, _ = mock_pbar.set_postfix_str.call_args
-        assert "Done: AAPL (+2).." in args[0]
+        updater(
+            ProgressSnapshot(
+                jobs_done=5,
+                jobs_total=5,
+                pct=100.0,
+                throughput_sym_per_s=3.0,
+                eta_s=0.0,
+                errors=1,
+                retries=2,
+                rows_written=20,
+                elapsed_s=2.0,
+                active_workers=0,
+                pending_jobs=0,
+                throttle_events=1,
+                dlq_spooled=0,
+                memory_mb=101.0,
+                cpu_pct=6.0,
+            )
+        )
+        mock_pbar.update.assert_called_with(2)
 
     def test_update_pbar_handles_pagination(self):
-        """Test that update_pbar does not update count if pagination is active."""
+        """No delta means no bar advance, but postfix still updates."""
         mock_pbar = MagicMock(spec=tqdm)
         updater = create_pbar_updater(mock_pbar)
-
-        mock_job = MagicMock()
-        mock_job.symbol = "AAPL"
-
-        # Mock parse_result with next_jobs
-        mock_parse_result = MagicMock()
-        mock_parse_result.next_jobs = ["job2"]
-
-        updater(job=mock_job, parse_result=mock_parse_result)
-
-        # Should NOT call update
+        updater(
+            ProgressSnapshot(
+                jobs_done=1,
+                jobs_total=5,
+                pct=20.0,
+                throughput_sym_per_s=1.0,
+                eta_s=4.0,
+                errors=0,
+                retries=0,
+                rows_written=5,
+                elapsed_s=1.0,
+                active_workers=1,
+                pending_jobs=3,
+                throttle_events=0,
+                dlq_spooled=0,
+                memory_mb=100.0,
+                cpu_pct=5.0,
+            )
+        )
+        mock_pbar.reset_mock()
+        updater(
+            ProgressSnapshot(
+                jobs_done=1,
+                jobs_total=5,
+                pct=20.0,
+                throughput_sym_per_s=1.5,
+                eta_s=3.0,
+                errors=0,
+                retries=0,
+                rows_written=8,
+                elapsed_s=1.5,
+                active_workers=1,
+                pending_jobs=2,
+                throttle_events=0,
+                dlq_spooled=0,
+                memory_mb=101.0,
+                cpu_pct=6.0,
+            )
+        )
         mock_pbar.update.assert_not_called()
-        # Should update postfix (inline at right) to show pagination
-        mock_pbar.set_postfix_str.assert_called()
-        assert "Pagination processing" in mock_pbar.set_postfix_str.call_args[0][0]
+        mock_pbar.set_postfix.assert_called()
 
 
 class TestCacheUtils:
@@ -486,26 +537,48 @@ def test_ipython_helpers_do_not_raise() -> None:
 
 
 def test_pbar_updater_pagination_and_final():
-    # pagination path
     mock_pbar = MagicMock(spec=tqdm)
     updater = create_pbar_updater(mock_pbar)
+    updater(
+        ProgressSnapshot(
+            jobs_done=1,
+            jobs_total=2,
+            pct=50.0,
+            throughput_sym_per_s=1.0,
+            eta_s=1.0,
+            errors=0,
+            retries=0,
+            rows_written=1,
+            elapsed_s=1.0,
+            active_workers=1,
+            pending_jobs=1,
+            throttle_events=0,
+            dlq_spooled=0,
+            memory_mb=100.0,
+            cpu_pct=5.0,
+        )
+    )
+    mock_pbar.set_postfix.assert_called()
 
-    class Job:
-        symbol = "AAPL,MSFT"
-
-    class Parse:
-        def __init__(self) -> None:
-            self.next_jobs = [1]
-
-    updater(job=Job(), parse_result=Parse())
-    mock_pbar.set_postfix_str.assert_called()
-    # final path (no next jobs) should call update
-    mock_pbar = MagicMock(spec=tqdm)
-    updater = create_pbar_updater(mock_pbar)
-
-    class Parse2:
-        def __init__(self) -> None:
-            self.next_jobs = None
-
-    updater(job=Job(), parse_result=Parse2())
+    updater(
+        ProgressSnapshot(
+            jobs_done=2,
+            jobs_total=2,
+            pct=100.0,
+            throughput_sym_per_s=1.2,
+            eta_s=0.0,
+            errors=0,
+            retries=0,
+            rows_written=2,
+            elapsed_s=2.0,
+            active_workers=0,
+            pending_jobs=0,
+            throttle_events=0,
+            dlq_spooled=0,
+            memory_mb=100.0,
+            cpu_pct=5.0,
+            finished=True,
+        )
+    )
     mock_pbar.update.assert_called()
+    mock_pbar.close.assert_called_once()

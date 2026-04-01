@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 import itertools
 from pathlib import Path
 import time
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -24,6 +24,7 @@ from vertex_forager.core.config import (
     FetchJob,
     FramePacket,
     ParseResult,
+    ProgressSnapshot,
     RequestSpec,
     ResolvedClientConfig,
     RunResult,
@@ -131,35 +132,534 @@ class _PaginatingRouter:
 
 @pytest.mark.asyncio
 async def test_single_symbol_drr_is_passthrough() -> None:
-    """Always-on DRR does not penalize single-symbol pagination runs."""
+    """Always-on DRR still reports logical-symbol progress correctly."""
     router = _PaginatingRouter(pages=4)
     engine, _ = _make_engine(router)
 
-    order: list[str] = []
+    snapshots: list[ProgressSnapshot] = []
 
-    async def on_progress(
-        *, job: FetchJob, payload: bytes | None, exc: Exception | None, parse_result: ParseResult | None
-    ) -> None:
-        if job.symbol:
-            order.append(job.symbol)
+    async def on_progress(snapshot: ProgressSnapshot) -> None:
+        snapshots.append(snapshot)
 
     result: RunResult = await engine.run(dataset="d", symbols=["AAPL", "MSFT"], on_progress=on_progress)
     assert isinstance(result, RunResult)
+    assert snapshots
+    assert snapshots[-1].finished is True
+    assert snapshots[-1].jobs_total == 2
+    assert snapshots[-1].jobs_done == 2
 
-    aapl_indices = [i for i, s in enumerate(order) if s == "AAPL"]
-    assert len(aapl_indices) >= 4, f"Expected ≥4 AAPL events, got {len(aapl_indices)}"
-    # Always-on DRR should behave like a passthrough when only one symbol paginates.
-    max_consec = 0
-    streak = 0
-    current = ""
-    for s in order:
-        if s == current:
-            streak += 1
-        else:
-            current = s
-            streak = 1
-        max_consec = max(max_consec, streak)
-    assert max_consec >= 4, f"Expected ≥4 consecutive same-symbol events for single-symbol DRR, got {max_consec}"
+
+@pytest.mark.asyncio
+async def test_progress_snapshot_finishes_once_without_stdout_when_progress_false(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    router = _PaginatingRouter(pages=1)
+    engine, _ = _make_engine(router)
+    snapshots: list[ProgressSnapshot] = []
+
+    async def on_progress(snapshot: ProgressSnapshot) -> None:
+        snapshots.append(snapshot)
+
+    await engine.run(dataset="d", symbols=["AAPL", "MSFT"], on_progress=on_progress, progress=False)
+
+    finished = [snapshot for snapshot in snapshots if snapshot.finished]
+    assert len(finished) == 1
+    assert finished[0].jobs_total == 2
+    assert finished[0].jobs_done == 2
+    assert capsys.readouterr().out == ""
+
+
+@pytest.mark.asyncio
+async def test_progress_snapshot_emits_finished_true_once_on_pipeline_error() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    snapshots: list[ProgressSnapshot] = []
+
+    async def _boom(**_: object) -> None:
+        req_q = cast("asyncio.PriorityQueue[tuple[int, int, FetchJob | None]]", engine._req_q)
+        await req_q.put(
+            (
+                engine.PRIORITY_NEW_JOB,
+                1,
+                FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x")),
+            )
+        )
+        raise RuntimeError("pipeline boom")
+
+    engine._await_pipeline_completion = _boom  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="pipeline boom"):
+        await engine.run(
+            dataset="d",
+            symbols=["AAPL", "MSFT"],
+            on_progress=lambda snapshot: snapshots.append(snapshot),
+            progress=False,
+        )
+
+    finished = [snapshot for snapshot in snapshots if snapshot.finished]
+    assert len(finished) == 1
+    assert finished[0].jobs_total == 2
+    assert finished[0].jobs_done == 0
+
+
+@pytest.mark.asyncio
+async def test_progress_snapshot_emits_finished_true_on_early_init_failure() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    snapshots: list[ProgressSnapshot] = []
+
+    def _boom(dataset: str, resume: bool) -> tuple[str, set[str]]:
+        raise RuntimeError("init boom")
+
+    engine._initialize_run_state = _boom  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="init boom"):
+        await engine.run(
+            dataset="d",
+            symbols=["AAPL", "MSFT"],
+            on_progress=lambda snapshot: snapshots.append(snapshot),
+        )
+
+    finished = [snapshot for snapshot in snapshots if snapshot.finished]
+    assert len(finished) == 1
+    assert finished[0].jobs_total == 2
+    assert finished[0].jobs_done == 0
+
+
+@pytest.mark.asyncio
+async def test_progress_snapshot_early_init_failure_does_not_reuse_prior_run_state() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    snapshots: list[ProgressSnapshot] = []
+
+    engine._progress_started_at = 123.0
+    engine._progress_total = 99
+    engine._progress_done = 77
+    engine._progress_history.append((122.0, 5))
+    engine._progress_window_events = 5
+
+    def _boom(dataset: str, resume: bool) -> tuple[str, set[str]]:
+        raise RuntimeError("init boom")
+
+    engine._initialize_run_state = _boom  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="init boom"):
+        await engine.run(
+            dataset="d",
+            symbols=["AAPL", "MSFT"],
+            on_progress=lambda snapshot: snapshots.append(snapshot),
+        )
+
+    finished = [snapshot for snapshot in snapshots if snapshot.finished]
+    assert len(finished) == 1
+    assert finished[0].jobs_total == 2
+    assert finished[0].jobs_done == 0
+
+
+@pytest.mark.asyncio
+async def test_progress_snapshot_preserves_completed_logical_units_on_early_init_failure() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    snapshots: list[ProgressSnapshot] = []
+
+    def _init_then_fail(dataset: str, resume: bool) -> tuple[str, set[str]]:
+        return "run-id", {"AAPL,MSFT"}
+
+    def _fail_queues() -> tuple[
+        asyncio.PriorityQueue[tuple[int, int, FetchJob | None]],
+        asyncio.Queue[FramePacket | None],
+    ]:
+        raise RuntimeError("queue boom")
+
+    engine._initialize_run_state = _init_then_fail  # type: ignore[method-assign]
+    engine._create_run_queues = _fail_queues  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="queue boom"):
+        await engine.run(
+            dataset="d",
+            symbols=["AAPL", "MSFT"],
+            resume=True,
+            on_progress=lambda snapshot: snapshots.append(snapshot),
+        )
+
+    finished = [snapshot for snapshot in snapshots if snapshot.finished]
+    assert len(finished) == 1
+    assert finished[0].jobs_total == 2
+    assert finished[0].jobs_done == 2
+    assert finished[0].pct == 100.0
+
+
+@pytest.mark.asyncio
+async def test_progress_snapshot_exceptional_shutdown_emits_terminal_after_stop() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    events: list[str] = []
+
+    async def _boom(**_: object) -> None:
+        raise RuntimeError("pipeline boom")
+
+    async def _stop() -> None:
+        events.append("stop")
+
+    async def _emit(**kwargs: object) -> None:
+        if kwargs["finished"]:
+            assert events == ["stop"]
+            events.append("finished")
+
+    engine._await_pipeline_completion = _boom  # type: ignore[method-assign]
+    engine.stop = _stop  # type: ignore[method-assign]
+    engine._emit_progress_snapshot = _emit  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="pipeline boom"):
+        await engine.run(dataset="d", symbols=["AAPL"], on_progress=lambda snapshot: None)
+
+    assert events == ["stop", "finished"]
+
+
+@pytest.mark.asyncio
+async def test_progress_snapshot_exceptional_shutdown_ignores_request_sentinels_in_pending_count() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    snapshots: list[ProgressSnapshot] = []
+
+    async def _boom(**_: object) -> None:
+        req_q = cast("asyncio.PriorityQueue[tuple[int, int, FetchJob | None]]", engine._req_q)
+        await req_q.put(
+            (
+                engine.PRIORITY_NEW_JOB,
+                1,
+                FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x")),
+            )
+        )
+        raise RuntimeError("pipeline boom")
+
+    async def _stop() -> None:
+        req_q = cast("asyncio.PriorityQueue[tuple[int, int, FetchJob | None]]", engine._req_q)
+        await req_q.put((engine.PRIORITY_SENTINEL, 999, None))
+        await req_q.put((engine.PRIORITY_SENTINEL, 1000, None))
+
+    engine._await_pipeline_completion = _boom  # type: ignore[method-assign]
+    engine.stop = _stop  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="pipeline boom"):
+        await engine.run(
+            dataset="d",
+            symbols=["AAPL"],
+            on_progress=lambda snapshot: snapshots.append(snapshot),
+        )
+
+    finished = [snapshot for snapshot in snapshots if snapshot.finished]
+    assert len(finished) == 1
+    assert finished[0].pending_jobs == 1
+
+
+@pytest.mark.asyncio
+async def test_progress_snapshot_prints_summary_when_progress_enabled_without_bar(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    result = RunResult(provider="stub", dataset="ignored")
+
+    engine._reset_progress_runtime(jobs_total=1)
+
+    await engine._emit_progress_snapshot(
+        result=result,
+        result_lock=asyncio.Lock(),
+        req_q=asyncio.PriorityQueue(),
+        on_progress=None,
+        progress_bar=None,
+        terminal_count=1,
+        finished=True,
+        show_summary=True,
+        summary_dataset="d",
+    )
+
+    output = capsys.readouterr().out
+    assert "vertex-forager run complete" in output
+    assert "dataset=d" in output
+
+
+@pytest.mark.asyncio
+async def test_progress_snapshot_counts_completed_symbols_on_resume() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    snapshots: list[ProgressSnapshot] = []
+
+    engine._initialize_run_state = lambda dataset, resume: ("run-id", {"AAPL"})  # type: ignore[method-assign]
+    engine._record_worker_symbol_state = lambda **kwargs: asyncio.sleep(0)  # type: ignore[method-assign]
+
+    await engine.run(
+        dataset="d",
+        symbols=["AAPL", "MSFT"],
+        resume=True,
+        on_progress=lambda snapshot: snapshots.append(snapshot),
+    )
+
+    assert snapshots
+    assert snapshots[-1].jobs_total == 2
+    assert snapshots[-1].jobs_done == 2
+    assert snapshots[-1].pct == 100.0
+
+
+@pytest.mark.asyncio
+async def test_progress_snapshot_counts_batched_completed_symbols_on_resume() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    snapshots: list[ProgressSnapshot] = []
+
+    engine._initialize_run_state = lambda dataset, resume: ("run-id", {"AAPL,MSFT"})  # type: ignore[method-assign]
+    engine._record_worker_symbol_state = lambda **kwargs: asyncio.sleep(0)  # type: ignore[method-assign]
+
+    await engine.run(
+        dataset="d",
+        symbols=["AAPL", "MSFT"],
+        resume=True,
+        on_progress=lambda snapshot: snapshots.append(snapshot),
+    )
+
+    assert snapshots
+    assert snapshots[-1].jobs_total == 2
+    assert snapshots[-1].jobs_done == 2
+    assert snapshots[-1].pct == 100.0
+
+
+@pytest.mark.asyncio
+async def test_progress_snapshot_intersects_completed_symbols_with_requested_resume_set() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    snapshots: list[ProgressSnapshot] = []
+
+    engine._initialize_run_state = lambda dataset, resume: ("run-id", {"AAPL,MSFT"})  # type: ignore[method-assign]
+    engine._record_worker_symbol_state = lambda **kwargs: asyncio.sleep(0)  # type: ignore[method-assign]
+
+    await engine.run(
+        dataset="d",
+        symbols=["MSFT"],
+        resume=True,
+        on_progress=lambda snapshot: snapshots.append(snapshot),
+    )
+
+    assert snapshots
+    assert snapshots[-1].jobs_total == 1
+    assert snapshots[-1].jobs_done == 1
+    assert snapshots[-1].pct == 100.0
+
+
+@pytest.mark.asyncio
+async def test_progress_snapshot_uses_progress_counters_when_metrics_disabled() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    result = RunResult(provider="stub", dataset="d")
+    lock = asyncio.Lock()
+    req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
+    snapshots: list[ProgressSnapshot] = []
+
+    engine._reset_progress_runtime(jobs_total=1)
+    engine._inc("rows_written_total", 5)
+    engine._inc("dlq_spooled_files_total", 2)
+
+    await engine._emit_progress_snapshot(
+        result=result,
+        result_lock=lock,
+        req_q=req_q,
+        on_progress=lambda snapshot: snapshots.append(snapshot),
+        progress_bar=None,
+        terminal_count=1,
+        finished=False,
+        show_summary=False,
+        summary_dataset="d",
+    )
+
+    assert snapshots
+    assert snapshots[-1].rows_written == 5
+    assert snapshots[-1].dlq_spooled == 2
+
+
+def test_logical_symbol_count_defaults_to_one_for_missing_symbol() -> None:
+    job = FetchJob(provider="stub", dataset="d", symbol=None, spec=RequestSpec(url="https://x"))
+    assert pipeline_module._logical_symbol_count(job) == 1
+
+
+@pytest.mark.asyncio
+async def test_emit_progress_snapshot_short_circuits_without_consumers() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    engine._reset_progress_runtime(jobs_total=1)
+
+    class _Proc:
+        def memory_info(self) -> object:
+            raise AssertionError("memory_info should not be called without consumers")
+
+        def cpu_percent(self, interval: float | None = None) -> float:
+            raise AssertionError("cpu_percent should not be called without consumers")
+
+    engine._progress_process = _Proc()  # type: ignore[assignment]
+
+    await engine._emit_progress_snapshot(
+        result=RunResult(provider="stub", dataset="d"),
+        result_lock=asyncio.Lock(),
+        req_q=asyncio.PriorityQueue(),
+        on_progress=None,
+        progress_bar=None,
+        terminal_count=1,
+        finished=False,
+        show_summary=False,
+        summary_dataset="d",
+    )
+
+    assert engine._progress_done == 1
+    assert engine._progress_window_events == 1
+
+
+@pytest.mark.asyncio
+async def test_progress_snapshot_uses_retained_sample_window_for_throughput(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    result = RunResult(provider="stub", dataset="d")
+    lock = asyncio.Lock()
+    req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
+    snapshots: list[ProgressSnapshot] = []
+
+    engine._progress_started_at = 80.0
+    engine._progress_total = 10
+    engine._progress_done = 4
+    engine._progress_history.append((95.0, 3))
+    engine._progress_history.append((99.0, 1))
+    engine._progress_window_events = 4
+    monkeypatch.setattr(pipeline_module.time, "monotonic", lambda: 100.0)
+
+    await engine._emit_progress_snapshot(
+        result=result,
+        result_lock=lock,
+        req_q=req_q,
+        on_progress=lambda snapshot: snapshots.append(snapshot),
+        progress_bar=None,
+        terminal_count=0,
+        finished=False,
+        show_summary=False,
+        summary_dataset="d",
+    )
+
+    assert snapshots
+    assert snapshots[-1].throughput_sym_per_s == pytest.approx(0.8)
+
+
+@pytest.mark.asyncio
+async def test_progress_snapshot_uses_run_start_for_single_sample_throughput(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    result = RunResult(provider="stub", dataset="d")
+    lock = asyncio.Lock()
+    req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
+    snapshots: list[ProgressSnapshot] = []
+
+    engine._progress_started_at = 90.0
+    engine._progress_total = 10
+    engine._progress_done = 1
+    engine._progress_history.append((100.0, 1))
+    engine._progress_window_events = 1
+    monkeypatch.setattr(pipeline_module.time, "monotonic", lambda: 100.0)
+
+    await engine._emit_progress_snapshot(
+        result=result,
+        result_lock=lock,
+        req_q=req_q,
+        on_progress=lambda snapshot: snapshots.append(snapshot),
+        progress_bar=None,
+        terminal_count=0,
+        finished=False,
+        show_summary=False,
+        summary_dataset="d",
+    )
+
+    assert snapshots
+    assert snapshots[-1].throughput_sym_per_s == pytest.approx(0.1)
+
+
+@pytest.mark.asyncio
+async def test_progress_true_prints_summary_and_closes_bar(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    router = _PaginatingRouter(pages=1)
+    engine, _ = _make_engine(router)
+
+    class _Bar:
+        def __init__(self) -> None:
+            self.updated = 0
+            self.closed = False
+
+        def update(self, n: int) -> None:
+            self.updated += n
+
+        def set_postfix(self, **_: object) -> None:
+            return None
+
+        def close(self) -> None:
+            self.closed = True
+
+    fake_bar = _Bar()
+    monkeypatch.setattr(pipeline_module, "tqdm", lambda **_: fake_bar, raising=True)
+
+    await engine.run(dataset="d", symbols=["AAPL", "MSFT"], progress=True)
+
+    assert fake_bar.updated == 2
+    assert fake_bar.closed is True
+    assert "vertex-forager run complete" in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+async def test_progress_true_and_on_progress_sink_work_together(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    snapshots: list[ProgressSnapshot] = []
+
+    class _Bar:
+        def update(self, _: int) -> None:
+            return None
+
+        def set_postfix(self, **_: object) -> None:
+            return None
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(pipeline_module, "tqdm", lambda **_: _Bar(), raising=True)
+
+    await engine.run(
+        dataset="d",
+        symbols=["AAPL", "MSFT"],
+        progress=True,
+        on_progress=lambda snapshot: snapshots.append(snapshot),
+    )
+
+    assert snapshots
+    assert snapshots[-1].finished is True
+
+
+@pytest.mark.asyncio
+async def test_progress_snapshot_uses_none_when_total_is_unknown() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    snapshots: list[ProgressSnapshot] = []
+
+    await engine.run(
+        dataset="d",
+        symbols=None,
+        on_progress=lambda snapshot: snapshots.append(snapshot),
+    )
+
+    assert snapshots
+    assert snapshots[-1].jobs_total is None
+    assert snapshots[-1].pct is None
+    assert snapshots[-1].eta_s is None
 
 
 # ─── Test 2: fairness dequeue tests ─────────────────────────────────────
@@ -495,6 +995,83 @@ async def test_producer_resumes_pending_pagination_jobs_without_restarting_symbo
 
 
 @pytest.mark.asyncio
+async def test_producer_resumes_batched_pending_jobs_without_restarting_component_symbols() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
+    pending_job = FetchJob(
+        provider="stub",
+        dataset="d",
+        symbol="AAPL,MSFT",
+        spec=RequestSpec(url="https://x", params={"page": 2}),
+    )
+    order_counter = itertools.count()
+
+    async def _generate_jobs(**kwargs: Any):
+        yield FetchJob(provider="stub", dataset="d", symbol="AAPL,MSFT", spec=RequestSpec(url="https://x"))
+        yield FetchJob(provider="stub", dataset="d", symbol="NVDA", spec=RequestSpec(url="https://z"))
+
+    engine._router.generate_jobs = _generate_jobs  # type: ignore[method-assign]
+
+    await engine._producer(
+        req_q=req_q,
+        dataset="d",
+        symbols=["AAPL,MSFT", "NVDA"],
+        order_counter=order_counter,
+        completed_symbols=set(),
+        pending_jobs=[pending_job],
+    )
+
+    queued_jobs: list[FetchJob] = []
+    while not req_q.empty():
+        _priority, _order, queued_job = req_q.get_nowait()
+        if queued_job is not None:
+            queued_jobs.append(queued_job)
+
+    assert [job.symbol for job in queued_jobs] == ["NVDA"]
+    resumed = list(engine._fair_state.queues["AAPL,MSFT"])
+    assert [job.symbol for job in resumed] == ["AAPL,MSFT"]
+    assert resumed[0].spec.params["page"] == 2
+
+
+@pytest.mark.asyncio
+async def test_producer_does_not_resume_batched_pending_job_on_partial_overlap() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
+    pending_job = FetchJob(
+        provider="stub",
+        dataset="d",
+        symbol="AAPL,MSFT",
+        spec=RequestSpec(url="https://x", params={"page": 2}),
+    )
+
+    async def _generate_jobs(**kwargs: Any):
+        yield FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x"))
+        yield FetchJob(provider="stub", dataset="d", symbol="NVDA", spec=RequestSpec(url="https://z"))
+
+    engine._router.generate_jobs = _generate_jobs  # type: ignore[method-assign]
+
+    await engine._producer(
+        req_q=req_q,
+        dataset="d",
+        symbols=["AAPL", "NVDA"],
+        order_counter=itertools.count(),
+        completed_symbols=set(),
+        pending_jobs=[pending_job],
+    )
+
+    queued_jobs: list[FetchJob] = []
+    while not req_q.empty():
+        _priority, _order, queued_job = req_q.get_nowait()
+        if queued_job is not None:
+            queued_jobs.append(queued_job)
+
+    assert [job.symbol for job in queued_jobs] == ["AAPL", "NVDA"]
+    assert list(engine._fair_state.queues.get("AAPL,MSFT", [])) == []
+
+
+@pytest.mark.asyncio
 async def test_producer_restores_only_requested_pending_jobs() -> None:
     router = _PaginatingRouter(pages=0)
     engine, _ = _make_engine(router)
@@ -572,8 +1149,7 @@ async def test_producer_preserves_symbolless_pending_jobs_on_resume() -> None:
             queued_jobs.append(queued_job)
 
     assert [job.symbol for job in queued_jobs] == ["MSFT"]
-    resumed = list(engine._fair_state.queues[""])
-    assert [job.symbol for job in resumed] == [None]
+    assert list(engine._fair_state.queues.get("", [])) == []
 
 
 @pytest.mark.asyncio
@@ -888,12 +1464,8 @@ async def test_fetch_worker_cancelled_error_preserves_handler_state(monkeypatch:
     async def _process_worker_job(**kwargs: object):
         raise asyncio.CancelledError()
 
-    async def on_progress(
-        *, job: FetchJob, payload: bytes | None, exc: Exception | None, parse_result: ParseResult | None
-    ) -> None:
-        seen["payload"] = payload
-        seen["exc"] = exc
-        seen["parse_result"] = parse_result
+    async def on_progress(snapshot: ProgressSnapshot) -> None:
+        seen["snapshot"] = snapshot
 
     async def _record_worker_symbol_state(**kwargs: object) -> None:
         seen["record_exc"] = kwargs["worker_exc"]
@@ -916,9 +1488,9 @@ async def test_fetch_worker_cancelled_error_preserves_handler_state(monkeypatch:
             on_progress=on_progress,
         )
 
-    assert seen["payload"] is None
-    assert isinstance(seen["exc"], asyncio.CancelledError)
-    assert seen["parse_result"] is None
+    assert isinstance(seen["snapshot"], ProgressSnapshot)
+    assert seen["snapshot"].finished is False
+    assert seen["snapshot"].jobs_done == 0
     assert isinstance(seen["record_exc"], asyncio.CancelledError)
     assert seen["record_parse_result"] is None
 

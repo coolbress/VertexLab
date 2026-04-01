@@ -11,19 +11,19 @@ import shutil
 import sys
 import threading
 import time
-from typing import Any, Literal, ParamSpec, TypeVar
+from typing import Any, Literal, TypeVar
 import warnings
 
 from dotenv import load_dotenv
 import psutil
 from tqdm.auto import tqdm
 
+from vertex_forager.core.config import ProgressSnapshot
 from vertex_forager.core.errors import RunError
 from vertex_forager.exceptions import InputError
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
-_P = ParamSpec("_P")
 
 
 def _safe_get_ipython() -> Any:
@@ -288,7 +288,7 @@ def check_memory_safety(
         )
 
 
-def create_pbar_updater(pbar: tqdm) -> Callable[_P, None]:
+def create_pbar_updater(pbar: tqdm) -> Callable[[ProgressSnapshot], None]:
     """Create a progress bar update callback.
 
     Args:
@@ -298,41 +298,23 @@ def create_pbar_updater(pbar: tqdm) -> Callable[_P, None]:
         Callable to update the progress bar.
     """
 
-    def _update_pbar(*args: _P.args, **kwargs: _P.kwargs) -> None:
-        """Update progress bar based on fully processed ticker count.
+    done = 0
 
-        With Smart Batching, we expect most requests to complete in a single fetch.
-        However, if pagination occurs (e.g. 10k row limit hit), we only update the
-        counter when the FINAL page is processed to avoid double counting.
-        """
-        job = kwargs.get("job")
-        parse_result = kwargs.get("parse_result")
-        if not job:
-            return
-
-        symbol = getattr(job, "symbol", "")
-        if not isinstance(symbol, str) or not symbol:
-            return
-
-        # Calculate number of symbols in this batch
-        # Filter out empty strings from split result (e.g. "AAPL,," -> ["AAPL"])
-        tokens = [s.strip() for s in symbol.split(",") if s.strip()]
-        count = len(tokens)
-
-        # Use a safe display value (first token)
-        display_symbol = tokens[0] if tokens else "Unknown"
-        if len(tokens) > 1:
-            display_symbol += f" (+{len(tokens) - 1})"
-
-        # Check for pagination
-        # If next_jobs exist, this logical request is not yet complete.
-        next_jobs = getattr(parse_result, "next_jobs", None) if parse_result else None
-
-        if next_jobs:
-            pbar.set_postfix_str("Pagination processing", refresh=True)
-        else:
-            pbar.update(count)
-            pbar.set_postfix_str(f"Done: {display_symbol}..", refresh=True)
+    def _update_pbar(snapshot: ProgressSnapshot) -> None:
+        nonlocal done
+        delta = max(0, snapshot.jobs_done - done)
+        if delta:
+            pbar.update(delta)
+            done += delta
+        pbar.set_postfix(
+            throughput=f"{snapshot.throughput_sym_per_s:.2f}/s",
+            eta="n/a" if snapshot.eta_s is None else f"{snapshot.eta_s:.1f}s",
+            errors=snapshot.errors,
+            rows=snapshot.rows_written,
+            refresh=True,
+        )
+        if snapshot.finished:
+            pbar.close()
 
     return _update_pbar
 
@@ -767,7 +749,7 @@ def run_sync_compat(coro: Coroutine[Any, Any, T]) -> T:
     except ImportError as exc:
         coro.close()
         raise RuntimeError(
-            "Running inside an event loop. Install optional dependency: pip install vertex-forager[notebook]"
+            "Running inside an event loop. Reinstall or upgrade vertex-forager to include nest-asyncio support."
         ) from exc
     nest_asyncio.apply(loop)
     task = loop.create_task(coro)

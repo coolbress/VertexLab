@@ -503,7 +503,7 @@ def tune_profile(
         run = client.get_price_data(
             tickers=_tickers,
             connect_db=db_path,
-            show_progress=False,
+            progress=False,
             start_date=start_date,
             end_date=end_date,
         )
@@ -533,7 +533,7 @@ def tune_profile(
             period="annual",
             tickers=yf_tickers,
             connect_db=db_path,
-            show_progress=False,
+            progress=False,
         )
         sh_key = os.getenv("SHARADAR_API_KEY")
         sh_run = None
