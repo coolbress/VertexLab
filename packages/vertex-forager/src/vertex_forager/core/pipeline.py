@@ -202,6 +202,26 @@ def _count_requested_symbol_units(symbols: Symbols | None) -> int | None:
     return total
 
 
+def _count_pending_request_jobs(req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] | None) -> int:
+    if req_q is None:
+        return 0
+    queue_items = getattr(req_q, "_queue", None)
+    if queue_items is None:
+        qsize = getattr(req_q, "qsize", None)
+        return int(qsize()) if callable(qsize) else 0
+    return sum(1 for item in queue_items if len(item) >= 3 and item[2] is not None)
+
+
+def _compute_window_start(
+    *, progress_started_at: float, progress_history: deque[tuple[float, int]], now: float
+) -> float:
+    if len(progress_history) == 1:
+        return progress_started_at
+    if progress_history:
+        return progress_history[0][0]
+    return now
+
+
 def _format_progress_summary(*, provider: str, dataset: str, snapshot: ProgressSnapshot) -> str:
     pct = f"{snapshot.pct:.1f}%" if snapshot.pct is not None else "n/a"
     eta = f"{snapshot.eta_s:.1f}s" if snapshot.eta_s is not None else "n/a"
@@ -691,6 +711,7 @@ class VertexForager:
             return result
         finally:
             try:
+                pending_jobs_before_stop = _count_pending_request_jobs(req_q)
                 await self.stop()
                 if not final_progress_emitted:
                     try:
@@ -714,6 +735,7 @@ class VertexForager:
                             finished=True,
                             show_summary=progress,
                             summary_dataset=dataset,
+                            pending_jobs_override=pending_jobs_before_stop,
                         )
                         final_progress_emitted = True
                     except Exception:
@@ -1197,7 +1219,6 @@ class VertexForager:
         )
 
         requested_symbols = set(symbols) if symbols else None
-        requested_symbol_tokens = {token for symbol in (symbols or []) for token in _symbol_tokens(symbol)}
         completed_symbol_tokens = {token for symbol in (completed_symbols or set()) for token in _symbol_tokens(symbol)}
         filtered_pending_jobs = [
             pending_job
@@ -1205,10 +1226,6 @@ class VertexForager:
             if requested_symbols is None
             or (pending_job.symbol is None and requested_symbols is None)
             or pending_job.symbol in requested_symbols
-            or (
-                bool(_symbol_tokens(pending_job.symbol))
-                and set(_symbol_tokens(pending_job.symbol)).issubset(requested_symbol_tokens)
-            )
         ]
         pending_job_signatures = {self._job_signature(pending_job) for pending_job in filtered_pending_jobs}
         pending_symbols = {
@@ -1471,6 +1488,7 @@ class VertexForager:
         finished: bool,
         show_summary: bool,
         summary_dataset: str | None,
+        pending_jobs_override: int | None = None,
     ) -> None:
         now = time.monotonic()
         if terminal_count > 0:
@@ -1485,7 +1503,12 @@ class VertexForager:
             return
         elapsed_s = max(0.0, now - self._progress_started_at)
         window_events = self._progress_window_events
-        window_span = min(30.0, max(0.0, now - self._progress_history[0][0])) if self._progress_history else 0.0
+        window_start = _compute_window_start(
+            progress_started_at=self._progress_started_at,
+            progress_history=self._progress_history,
+            now=now,
+        )
+        window_span = min(30.0, max(0.0, now - window_start)) if self._progress_history else 0.0
         throughput = float(window_events / window_span) if window_span > 0.0 else 0.0
         jobs_total = self._progress_total
         if jobs_total not in (None, 0):
@@ -1501,8 +1524,9 @@ class VertexForager:
             result_lock = asyncio.Lock()
         async with result_lock:
             errors = len(result.errors)
-        qsize = getattr(req_q, "qsize", None)
-        pending_jobs = int(qsize()) if callable(qsize) else 0
+        pending_jobs = (
+            pending_jobs_override if pending_jobs_override is not None else _count_pending_request_jobs(req_q)
+        )
         snapshot = ProgressSnapshot(
             jobs_done=self._progress_done,
             jobs_total=jobs_total,

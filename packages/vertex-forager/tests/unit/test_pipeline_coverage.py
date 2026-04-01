@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 import itertools
 from pathlib import Path
 import time
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -176,6 +176,14 @@ async def test_progress_snapshot_emits_finished_true_once_on_pipeline_error() ->
     snapshots: list[ProgressSnapshot] = []
 
     async def _boom(**_: object) -> None:
+        req_q = cast("asyncio.PriorityQueue[tuple[int, int, FetchJob | None]]", engine._req_q)
+        await req_q.put(
+            (
+                engine.PRIORITY_NEW_JOB,
+                1,
+                FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x")),
+            )
+        )
         raise RuntimeError("pipeline boom")
 
     engine._await_pipeline_completion = _boom  # type: ignore[method-assign]
@@ -306,6 +314,43 @@ async def test_progress_snapshot_exceptional_shutdown_emits_terminal_after_stop(
         await engine.run(dataset="d", symbols=["AAPL"], on_progress=lambda snapshot: None)
 
     assert events == ["stop", "finished"]
+
+
+@pytest.mark.asyncio
+async def test_progress_snapshot_exceptional_shutdown_ignores_request_sentinels_in_pending_count() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    snapshots: list[ProgressSnapshot] = []
+
+    async def _boom(**_: object) -> None:
+        req_q = cast("asyncio.PriorityQueue[tuple[int, int, FetchJob | None]]", engine._req_q)
+        await req_q.put(
+            (
+                engine.PRIORITY_NEW_JOB,
+                1,
+                FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x")),
+            )
+        )
+        raise RuntimeError("pipeline boom")
+
+    async def _stop() -> None:
+        req_q = cast("asyncio.PriorityQueue[tuple[int, int, FetchJob | None]]", engine._req_q)
+        await req_q.put((engine.PRIORITY_SENTINEL, 999, None))
+        await req_q.put((engine.PRIORITY_SENTINEL, 1000, None))
+
+    engine._await_pipeline_completion = _boom  # type: ignore[method-assign]
+    engine.stop = _stop  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="pipeline boom"):
+        await engine.run(
+            dataset="d",
+            symbols=["AAPL"],
+            on_progress=lambda snapshot: snapshots.append(snapshot),
+        )
+
+    finished = [snapshot for snapshot in snapshots if snapshot.finished]
+    assert len(finished) == 1
+    assert finished[0].pending_jobs == 1
 
 
 @pytest.mark.asyncio
@@ -500,6 +545,40 @@ async def test_progress_snapshot_uses_retained_sample_window_for_throughput(
 
     assert snapshots
     assert snapshots[-1].throughput_sym_per_s == pytest.approx(0.8)
+
+
+@pytest.mark.asyncio
+async def test_progress_snapshot_uses_run_start_for_single_sample_throughput(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    result = RunResult(provider="stub", dataset="d")
+    lock = asyncio.Lock()
+    req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
+    snapshots: list[ProgressSnapshot] = []
+
+    engine._progress_started_at = 90.0
+    engine._progress_total = 10
+    engine._progress_done = 1
+    engine._progress_history.append((100.0, 1))
+    engine._progress_window_events = 1
+    monkeypatch.setattr(pipeline_module.time, "monotonic", lambda: 100.0)
+
+    await engine._emit_progress_snapshot(
+        result=result,
+        result_lock=lock,
+        req_q=req_q,
+        on_progress=lambda snapshot: snapshots.append(snapshot),
+        progress_bar=None,
+        terminal_count=0,
+        finished=False,
+        show_summary=False,
+        summary_dataset="d",
+    )
+
+    assert snapshots
+    assert snapshots[-1].throughput_sym_per_s == pytest.approx(0.1)
 
 
 @pytest.mark.asyncio
@@ -937,7 +1016,7 @@ async def test_producer_resumes_batched_pending_jobs_without_restarting_componen
     await engine._producer(
         req_q=req_q,
         dataset="d",
-        symbols=["AAPL", "MSFT", "NVDA"],
+        symbols=["AAPL,MSFT", "NVDA"],
         order_counter=order_counter,
         completed_symbols=set(),
         pending_jobs=[pending_job],
