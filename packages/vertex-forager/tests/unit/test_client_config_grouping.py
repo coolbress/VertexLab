@@ -6,7 +6,14 @@ import warnings
 
 import pytest
 
-from vertex_forager import AdaptiveThrottleConfig, AdvancedConfig, HTTPConfig, RetryConfig, create_client
+from vertex_forager import (
+    AdaptiveThrottleConfig,
+    AdvancedConfig,
+    HTTPConfig,
+    RetryConfig,
+    SchedulerConfig,
+    create_client,
+)
 import vertex_forager.clients.base as base_mod
 from vertex_forager.constants import HTTP_TIMEOUT_S
 
@@ -27,7 +34,7 @@ def test_create_client_accepts_grouped_public_configs() -> None:
         rate_limit=120,
         metrics_enabled=True,
         dlq_enabled=False,
-        pagination_max_burst=3,
+        schedule=SchedulerConfig(quantum=3),
         retry=RetryConfig(max_attempts=5),
         throttle=AdaptiveThrottleConfig(enabled=True, window_s=30, recovery_factor=0.05),
         concurrency=4,
@@ -45,7 +52,7 @@ def test_create_client_accepts_grouped_public_configs() -> None:
     assert client.config.requests_per_minute == 120
     assert client.config.metrics_enabled is True
     assert client.config.dlq_enabled is False
-    assert client.config.pagination_max_burst == 3
+    assert client.config.schedule.quantum == 3
     assert client.config.retry.max_attempts == 5
     assert client.config.adaptive_throttle_enabled is True
     assert client.config.adaptive_throttle_window_s == 30
@@ -62,6 +69,21 @@ def test_create_client_accepts_grouped_public_configs() -> None:
     assert client._http_limits.max_keepalive_connections == 25
     assert client._memory_threshold_ratio == 0.5
     assert client._memory_threshold_absolute is None
+
+
+def test_create_client_schedule_defaults_are_applied() -> None:
+    client = create_client(provider="yfinance", rate_limit=60)
+
+    assert isinstance(client, YFinanceClient)
+    assert client.config.schedule == SchedulerConfig()
+    assert client.config.quantum == 3
+    assert client.config.max_pending_per_symbol is None
+    assert client.config.backpressure_threshold is None
+
+
+def test_removed_pagination_max_burst_kwarg_is_rejected() -> None:
+    with pytest.raises(TypeError):
+        create_client(provider="yfinance", rate_limit=60, pagination_max_burst=3)
 
 
 def test_removed_legacy_adaptive_throttle_kwargs_are_rejected() -> None:

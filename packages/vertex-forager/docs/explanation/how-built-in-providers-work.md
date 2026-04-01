@@ -154,8 +154,10 @@ Pagination follow-up jobs do not bypass pipeline fairness:
 
 - The initial request enters the main request queue.
 - Follow-up page jobs enter the pagination scheduler lane.
-- When `pagination_max_burst` is set, that lane uses Deficit Round Robin per symbol.
-- When `pagination_max_burst=None`, pagination follow-up jobs fall back to the main queue and can run consecutively.
+- That lane always uses Deficit Round Robin per symbol.
+- `schedule.quantum` controls how many pagination credits each symbol receives per DRR round.
+- `schedule.max_pending_per_symbol` optionally blocks one symbol from building an unbounded local queue.
+- `schedule.backpressure_threshold` optionally blocks the producer when total pending DRR work grows too large.
 
 ## Diagrams
 

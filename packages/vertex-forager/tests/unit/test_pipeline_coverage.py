@@ -1,7 +1,7 @@
 """Targeted tests for uncovered pipeline branches.
 
 Covers:
-- pagination_max_burst=None (no burst cap — all pages consecutive)
+- always-on DRR fairness and dequeue coverage
 - _pop_next_job_respecting_fairness direct branch coverage
 - _try_flush_once idempotent re-entry and suppress paths
 - deferred_demotes sentinel cleanup
@@ -27,6 +27,7 @@ from vertex_forager.core.config import (
     RequestSpec,
     ResolvedClientConfig,
     RunResult,
+    SchedulerConfig,
 )
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor
@@ -78,7 +79,7 @@ def _make_engine(
     router: Any,
     *,
     concurrency: int = 1,
-    pagination_max_burst: int | None = None,
+    schedule: SchedulerConfig | None = None,
     writer: Any | None = None,
 ) -> tuple[VertexForager, Any]:
     w = writer or _RecordingWriter()
@@ -87,7 +88,7 @@ def _make_engine(
         concurrency=concurrency,
         metrics_enabled=False,
         structured_logs=False,
-        pagination_max_burst=pagination_max_burst,
+        schedule=schedule or SchedulerConfig(),
     )
     controller = FlowController(requests_per_minute=60, concurrency_limit=concurrency)
     engine = VertexForager(
@@ -101,7 +102,7 @@ def _make_engine(
     return engine, w
 
 
-# ─── Test 1: pagination_max_burst=None → unlimited consecutive pages ────
+# ─── Test 1: always-on DRR behavior ─────────────────────────────────────
 
 
 class _PaginatingRouter:
@@ -129,10 +130,10 @@ class _PaginatingRouter:
 
 
 @pytest.mark.asyncio
-async def test_no_burst_cap_allows_all_consecutive_pages() -> None:
-    """Without pagination_max_burst, all same-symbol pages run consecutively."""
+async def test_single_symbol_drr_is_passthrough() -> None:
+    """Always-on DRR does not penalize single-symbol pagination runs."""
     router = _PaginatingRouter(pages=4)
-    engine, _ = _make_engine(router, pagination_max_burst=None)
+    engine, _ = _make_engine(router)
 
     order: list[str] = []
 
@@ -147,8 +148,7 @@ async def test_no_burst_cap_allows_all_consecutive_pages() -> None:
 
     aapl_indices = [i for i, s in enumerate(order) if s == "AAPL"]
     assert len(aapl_indices) >= 4, f"Expected ≥4 AAPL events, got {len(aapl_indices)}"
-    # With burst_cap=None, the engine should process pages without fairness interruption.
-    # AAPL should appear in a long consecutive run (initial + 4 pages = 5).
+    # Always-on DRR should behave like a passthrough when only one symbol paginates.
     max_consec = 0
     streak = 0
     current = ""
@@ -159,7 +159,7 @@ async def test_no_burst_cap_allows_all_consecutive_pages() -> None:
             current = s
             streak = 1
         max_consec = max(max_consec, streak)
-    assert max_consec >= 4, f"Expected ≥4 consecutive same-symbol events without cap, got {max_consec}"
+    assert max_consec >= 4, f"Expected ≥4 consecutive same-symbol events for single-symbol DRR, got {max_consec}"
 
 
 # ─── Test 2: fairness dequeue tests ─────────────────────────────────────
@@ -176,7 +176,7 @@ async def test_fairness_sentinel_returns_already_done() -> None:
     req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
     await req_q.put((VertexForager.PRIORITY_SENTINEL, 0, None))
 
-    selected = await engine._dequeue_worker_job(req_q=req_q, burst_cap=2)
+    selected = await engine._dequeue_worker_job(req_q=req_q)
     assert selected.job is None
     assert selected.already_done is True
     assert selected.priority == VertexForager.PRIORITY_SENTINEL
@@ -199,12 +199,12 @@ async def test_fairness_burst_cap_demotes_and_finds_different_candidate() -> Non
     await enqueue_pagination_job(fair_lock=engine._fair_lock, fairness_state=engine._fair_state, job=aapl_job)
     await enqueue_pagination_job(fair_lock=engine._fair_lock, fairness_state=engine._fair_state, job=msft_job)
 
-    first = await engine._dequeue_worker_job(req_q=req_q, burst_cap=2)
-    second = await engine._dequeue_worker_job(req_q=req_q, burst_cap=2)
+    first = await engine._dequeue_worker_job(req_q=req_q)
+    second = await engine._dequeue_worker_job(req_q=req_q)
     await mark_pagination_job_done(fair_lock=engine._fair_lock, fairness_state=engine._fair_state)
     await mark_pagination_job_done(fair_lock=engine._fair_lock, fairness_state=engine._fair_state)
 
-    selected = await engine._dequeue_worker_job(req_q=req_q, burst_cap=2)
+    selected = await engine._dequeue_worker_job(req_q=req_q)
     assert first.job is not None
     assert first.job.symbol == "AAPL"
     assert second.job is not None
@@ -233,7 +233,7 @@ async def test_fairness_burst_cap_queue_empty_after_demotes() -> None:
         )
     )
 
-    selected = await engine._dequeue_worker_job(req_q=req_q, burst_cap=2)
+    selected = await engine._dequeue_worker_job(req_q=req_q)
     assert selected.job is not None
     assert selected.job.symbol == "AAPL"
     assert selected.demoted == []
@@ -254,7 +254,7 @@ async def test_fairness_sentinel_found_during_demote_drain() -> None:
     await enqueue_pagination_job(fair_lock=engine._fair_lock, fairness_state=engine._fair_state, job=aapl_job)
     await req_q.put((VertexForager.PRIORITY_SENTINEL, 0, None))
 
-    first = await engine._dequeue_worker_job(req_q=req_q, burst_cap=2)
+    first = await engine._dequeue_worker_job(req_q=req_q)
     assert first.job is None
     assert first.already_done is True
     assert first.priority == VertexForager.PRIORITY_SENTINEL
@@ -287,7 +287,7 @@ async def test_fairness_prefers_req_get_when_both_waits_complete(monkeypatch: py
     monkeypatch.setattr(engine, "_get_request_queue", _immediate_req_get, raising=True)
     monkeypatch.setattr(req_q, "task_done", lambda: None, raising=True)
 
-    selected = await engine._dequeue_worker_job(req_q=req_q, burst_cap=2)
+    selected = await engine._dequeue_worker_job(req_q=req_q)
 
     assert selected.job is None
     assert selected.already_done is True
@@ -311,7 +311,7 @@ async def test_fairness_dataset_level_pagination_with_symbol_none() -> None:
         job=dataset_job,
     )
 
-    selected = await engine._dequeue_worker_job(req_q=req_q, burst_cap=3)
+    selected = await engine._dequeue_worker_job(req_q=req_q)
 
     assert selected.job is not None
     assert selected.job.symbol is None
@@ -488,8 +488,10 @@ async def test_producer_resumes_pending_pagination_jobs_without_restarting_symbo
         if queued_job is not None:
             queued_jobs.append(queued_job)
 
-    assert [job.symbol for job in queued_jobs] == ["AAPL", "MSFT"]
-    assert queued_jobs[0].spec.params["page"] == 2
+    assert [job.symbol for job in queued_jobs] == ["MSFT"]
+    resumed = list(engine._fair_state.queues["AAPL"])
+    assert [job.symbol for job in resumed] == ["AAPL"]
+    assert resumed[0].spec.params["page"] == 2
 
 
 @pytest.mark.asyncio
@@ -569,7 +571,9 @@ async def test_producer_preserves_symbolless_pending_jobs_on_resume() -> None:
         if queued_job is not None:
             queued_jobs.append(queued_job)
 
-    assert [job.symbol for job in queued_jobs] == [None, "MSFT"]
+    assert [job.symbol for job in queued_jobs] == ["MSFT"]
+    resumed = list(engine._fair_state.queues[""])
+    assert [job.symbol for job in resumed] == [None]
 
 
 @pytest.mark.asyncio

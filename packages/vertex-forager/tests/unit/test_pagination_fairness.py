@@ -12,6 +12,7 @@ from vertex_forager.core.config import (
     RequestSpec,
     ResolvedClientConfig,
     RunResult,
+    SchedulerConfig,
 )
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor
@@ -80,7 +81,7 @@ async def test_pagination_fairness_serves_new_symbol_before_long_tail(monkeypatc
         concurrency=1,
         metrics_enabled=False,
         structured_logs=False,
-        pagination_max_burst=2,
+        schedule=SchedulerConfig(quantum=2),
     )
     controller = FlowController(requests_per_minute=60, concurrency_limit=1)
     engine = VertexForager(router=router, http=http, writer=writer, mapper=None, config=config, controller=controller)

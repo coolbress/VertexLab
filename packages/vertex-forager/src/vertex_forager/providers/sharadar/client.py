@@ -42,7 +42,14 @@ from vertex_forager.utils import (
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from vertex_forager.core.config import AdaptiveThrottleConfig, AdvancedConfig, HTTPConfig, RetryConfig, RunResult
+    from vertex_forager.core.config import (
+        AdaptiveThrottleConfig,
+        AdvancedConfig,
+        HTTPConfig,
+        RetryConfig,
+        RunResult,
+        SchedulerConfig,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +127,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         structured_logs: bool | None = None,
         log_verbose: bool | None = None,
         dlq_enabled: bool | None = None,
-        pagination_max_burst: int | None = 3,
+        schedule: SchedulerConfig | dict[str, Any] | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
         adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
         concurrency: int | None = None,
@@ -142,7 +149,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             structured_logs: Enables structured stage logs when True.
             log_verbose: Promotes structured logs to INFO when True.
             dlq_enabled: Enables DLQ spooling on persistence failures.
-            pagination_max_burst: DRR pagination quantum. Defaults to 3.
+            schedule: Grouped scheduler configuration for always-on DRR fairness.
             retry: Grouped retry policy configuration.
             adaptive_throttle: Grouped adaptive throttle policy configuration.
             concurrency: Explicit fetch concurrency limit.
@@ -168,7 +175,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             structured_logs=structured_logs,
             log_verbose=log_verbose,
             dlq_enabled=dlq_enabled,
-            pagination_max_burst=pagination_max_burst,
+            schedule=schedule,
             retry=retry,
             adaptive_throttle=adaptive_throttle,
             concurrency=concurrency,

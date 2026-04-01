@@ -161,6 +161,16 @@ class AdvancedConfig(BaseModel):
     model_config = {"arbitrary_types_allowed": True, "extra": "forbid"}
 
 
+class SchedulerConfig(BaseModel):
+    """Scheduler controls for always-on DRR pagination fairness."""
+
+    quantum: int = Field(default=3, gt=0)
+    max_pending_per_symbol: int | None = Field(default=None, gt=0)
+    backpressure_threshold: int | None = Field(default=None, gt=0)
+
+    model_config = {"extra": "forbid"}
+
+
 class HttpMethod(str, Enum):
     """HTTP method for request execution.
 
@@ -285,7 +295,7 @@ class ResolvedClientConfig(BaseModel):
 
     Public callers should set configuration through `create_client(...)` and the
     grouped public config objects (`RetryConfig`, `AdaptiveThrottleConfig`, `HTTPConfig`,
-    `AdvancedConfig`) rather than constructing this model directly.
+    `AdvancedConfig`, `SchedulerConfig`) rather than constructing this model directly.
     """
 
     requests_per_minute: int = Field(..., gt=0)
@@ -293,7 +303,7 @@ class ResolvedClientConfig(BaseModel):
     structured_logs: bool = False
     log_verbose: bool = False
     dlq_enabled: bool = True
-    pagination_max_burst: int | None = Field(default=3, ge=1)
+    schedule: SchedulerConfig = Field(default_factory=SchedulerConfig)
     retry: RetryConfig = Field(default_factory=RetryConfig)
     adaptive_throttle: AdaptiveThrottleConfig = Field(default_factory=AdaptiveThrottleConfig)
     concurrency: int | None = Field(default=None, gt=0)
@@ -347,6 +357,18 @@ class ResolvedClientConfig(BaseModel):
     @property
     def dlq_tmp_retention_s(self) -> int:
         return getattr(self.advanced, "dlq_tmp_retention_s", DLQ_TMP_RETENTION_S)
+
+    @property
+    def quantum(self) -> int:
+        return self.schedule.quantum
+
+    @property
+    def max_pending_per_symbol(self) -> int | None:
+        return self.schedule.max_pending_per_symbol
+
+    @property
+    def backpressure_threshold(self) -> int | None:
+        return self.schedule.backpressure_threshold
 
     @property
     def tracer(self) -> TracerProtocol | None:

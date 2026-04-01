@@ -19,6 +19,7 @@ from vertex_forager.core.config import (
     HTTPConfig,
     RetryConfig,
     RunResult,
+    SchedulerConfig,
 )
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor
@@ -58,6 +59,7 @@ __all__ = [
     "HttpExecutor",
     "RetryConfig",
     "RunResult",
+    "SchedulerConfig",
     "VertexForager",
     "retry",
 ]

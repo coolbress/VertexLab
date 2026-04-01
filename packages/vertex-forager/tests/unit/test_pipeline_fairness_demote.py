@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from vertex_forager.core.config import FetchJob, RequestSpec, ResolvedClientConfig
+from vertex_forager.core.config import FetchJob, RequestSpec, ResolvedClientConfig, SchedulerConfig
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor
 from vertex_forager.core.pipeline import VertexForager
@@ -18,7 +18,7 @@ class _StubClient:
 
 @pytest.mark.asyncio
 async def test_drr_handles_large_page_count_disparity_without_scan() -> None:
-    config = ResolvedClientConfig(requests_per_minute=60, concurrency=1, pagination_max_burst=3)
+    config = ResolvedClientConfig(requests_per_minute=60, concurrency=1, schedule=SchedulerConfig(quantum=3))
     controller = FlowController(requests_per_minute=60, concurrency_limit=1)
     eng = VertexForager(
         router=None,  # type: ignore[arg-type]
@@ -44,7 +44,7 @@ async def test_drr_handles_large_page_count_disparity_without_scan() -> None:
 
     first_round = []
     for _ in range(4):
-        selected = await eng._dequeue_worker_job(req_q=q, burst_cap=3)  # type: ignore[attr-defined]
+        selected = await eng._dequeue_worker_job(req_q=q)  # type: ignore[attr-defined]
         assert selected.job is not None
         first_round.append(selected.job.symbol)
         await mark_pagination_job_done(fair_lock=eng._fair_lock, fairness_state=eng._fair_state)

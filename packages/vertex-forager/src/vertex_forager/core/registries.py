@@ -24,7 +24,13 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from vertex_forager.clients.base import BaseClient
-    from vertex_forager.core.config import AdaptiveThrottleConfig, AdvancedConfig, HTTPConfig, RetryConfig
+    from vertex_forager.core.config import (
+        AdaptiveThrottleConfig,
+        AdvancedConfig,
+        HTTPConfig,
+        RetryConfig,
+        SchedulerConfig,
+    )
     from vertex_forager.routers.base import BaseRouter
     from vertex_forager.writers.base import BaseWriter
 
@@ -205,7 +211,7 @@ class ClientFactory(Protocol):
         structured_logs: bool | None = None,
         log_verbose: bool | None = None,
         dlq_enabled: bool | None = None,
-        pagination_max_burst: int | None = 3,
+        schedule: SchedulerConfig | dict[str, Any] | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
         adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
         concurrency: int | None = None,
@@ -227,7 +233,7 @@ class ClientFactory(Protocol):
             structured_logs: Enables structured stage logs when True.
             log_verbose: Promotes structured logs to INFO when True.
             dlq_enabled: Enables DLQ spooling when True.
-            pagination_max_burst: DRR pagination quantum. Defaults to 3.
+            schedule: Grouped scheduler configuration for always-on DRR fairness.
             retry: Grouped retry policy configuration.
             adaptive_throttle: Grouped adaptive throttle policy configuration.
             concurrency: Explicit fetch concurrency limit.

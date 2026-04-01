@@ -13,7 +13,14 @@ from vertex_forager.constants import (
     DEFAULT_RETRY_MAX_BACKOFF_S,
     RESERVED_PIPELINE_KEYS,
 )
-from vertex_forager.core.config import AdaptiveThrottleConfig, AdvancedConfig, HTTPConfig, RetryConfig, RunResult
+from vertex_forager.core.config import (
+    AdaptiveThrottleConfig,
+    AdvancedConfig,
+    HTTPConfig,
+    RetryConfig,
+    RunResult,
+    SchedulerConfig,
+)
 from vertex_forager.core.types import YFinanceDataset
 from vertex_forager.exceptions import InputError
 from vertex_forager.logging.constants import (
@@ -64,7 +71,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         structured_logs: bool | None = None,
         log_verbose: bool | None = None,
         dlq_enabled: bool | None = None,
-        pagination_max_burst: int | None = 3,
+        schedule: SchedulerConfig | dict[str, Any] | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
         adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
         concurrency: int | None = None,
@@ -86,7 +93,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             structured_logs (bool | None): Enable structured logs when True. Default is None.
             log_verbose (bool | None): Enable verbose client logging when True. Default is None.
             dlq_enabled (bool | None): Preserve failed write batches for recovery when True. Default is None.
-            pagination_max_burst (int | None): DRR pagination quantum. Default is 3.
+            schedule: Grouped scheduler configuration for always-on DRR fairness.
             retry (RetryConfig | dict[str, Any] | None): Retry settings for fetch failures. Default is None.
             adaptive_throttle (
                 AdaptiveThrottleConfig | dict[str, Any] | None,
@@ -126,7 +133,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             structured_logs=structured_logs,
             log_verbose=log_verbose,
             dlq_enabled=dlq_enabled,
-            pagination_max_burst=pagination_max_burst,
+            schedule=schedule,
             retry=retry,
             adaptive_throttle=adaptive_throttle,
             concurrency=concurrency,

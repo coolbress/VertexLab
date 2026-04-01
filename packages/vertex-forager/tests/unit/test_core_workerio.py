@@ -32,12 +32,13 @@ async def test_emit_packets_and_next_jobs_emits_and_enqueues() -> None:
     req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
     pkt_q: asyncio.Queue[FramePacket | None] = asyncio.Queue()
     counters: dict[str, int] = {}
+    enqueued: list[FetchJob] = []
 
     def _inc(name: str, amount: int) -> None:
         counters[name] = counters.get(name, 0) + amount
 
-    async def _noop_enqueue(job: FetchJob) -> None:
-        pass
+    async def _capture_enqueue(job: FetchJob) -> None:
+        enqueued.append(job)
 
     await emit_packets_and_next_jobs(
         parse_result=parse_result,
@@ -50,16 +51,14 @@ async def test_emit_packets_and_next_jobs_emits_and_enqueues() -> None:
         normalize_packet=lambda packet: packet,
         inc=_inc,
         priority_pagination=1,
-        pagination_max_burst=None,
-        enqueue_pagination_job=_noop_enqueue,
+        enqueue_pagination_job=_capture_enqueue,
         logger=type("L", (), {"debug": lambda *args, **kwargs: None})(),
     )
     assert counters["packets_emitted"] == 1
     assert pkt_q.get_nowait().table == "sharadar_price"
-    priority, _, next_job = req_q.get_nowait()
-    assert priority == 1
-    assert next_job is not None
-    assert next_job.symbol == "MSFT"
+    assert req_q.empty()
+    assert len(enqueued) == 1
+    assert enqueued[0].symbol == "MSFT"
 
 
 @pytest.mark.asyncio
