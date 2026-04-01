@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.15.1...vertex-forager-v0.16.0) (2026-04-01)
+
+
+### Features
+
+* **vertex-forager:** implement pagination fairness demotion ([#409](https://github.com/coolbress/VertexLab/issues/409)) ([363034a](https://github.com/coolbress/VertexLab/commit/363034a332d5518a77a43f732142c6cc758e7388))
+
 ## [0.15.1](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.15.0...vertex-forager-v0.15.1) (2026-03-31)
 
 
