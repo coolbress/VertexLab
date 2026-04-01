@@ -1323,6 +1323,16 @@ class VertexForager:
     ) -> tuple[int, int, FetchJob | None]:
         return await req_q.get()
 
+    def _try_get_request_queue_nowait(
+        self,
+        *,
+        req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]],
+    ) -> tuple[int, int, FetchJob | None] | None:
+        try:
+            return req_q.get_nowait()
+        except asyncio.QueueEmpty:
+            return None
+
     async def _dequeue_worker_job(
         self,
         *,
@@ -1336,8 +1346,9 @@ class VertexForager:
                     await task
 
         while True:
-            if req_q.qsize() > 0:
-                priority, _, job = await self._get_request_queue(req_q=req_q)
+            request_item = self._try_get_request_queue_nowait(req_q=req_q)
+            if request_item is not None:
+                priority, _, job = request_item
                 already_done = False
                 if job is None:
                     req_q.task_done()
@@ -1354,7 +1365,12 @@ class VertexForager:
                 wait_for_pagination_availability_impl(fairness_state=self._fair_state)
             )
             req_get = asyncio.create_task(self._get_request_queue(req_q=req_q))
-            done, pending = await asyncio.wait({pagination_wait, req_get}, return_when=asyncio.FIRST_COMPLETED)
+            pending_tasks = (pagination_wait, req_get)
+            try:
+                done, pending = await asyncio.wait({pagination_wait, req_get}, return_when=asyncio.FIRST_COMPLETED)
+            except asyncio.CancelledError:
+                await _cancel_pending(pending_tasks)
+                raise
             await _cancel_pending(tuple(pending))
             if req_get in done:
                 priority, _, job = req_get.result()

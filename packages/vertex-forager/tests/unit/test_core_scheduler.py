@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 
 import pytest
 
@@ -181,3 +182,58 @@ async def test_enqueue_blocks_until_backpressure_drops_below_threshold() -> None
     await mark_pagination_job_done(fair_lock=lock, fairness_state=state)
 
     await asyncio.wait_for(blocked, timeout=1)
+
+
+@pytest.mark.asyncio
+async def test_backpressure_ignores_currently_running_job() -> None:
+    state = FairnessState(quantum=3, backpressure_threshold=1)
+    lock = asyncio.Lock()
+    await enqueue_pagination_job(fair_lock=lock, fairness_state=state, job=_job("AAPL", 1))
+
+    first = await pop_next_job_respecting_fairness(
+        fair_lock=lock,
+        priority_pagination=1,
+        fairness_state=state,
+    )
+    assert first.job is not None
+
+    followup = asyncio.create_task(enqueue_pagination_job(fair_lock=lock, fairness_state=state, job=_job("AAPL", 2)))
+    await asyncio.sleep(0)
+
+    assert followup.done() is True
+    await followup
+
+
+@pytest.mark.asyncio
+async def test_symbol_capacity_cache_is_removed_when_queue_drains() -> None:
+    state = FairnessState(quantum=3, max_pending_per_symbol=1)
+    lock = asyncio.Lock()
+    await enqueue_pagination_job(fair_lock=lock, fairness_state=state, job=_job("AAPL", 1))
+
+    result = await pop_next_job_respecting_fairness(
+        fair_lock=lock,
+        priority_pagination=1,
+        fairness_state=state,
+    )
+
+    assert result.job is not None
+    assert "AAPL" not in state.symbol_capacity
+
+
+@pytest.mark.asyncio
+async def test_symbol_capacity_cache_is_removed_for_stale_empty_queue() -> None:
+    state = FairnessState(quantum=3, max_pending_per_symbol=1)
+    state.active.append("AAPL")
+    state.active_symbols.add("AAPL")
+    state.queues["AAPL"] = deque()
+    state.symbol_capacity["AAPL"] = asyncio.Event()
+    lock = asyncio.Lock()
+
+    result = await pop_next_job_respecting_fairness(
+        fair_lock=lock,
+        priority_pagination=1,
+        fairness_state=state,
+    )
+
+    assert result.job is None
+    assert "AAPL" not in state.symbol_capacity

@@ -42,7 +42,7 @@ class FairnessState:
             raise ValueError("max_pending_per_symbol must be positive when specified")
         if self.backpressure_threshold is not None and self.backpressure_threshold <= 0:
             raise ValueError("backpressure_threshold must be positive when specified")
-        if self.backpressure_threshold is None or self.unfinished_jobs < self.backpressure_threshold:
+        if self.backpressure_threshold is None or _queued_backlog(fairness_state=self) < self.backpressure_threshold:
             self.below_threshold.set()
 
 
@@ -66,10 +66,14 @@ def _ensure_symbol_capacity_event(*, fairness_state: FairnessState, symbol: str)
     return event
 
 
+def _queued_backlog(*, fairness_state: FairnessState) -> int:
+    return sum(len(queue) for queue in fairness_state.queues.values())
+
+
 def _sync_below_threshold_event(*, fairness_state: FairnessState) -> None:
     if (
         fairness_state.backpressure_threshold is None
-        or fairness_state.unfinished_jobs < fairness_state.backpressure_threshold
+        or _queued_backlog(fairness_state=fairness_state) < fairness_state.backpressure_threshold
     ):
         fairness_state.below_threshold.set()
     else:
@@ -92,7 +96,7 @@ def _try_enqueue_pagination_job(*, fairness_state: FairnessState, symbol: str, j
     waits: list[asyncio.Event] = []
     if (
         fairness_state.backpressure_threshold is not None
-        and fairness_state.unfinished_jobs >= fairness_state.backpressure_threshold
+        and _queued_backlog(fairness_state=fairness_state) >= fairness_state.backpressure_threshold
     ):
         waits.append(fairness_state.below_threshold)
     if fairness_state.max_pending_per_symbol is not None and current_depth >= fairness_state.max_pending_per_symbol:
@@ -127,7 +131,15 @@ async def enqueue_pagination_job(
             if not wait_events:
                 return
             waits = [asyncio.create_task(event.wait()) for event in wait_events]
-        done, pending = await asyncio.wait(set(waits), return_when=asyncio.FIRST_COMPLETED)
+        try:
+            done, pending = await asyncio.wait(set(waits), return_when=asyncio.FIRST_COMPLETED)
+        except asyncio.CancelledError:
+            for task in waits:
+                task.cancel()
+            for task in waits:
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+            raise
         for task in pending:
             task.cancel()
         for task in pending:
@@ -179,6 +191,7 @@ async def pop_next_job_respecting_fairness(
                 fairness_state.active_symbols.discard(symbol)
                 fairness_state.queues.pop(symbol, None)
                 fairness_state.deficit.pop(symbol, None)
+                fairness_state.symbol_capacity.pop(symbol, None)
                 continue
             current_deficit = fairness_state.deficit.get(symbol, 0.0)
             if current_deficit < 1.0:
@@ -197,6 +210,8 @@ async def pop_next_job_respecting_fairness(
                 fairness_state.active_symbols.discard(symbol)
                 fairness_state.queues.pop(symbol, None)
                 fairness_state.deficit.pop(symbol, None)
+                fairness_state.symbol_capacity.pop(symbol, None)
+            _sync_below_threshold_event(fairness_state=fairness_state)
             if not fairness_state.active:
                 fairness_state.available.clear()
             return SchedulerResult(priority=priority_pagination, job=job, demoted=[], already_done=False)
