@@ -580,7 +580,13 @@ class VertexForager:
             concurrency = self._resolve_concurrency()
             self._ensure_parse_executor(concurrency)
             jobs_total = len(symbols) if symbols is not None else None
-            jobs_done_initial = len(completed_symbols) if symbols is not None and resume else 0
+            if resume and symbols is not None:
+                requested_symbols = set(symbols)
+                jobs_done_initial = len(completed_symbols & requested_symbols)
+            elif resume:
+                jobs_done_initial = len(completed_symbols)
+            else:
+                jobs_done_initial = 0
             self._reset_progress_runtime(jobs_total=jobs_total, jobs_done_initial=jobs_done_initial)
             progress_bar = (
                 tqdm(total=jobs_total, initial=jobs_done_initial, unit="jobs", desc=dataset, leave=True)
@@ -636,8 +642,13 @@ class VertexForager:
             return result
         finally:
             try:
-                if not final_progress_emitted and result is not None and result_lock is not None and req_q is not None:
+                if not final_progress_emitted:
                     try:
+                        if self._progress_started_at == 0.0:
+                            self._reset_progress_runtime(
+                                jobs_total=len(symbols) if symbols is not None else None,
+                                jobs_done_initial=0,
+                            )
                         await self._emit_progress_snapshot(
                             result=result,
                             result_lock=result_lock,
@@ -1372,9 +1383,9 @@ class VertexForager:
     async def _emit_progress_snapshot(
         self,
         *,
-        result: RunResult,
-        result_lock: asyncio.Lock,
-        req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]],
+        result: RunResult | None,
+        result_lock: asyncio.Lock | None,
+        req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] | None,
         on_progress: Callable[[ProgressSnapshot], Any] | None,
         progress_bar: tqdm | None,
         terminal_count: int,
@@ -1389,7 +1400,9 @@ class VertexForager:
             self._progress_history.popleft()
         elapsed_s = max(0.0, now - self._progress_started_at)
         window_events = sum(count for _, count in self._progress_history)
-        window_span = min(30.0, elapsed_s) if elapsed_s > 0.0 else 0.0
+        window_span = (
+            min(30.0, max(0.0, now - self._progress_history[0][0])) if self._progress_history else 0.0
+        )
         throughput = float(window_events / window_span) if window_span > 0.0 else 0.0
         jobs_total = self._progress_total
         if jobs_total not in (None, 0):
@@ -1399,6 +1412,10 @@ class VertexForager:
         else:
             pct = None
             eta_s = None
+        if result is None:
+            result = RunResult(provider=self._router.provider, dataset=None)
+        if result_lock is None:
+            result_lock = asyncio.Lock()
         async with result_lock:
             errors = len(result.errors)
         qsize = getattr(req_q, "qsize", None)
