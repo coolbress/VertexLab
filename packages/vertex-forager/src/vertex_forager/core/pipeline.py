@@ -1363,14 +1363,15 @@ class VertexForager:
                 req_get = asyncio.create_task(self._get_request_queue(req_q=req_q))
                 done, pending = await asyncio.wait({pagination_wait, req_get}, return_when=asyncio.FIRST_COMPLETED)
                 await _cancel_pending(tuple(pending))
+                if req_get in done:
+                    priority, _, job = req_get.result()
+                    already_done = False
+                    if job is None:
+                        req_q.task_done()
+                        already_done = True
+                    return SchedulerResult(priority=priority, job=job, demoted=[], already_done=already_done)
                 if pagination_wait in done:
                     continue
-                priority, _, job = req_get.result()
-                already_done = False
-                if job is None:
-                    req_q.task_done()
-                    already_done = True
-                return SchedulerResult(priority=priority, job=job, demoted=[], already_done=already_done)
         if burst_cap is None:
             priority, _, job = await self._get_request_queue(req_q=req_q)
             already_done = False

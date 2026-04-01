@@ -18,6 +18,7 @@ from typing import Any
 
 import pytest
 
+from vertex_forager.core import pipeline as pipeline_module
 from vertex_forager.core.checkpoint import Checkpoint, save_checkpoint
 from vertex_forager.core.config import (
     FetchJob,
@@ -257,6 +258,40 @@ async def test_fairness_sentinel_found_during_demote_drain() -> None:
     assert first.job is None
     assert first.already_done is True
     assert first.priority == VertexForager.PRIORITY_SENTINEL
+
+
+@pytest.mark.asyncio
+async def test_fairness_prefers_req_get_when_both_waits_complete(monkeypatch: pytest.MonkeyPatch) -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    engine._fair_lock = asyncio.Lock()
+    engine._fair_state = FairnessState(quantum=2)
+
+    req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
+
+    async def _immediate_pagination_wait(*, fairness_state: FairnessState) -> None:
+        return None
+
+    async def _immediate_req_get(
+        *,
+        req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]],
+    ) -> tuple[int, int, FetchJob | None]:
+        return (VertexForager.PRIORITY_SENTINEL, 0, None)
+
+    monkeypatch.setattr(
+        pipeline_module,
+        "wait_for_pagination_availability_impl",
+        _immediate_pagination_wait,
+        raising=True,
+    )
+    monkeypatch.setattr(engine, "_get_request_queue", _immediate_req_get, raising=True)
+    monkeypatch.setattr(req_q, "task_done", lambda: None, raising=True)
+
+    selected = await engine._dequeue_worker_job(req_q=req_q, burst_cap=2)
+
+    assert selected.job is None
+    assert selected.already_done is True
+    assert selected.priority == VertexForager.PRIORITY_SENTINEL
 
 
 # ─── Test 3: _try_flush_once idempotency ───────────────────────────────
