@@ -24,6 +24,7 @@ from vertex_forager.core.config import (
     FetchJob,
     FramePacket,
     ParseResult,
+    ProgressSnapshot,
     RequestSpec,
     ResolvedClientConfig,
     RunResult,
@@ -131,35 +132,147 @@ class _PaginatingRouter:
 
 @pytest.mark.asyncio
 async def test_single_symbol_drr_is_passthrough() -> None:
-    """Always-on DRR does not penalize single-symbol pagination runs."""
+    """Always-on DRR still reports logical-symbol progress correctly."""
     router = _PaginatingRouter(pages=4)
     engine, _ = _make_engine(router)
 
-    order: list[str] = []
+    snapshots: list[ProgressSnapshot] = []
 
-    async def on_progress(
-        *, job: FetchJob, payload: bytes | None, exc: Exception | None, parse_result: ParseResult | None
-    ) -> None:
-        if job.symbol:
-            order.append(job.symbol)
+    async def on_progress(snapshot: ProgressSnapshot) -> None:
+        snapshots.append(snapshot)
 
     result: RunResult = await engine.run(dataset="d", symbols=["AAPL", "MSFT"], on_progress=on_progress)
     assert isinstance(result, RunResult)
+    assert snapshots
+    assert snapshots[-1].finished is True
+    assert snapshots[-1].jobs_total == 2
+    assert snapshots[-1].jobs_done == 2
 
-    aapl_indices = [i for i, s in enumerate(order) if s == "AAPL"]
-    assert len(aapl_indices) >= 4, f"Expected ≥4 AAPL events, got {len(aapl_indices)}"
-    # Always-on DRR should behave like a passthrough when only one symbol paginates.
-    max_consec = 0
-    streak = 0
-    current = ""
-    for s in order:
-        if s == current:
-            streak += 1
-        else:
-            current = s
-            streak = 1
-        max_consec = max(max_consec, streak)
-    assert max_consec >= 4, f"Expected ≥4 consecutive same-symbol events for single-symbol DRR, got {max_consec}"
+
+@pytest.mark.asyncio
+async def test_progress_snapshot_finishes_once_without_stdout_when_progress_false(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    router = _PaginatingRouter(pages=1)
+    engine, _ = _make_engine(router)
+    snapshots: list[ProgressSnapshot] = []
+
+    async def on_progress(snapshot: ProgressSnapshot) -> None:
+        snapshots.append(snapshot)
+
+    await engine.run(dataset="d", symbols=["AAPL", "MSFT"], on_progress=on_progress, progress=False)
+
+    finished = [snapshot for snapshot in snapshots if snapshot.finished]
+    assert len(finished) == 1
+    assert finished[0].jobs_total == 2
+    assert finished[0].jobs_done == 2
+    assert capsys.readouterr().out == ""
+
+
+@pytest.mark.asyncio
+async def test_progress_snapshot_emits_finished_true_once_on_pipeline_error() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    snapshots: list[ProgressSnapshot] = []
+
+    async def _boom(**_: object) -> None:
+        raise RuntimeError("pipeline boom")
+
+    engine._await_pipeline_completion = _boom  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="pipeline boom"):
+        await engine.run(
+            dataset="d",
+            symbols=["AAPL", "MSFT"],
+            on_progress=lambda snapshot: snapshots.append(snapshot),
+            progress=False,
+        )
+
+    finished = [snapshot for snapshot in snapshots if snapshot.finished]
+    assert len(finished) == 1
+    assert finished[0].jobs_total == 2
+    assert finished[0].jobs_done == 0
+
+
+@pytest.mark.asyncio
+async def test_progress_true_prints_summary_and_closes_bar(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    router = _PaginatingRouter(pages=1)
+    engine, _ = _make_engine(router)
+
+    class _Bar:
+        def __init__(self) -> None:
+            self.updated = 0
+            self.closed = False
+
+        def update(self, n: int) -> None:
+            self.updated += n
+
+        def set_postfix(self, **_: object) -> None:
+            return None
+
+        def close(self) -> None:
+            self.closed = True
+
+    fake_bar = _Bar()
+    monkeypatch.setattr(pipeline_module, "tqdm", lambda **_: fake_bar, raising=True)
+
+    await engine.run(dataset="d", symbols=["AAPL", "MSFT"], progress=True)
+
+    assert fake_bar.updated == 2
+    assert fake_bar.closed is True
+    assert "vertex-forager run complete" in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+async def test_progress_true_and_on_progress_sink_work_together(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    snapshots: list[ProgressSnapshot] = []
+
+    class _Bar:
+        def update(self, _: int) -> None:
+            return None
+
+        def set_postfix(self, **_: object) -> None:
+            return None
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(pipeline_module, "tqdm", lambda **_: _Bar(), raising=True)
+
+    await engine.run(
+        dataset="d",
+        symbols=["AAPL", "MSFT"],
+        progress=True,
+        on_progress=lambda snapshot: snapshots.append(snapshot),
+    )
+
+    assert snapshots
+    assert snapshots[-1].finished is True
+
+
+@pytest.mark.asyncio
+async def test_progress_snapshot_uses_none_when_total_is_unknown() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    snapshots: list[ProgressSnapshot] = []
+
+    await engine.run(
+        dataset="d",
+        symbols=None,
+        on_progress=lambda snapshot: snapshots.append(snapshot),
+    )
+
+    assert snapshots
+    assert snapshots[-1].jobs_total is None
+    assert snapshots[-1].pct is None
+    assert snapshots[-1].eta_s is None
 
 
 # ─── Test 2: fairness dequeue tests ─────────────────────────────────────
@@ -888,12 +1001,8 @@ async def test_fetch_worker_cancelled_error_preserves_handler_state(monkeypatch:
     async def _process_worker_job(**kwargs: object):
         raise asyncio.CancelledError()
 
-    async def on_progress(
-        *, job: FetchJob, payload: bytes | None, exc: Exception | None, parse_result: ParseResult | None
-    ) -> None:
-        seen["payload"] = payload
-        seen["exc"] = exc
-        seen["parse_result"] = parse_result
+    async def on_progress(snapshot: ProgressSnapshot) -> None:
+        seen["snapshot"] = snapshot
 
     async def _record_worker_symbol_state(**kwargs: object) -> None:
         seen["record_exc"] = kwargs["worker_exc"]
@@ -916,9 +1025,8 @@ async def test_fetch_worker_cancelled_error_preserves_handler_state(monkeypatch:
             on_progress=on_progress,
         )
 
-    assert seen["payload"] is None
-    assert isinstance(seen["exc"], asyncio.CancelledError)
-    assert seen["parse_result"] is None
+    assert isinstance(seen["snapshot"], ProgressSnapshot)
+    assert seen["snapshot"].finished is False
     assert isinstance(seen["record_exc"], asyncio.CancelledError)
     assert seen["record_parse_result"] is None
 

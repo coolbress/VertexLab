@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import deque
-from collections.abc import Awaitable, Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
 import inspect
@@ -35,6 +35,8 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 
 import httpx
 from polars.exceptions import ComputeError
+import psutil
+from tqdm.auto import tqdm
 
 from vertex_forager.constants import FLUSH_THRESHOLD_INFINITE as CONST_FLUSH_THRESHOLD_INFINITE
 from vertex_forager.constants import FLUSH_THRESHOLD_ROWS as DEFAULT_FLUSH_THRESHOLD_ROWS
@@ -49,7 +51,7 @@ from vertex_forager.core.checkpoint import (
     save_checkpoint,
     save_run_history,
 )
-from vertex_forager.core.config import RunResult
+from vertex_forager.core.config import ProgressSnapshot, RunResult
 from vertex_forager.core.dlq import (
     build_writer_error_summary,
     spool_to_dlq_and_rescue,
@@ -149,6 +151,25 @@ logger = logging.getLogger("vertex_forager.debug")
 Symbols = Sequence[str]
 
 
+def _logical_symbol_count(job: FetchJob) -> int:
+    symbol = job.symbol
+    if not isinstance(symbol, str) or not symbol:
+        return 0
+    return len([token for token in (part.strip() for part in symbol.split(",")) if token])
+
+
+def _format_progress_summary(*, provider: str, dataset: str, snapshot: ProgressSnapshot) -> str:
+    pct = f"{snapshot.pct:.1f}%" if snapshot.pct is not None else "n/a"
+    eta = f"{snapshot.eta_s:.1f}s" if snapshot.eta_s is not None else "n/a"
+    return (
+        f"vertex-forager run complete | provider={provider} dataset={dataset} jobs={snapshot.jobs_done}"
+        f"/{snapshot.jobs_total if snapshot.jobs_total is not None else '?'} pct={pct} "
+        f"elapsed={snapshot.elapsed_s:.1f}s throughput={snapshot.throughput_sym_per_s:.2f}/s "
+        f"eta={eta} rows={snapshot.rows_written} errors={snapshot.errors} retries={snapshot.retries} "
+        f"throttle_events={snapshot.throttle_events} dlq_spooled={snapshot.dlq_spooled}"
+    )
+
+
 class VertexForager:
     """High-performance asynchronous data pipeline engine.
 
@@ -213,6 +234,7 @@ class VertexForager:
         # Track active tasks for graceful shutdown
         self._active_tasks: list[asyncio.Future[Any]] = []
         self._running = False
+        self._initialize_progress_runtime()
 
         # Validate configuration
         self._config.assert_valid()
@@ -305,6 +327,15 @@ class VertexForager:
         if str(os.getenv("VF_ALLOW_PICKLE_COMPAT", "")).lower() in {"1", "true", "yes"}:
             logger.warning("PIPELINE: VF_ALLOW_PICKLE_COMPAT is enabled; pickled payloads may be accepted")
             self._inc("pickle_compat_enabled", 1)
+
+    def _initialize_progress_runtime(self) -> None:
+        self._progress_started_at = 0.0
+        self._progress_total: int | None = None
+        self._progress_done = 0
+        self._progress_history: deque[tuple[float, int]] = deque()
+        self._active_workers = 0
+        self._progress_process = psutil.Process(os.getpid())
+        self._progress_process.cpu_percent(interval=None)
 
     def _inc(self, name: str, amount: int = 1) -> None:
         if not self._metrics_enabled:
@@ -482,7 +513,8 @@ class VertexForager:
         *,
         dataset: str,
         symbols: Symbols | None,
-        on_progress: Callable[..., Any] | None = None,
+        on_progress: Callable[[ProgressSnapshot], Any] | None = None,
+        progress: bool = False,
         resume: bool = False,
         **kwargs: object,
     ) -> RunResult:
@@ -505,7 +537,8 @@ class VertexForager:
         Args:
             dataset: Name of the dataset to fetch (e.g., "sep").
             symbols: List of symbols to fetch, or None for all.
-            on_progress: Optional callback to update progress bar (called on job completion).
+            on_progress: Optional callback receiving ProgressSnapshot on each job completion.
+            progress: Whether to show the built-in progress bar and final summary.
             resume: Whether to resume from existing checkpoint (default: False).
             **kwargs: Additional arguments passed to the router's generate_jobs method.
 
@@ -529,6 +562,12 @@ class VertexForager:
         if self._running:
             raise RuntimeError("Pipeline is already running; concurrent run() calls are not supported")
         self._running = True
+        req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] | None = None
+        pkt_q: asyncio.Queue[FramePacket | None] | None = None
+        result: RunResult | None = None
+        result_lock: asyncio.Lock | None = None
+        progress_bar: tqdm | None = None
+        final_progress_emitted = False
 
         try:
             run_id, completed_symbols = self._initialize_run_state(dataset=dataset, resume=resume)
@@ -538,6 +577,9 @@ class VertexForager:
             result, result_lock = self._create_run_result(run_id=run_id, dataset=dataset)
             concurrency = self._resolve_concurrency()
             self._ensure_parse_executor(concurrency)
+            jobs_total = len(symbols) if symbols is not None else None
+            self._reset_progress_runtime(jobs_total=jobs_total)
+            progress_bar = tqdm(total=jobs_total, unit="jobs", desc=dataset, leave=True) if progress else None
             producer_task, fetch_tasks, writer_tasks = self._create_pipeline_tasks(
                 req_q=req_q,
                 pkt_q=pkt_q,
@@ -548,6 +590,7 @@ class VertexForager:
                 completed_symbols=completed_symbols,
                 concurrency=concurrency,
                 on_progress=on_progress,
+                progress_bar=progress_bar,
                 kwargs=kwargs,
             )
             self._register_run_runtime(
@@ -573,9 +616,32 @@ class VertexForager:
                 run_id=run_id,
                 started_monotonic=t_run0,
             )
+            await self._emit_progress_snapshot(
+                result=result,
+                result_lock=result_lock,
+                req_q=req_q,
+                on_progress=on_progress,
+                progress_bar=progress_bar,
+                terminal_count=0,
+                finished=True,
+            )
+            final_progress_emitted = True
             return result
         finally:
             try:
+                if not final_progress_emitted and result is not None and result_lock is not None and req_q is not None:
+                    try:
+                        await self._emit_progress_snapshot(
+                            result=result,
+                            result_lock=result_lock,
+                            req_q=req_q,
+                            on_progress=on_progress,
+                            progress_bar=progress_bar,
+                            terminal_count=0,
+                            finished=True,
+                        )
+                    except Exception:
+                        logger.exception("PIPELINE: Failed to emit final progress snapshot during exceptional shutdown")
                 await self.stop()
             finally:
                 self._running = False
@@ -591,7 +657,8 @@ class VertexForager:
         symbols: Sequence[str] | None,
         completed_symbols: set[str],
         concurrency: int,
-        on_progress: Callable[..., Any] | None,
+        on_progress: Callable[[ProgressSnapshot], Any] | None,
+        progress_bar: tqdm | None,
         kwargs: dict[str, object],
     ) -> tuple[asyncio.Task[Any], list[asyncio.Task[Any]], list[asyncio.Task[Any]]]:
         writer_tasks = [
@@ -612,6 +679,7 @@ class VertexForager:
                     result_lock=result_lock,
                     order_counter=order_counter,
                     on_progress=on_progress,
+                    progress_bar=progress_bar,
                 ),
                 name=f"vertex-forager:fetch:{i}",
             )
@@ -1179,7 +1247,8 @@ class VertexForager:
         result: RunResult,
         result_lock: asyncio.Lock,
         order_counter: itertools.count,
-        on_progress: Callable[..., Any] | None = None,
+        on_progress: Callable[[ProgressSnapshot], Any] | None = None,
+        progress_bar: tqdm | None = None,
     ) -> None:
         """Consume jobs, execute HTTP requests, and produce data packets.
 
@@ -1191,7 +1260,6 @@ class VertexForager:
         5.  Put resulting `FramePacket`s into `pkt_q`.
         6.  Log errors to `result` if exceptions occur.
         """
-        handler = self._build_progress_handler(on_progress)
         job_count = 0
         while True:
             selected = await self._dequeue_worker_job(req_q=req_q)
@@ -1213,11 +1281,10 @@ class VertexForager:
             self._inc("jobs_processed", 1)
             if job_count % 100 == 0:
                 logger.debug("[Worker-%s] Processed %s jobs so far...", worker_id, job_count)
-            payload: bytes | None = None
             worker_exc: BaseException | None = None
             parse_result: ParseResult | None = None
             try:
-                payload, worker_exc, parse_result = await self._process_worker_job(
+                _payload, worker_exc, parse_result = await self._process_worker_job(
                     worker_id=worker_id,
                     priority=priority,
                     job=job,
@@ -1239,21 +1306,22 @@ class VertexForager:
                 else:
                     req_q.task_done()
                 try:
-                    await handler(job, payload, worker_exc, parse_result)
-                except Exception as e:
-                    logger.error(
-                        "[Worker-%s] Error in result handler for %s:%s:%s: %s",
-                        worker_id,
-                        job.provider,
-                        job.dataset,
-                        job.symbol,
-                        e,
-                    )
-                try:
                     await self._record_worker_symbol_state(job=job, worker_exc=worker_exc, parse_result=parse_result)
+                    terminal_count = 0
+                    if worker_exc is not None or not list(parse_result.next_jobs if parse_result is not None else []):
+                        terminal_count = _logical_symbol_count(job)
+                    await self._emit_progress_snapshot(
+                        result=result,
+                        result_lock=result_lock,
+                        req_q=req_q,
+                        on_progress=on_progress,
+                        progress_bar=progress_bar,
+                        terminal_count=terminal_count,
+                        finished=False,
+                    )
                 except Exception as e:
                     logger.error(
-                        "[Worker-%s] Error recording symbol state for %s:%s:%s: %s",
+                        "[Worker-%s] Error updating progress state for %s:%s:%s: %s",
                         worker_id,
                         job.provider,
                         job.dataset,
@@ -1261,46 +1329,105 @@ class VertexForager:
                         e,
                     )
 
-    def _build_progress_handler(
-        self,
-        on_progress: Callable[..., Any] | None,
-    ) -> Callable[[FetchJob, bytes | None, BaseException | None, ParseResult | None], Awaitable[None]]:
-        async def noop_handler(
-            job: FetchJob,
-            payload: bytes | None,
-            exc: BaseException | None,
-            parse_result: ParseResult | None,
-        ) -> None:
+    def _reset_progress_runtime(self, *, jobs_total: int | None) -> None:
+        self._progress_started_at = time.monotonic()
+        self._progress_total = jobs_total
+        self._progress_done = 0
+        self._progress_history.clear()
+        self._active_workers = 0
+        self._progress_display_done = 0
+        self._progress_process.cpu_percent(interval=None)
+
+    def _update_progress_bar(self, *, progress_bar: tqdm | None, snapshot: ProgressSnapshot) -> None:
+        if progress_bar is None:
             return
+        delta = max(0, snapshot.jobs_done - self._progress_display_done)
+        if delta:
+            progress_bar.update(delta)
+            self._progress_display_done += delta
+        progress_bar.set_postfix(
+            throughput=f"{snapshot.throughput_sym_per_s:.2f}/s",
+            eta="n/a" if snapshot.eta_s is None else f"{snapshot.eta_s:.1f}s",
+            errors=snapshot.errors,
+            rows=snapshot.rows_written,
+            refresh=False,
+        )
+        if snapshot.finished:
+            progress_bar.close()
 
+    async def _emit_progress_snapshot(
+        self,
+        *,
+        result: RunResult,
+        result_lock: asyncio.Lock,
+        req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]],
+        on_progress: Callable[[ProgressSnapshot], Any] | None,
+        progress_bar: tqdm | None,
+        terminal_count: int,
+        finished: bool,
+    ) -> None:
+        now = time.monotonic()
+        if terminal_count > 0:
+            self._progress_done += terminal_count
+            self._progress_history.append((now, terminal_count))
+        cutoff = now - 30.0
+        while self._progress_history and self._progress_history[0][0] < cutoff:
+            self._progress_history.popleft()
+        elapsed_s = max(0.0, now - self._progress_started_at)
+        window_events = sum(count for _, count in self._progress_history)
+        window_span = min(30.0, elapsed_s) if elapsed_s > 0.0 else 0.0
+        throughput = float(window_events / window_span) if window_span > 0.0 else 0.0
+        jobs_total = self._progress_total
+        if jobs_total not in (None, 0):
+            known_jobs_total = cast("int", jobs_total)
+            pct = float((self._progress_done / known_jobs_total) * 100.0)
+            eta_s = float(max(0, known_jobs_total - self._progress_done) / throughput) if throughput > 0.0 else None
+        else:
+            pct = None
+            eta_s = None
+        async with result_lock:
+            errors = len(result.errors)
+        qsize = getattr(req_q, "qsize", None)
+        pending_jobs = int(qsize()) if callable(qsize) else 0
+        snapshot = ProgressSnapshot(
+            jobs_done=self._progress_done,
+            jobs_total=jobs_total,
+            pct=pct,
+            throughput_sym_per_s=throughput,
+            eta_s=eta_s,
+            errors=errors,
+            retries=int(getattr(self.controller, "retry_events", 0)),
+            rows_written=int(self._counters.get("rows_written_total", 0)),
+            elapsed_s=float(result.duration_s) if finished and result.duration_s is not None else elapsed_s,
+            active_workers=self._active_workers,
+            pending_jobs=pending_jobs,
+            throttle_events=int(getattr(self.controller, "throttle_events", 0)),
+            dlq_spooled=int(self._counters.get("dlq_spooled_files_total", 0)),
+            memory_mb=float(self._progress_process.memory_info().rss / (1024 * 1024)),
+            cpu_pct=float(self._progress_process.cpu_percent(interval=None)),
+            finished=finished,
+        )
+        self._update_progress_bar(progress_bar=progress_bar, snapshot=snapshot)
         if on_progress is None:
-            return noop_handler
+            if finished and progress_bar is not None:
+                print(
+                    _format_progress_summary(
+                        provider=self._router.provider, dataset=result.dataset or "", snapshot=snapshot
+                    )
+                )
+            return
         try:
-            sig = inspect.signature(on_progress)
-            wants_parse_result = "parse_result" in sig.parameters
-            is_async = inspect.iscoroutinefunction(on_progress)
+            maybe_awaitable = on_progress(snapshot)
+            if inspect.isawaitable(maybe_awaitable):
+                await maybe_awaitable
         except Exception as e:
-            logger.warning("Failed to bind on_progress handler: %s", e)
-            return noop_handler
-
-        async def _progress_wrapper(
-            job: FetchJob,
-            payload: bytes | None,
-            exc: BaseException | None,
-            parse_result: ParseResult | None,
-        ) -> None:
-            kwargs: dict[str, object] = {"job": job, "payload": payload, "exc": exc}
-            if wants_parse_result:
-                kwargs["parse_result"] = parse_result
-            try:
-                if is_async:
-                    await on_progress(**kwargs)
-                else:
-                    on_progress(**kwargs)
-            except Exception as e:
-                logger.error("Error in on_progress callback: %s", e)
-
-        return _progress_wrapper
+            logger.error("Error in on_progress callback: %s", e)
+        if finished and progress_bar is not None:
+            print(
+                _format_progress_summary(
+                    provider=self._router.provider, dataset=result.dataset or "", snapshot=snapshot
+                )
+            )
 
     def _drain_deferred_demotes(self, **_: object) -> None:
         return None

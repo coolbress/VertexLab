@@ -273,6 +273,8 @@ class FlowController:
         self._last_downshift_ts = 0.0
         self._last_upshift_ts = 0.0
         self._error_count = 0
+        self._throttle_events = 0
+        self._retry_events = 0
 
     async def _safe_set_rpm(self, rpm: int) -> bool:
         try:
@@ -349,6 +351,8 @@ class FlowController:
             return
         now = time.monotonic()
         is_error = retried or (status_code in (429, 503))
+        if retried:
+            self._retry_events += 1
         self._events.append((now, is_error))
         if is_error:
             self._error_count += 1
@@ -378,6 +382,7 @@ class FlowController:
                     loop = asyncio.get_running_loop()
                     # Optimistic update only after ensuring loop is available
                     self._effective_rpm = new_rpm
+                    self._throttle_events += 1
                     self._last_task = loop.create_task(self._apply_downshift(prev=prev_eff, new=new_rpm, ratio=ratio))
                 except Exception:
                     self._last_downshift_ts = prev_guard
@@ -397,3 +402,11 @@ class FlowController:
                 except Exception:
                     self._last_upshift_ts = prev_up_guard
                     logger.exception("FLOW_EVENT rpm_upshift_schedule_failed new_rpm=%d", new_rpm)
+
+    @property
+    def throttle_events(self) -> int:
+        return self._throttle_events
+
+    @property
+    def retry_events(self) -> int:
+        return self._retry_events

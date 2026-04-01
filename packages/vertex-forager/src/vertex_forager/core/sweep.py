@@ -87,7 +87,7 @@ def _measure_yfinance_price(
     run_result = client.get_price_data(
         tickers=tickers,
         connect_db=combo_db_path,
-        show_progress=False,
+        progress=False,
         start_date=start_date,
         end_date=end_date,
     )
@@ -110,7 +110,7 @@ def _measure_yfinance_financials(
         period="annual",
         tickers=tickers,
         connect_db=combo_db_path,
-        show_progress=False,
+        progress=False,
     )
     t1 = time.monotonic()
     return {"duration_s": round(t1 - t0, 3), "metrics": _collect_metrics(run_result)}

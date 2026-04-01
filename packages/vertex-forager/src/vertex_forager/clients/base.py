@@ -10,13 +10,12 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
-from tqdm.auto import tqdm
-
 from vertex_forager.constants import FLUSH_THRESHOLD_ROWS, HTTP_TIMEOUT_S
 from vertex_forager.core.config import (
     AdaptiveThrottleConfig,
     AdvancedConfig,
     HTTPConfig,
+    ProgressSnapshot,
     ResolvedClientConfig,
     RetryConfig,
     RunResult,
@@ -31,7 +30,6 @@ from vertex_forager.core.types import JSONValue, SharadarDataset, YFinanceDatase
 from vertex_forager.schema.registry import get_table_schema
 from vertex_forager.utils import (
     Spinner,
-    create_pbar_updater,
     sanitize_field,
 )
 from vertex_forager.utils import (
@@ -414,7 +412,8 @@ class BaseClient(ABC, Generic[T]):
         symbols: list[str] | None,
         writer: IWriter,
         mapper: IMapper,
-        on_progress: Callable[..., None] | None = None,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
+        progress: bool = False,
         **kwargs: JSONValue,
     ) -> RunResult:
         """
@@ -426,7 +425,8 @@ class BaseClient(ABC, Generic[T]):
             symbols: List of symbols to fetch data for. If None, fetch all symbols.
             writer: Data writer to persist the processed data.
             mapper: Schema mapper to transform connector data to sink schema.
-            on_progress: Optional callback function called on each completed request.
+            on_progress: Optional callback receiving ProgressSnapshot per completed request.
+            progress: Whether to show built-in progress output and final summary.
             **kwargs: Additional arguments passed to the pipeline run method.
 
         Returns:
@@ -448,6 +448,7 @@ class BaseClient(ABC, Generic[T]):
             "writer",
             "mapper",
             "on_progress",
+            "progress",
             "http_executor_cls",
             "vertex_forager_cls",
         }
@@ -480,6 +481,7 @@ class BaseClient(ABC, Generic[T]):
             writer=writer,
             mapper=mapper,
             on_progress=on_progress,
+            progress=progress,
             http_executor_cls=HttpExecutor,
             vertex_forager_cls=VertexForager,
             **run_kwargs,
@@ -564,43 +566,6 @@ class BaseClient(ABC, Generic[T]):
         finally:
             with Spinner("Finalizing database writes...") if show_progress else nullcontext():
                 await stack.__aexit__(None, None, None)
-
-    def create_progress_tracker(
-        self,
-        *,
-        total_items: int | None = None,
-        unit: str = "it",
-        desc: str = "Processing",
-        show_progress: bool = True,
-    ) -> tuple[Any, Callable | None]:
-        """Create progress tracking infrastructure.
-
-        Common progress tracking setup that can be used by all providers.
-        Uses `tqdm` only when `show_progress=True`; otherwise returns (None, None)
-        to minimize overhead for high-performance/headless runs.
-
-        Args:
-            total_items: Total number of items to process
-            unit: Unit label (e.g., "tickers", "pages", "it")
-            desc: Description for the progress bar
-            show_progress: Whether to show progress bar. If False, tqdm is skipped.
-
-        Returns:
-            tuple: (progress_bar_object, progress_updater_callback)
-            Both will be None if show_progress is False
-        """
-        if not show_progress:
-            return None, None
-
-        pbar = tqdm(
-            total=total_items,
-            unit=unit,
-            desc=desc,
-            leave=True,
-            disable=False,
-        )
-        pbar_updater: Callable[..., None] = create_pbar_updater(pbar)
-        return pbar, pbar_updater
 
     async def collect_results(
         self,

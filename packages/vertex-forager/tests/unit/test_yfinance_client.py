@@ -120,7 +120,7 @@ async def test_public_methods_dispatch_to_expected_dataset_async(
 
     monkeypatch.setattr(client, "_dispatch_fetch", _fake_dispatch_fetch)
     raw_method = getattr(client, f"_{method_name}_async")
-    result = await raw_method(connect_db=None, show_progress=False, **kwargs)
+    result = await raw_method(connect_db=None, progress=False, **kwargs)
     assert result == {"ok": True}
     assert captured["dataset"] == expected_dataset
     assert captured["table_name"] == expected_table
@@ -136,7 +136,7 @@ def test_get_info_sync_facade_dispatches(monkeypatch: pytest.MonkeyPatch) -> Non
         return {"ok": True}
 
     monkeypatch.setattr(client, "_dispatch_fetch", _fake_dispatch_fetch)
-    result = client.get_info(tickers=["AAPL"], connect_db=None, show_progress=False)
+    result = client.get_info(tickers=["AAPL"], connect_db=None, progress=False)
     assert result == {"ok": True}
     assert captured["dataset"] == "info"
     assert captured["table_name"] == "yfinance_info"
@@ -160,7 +160,7 @@ async def test_get_financials_maps_earnings_to_financials_async(
         period="annual",
         tickers=["AAPL"],
         connect_db=None,
-        show_progress=False,
+        progress=False,
     )
     assert result == {"ok": True}
     assert captured["dataset"] == "financials"
@@ -184,7 +184,7 @@ async def test_get_financials_quarterly_income_stmt_dataset_async(
         period="quarterly",
         tickers=["AAPL"],
         connect_db=None,
-        show_progress=False,
+        progress=False,
     )
     assert result == {"ok": True}
     assert captured["dataset"] == "quarterly_financials"
@@ -199,7 +199,7 @@ async def test_get_financials_rejects_quarterly_earnings_async() -> None:
             period="quarterly",
             tickers=["AAPL"],
             connect_db=None,
-            show_progress=False,
+            progress=False,
         )
 
 
@@ -215,17 +215,7 @@ async def test_fetch_per_ticker_filters_pipeline_kwargs(monkeypatch: pytest.Monk
         async def __aexit__(self, exc_type, exc, tb) -> bool:
             return False
 
-    class _Pbar:
-        def __init__(self) -> None:
-            self.closed = False
-
-        def close(self) -> None:
-            self.closed = True
-
-    pbar = _Pbar()
-
     monkeypatch.setattr(client, "managed_writer", lambda connect_db, show_progress=True: _Ctx())
-    monkeypatch.setattr(client, "create_progress_tracker", lambda **kwargs: (pbar, None))
     monkeypatch.setattr(
         "vertex_forager.providers.yfinance.client.validate_tickers",
         lambda symbols: None,
@@ -257,7 +247,7 @@ async def test_fetch_per_ticker_filters_pipeline_kwargs(monkeypatch: pytest.Monk
         connect_db=None,
         desc="test",
         table_name="yfinance_price",
-        show_progress=True,
+        progress=True,
         total_items=1,
         unit="tickers",
         price_batch_size=123,
@@ -272,5 +262,5 @@ async def test_fetch_per_ticker_filters_pipeline_kwargs(monkeypatch: pytest.Monk
     assert captured["run_pipeline_kwargs"]["dataset"] == "price"
     assert captured["run_pipeline_kwargs"]["symbols"] == ["AAPL"]
     assert captured["run_pipeline_kwargs"]["custom_flag"] is True
+    assert captured["run_pipeline_kwargs"]["progress"] is True
     assert "price_batch_size" not in captured["run_pipeline_kwargs"]
-    assert pbar.closed

@@ -87,7 +87,7 @@ def _measure_yfinance_price(*, db_path: Path, inputs: dict[str, Any], client_con
         yf_price = yfc.get_price_data(
             tickers=inputs["yf_tickers_price"],
             connect_db=db_path,
-            show_progress=False,
+            progress=False,
             start_date=inputs["yf_start"],
             end_date=inputs["yf_end"],
         )
@@ -119,7 +119,7 @@ def _measure_yfinance_financials(
             period="annual",
             tickers=inputs["yf_tickers_fin"],
             connect_db=db_path,
-            show_progress=False,
+            progress=False,
         )
     except ImportError as err:
         if err.name in {"pandas", "yfinance"}:

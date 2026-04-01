@@ -503,6 +503,25 @@ class RunResult(BaseModel):
         self.quality_violations[table] = self.quality_violations.get(table, 0) + count
 
 
+class ProgressSnapshot(BaseModel):
+    jobs_done: int
+    jobs_total: int | None
+    pct: float | None
+    throughput_sym_per_s: float
+    eta_s: float | None
+    errors: int
+    retries: int
+    rows_written: int
+    elapsed_s: float
+    active_workers: int
+    pending_jobs: int
+    throttle_events: int
+    dlq_spooled: int
+    memory_mb: float
+    cpu_pct: float
+    finished: bool = False
+
+
 @dataclass(frozen=True, slots=True)
 class ParseResult:
     """Result of parsing a response.
@@ -524,7 +543,10 @@ __all__ = [
     "HTTPConfig",
     "HttpMethod",
     "ParseResult",
+    "ProgressSnapshot",
     "RequestAuth",
     "RequestSpec",
     "RetryConfig",
+    "RunResult",
+    "SchedulerConfig",
 ]

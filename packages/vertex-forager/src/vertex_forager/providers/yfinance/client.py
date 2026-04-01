@@ -39,7 +39,10 @@ from vertex_forager.schema.mapper import SchemaMapper
 from vertex_forager.utils import run_sync_compat, validate_memory_usage, validate_tickers
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
+
+    from vertex_forager.core.config import ProgressSnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -155,14 +158,21 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
     # --- Reference Data ---
 
     def get_info(
-        self, *, tickers: list[str], connect_db: str | Path | None = None, show_progress: bool = True, **kwargs: Any
+        self,
+        *,
+        tickers: list[str],
+        connect_db: str | Path | None = None,
+        progress: bool = False,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
+        **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         """Fetch ticker metadata/info.
 
         Args:
             tickers: List of ticker symbols.
             connect_db: Optional DuckDB connection string/path for persistence.
-            show_progress: Whether to display progress indicators (default: True).
+            progress: Whether to display built-in progress output.
+            on_progress: Optional callback receiving ProgressSnapshot updates.
             **kwargs: Additional provider-specific options.
 
         Returns:
@@ -178,13 +188,20 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             self._get_info_async(
                 tickers=tickers,
                 connect_db=connect_db,
-                show_progress=show_progress,
+                progress=progress,
+                on_progress=on_progress,
                 **kwargs,
             )
         )
 
     async def _get_info_async(
-        self, *, tickers: list[str], connect_db: str | Path | None = None, show_progress: bool = True, **kwargs: Any
+        self,
+        *,
+        tickers: list[str],
+        connect_db: str | Path | None = None,
+        progress: bool = False,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
+        **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         return await self._dispatch_fetch(
             dataset="info",
@@ -192,7 +209,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             connect_db=connect_db,
             desc="Fetching YFinance info",
             table_name="yfinance_info",
-            show_progress=show_progress,
+            progress=progress,
+            on_progress=on_progress,
             **kwargs,
         )
 
@@ -205,7 +223,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         connect_db: str | Path | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
-        show_progress: bool = True,
+        progress: bool = False,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         """Fetch historical price data (OHLCV).
@@ -215,7 +234,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             connect_db: Database connection string.
             start_date: Start date (YYYY-MM-DD). If None, fetches all available history.
             end_date: End date (YYYY-MM-DD). If None, fetches up to latest available date.
-            show_progress: Whether to display progress indicators (default: True).
+            progress: Whether to display built-in progress output.
+            on_progress: Optional callback receiving ProgressSnapshot updates.
             **kwargs: Additional provider-specific options forwarded to the pipeline/executor.
 
         Returns:
@@ -236,7 +256,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
                 connect_db=connect_db,
                 start_date=start_date,
                 end_date=end_date,
-                show_progress=show_progress,
+                progress=progress,
+                on_progress=on_progress,
                 **kwargs,
             )
         )
@@ -248,7 +269,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         connect_db: str | Path | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
-        show_progress: bool = True,
+        progress: bool = False,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         return await self._dispatch_fetch(
@@ -259,7 +281,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             table_name="yfinance_price",
             start_date=start_date,
             end_date=end_date,
-            show_progress=show_progress,
+            progress=progress,
+            on_progress=on_progress,
             **kwargs,
         )
 
@@ -272,7 +295,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         period: Literal["annual", "quarterly"] = "annual",
         tickers: list[str],
         connect_db: str | Path | None = None,
-        show_progress: bool = True,
+        progress: bool = False,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         """Fetch financial statements (Unified Method).
@@ -304,7 +328,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
                 period=period,
                 tickers=tickers,
                 connect_db=connect_db,
-                show_progress=show_progress,
+                progress=progress,
+                on_progress=on_progress,
                 **kwargs,
             )
         )
@@ -316,7 +341,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         period: Literal["annual", "quarterly"] = "annual",
         tickers: list[str],
         connect_db: str | Path | None = None,
-        show_progress: bool = True,
+        progress: bool = False,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         target_kind = "financials" if kind in ("income_stmt", "earnings") else kind
@@ -334,7 +360,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             connect_db=connect_db,
             desc=f"Fetching YFinance {dataset}",
             table_name="yfinance_financials",
-            show_progress=show_progress,
+            progress=progress,
+            on_progress=on_progress,
             **kwargs,
         )
 
@@ -348,7 +375,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         connect_db: str | Path | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
-        show_progress: bool = True,
+        progress: bool = False,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         """Fetch corporate actions (Unified Method: dividends or splits).
@@ -377,7 +405,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
                 connect_db=connect_db,
                 start_date=start_date,
                 end_date=end_date,
-                show_progress=show_progress,
+                progress=progress,
+                on_progress=on_progress,
                 **kwargs,
             )
         )
@@ -390,7 +419,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         connect_db: str | Path | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
-        show_progress: bool = True,
+        progress: bool = False,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         return await self._dispatch_fetch(
@@ -401,7 +431,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             table_name=f"yfinance_{kind}",
             start_date=start_date,
             end_date=end_date,
-            show_progress=show_progress,
+            progress=progress,
+            on_progress=on_progress,
             **kwargs,
         )
 
@@ -413,7 +444,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         kind: Literal["institutional", "mutualfund"] = "institutional",
         tickers: list[str],
         connect_db: str | Path | None = None,
-        show_progress: bool = True,
+        progress: bool = False,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         """Fetch holders information (Unified Method).
@@ -438,7 +470,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
                 kind=kind,
                 tickers=tickers,
                 connect_db=connect_db,
-                show_progress=show_progress,
+                progress=progress,
+                on_progress=on_progress,
                 **kwargs,
             )
         )
@@ -449,7 +482,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         kind: Literal["institutional", "mutualfund"] = "institutional",
         tickers: list[str],
         connect_db: str | Path | None = None,
-        show_progress: bool = True,
+        progress: bool = False,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         dataset = f"{kind}_holders"
@@ -459,7 +493,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             connect_db=connect_db,
             desc=f"Fetching YFinance {dataset}",
             table_name="yfinance_holders",
-            show_progress=show_progress,
+            progress=progress,
+            on_progress=on_progress,
             **kwargs,
         )
 
@@ -468,7 +503,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         *,
         tickers: list[str],
         connect_db: str | Path | None = None,
-        show_progress: bool = True,
+        progress: bool = False,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         """Fetch major holders summary metrics.
@@ -491,7 +527,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             self._get_major_holders_async(
                 tickers=tickers,
                 connect_db=connect_db,
-                show_progress=show_progress,
+                progress=progress,
+                on_progress=on_progress,
                 **kwargs,
             )
         )
@@ -501,7 +538,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         *,
         tickers: list[str],
         connect_db: str | Path | None = None,
-        show_progress: bool = True,
+        progress: bool = False,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         return await self._dispatch_fetch(
@@ -510,7 +548,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             connect_db=connect_db,
             desc="Fetching YFinance major_holders",
             table_name="yfinance_major_holders",
-            show_progress=show_progress,
+            progress=progress,
+            on_progress=on_progress,
             **kwargs,
         )
 
@@ -521,7 +560,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         *,
         tickers: list[str],
         connect_db: str | Path | None = None,
-        show_progress: bool = True,
+        progress: bool = False,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         """Fetch insider roster holders.
@@ -544,7 +584,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             self._get_insider_roster_holders_async(
                 tickers=tickers,
                 connect_db=connect_db,
-                show_progress=show_progress,
+                progress=progress,
+                on_progress=on_progress,
                 **kwargs,
             )
         )
@@ -554,7 +595,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         *,
         tickers: list[str],
         connect_db: str | Path | None = None,
-        show_progress: bool = True,
+        progress: bool = False,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         return await self._dispatch_fetch(
@@ -563,12 +605,19 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             connect_db=connect_db,
             desc="Fetching YFinance insider_roster_holders",
             table_name="yfinance_insider_roster_holders",
-            show_progress=show_progress,
+            progress=progress,
+            on_progress=on_progress,
             **kwargs,
         )
 
     def get_insider_purchases(
-        self, *, tickers: list[str], connect_db: str | Path | None = None, show_progress: bool = True, **kwargs: Any
+        self,
+        *,
+        tickers: list[str],
+        connect_db: str | Path | None = None,
+        progress: bool = False,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
+        **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         """Fetch insider purchases.
 
@@ -590,13 +639,20 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             self._get_insider_purchases_async(
                 tickers=tickers,
                 connect_db=connect_db,
-                show_progress=show_progress,
+                progress=progress,
+                on_progress=on_progress,
                 **kwargs,
             )
         )
 
     async def _get_insider_purchases_async(
-        self, *, tickers: list[str], connect_db: str | Path | None = None, show_progress: bool = True, **kwargs: Any
+        self,
+        *,
+        tickers: list[str],
+        connect_db: str | Path | None = None,
+        progress: bool = False,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
+        **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         return await self._dispatch_fetch(
             dataset="insider_purchases",
@@ -604,14 +660,21 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             connect_db=connect_db,
             desc="Fetching YFinance insider_purchases",
             table_name="yfinance_insider_purchases",
-            show_progress=show_progress,
+            progress=progress,
+            on_progress=on_progress,
             **kwargs,
         )
 
     # --- Calendar ---
 
     def get_calendar(
-        self, *, tickers: list[str], connect_db: str | Path | None = None, show_progress: bool = True, **kwargs: Any
+        self,
+        *,
+        tickers: list[str],
+        connect_db: str | Path | None = None,
+        progress: bool = False,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
+        **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         """Fetch earnings calendar.
 
@@ -633,13 +696,20 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             self._get_calendar_async(
                 tickers=tickers,
                 connect_db=connect_db,
-                show_progress=show_progress,
+                progress=progress,
+                on_progress=on_progress,
                 **kwargs,
             )
         )
 
     async def _get_calendar_async(
-        self, *, tickers: list[str], connect_db: str | Path | None = None, show_progress: bool = True, **kwargs: Any
+        self,
+        *,
+        tickers: list[str],
+        connect_db: str | Path | None = None,
+        progress: bool = False,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
+        **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         return await self._dispatch_fetch(
             dataset="calendar",
@@ -647,14 +717,21 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             connect_db=connect_db,
             desc="Fetching YFinance calendar",
             table_name="yfinance_calendar",
-            show_progress=show_progress,
+            progress=progress,
+            on_progress=on_progress,
             **kwargs,
         )
 
     # --- Analyst Recommendations ---
 
     def get_recommendations(
-        self, *, tickers: list[str], connect_db: str | Path | None = None, show_progress: bool = True, **kwargs: Any
+        self,
+        *,
+        tickers: list[str],
+        connect_db: str | Path | None = None,
+        progress: bool = False,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
+        **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         """Fetch analyst recommendations.
 
@@ -676,13 +753,20 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             self._get_recommendations_async(
                 tickers=tickers,
                 connect_db=connect_db,
-                show_progress=show_progress,
+                progress=progress,
+                on_progress=on_progress,
                 **kwargs,
             )
         )
 
     async def _get_recommendations_async(
-        self, *, tickers: list[str], connect_db: str | Path | None = None, show_progress: bool = True, **kwargs: Any
+        self,
+        *,
+        tickers: list[str],
+        connect_db: str | Path | None = None,
+        progress: bool = False,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
+        **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         return await self._dispatch_fetch(
             dataset="recommendations",
@@ -690,14 +774,21 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             connect_db=connect_db,
             desc="Fetching YFinance recommendations",
             table_name="yfinance_recommendations",
-            show_progress=show_progress,
+            progress=progress,
+            on_progress=on_progress,
             **kwargs,
         )
 
     # --- news ---
 
     def get_news(
-        self, *, tickers: list[str], connect_db: str | Path | None = None, show_progress: bool = True, **kwargs: Any
+        self,
+        *,
+        tickers: list[str],
+        connect_db: str | Path | None = None,
+        progress: bool = False,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
+        **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         """Fetch ticker news.
 
@@ -719,13 +810,20 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             self._get_news_async(
                 tickers=tickers,
                 connect_db=connect_db,
-                show_progress=show_progress,
+                progress=progress,
+                on_progress=on_progress,
                 **kwargs,
             )
         )
 
     async def _get_news_async(
-        self, *, tickers: list[str], connect_db: str | Path | None = None, show_progress: bool = True, **kwargs: Any
+        self,
+        *,
+        tickers: list[str],
+        connect_db: str | Path | None = None,
+        progress: bool = False,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
+        **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         return await self._dispatch_fetch(
             dataset="news",
@@ -733,7 +831,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             connect_db=connect_db,
             desc="Fetching YFinance news",
             table_name="yfinance_news",
-            show_progress=show_progress,
+            progress=progress,
+            on_progress=on_progress,
             **kwargs,
         )
 
@@ -749,7 +848,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         connect_db: str | Path | None,
         desc: str,
         table_name: str,
-        show_progress: bool = True,
+        progress: bool = False,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
         total_items: int | None = None,
         unit: str = "tickers",
         start_date: str | None = None,
@@ -774,7 +874,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             connect_db: Database connection string/path, or None for in-memory
             desc: Progress bar description
             table_name: Table name for result collection
-            show_progress: Whether to show progress indicators
+            progress: Whether to show built-in progress output.
+            on_progress: Optional callback receiving ProgressSnapshot updates.
             total_items: Total number of items (for progress bar)
             unit: Unit label for progress bar (default: "tickers")
             start_date: Start date for data fetch
@@ -794,48 +895,37 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             threshold_absolute=self._memory_threshold_absolute,
         )
 
-        # Use BaseClient's common infrastructure
-        pbar, pbar_updater = self.create_progress_tracker(
-            total_items=total_items,
-            unit=unit,
-            desc=desc,
-            show_progress=show_progress,
-        )
-
         result_obj: pl.DataFrame | RunResult = (
             RunResult(provider="yfinance") if connect_db is not None else pl.DataFrame()
         )
-        try:
-            async with self.managed_writer(connect_db, show_progress=show_progress) as writer:
-                router = create_router(
-                    "yfinance",
-                    api_key=self.api_key or "",
-                    rate_limit=self._config.requests_per_minute,
-                    start_date=start_date,
-                    end_date=end_date,
-                    structured_logs=self._config.structured_logs,
-                    log_verbose=self._config.log_verbose,
-                    **{k: v for k, v in kwargs.items() if k in {PRICE_BATCH_SIZE_KEY}},
-                )
+        async with self.managed_writer(connect_db, show_progress=progress) as writer:
+            router = create_router(
+                "yfinance",
+                api_key=self.api_key or "",
+                rate_limit=self._config.requests_per_minute,
+                start_date=start_date,
+                end_date=end_date,
+                structured_logs=self._config.structured_logs,
+                log_verbose=self._config.log_verbose,
+                **{k: v for k, v in kwargs.items() if k in {PRICE_BATCH_SIZE_KEY}},
+            )
 
-                await self.run_pipeline(
-                    router=router,
-                    dataset=dataset,
-                    symbols=symbols,
-                    writer=writer,
-                    mapper=self._mapper,
-                    on_progress=pbar_updater,
-                    **{k: v for k, v in kwargs.items() if k not in (RESERVED_PIPELINE_KEYS | {PRICE_BATCH_SIZE_KEY})},
-                )
+            await self.run_pipeline(
+                router=router,
+                dataset=dataset,
+                symbols=symbols,
+                writer=writer,
+                mapper=self._mapper,
+                on_progress=on_progress,
+                progress=progress,
+                **{k: v for k, v in kwargs.items() if k not in (RESERVED_PIPELINE_KEYS | {PRICE_BATCH_SIZE_KEY})},
+            )
 
-                result_obj = await self.collect_results(
-                    writer=writer,
-                    table_name=table_name,
-                    connect_db=connect_db,
-                )
-        finally:
-            if pbar is not None:
-                pbar.close()
+            result_obj = await self.collect_results(
+                writer=writer,
+                table_name=table_name,
+                connect_db=connect_db,
+            )
         return result_obj
 
     async def _dispatch_fetch(
@@ -848,7 +938,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         table_name: str,
         start_date: str | None = None,
         end_date: str | None = None,
-        show_progress: bool = True,
+        progress: bool = False,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
         total_items = len(tickers)
@@ -858,7 +949,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             connect_db=connect_db,
             desc=desc,
             table_name=table_name,
-            show_progress=show_progress,
+            progress=progress,
+            on_progress=on_progress,
             total_items=total_items,
             start_date=start_date,
             end_date=end_date,

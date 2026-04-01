@@ -27,6 +27,7 @@ RESERVED_PIPELINE_KEYS: Final[set[str]] = {
     "writer",
     "mapper",
     "on_progress",
+    "progress",
     "resume",
 }
 
