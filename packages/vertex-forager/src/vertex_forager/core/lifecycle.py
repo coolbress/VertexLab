@@ -47,7 +47,7 @@ def initialize_run_state(
     return run_id, completed_symbols, failed_symbols
 
 
-async def create_run_queues(
+def create_run_queues(
     *,
     queue_max: int,
     checkpoint_retention_days: int,
@@ -63,8 +63,7 @@ async def create_run_queues(
     req_q: asyncio.PriorityQueue[tuple[int, int, Any | None]] = asyncio.PriorityQueue(maxsize=queue_max)
     pkt_q: asyncio.Queue[Any | None] = asyncio.Queue(maxsize=queue_max)
     try:
-        await asyncio.to_thread(
-            cleanup_state_retention,
+        cleanup_state_retention(
             checkpoint_retention_days=checkpoint_retention_days,
             run_history_retention_days=run_history_retention_days,
             dlq_retention_s=dlq_tmp_retention_s,
@@ -73,7 +72,7 @@ async def create_run_queues(
         logger.warning("PIPELINE: State retention cleanup failed: %s", cleanup_error)
     if dlq_tmp_periodic_cleanup:
         try:
-            await asyncio.to_thread(cleanup_dlq_tmp, cache_dir / "dlq", dlq_tmp_retention_s)
+            cleanup_dlq_tmp(cache_dir / "dlq", dlq_tmp_retention_s)
         except Exception as cleanup_error:
             logger.warning("PIPELINE: DLQ periodic cleanup failed: %s", cleanup_error)
     return req_q, pkt_q
