@@ -106,8 +106,9 @@ async def pop_next_job_respecting_fairness(
                 fairness_state.queues.pop(symbol, None)
                 fairness_state.deficit.pop(symbol, None)
                 continue
-            if fairness_state.deficit.get(symbol, 0.0) < 1.0:
-                fairness_state.deficit[symbol] = fairness_state.deficit.get(symbol, 0.0) + fairness_state.quantum
+            current_deficit = fairness_state.deficit.get(symbol, 0.0)
+            if current_deficit < 1.0:
+                fairness_state.deficit[symbol] = current_deficit + fairness_state.quantum
             if fairness_state.deficit[symbol] < 1.0:
                 fairness_state.active.rotate(-1)
                 continue
