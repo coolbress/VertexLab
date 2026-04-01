@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.18.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.17.0...vertex-forager-v0.18.0) (2026-04-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* **vertex-forager:** redesign progress reporting API ([#414](https://github.com/coolbress/VertexLab/issues/414))
+
+### Features
+
+* **vertex-forager:** redesign progress reporting API ([#414](https://github.com/coolbress/VertexLab/issues/414)) ([be86dcf](https://github.com/coolbress/VertexLab/commit/be86dcf1276357232de013d7d1caf398ee1c91d4))
+
 ## [0.17.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.16.0...vertex-forager-v0.17.0) (2026-04-01)
 
 
