@@ -17,7 +17,7 @@
 | packages/vertex-forager/src/vertex\_forager/core/errors.py          |       38 |       12 |     68% |18-19, 24-25, 105-111, 117, 123, 129 |
 | packages/vertex-forager/src/vertex\_forager/core/http.py            |      107 |       26 |     76% |16-17, 105, 109-117, 168-169, 187-189, 191-198, 201-202 |
 | packages/vertex-forager/src/vertex\_forager/core/library.py         |       25 |        1 |     96% |        26 |
-| packages/vertex-forager/src/vertex\_forager/core/lifecycle.py       |       82 |       10 |     88% |33-38, 72-73, 77-78, 125, 138, 180, 188 |
+| packages/vertex-forager/src/vertex\_forager/core/lifecycle.py       |       82 |       10 |     88% |33-38, 71-72, 76-77, 124, 137, 179, 187 |
 | packages/vertex-forager/src/vertex\_forager/core/orchestration.py   |       74 |       10 |     86% |43-44, 92-93, 95-97, 125, 188-189 |
 | packages/vertex-forager/src/vertex\_forager/core/pipeline.py        |      907 |      124 |     86% |111-112, 138-139, 146-147, 169, 171, 176-177, 184-187, 335-337, 420-421, 433-434, 438, 489, 498-515, 539, 570-571, 748-749, 857-859, 864-865, 873-874, 959-961, 976-977, 981, 995-997, 999-1002, 1042-1043, 1046, 1049, 1069-1070, 1075-1081, 1123-1124, 1127-1128, 1131-1134, 1189, 1192-1197, 1263-1264, 1331-1343, 1436, 1448-1449, 1507-1508, 1570-1571, 1582, 1585, 1647-1649, 1658-1659, 1718-1719, 1728-1729, 1894-1895 |
 | packages/vertex-forager/src/vertex\_forager/core/quality.py         |       90 |        4 |     96% |120-121, 228-229 |
