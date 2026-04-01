@@ -378,6 +378,7 @@ class VertexForager:
         self._progress_total: int | None = None
         self._progress_done = 0
         self._progress_history: deque[tuple[float, int]] = deque()
+        self._progress_window_events = 0
         self._active_workers = 0
         self._progress_process = psutil.Process(os.getpid())
         self._progress_process.cpu_percent(interval=None)
@@ -608,12 +609,14 @@ class VertexForager:
         if self._running:
             raise RuntimeError("Pipeline is already running; concurrent run() calls are not supported")
         self._running = True
+        self._progress_started_at = 0.0
         req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] | None = None
         pkt_q: asyncio.Queue[FramePacket | None] | None = None
         result: RunResult | None = None
         result_lock: asyncio.Lock | None = None
         progress_bar: tqdm | None = None
         final_progress_emitted = False
+        completed_symbols: set[str] = set()
 
         try:
             run_id, completed_symbols = self._initialize_run_state(dataset=dataset, resume=resume)
@@ -1187,15 +1190,22 @@ class VertexForager:
         )
 
         requested_symbols = set(symbols) if symbols else None
+        requested_symbol_tokens = {token for symbol in (symbols or []) for token in _symbol_tokens(symbol)}
         completed_symbol_tokens = {token for symbol in (completed_symbols or set()) for token in _symbol_tokens(symbol)}
         filtered_pending_jobs = [
             pending_job
             for pending_job in (pending_jobs or [])
-            if requested_symbols is None or pending_job.symbol is None or pending_job.symbol in requested_symbols
+            if requested_symbols is None
+            or pending_job.symbol is None
+            or pending_job.symbol in requested_symbols
+            or any(token in requested_symbol_tokens for token in _symbol_tokens(pending_job.symbol))
         ]
         pending_job_signatures = {self._job_signature(pending_job) for pending_job in filtered_pending_jobs}
         pending_symbols = {
             pending_job.symbol for pending_job in filtered_pending_jobs if pending_job.symbol is not None
+        }
+        pending_symbol_tokens = {
+            token for pending_job in filtered_pending_jobs for token in _symbol_tokens(pending_job.symbol)
         }
         for pending_job in filtered_pending_jobs:
             await enqueue_pagination_job_impl(
@@ -1216,7 +1226,10 @@ class VertexForager:
             if self._job_signature(job) in pending_job_signatures:
                 logger.debug("PRODUCER: Skipping duplicate pending checkpoint job %s", job)
                 continue
-            if job.symbol and job.symbol in pending_symbols:
+            if job.symbol and (
+                job.symbol in pending_symbols
+                or any(token in pending_symbol_tokens for token in _symbol_tokens(job.symbol))
+            ):
                 logger.debug("PRODUCER: Resuming paginated symbol %s from pending checkpoint job", job.symbol)
                 continue
 
@@ -1409,6 +1422,7 @@ class VertexForager:
         self._progress_total = jobs_total
         self._progress_done = jobs_done_initial
         self._progress_history.clear()
+        self._progress_window_events = 0
         self._active_workers = 0
         self._progress_display_done = jobs_done_initial
         self._progress_counters = {}
@@ -1446,11 +1460,15 @@ class VertexForager:
         if terminal_count > 0:
             self._progress_done += terminal_count
             self._progress_history.append((now, terminal_count))
+            self._progress_window_events += terminal_count
         cutoff = now - 30.0
         while self._progress_history and self._progress_history[0][0] < cutoff:
-            self._progress_history.popleft()
+            _ts, count = self._progress_history.popleft()
+            self._progress_window_events = max(0, self._progress_window_events - count)
+        if not finished and progress_bar is None and on_progress is None:
+            return
         elapsed_s = max(0.0, now - self._progress_started_at)
-        window_events = sum(count for _, count in self._progress_history)
+        window_events = self._progress_window_events
         window_span = min(30.0, max(0.0, now - self._progress_history[0][0])) if self._progress_history else 0.0
         throughput = float(window_events / window_span) if window_span > 0.0 else 0.0
         jobs_total = self._progress_total
