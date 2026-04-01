@@ -207,7 +207,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             dataset="info",
             tickers=tickers,
             connect_db=connect_db,
-            desc="Fetching YFinance info",
             table_name="yfinance_info",
             progress=progress,
             on_progress=on_progress,
@@ -277,7 +276,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             dataset="price",
             tickers=tickers,
             connect_db=connect_db,
-            desc="Fetching YFinance price data",
             table_name="yfinance_price",
             start_date=start_date,
             end_date=end_date,
@@ -306,6 +304,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             period: Reporting period ('annual' or 'quarterly'). For 'earnings', quarterly is deprecated.
             tickers: List of ticker symbols.
             connect_db: Optional DuckDB connection string.
+            progress: Whether to display built-in progress output.
+            on_progress: Optional callback receiving ProgressSnapshot updates.
 
         Returns:
             Polars DataFrame in memory or RunResult when persisting.
@@ -358,7 +358,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             dataset=cast("YFinanceDataset", dataset),
             tickers=tickers,
             connect_db=connect_db,
-            desc=f"Fetching YFinance {dataset}",
             table_name="yfinance_financials",
             progress=progress,
             on_progress=on_progress,
@@ -387,6 +386,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             connect_db: Optional DuckDB connection string.
             start_date: Optional start date (YYYY-MM-DD).
             end_date: Optional end date (YYYY-MM-DD).
+            progress: Whether to display built-in progress output.
+            on_progress: Optional callback receiving ProgressSnapshot updates.
             **kwargs: Additional provider-specific options.
 
         Returns:
@@ -427,7 +428,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             dataset=cast("YFinanceDataset", kind),
             tickers=tickers,
             connect_db=connect_db,
-            desc=f"Fetching YFinance {kind}",
             table_name=f"yfinance_{kind}",
             start_date=start_date,
             end_date=end_date,
@@ -454,6 +454,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             kind: Type of holder ('institutional', 'mutualfund').
             tickers: List of ticker symbols.
             connect_db: Optional DuckDB connection string.
+            progress: Whether to display built-in progress output.
+            on_progress: Optional callback receiving ProgressSnapshot updates.
             **kwargs: Additional provider-specific options.
 
         Returns:
@@ -491,7 +493,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             dataset=cast("YFinanceDataset", dataset),
             tickers=tickers,
             connect_db=connect_db,
-            desc=f"Fetching YFinance {dataset}",
             table_name="yfinance_holders",
             progress=progress,
             on_progress=on_progress,
@@ -512,6 +513,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         Args:
             tickers: List of ticker symbols.
             connect_db: Optional DuckDB connection string.
+            progress: Whether to display built-in progress output.
+            on_progress: Optional callback receiving ProgressSnapshot updates.
             **kwargs: Additional provider-specific options.
 
         Returns:
@@ -546,7 +549,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             dataset="major_holders",
             tickers=tickers,
             connect_db=connect_db,
-            desc="Fetching YFinance major_holders",
             table_name="yfinance_major_holders",
             progress=progress,
             on_progress=on_progress,
@@ -569,6 +571,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         Args:
             tickers: List of ticker symbols.
             connect_db: Optional DuckDB connection string.
+            progress: Whether to display built-in progress output.
+            on_progress: Optional callback receiving ProgressSnapshot updates.
             **kwargs: Additional provider-specific options.
 
         Returns:
@@ -603,7 +607,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             dataset="insider_roster_holders",
             tickers=tickers,
             connect_db=connect_db,
-            desc="Fetching YFinance insider_roster_holders",
             table_name="yfinance_insider_roster_holders",
             progress=progress,
             on_progress=on_progress,
@@ -624,6 +627,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         Args:
             tickers: List of ticker symbols.
             connect_db: Optional DuckDB connection string.
+            progress: Whether to display built-in progress output.
+            on_progress: Optional callback receiving ProgressSnapshot updates.
             **kwargs: Additional provider-specific options.
 
         Returns:
@@ -658,7 +663,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             dataset="insider_purchases",
             tickers=tickers,
             connect_db=connect_db,
-            desc="Fetching YFinance insider_purchases",
             table_name="yfinance_insider_purchases",
             progress=progress,
             on_progress=on_progress,
@@ -681,6 +685,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         Args:
             tickers: List of ticker symbols.
             connect_db: Optional DuckDB connection string.
+            progress: Whether to display built-in progress output.
+            on_progress: Optional callback receiving ProgressSnapshot updates.
             **kwargs: Additional provider-specific options.
 
         Returns:
@@ -715,7 +721,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             dataset="calendar",
             tickers=tickers,
             connect_db=connect_db,
-            desc="Fetching YFinance calendar",
             table_name="yfinance_calendar",
             progress=progress,
             on_progress=on_progress,
@@ -738,6 +743,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         Args:
             tickers: List of ticker symbols.
             connect_db: Optional DuckDB connection string.
+            progress: Whether to display built-in progress output.
+            on_progress: Optional callback receiving ProgressSnapshot updates.
             **kwargs: Additional provider-specific options.
 
         Returns:
@@ -772,7 +779,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             dataset="recommendations",
             tickers=tickers,
             connect_db=connect_db,
-            desc="Fetching YFinance recommendations",
             table_name="yfinance_recommendations",
             progress=progress,
             on_progress=on_progress,
@@ -795,6 +801,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         Args:
             tickers: List of ticker symbols.
             connect_db: Optional DuckDB connection string.
+            progress: Whether to display built-in progress output.
+            on_progress: Optional callback receiving ProgressSnapshot updates.
             **kwargs: Additional provider-specific options.
 
         Returns:
@@ -829,7 +837,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             dataset="news",
             tickers=tickers,
             connect_db=connect_db,
-            desc="Fetching YFinance news",
             table_name="yfinance_news",
             progress=progress,
             on_progress=on_progress,
@@ -846,12 +853,9 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         dataset: YFinanceDataset,
         symbols: list[str],
         connect_db: str | Path | None,
-        desc: str,
         table_name: str,
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
-        total_items: int | None = None,
-        unit: str = "tickers",
         start_date: str | None = None,
         end_date: str | None = None,
         **kwargs: Any,
@@ -872,12 +876,9 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             dataset: Dataset name (e.g., "price", "financials", "info")
             symbols: List of symbols to fetch (required; must be non-empty)
             connect_db: Database connection string/path, or None for in-memory
-            desc: Progress bar description
             table_name: Table name for result collection
             progress: Whether to show built-in progress output.
             on_progress: Optional callback receiving ProgressSnapshot updates.
-            total_items: Total number of items (for progress bar)
-            unit: Unit label for progress bar (default: "tickers")
             start_date: Start date for data fetch
             end_date: End date for data fetch
             **kwargs: Additional provider-specific arguments
@@ -934,7 +935,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         dataset: YFinanceDataset,
         tickers: list[str],
         connect_db: str | Path | None,
-        desc: str,
         table_name: str,
         start_date: str | None = None,
         end_date: str | None = None,
@@ -942,16 +942,13 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
     ) -> pl.DataFrame | RunResult:
-        total_items = len(tickers)
         return await self._fetch_per_ticker(
             dataset=dataset,
             symbols=tickers,
             connect_db=connect_db,
-            desc=desc,
             table_name=table_name,
             progress=progress,
             on_progress=on_progress,
-            total_items=total_items,
             start_date=start_date,
             end_date=end_date,
             **kwargs,

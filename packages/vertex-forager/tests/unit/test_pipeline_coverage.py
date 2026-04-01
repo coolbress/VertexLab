@@ -195,6 +195,61 @@ async def test_progress_snapshot_emits_finished_true_once_on_pipeline_error() ->
 
 
 @pytest.mark.asyncio
+async def test_progress_snapshot_counts_completed_symbols_on_resume() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    snapshots: list[ProgressSnapshot] = []
+
+    engine._initialize_run_state = lambda dataset, resume: ("run-id", {"AAPL"})  # type: ignore[method-assign]
+    engine._record_worker_symbol_state = lambda **kwargs: asyncio.sleep(0)  # type: ignore[method-assign]
+
+    await engine.run(
+        dataset="d",
+        symbols=["AAPL", "MSFT"],
+        resume=True,
+        on_progress=lambda snapshot: snapshots.append(snapshot),
+    )
+
+    assert snapshots
+    assert snapshots[-1].jobs_total == 2
+    assert snapshots[-1].jobs_done == 2
+    assert snapshots[-1].pct == 100.0
+
+
+@pytest.mark.asyncio
+async def test_progress_snapshot_uses_progress_counters_when_metrics_disabled() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    result = RunResult(provider="stub", dataset="d")
+    lock = asyncio.Lock()
+    req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
+    snapshots: list[ProgressSnapshot] = []
+
+    engine._reset_progress_runtime(jobs_total=1)
+    engine._inc("rows_written_total", 5)
+    engine._inc("dlq_spooled_files_total", 2)
+
+    await engine._emit_progress_snapshot(
+        result=result,
+        result_lock=lock,
+        req_q=req_q,
+        on_progress=lambda snapshot: snapshots.append(snapshot),
+        progress_bar=None,
+        terminal_count=1,
+        finished=False,
+    )
+
+    assert snapshots
+    assert snapshots[-1].rows_written == 5
+    assert snapshots[-1].dlq_spooled == 2
+
+
+def test_logical_symbol_count_defaults_to_one_for_missing_symbol() -> None:
+    job = FetchJob(provider="stub", dataset="d", symbol=None, spec=RequestSpec(url="https://x"))
+    assert pipeline_module._logical_symbol_count(job) == 1
+
+
+@pytest.mark.asyncio
 async def test_progress_true_prints_summary_and_closes_bar(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -1027,6 +1082,7 @@ async def test_fetch_worker_cancelled_error_preserves_handler_state(monkeypatch:
 
     assert isinstance(seen["snapshot"], ProgressSnapshot)
     assert seen["snapshot"].finished is False
+    assert seen["snapshot"].jobs_done == 0
     assert isinstance(seen["record_exc"], asyncio.CancelledError)
     assert seen["record_parse_result"] is None
 

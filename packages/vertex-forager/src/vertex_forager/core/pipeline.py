@@ -154,7 +154,7 @@ Symbols = Sequence[str]
 def _logical_symbol_count(job: FetchJob) -> int:
     symbol = job.symbol
     if not isinstance(symbol, str) or not symbol:
-        return 0
+        return 1
     return len([token for token in (part.strip() for part in symbol.split(",")) if token])
 
 
@@ -227,6 +227,7 @@ class VertexForager:
         self._structured_logs = bool(config.structured_logs)
         self._log_verbose = bool(config.log_verbose)
         self._counters: dict[str, int] = {}
+        self._progress_counters: dict[str, int] = {}
         self._hists: dict[str, deque[float]] = {}
         self._tracer = config.advanced.tracer
         self._otel_enabled = bool(config.advanced.otel_enabled)
@@ -338,6 +339,7 @@ class VertexForager:
         self._progress_process.cpu_percent(interval=None)
 
     def _inc(self, name: str, amount: int = 1) -> None:
+        self._progress_counters[name] = self._progress_counters.get(name, 0) + amount
         if not self._metrics_enabled:
             return
         self._counters[name] = self._counters.get(name, 0) + amount
@@ -578,8 +580,13 @@ class VertexForager:
             concurrency = self._resolve_concurrency()
             self._ensure_parse_executor(concurrency)
             jobs_total = len(symbols) if symbols is not None else None
-            self._reset_progress_runtime(jobs_total=jobs_total)
-            progress_bar = tqdm(total=jobs_total, unit="jobs", desc=dataset, leave=True) if progress else None
+            jobs_done_initial = len(completed_symbols) if symbols is not None and resume else 0
+            self._reset_progress_runtime(jobs_total=jobs_total, jobs_done_initial=jobs_done_initial)
+            progress_bar = (
+                tqdm(total=jobs_total, initial=jobs_done_initial, unit="jobs", desc=dataset, leave=True)
+                if progress
+                else None
+            )
             producer_task, fetch_tasks, writer_tasks = self._create_pipeline_tasks(
                 req_q=req_q,
                 pkt_q=pkt_q,
@@ -1284,6 +1291,7 @@ class VertexForager:
             worker_exc: BaseException | None = None
             parse_result: ParseResult | None = None
             try:
+                self._active_workers += 1
                 _payload, worker_exc, parse_result = await self._process_worker_job(
                     worker_id=worker_id,
                     priority=priority,
@@ -1306,9 +1314,14 @@ class VertexForager:
                 else:
                     req_q.task_done()
                 try:
+                    self._active_workers = max(0, self._active_workers - 1)
                     await self._record_worker_symbol_state(job=job, worker_exc=worker_exc, parse_result=parse_result)
                     terminal_count = 0
-                    if worker_exc is not None or not list(parse_result.next_jobs if parse_result is not None else []):
+                    next_jobs = list(parse_result.next_jobs if parse_result is not None else [])
+                    if (
+                        worker_exc is not None
+                        and not isinstance(worker_exc, asyncio.CancelledError)
+                    ) or (worker_exc is None and not next_jobs):
                         terminal_count = _logical_symbol_count(job)
                     await self._emit_progress_snapshot(
                         result=result,
@@ -1329,13 +1342,14 @@ class VertexForager:
                         e,
                     )
 
-    def _reset_progress_runtime(self, *, jobs_total: int | None) -> None:
+    def _reset_progress_runtime(self, *, jobs_total: int | None, jobs_done_initial: int = 0) -> None:
         self._progress_started_at = time.monotonic()
         self._progress_total = jobs_total
-        self._progress_done = 0
+        self._progress_done = jobs_done_initial
         self._progress_history.clear()
         self._active_workers = 0
-        self._progress_display_done = 0
+        self._progress_display_done = jobs_done_initial
+        self._progress_counters = {}
         self._progress_process.cpu_percent(interval=None)
 
     def _update_progress_bar(self, *, progress_bar: tqdm | None, snapshot: ProgressSnapshot) -> None:
@@ -1397,12 +1411,12 @@ class VertexForager:
             eta_s=eta_s,
             errors=errors,
             retries=int(getattr(self.controller, "retry_events", 0)),
-            rows_written=int(self._counters.get("rows_written_total", 0)),
+            rows_written=int(self._progress_counters.get("rows_written_total", 0)),
             elapsed_s=float(result.duration_s) if finished and result.duration_s is not None else elapsed_s,
             active_workers=self._active_workers,
             pending_jobs=pending_jobs,
             throttle_events=int(getattr(self.controller, "throttle_events", 0)),
-            dlq_spooled=int(self._counters.get("dlq_spooled_files_total", 0)),
+            dlq_spooled=int(self._progress_counters.get("dlq_spooled_files_total", 0)),
             memory_mb=float(self._progress_process.memory_info().rss / (1024 * 1024)),
             cpu_pct=float(self._progress_process.cpu_percent(interval=None)),
             finished=finished,

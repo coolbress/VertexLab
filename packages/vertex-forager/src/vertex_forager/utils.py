@@ -749,7 +749,7 @@ def run_sync_compat(coro: Coroutine[Any, Any, T]) -> T:
     except ImportError as exc:
         coro.close()
         raise RuntimeError(
-            "Running inside an event loop. Install optional dependency: pip install vertex-forager[notebook]"
+            "Running inside an event loop. Reinstall or upgrade vertex-forager to include nest-asyncio support."
         ) from exc
     nest_asyncio.apply(loop)
     task = loop.create_task(coro)

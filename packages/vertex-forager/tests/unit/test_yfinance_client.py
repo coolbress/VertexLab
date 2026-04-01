@@ -245,11 +245,8 @@ async def test_fetch_per_ticker_filters_pipeline_kwargs(monkeypatch: pytest.Monk
         dataset="price",
         symbols=["AAPL"],
         connect_db=None,
-        desc="test",
         table_name="yfinance_price",
         progress=True,
-        total_items=1,
-        unit="tickers",
         price_batch_size=123,
         custom_flag=True,
     )
