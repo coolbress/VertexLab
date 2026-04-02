@@ -205,11 +205,14 @@ def _count_requested_symbol_units(symbols: Symbols | None) -> int | None:
 
 
 def _fsync_dir(path: str) -> None:
-    dir_fd = os.open(str(path), os.O_RDONLY)
     try:
-        os.fsync(dir_fd)
-    finally:
-        os.close(dir_fd)
+        dir_fd = os.open(path, os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    except OSError:
+        pass
 
 
 def _count_pending_request_jobs(req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] | None) -> int:
@@ -1344,6 +1347,7 @@ class VertexForager:
                         entry["remaining"] = entry.get("remaining", 0) + 1
                         result.dlq_counts[pkt.table] = entry
                         self._inc("dlq_remaining_total", 1)
+                        self._inc(f"dlq_remaining.{pkt.table}", 1)
                         result.errors.append(RunError.from_exception(e, pkt.provider, pkt.table, ""))
 
     async def _fetch_worker(
