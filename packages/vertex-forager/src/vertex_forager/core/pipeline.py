@@ -32,6 +32,7 @@ import logging
 import os
 import time
 from typing import TYPE_CHECKING, Any, Literal, cast
+from uuid import uuid4
 
 import httpx
 from polars.exceptions import ComputeError
@@ -1302,8 +1303,9 @@ class VertexForager:
                     dlq_dir = get_cache_dir() / "dlq" / pkt.table
                     dlq_dir.mkdir(parents=True, exist_ok=True)
                     ts_ns = time.time_ns()
-                    fpath = dlq_dir / f"packet_{ts_ns}.ipc"
-                    tmp_path = fpath.parent / (f"{fpath.name}.tmp")
+                    file_id = f"{ts_ns}_{uuid4().hex}"
+                    fpath = dlq_dir / f"packet_{file_id}.ipc"
+                    tmp_path = fpath.parent / f"{fpath.name}.tmp"
                     fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
                     with os.fdopen(fd, "wb") as fh:
                         pkt.frame.write_ipc(fh)
