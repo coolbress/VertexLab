@@ -32,17 +32,13 @@ def _register_sharadar() -> None:
         *,
         api_key: str | None = None,
         rate_limit: int,
-        metrics_enabled: bool | None = None,
         structured_logs: bool | None = None,
         log_verbose: bool | None = None,
-        dlq_enabled: bool | None = None,
         schedule: SchedulerConfig | dict[str, Any] | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
         adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
         concurrency: int | None = None,
         flush_threshold_rows: int | None = None,
-        writer_chunk_rows: int | None = None,
-        writer_concurrency: int | None = None,
         checkpoint_retention_days: int | None = None,
         run_history_retention_days: int | None = None,
         http_timeout_s: float | None = None,
@@ -52,17 +48,13 @@ def _register_sharadar() -> None:
         return SharadarClient(
             api_key=api_key or "",
             rate_limit=rate_limit,
-            metrics_enabled=metrics_enabled,
             structured_logs=structured_logs,
             log_verbose=log_verbose,
-            dlq_enabled=dlq_enabled,
             schedule=schedule,
             retry=retry,
             adaptive_throttle=adaptive_throttle,
             concurrency=concurrency,
             flush_threshold_rows=flush_threshold_rows,
-            writer_chunk_rows=writer_chunk_rows,
-            writer_concurrency=writer_concurrency,
             checkpoint_retention_days=checkpoint_retention_days,
             run_history_retention_days=run_history_retention_days,
             http_timeout_s=http_timeout_s,
@@ -87,17 +79,13 @@ def _register_yfinance() -> None:
         *,
         api_key: str | None = None,
         rate_limit: int,
-        metrics_enabled: bool | None = None,
         structured_logs: bool | None = None,
         log_verbose: bool | None = None,
-        dlq_enabled: bool | None = None,
         schedule: SchedulerConfig | dict[str, Any] | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
         adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
         concurrency: int | None = None,
         flush_threshold_rows: int | None = None,
-        writer_chunk_rows: int | None = None,
-        writer_concurrency: int | None = None,
         checkpoint_retention_days: int | None = None,
         run_history_retention_days: int | None = None,
         http_timeout_s: float | None = None,
@@ -107,17 +95,13 @@ def _register_yfinance() -> None:
         return YFinanceClient(
             api_key=api_key or "",
             rate_limit=rate_limit,
-            metrics_enabled=metrics_enabled,
             structured_logs=structured_logs,
             log_verbose=log_verbose,
-            dlq_enabled=dlq_enabled,
             schedule=schedule,
             retry=retry,
             adaptive_throttle=adaptive_throttle,
             concurrency=concurrency,
             flush_threshold_rows=flush_threshold_rows,
-            writer_chunk_rows=writer_chunk_rows,
-            writer_concurrency=writer_concurrency,
             checkpoint_retention_days=checkpoint_retention_days,
             run_history_retention_days=run_history_retention_days,
             http_timeout_s=http_timeout_s,
@@ -139,17 +123,13 @@ def create_client(
     provider: str,
     api_key: str | None = None,
     rate_limit: int | None = None,
-    metrics_enabled: bool | None = None,
     structured_logs: bool | None = None,
     log_verbose: bool | None = None,
-    dlq_enabled: bool | None = None,
     schedule: SchedulerConfig | dict[str, Any] | None = None,
     retry: RetryConfig | dict[str, Any] | None = None,
     throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
     concurrency: int | None = None,
     flush_threshold_rows: int | None = None,
-    writer_chunk_rows: int | None = None,
-    writer_concurrency: int | None = None,
     checkpoint_retention_days: int | None = None,
     run_history_retention_days: int | None = None,
     http_timeout_s: float | None = None,
@@ -163,17 +143,13 @@ def create_client(
         provider: The provider identifier (e.g., "sharadar").
         api_key: API key. If not provided, will look up provider-specific env var.
         rate_limit: Rate limit in requests per minute.
-        metrics_enabled: Enables metrics emission when True.
         structured_logs: Enables structured stage logs when True.
         log_verbose: Promotes structured logs to INFO when True.
-        dlq_enabled: Enables DLQ spooling when True.
         schedule: Grouped scheduler configuration for always-on DRR fairness.
         retry: Grouped retry policy configuration.
         throttle: Grouped adaptive throttle policy configuration.
         concurrency: Explicit fetch concurrency limit.
         flush_threshold_rows: Buffered row threshold before flush.
-        writer_chunk_rows: Transitional write chunk-size tuning.
-        writer_concurrency: Transitional writer worker count tuning.
         checkpoint_retention_days: Retention window for completed checkpoints.
         run_history_retention_days: Retention window for run-history records.
         http_timeout_s: HTTP request timeout in seconds.
@@ -219,17 +195,13 @@ def create_client(
         return registration.factory(
             api_key=None,
             rate_limit=effective_limit,
-            metrics_enabled=metrics_enabled,
             structured_logs=structured_logs,
             log_verbose=log_verbose,
-            dlq_enabled=dlq_enabled,
             schedule=schedule,
             retry=retry,
             adaptive_throttle=throttle,
             concurrency=concurrency,
             flush_threshold_rows=flush_threshold_rows,
-            writer_chunk_rows=writer_chunk_rows,
-            writer_concurrency=writer_concurrency,
             checkpoint_retention_days=checkpoint_retention_days,
             run_history_retention_days=run_history_retention_days,
             http_timeout_s=http_timeout_s,
@@ -241,17 +213,13 @@ def create_client(
     return registration.factory(
         api_key=resolved_key,
         rate_limit=rate_limit,
-        metrics_enabled=metrics_enabled,
         structured_logs=structured_logs,
         log_verbose=log_verbose,
-        dlq_enabled=dlq_enabled,
         schedule=schedule,
         retry=retry,
         adaptive_throttle=throttle,
         concurrency=concurrency,
         flush_threshold_rows=flush_threshold_rows,
-        writer_chunk_rows=writer_chunk_rows,
-        writer_concurrency=writer_concurrency,
         checkpoint_retention_days=checkpoint_retention_days,
         run_history_retention_days=run_history_retention_days,
         http_timeout_s=http_timeout_s,

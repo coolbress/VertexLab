@@ -8,9 +8,9 @@ from unittest.mock import AsyncMock, MagicMock
 import polars as pl
 import pytest
 
+from vertex_forager.constants import WRITER_CHUNK_ROWS
 from vertex_forager.core.config import FramePacket, ResolvedClientConfig, RunResult
 from vertex_forager.core.pipeline import VertexForager
-from vertex_forager.exceptions import VertexForagerError
 from vertex_forager.writers.base import BaseWriter, WriteResult
 
 
@@ -29,7 +29,7 @@ async def test_chunked_flush_writes_multiple_chunks() -> None:
     mock_mapper = MagicMock()
     mock_controller = MagicMock()
 
-    cfg = ResolvedClientConfig(requests_per_minute=100, writer_chunk_rows=10_000, metrics_enabled=True)
+    cfg = ResolvedClientConfig(requests_per_minute=100)
     forager = VertexForager(
         router=mock_router,
         http=mock_http,
@@ -43,11 +43,11 @@ async def test_chunked_flush_writes_multiple_chunks() -> None:
     result = RunResult(provider="test")
     result_lock = asyncio.Lock()
 
-    # 10001 rows total -> chunks: 10000, 1
+    # WRITER_CHUNK_ROWS + 1 rows total -> chunks: WRITER_CHUNK_ROWS, 1
     frames = [
-        pl.DataFrame({"id": list(range(6000))}),
-        pl.DataFrame({"id": list(range(6000, 10000))}),
-        pl.DataFrame({"id": [10000]}),
+        pl.DataFrame({"id": list(range(12_000))}),
+        pl.DataFrame({"id": list(range(12_000, WRITER_CHUNK_ROWS))}),
+        pl.DataFrame({"id": [WRITER_CHUNK_ROWS]}),
     ]
     for frame in frames:
         pkt_q.put_nowait(
@@ -68,27 +68,14 @@ async def test_chunked_flush_writes_multiple_chunks() -> None:
     first_rows = len(calls[0].args[0].frame)
     second_rows = len(calls[1].args[0].frame)
     # Streaming aggregator fills the first chunk to the limit, then writes the tail
-    assert first_rows == 10000
+    assert first_rows == WRITER_CHUNK_ROWS
     assert second_rows == 1
-    assert result.tables.get("chunk_table", 0) == 10001
+    assert result.tables.get("chunk_table", 0) == WRITER_CHUNK_ROWS + 1
     # Verify per-chunk contract: metrics histogram records per-chunk rows in order
     hist = list(forager._hists.get("writer_rows.chunk_table", []))  # type: ignore[attr-defined]
     assert len(hist) == 2
     assert int(hist[0]) == first_rows
     assert int(hist[1]) == second_rows
-
-
-def test_runtime_config_writer_chunk_rows_coercion() -> None:
-    # Pydantic may coerce at model construction time; explicitly test assert_valid path
-    cfg = ResolvedClientConfig(requests_per_minute=60)
-    cfg.writer_chunk_rows = "20000"  # type: ignore[assignment]
-    cfg.assert_valid()
-    assert isinstance(cfg.writer_chunk_rows, int)
-    assert cfg.writer_chunk_rows == 20000
-    # Now assign invalid raw value and verify VertexForagerError path
-    cfg.writer_chunk_rows = "not-an-int"  # type: ignore[assignment]
-    with pytest.raises(VertexForagerError):
-        cfg.assert_valid()
 
 
 @pytest.mark.asyncio
@@ -111,7 +98,7 @@ async def test_chunked_flush_partial_error(tmp_path, monkeypatch) -> None:
     mock_controller = MagicMock()
 
     monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "app"))
-    cfg = ResolvedClientConfig(requests_per_minute=100, writer_chunk_rows=10_000)
+    cfg = ResolvedClientConfig(requests_per_minute=100)
     forager = VertexForager(
         router=mock_router,
         http=mock_http,
@@ -125,11 +112,11 @@ async def test_chunked_flush_partial_error(tmp_path, monkeypatch) -> None:
     result = RunResult(provider="test")
     result_lock = asyncio.Lock()
 
-    # First chunk 10000 rows, then remaining 2 rows to trigger failure on second write
+    # First chunk WRITER_CHUNK_ROWS rows, then remaining 2 rows to trigger failure on second write
     frames = [
-        pl.DataFrame({"id": list(range(10000))}),
-        pl.DataFrame({"id": [10000]}),
-        pl.DataFrame({"id": [10001]}),
+        pl.DataFrame({"id": list(range(WRITER_CHUNK_ROWS))}),
+        pl.DataFrame({"id": [WRITER_CHUNK_ROWS]}),
+        pl.DataFrame({"id": [WRITER_CHUNK_ROWS + 1]}),
     ]
     for frame in frames:
         pkt_q.put_nowait(
@@ -146,7 +133,7 @@ async def test_chunked_flush_partial_error(tmp_path, monkeypatch) -> None:
 
     # Exactly one error recorded; rows from the first successful chunk counted
     assert len(result.errors) == 1
-    assert result.tables.get("chunk_table", 0) == 10000
+    assert result.tables.get("chunk_table", 0) == WRITER_CHUNK_ROWS
     # DLQ spooled file has two failed rows; error summary records remaining=2
     dlq_dir = tmp_path / "app" / "cache" / "dlq" / "chunk_table"
     assert dlq_dir.exists()
@@ -154,30 +141,8 @@ async def test_chunked_flush_partial_error(tmp_path, monkeypatch) -> None:
     assert len(files) >= 1
     df = pl.read_ipc(files[0])
     assert df.shape[0] == 2
-    assert set(df.get_column("id").to_list()) == {10000, 10001}
+    assert set(df.get_column("id").to_list()) == {WRITER_CHUNK_ROWS, WRITER_CHUNK_ROWS + 1}
     assert any("DLQ=spooled" in e.message and "remaining=2" in e.message for e in result.errors)
-
-
-def test_runtime_config_writer_chunk_rows_lower_bound() -> None:
-    cfg = ResolvedClientConfig(requests_per_minute=60, writer_chunk_rows=9_999)
-    with pytest.raises(ValueError, match=r".*"):
-        cfg.assert_valid()
-
-
-def test_runtime_config_writer_concurrency_coercion() -> None:
-    cfg = ResolvedClientConfig(requests_per_minute=60)
-    cfg.writer_concurrency = "2"  # type: ignore[assignment]
-    cfg.assert_valid()
-    assert isinstance(cfg.writer_concurrency, int)
-    assert cfg.writer_concurrency == 2
-    cfg.writer_concurrency = "bad"  # type: ignore[assignment]
-    with pytest.raises(VertexForagerError):
-        cfg.assert_valid()
-
-
-def test_runtime_config_writer_concurrency_lower_bound() -> None:
-    with pytest.raises(ValueError, match=r".*"):
-        ResolvedClientConfig(requests_per_minute=60, writer_concurrency=0)
 
 
 def test_compute_summary_percentiles_and_counters() -> None:
@@ -195,8 +160,7 @@ def test_compute_summary_percentiles_and_counters() -> None:
         config=cfg,
         controller=mock_controller,
     )
-    # Enable metrics and populate histograms/counters
-    vf._metrics_enabled = True  # type: ignore[attr-defined]
+    # Populate histograms/counters
     vf._hists = {  # type: ignore[attr-defined]
         "fetch_duration_s": deque([0.1, 0.2, 0.3]),
         "writer_flush_duration_s.tableA": deque([1.0, 2.0, 3.0]),

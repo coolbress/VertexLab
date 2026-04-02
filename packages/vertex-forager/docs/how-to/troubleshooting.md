@@ -19,20 +19,17 @@
 - Checks
   - Review `writer_rows.{table}` and `writer_flush_duration_s.{table}` histograms.
 - Actions
-  - Enable chunked flush and tune:
-    - Set `writer_chunk_rows` (>= 10_000).
-    - Adjust `flush_threshold_rows` to control batch sizes.
+  - Adjust `flush_threshold_rows` to control batch sizes.
   - Consider splitting workloads by dataset or symbols if necessary.
 
-## DLQ disabled path
+## DLQ persistence
 
 - Symptoms
-  - No DLQ files on failure; only summaries.
+  - No DLQ files on failure, or spool/write errors appear in summaries.
 - Checks
-  - Confirm `dlq_enabled=False` was intentionally passed to `create_client(...)`.
-  - Inspect `RunResult.dlq_counts` and `RunResult.errors` for `DLQ=disabled` summary.
+  - Inspect `RunResult.dlq_counts` and `RunResult.errors` for `DLQ=spooled` or `DLQ=spool_failed`.
 - Actions
-  - If persistence is required, set `dlq_enabled=True` and ensure app root is writable.
+  - Ensure the app root is writable.
   - Use recovery CLI to reinject DLQ artifacts when spooling is enabled.
 
 ## Writer validation failures (PK missing/null)

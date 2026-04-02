@@ -113,17 +113,13 @@ class SharadarClient(BaseClient[SharadarDataset]):
         *,
         api_key: str,
         rate_limit: int,
-        metrics_enabled: bool | None = None,
         structured_logs: bool | None = None,
         log_verbose: bool | None = None,
-        dlq_enabled: bool | None = None,
         schedule: SchedulerConfig | dict[str, Any] | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
         adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
         concurrency: int | None = None,
         flush_threshold_rows: int | None = None,
-        writer_chunk_rows: int | None = None,
-        writer_concurrency: int | None = None,
         checkpoint_retention_days: int | None = None,
         run_history_retention_days: int | None = None,
         http_timeout_s: float | None = None,
@@ -135,17 +131,13 @@ class SharadarClient(BaseClient[SharadarDataset]):
         Args:
             api_key: Valid API key for the provider.
             rate_limit: Requests per minute (int).
-            metrics_enabled: Enables metrics emission when True.
             structured_logs: Enables structured stage logs when True.
             log_verbose: Promotes structured logs to INFO when True.
-            dlq_enabled: Enables DLQ spooling on persistence failures.
             schedule: Grouped scheduler configuration for always-on DRR fairness.
             retry: Grouped retry policy configuration.
             adaptive_throttle: Grouped adaptive throttle policy configuration.
             concurrency: Explicit fetch concurrency limit.
             flush_threshold_rows: Buffered row threshold before flush begins.
-            writer_chunk_rows: Transitional write chunk-size tuning.
-            writer_concurrency: Transitional writer worker count tuning.
             checkpoint_retention_days: Retention window for completed checkpoints.
             run_history_retention_days: Retention window for run-history records.
             http_timeout_s: HTTP request timeout in seconds.
@@ -161,17 +153,13 @@ class SharadarClient(BaseClient[SharadarDataset]):
         super().__init__(
             api_key=api_key,
             rate_limit=rate_limit,
-            metrics_enabled=metrics_enabled,
             structured_logs=structured_logs,
             log_verbose=log_verbose,
-            dlq_enabled=dlq_enabled,
             schedule=schedule,
             retry=retry,
             adaptive_throttle=adaptive_throttle,
             concurrency=concurrency,
             flush_threshold_rows=flush_threshold_rows,
-            writer_chunk_rows=writer_chunk_rows,
-            writer_concurrency=writer_concurrency,
             checkpoint_retention_days=checkpoint_retention_days,
             run_history_retention_days=run_history_retention_days,
             http_timeout_s=http_timeout_s,

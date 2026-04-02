@@ -5,8 +5,8 @@ from vertex_forager.core.config import ResolvedClientConfig
 from vertex_forager.core.pipeline import VertexForager
 
 
-def _make_engine(metrics_enabled: bool) -> VertexForager:
-    cfg = ResolvedClientConfig(requests_per_minute=60, metrics_enabled=metrics_enabled)
+def _make_engine() -> VertexForager:
+    cfg = ResolvedClientConfig(requests_per_minute=60)
     mock_router = MagicMock()
     mock_http = MagicMock()
     mock_writer = AsyncMock()
@@ -26,7 +26,7 @@ def _make_engine(metrics_enabled: bool) -> VertexForager:
 def test_pickle_compat_env_emits_warning_and_metric(monkeypatch, caplog) -> None:
     monkeypatch.setenv("VF_ALLOW_PICKLE_COMPAT", "1")
     caplog.set_level(logging.WARNING, logger="vertex_forager.debug")
-    engine = _make_engine(metrics_enabled=True)
+    engine = _make_engine()
     msgs = [rec.getMessage() for rec in caplog.records if rec.levelno >= logging.WARNING]
     assert any("VF_ALLOW_PICKLE_COMPAT is enabled" in m for m in msgs)
     assert engine._counters.get("pickle_compat_enabled", 0) == 1
@@ -35,7 +35,7 @@ def test_pickle_compat_env_emits_warning_and_metric(monkeypatch, caplog) -> None
 def test_no_warning_or_metric_without_env(monkeypatch, caplog) -> None:
     monkeypatch.delenv("VF_ALLOW_PICKLE_COMPAT", raising=False)
     caplog.set_level(logging.WARNING, logger="vertex_forager.debug")
-    engine = _make_engine(metrics_enabled=True)
+    engine = _make_engine()
     msgs = [rec.getMessage() for rec in caplog.records if rec.levelno >= logging.WARNING]
     assert not any("VF_ALLOW_PICKLE_COMPAT is enabled" in m for m in msgs)
     assert engine._counters.get("pickle_compat_enabled", 0) == 0

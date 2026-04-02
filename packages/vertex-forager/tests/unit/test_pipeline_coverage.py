@@ -87,7 +87,6 @@ def _make_engine(
     config = ResolvedClientConfig(
         requests_per_minute=60,
         concurrency=concurrency,
-        metrics_enabled=False,
         structured_logs=False,
         schedule=schedule or SchedulerConfig(),
     )
@@ -1323,7 +1322,6 @@ async def test_record_worker_symbol_state_retries_current_job_after_emit_failure
 async def test_finalize_run_metrics_sink_and_history_error_suppressed(monkeypatch: pytest.MonkeyPatch) -> None:
     router = _PaginatingRouter(pages=0)
     engine, _ = _make_engine(router)
-    engine._metrics_enabled = True
     engine._counters = {"rows_written_total": 0}
     engine._hists = {}
     engine._summary = {}
@@ -1365,7 +1363,6 @@ async def test_finalize_run_keeps_checkpoint_resumable_when_failures_remain(
 ) -> None:
     router = _PaginatingRouter(pages=0)
     engine, _ = _make_engine(router)
-    engine._metrics_enabled = False
     engine._completed_symbols = {"AAPL"}
     engine._failed_symbols = {"MSFT"}
     engine._pending_jobs = []

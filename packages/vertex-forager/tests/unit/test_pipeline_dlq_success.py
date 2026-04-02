@@ -33,7 +33,7 @@ class _StubClient:
 
 @pytest.mark.asyncio
 async def test_persist_packets_with_dlq_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    cfg = ResolvedClientConfig(requests_per_minute=60, concurrency=1, dlq_enabled=True)
+    cfg = ResolvedClientConfig(requests_per_minute=60, concurrency=1)
     ctrl = FlowController(requests_per_minute=60, concurrency_limit=1)
     writer = _CollectingWriter()
     eng = VertexForager(

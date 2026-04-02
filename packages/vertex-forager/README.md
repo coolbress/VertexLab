@@ -70,7 +70,7 @@ print(df)
 
 - `create_client(...)`
   - required: `provider`, `api_key` (Sharadar), `rate_limit`
-  - common runtime knobs: `concurrency`, `flush_threshold_rows`, `writer_chunk_rows`, `dlq_enabled`, `metrics_enabled`
+  - common runtime knobs: `concurrency`, `flush_threshold_rows`
   - state retention knobs: `checkpoint_retention_days`, `run_history_retention_days`
   - grouped config: `retry=RetryConfig(...)`, `throttle=AdaptiveThrottleConfig(...)`, `limits=HTTPConfig(...)`, `advanced=AdvancedConfig(...)`
 - persistence path: `connect_db="duckdb://./forager.duckdb"`
@@ -81,7 +81,6 @@ print(df)
   - [Quickstart](docs/tutorials/quickstart.md)
 - How‑to Guides
   - [Resume and recovery](docs/how-to/resume-and-recovery.md)
-  - [Operate with DLQ disabled](docs/how-to/dlq-disabled.md)
   - [Performance tuning](docs/how-to/performance-tuning.md)
   - [Data integrity controls](docs/how-to/data-integrity.md)
   - [Troubleshooting](docs/how-to/troubleshooting.md)

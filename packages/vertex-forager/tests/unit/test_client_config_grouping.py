@@ -32,26 +32,20 @@ def test_create_client_accepts_grouped_public_configs() -> None:
     client = create_client(
         provider="yfinance",
         rate_limit=120,
-        metrics_enabled=True,
-        dlq_enabled=False,
         schedule=SchedulerConfig(quantum=3),
         retry=RetryConfig(max_attempts=5),
         throttle=AdaptiveThrottleConfig(enabled=True, window_s=30, recovery_factor=0.05),
         concurrency=4,
         flush_threshold_rows=10_000,
-        writer_chunk_rows=20_000,
-        writer_concurrency=2,
         checkpoint_retention_days=5,
         run_history_retention_days=45,
         http_timeout_s=15.0,
         limits=HTTPConfig(max_connections=50, max_keepalive_connections=25),
-        advanced=AdvancedConfig(otel_enabled=True, mem_threshold_ratio=0.5, mem_threshold_abs_mb=None),
+        advanced=AdvancedConfig(otel_enabled=True),
     )
 
     assert isinstance(client, YFinanceClient)
     assert client.config.requests_per_minute == 120
-    assert client.config.metrics_enabled is True
-    assert client.config.dlq_enabled is False
     assert client.config.schedule.quantum == 3
     assert client.config.retry.max_attempts == 5
     assert client.config.adaptive_throttle_enabled is True
@@ -59,16 +53,12 @@ def test_create_client_accepts_grouped_public_configs() -> None:
     assert client.config.recovery_factor == 0.05
     assert client.config.concurrency == 4
     assert client.config.flush_threshold_rows == 10_000
-    assert client.config.writer_chunk_rows == 20_000
-    assert client.config.writer_concurrency == 2
     assert client.config.checkpoint_retention_days == 5
     assert client.config.run_history_retention_days == 45
     assert client.config.otel_enabled is True
     assert client._http_timeout_s == 15.0
     assert client._http_limits.max_connections == 50
     assert client._http_limits.max_keepalive_connections == 25
-    assert client._memory_threshold_ratio == 0.5
-    assert client._memory_threshold_absolute is None
 
 
 def test_create_client_schedule_defaults_are_applied() -> None:
@@ -104,52 +94,67 @@ def test_removed_legacy_advanced_kwargs_are_rejected() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "removed_kwargs",
+    [
+        {"metrics_enabled": True},
+        {"dlq_enabled": False},
+        {"writer_chunk_rows": 20_000},
+        {"writer_concurrency": 2},
+    ],
+)
+def test_removed_runtime_kwargs_are_rejected(removed_kwargs: dict[str, object]) -> None:
+    with pytest.raises(TypeError):
+        create_client(provider="yfinance", rate_limit=60, **removed_kwargs)
+
+
+@pytest.mark.parametrize(
+    "advanced_kwargs",
+    [
+        {"mem_threshold_ratio": 0.5},
+        {"mem_threshold_abs_mb": 1024},
+        {"dlq_tmp_cleanup_on_error": False},
+        {"dlq_tmp_periodic_cleanup": False},
+    ],
+)
+def test_removed_advanced_config_kwargs_are_rejected(advanced_kwargs: dict[str, object]) -> None:
+    with pytest.raises(ValueError, match=r".*"):
+        create_client(provider="yfinance", rate_limit=60, advanced=advanced_kwargs)
+
+
 def test_string_flag_inputs_normalize_correctly() -> None:
     client = create_client(
         provider="yfinance",
         rate_limit=60,
-        metrics_enabled="false",  # type: ignore[arg-type]
         structured_logs="0",  # type: ignore[arg-type]
         log_verbose="no",  # type: ignore[arg-type]
-        dlq_enabled="true",  # type: ignore[arg-type]
     )
 
     assert isinstance(client, YFinanceClient)
-    assert client.config.metrics_enabled is False
     assert client.config.structured_logs is False
     assert client.config.log_verbose is False
-    assert client.config.dlq_enabled is True
 
 
 def test_non_auth_env_vars_no_longer_backfill_client_config(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("VF_METRICS_ENABLED", "1")
     monkeypatch.setenv("VF_HTTP_TIMEOUT_S", "11")
-    monkeypatch.setenv("VF_MEM_THRESHOLD_RATIO", "0.4")
 
     client = create_client(provider="yfinance", rate_limit=60)
 
     assert isinstance(client, YFinanceClient)
-    assert client.config.metrics_enabled is False
     assert client._http_timeout_s == HTTP_TIMEOUT_S
     assert client._http_limits.max_connections == HTTPConfig().max_connections
     assert client._http_limits.max_keepalive_connections == HTTPConfig().max_keepalive_connections
-    assert client._memory_threshold_ratio == AdvancedConfig().mem_threshold_ratio
-    assert client._memory_threshold_absolute == AdvancedConfig().mem_threshold_abs_mb * 1024 * 1024
 
 
 def test_client_creation_ignores_non_auth_env_vars_without_warnings(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("VF_METRICS_ENABLED", "1")
     monkeypatch.setenv("VF_HTTP_TIMEOUT_S", "11")
-    monkeypatch.setenv("VF_MEM_THRESHOLD_RATIO", "0.4")
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         client = create_client(provider="yfinance", rate_limit=60)
 
     assert isinstance(client, YFinanceClient)
-    assert client.config.metrics_enabled is False
     assert client._http_timeout_s == HTTP_TIMEOUT_S
-    assert client._memory_threshold_ratio == AdvancedConfig().mem_threshold_ratio
     assert not any(issubclass(w.category, DeprecationWarning) for w in caught)
 
 

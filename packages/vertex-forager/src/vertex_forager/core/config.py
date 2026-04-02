@@ -149,14 +149,10 @@ class AdvancedConfig(BaseModel):
     Attributes:
         tracer: Optional tracing adapter implementing ``start_span``.
         otel_enabled: Optional tracing toggle.
-        mem_threshold_ratio: Memory warning threshold as a ratio of available RAM.
-        mem_threshold_abs_mb: Absolute memory warning threshold in MB.
     """
 
     tracer: TracerProtocol | None = None
     otel_enabled: bool | None = None
-    mem_threshold_ratio: float = Field(default=0.7, gt=0.0, le=1.0)
-    mem_threshold_abs_mb: int | None = Field(default=4096, ge=1)
 
     model_config = {"arbitrary_types_allowed": True, "extra": "forbid"}
 
@@ -299,17 +295,13 @@ class ResolvedClientConfig(BaseModel):
     """
 
     requests_per_minute: int = Field(..., gt=0)
-    metrics_enabled: bool = False
     structured_logs: bool = False
     log_verbose: bool = False
-    dlq_enabled: bool = True
     schedule: SchedulerConfig = Field(default_factory=SchedulerConfig)
     retry: RetryConfig = Field(default_factory=RetryConfig)
     adaptive_throttle: AdaptiveThrottleConfig = Field(default_factory=AdaptiveThrottleConfig)
     concurrency: int | None = Field(default=None, gt=0)
     flush_threshold_rows: int = FLUSH_THRESHOLD_ROWS
-    writer_chunk_rows: int | None = None
-    writer_concurrency: int = Field(default=1, ge=1)
     http_timeout_s: float = Field(default=HTTP_TIMEOUT_S, gt=0)
     limits: HTTPConfig = Field(default_factory=HTTPConfig)
     advanced: AdvancedConfig = Field(default_factory=AdvancedConfig)
@@ -345,14 +337,6 @@ class ResolvedClientConfig(BaseModel):
     @property
     def healthy_window_s(self) -> int:
         return self.adaptive_throttle.healthy_window_s
-
-    @property
-    def dlq_tmp_cleanup_on_error(self) -> bool:
-        return getattr(self.advanced, "dlq_tmp_cleanup_on_error", True)
-
-    @property
-    def dlq_tmp_periodic_cleanup(self) -> bool:
-        return getattr(self.advanced, "dlq_tmp_periodic_cleanup", True)
 
     @property
     def dlq_tmp_retention_s(self) -> int:
@@ -395,21 +379,6 @@ class ResolvedClientConfig(BaseModel):
             raise ValueError("requests_per_minute must be positive")
         if self.concurrency is not None and self.concurrency <= 0:
             raise ValueError("concurrency must be positive if specified")
-        if self.writer_chunk_rows is not None:
-            try:
-                v = int(self.writer_chunk_rows)
-            except (TypeError, ValueError) as e:
-                raise VertexForagerError(f"writer_chunk_rows must be an integer or None: {e}") from e
-            if v < 10_000:
-                raise ValueError("writer_chunk_rows must be >= 10_000 when specified")
-            self.writer_chunk_rows = v
-        try:
-            wc = int(self.writer_concurrency)
-        except (TypeError, ValueError) as e:
-            raise VertexForagerError(f"writer_concurrency must be an integer >= 1: {e}") from e
-        if wc <= 0:
-            raise ValueError("writer_concurrency must be >= 1")
-        self.writer_concurrency = wc
         try:
             checkpoint_retention_days = (
                 7 if self.checkpoint_retention_days is None else int(self.checkpoint_retention_days)

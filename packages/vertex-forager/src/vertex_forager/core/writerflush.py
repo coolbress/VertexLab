@@ -42,7 +42,7 @@ class WriterLike(Protocol):
 
 @runtime_checkable
 class ConfigLike(Protocol):
-    writer_chunk_rows: int | None
+    pass
 
 
 @dataclass(frozen=True)

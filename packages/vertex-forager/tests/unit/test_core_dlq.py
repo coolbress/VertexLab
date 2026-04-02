@@ -51,7 +51,7 @@ async def test_spool_to_dlq_and_rescue_noop() -> None:
         table="dlq_unit_unknown",
         packets=[],
         writer=_OkWriter(),
-        config=SimpleNamespace(dlq_enabled=True, dlq_tmp_cleanup_on_error=False),
+        config=SimpleNamespace(),
         result=result,
         result_lock=result_lock,
         inc=inc,
@@ -59,27 +59,6 @@ async def test_spool_to_dlq_and_rescue_noop() -> None:
     )
     assert status["status"] == "noop"
     assert counters == {}
-
-
-@pytest.mark.asyncio
-async def test_spool_to_dlq_and_rescue_disabled_counts() -> None:
-    result = RunResult(provider="test")
-    result_lock = asyncio.Lock()
-    counters, inc = _inc_collector()
-    status = await spool_to_dlq_and_rescue(
-        table="dlq_unit_unknown",
-        packets=[_packet(table="dlq_unit_unknown", row_value=1), _packet(table="dlq_unit_unknown", row_value=2)],
-        writer=_FailWriter(),
-        config=SimpleNamespace(dlq_enabled=False, dlq_tmp_cleanup_on_error=False),
-        result=result,
-        result_lock=result_lock,
-        inc=inc,
-        log_structured=lambda **_: None,
-    )
-    assert status["status"] == "disabled"
-    assert status["remaining"] >= 1
-    assert result.dlq_counts["dlq_unit_unknown"]["remaining"] >= 1
-    assert counters["dlq_disabled_total"] == 1
 
 
 @pytest.mark.asyncio
@@ -103,7 +82,7 @@ async def test_spool_to_dlq_and_rescue_spools_to_file(tmp_path, monkeypatch: pyt
         table="dlq_unit_unknown",
         packets=[_packet(table="dlq_unit_unknown", row_value=1), _packet(table="dlq_unit_unknown", row_value=2)],
         writer=_FailWriter(),
-        config=SimpleNamespace(dlq_enabled=True, dlq_tmp_cleanup_on_error=False),
+        config=SimpleNamespace(),
         result=result,
         result_lock=result_lock,
         inc=inc,
@@ -144,7 +123,7 @@ async def test_spool_to_dlq_and_rescue_uses_unique_file_names_when_timestamps_ma
         table="dlq_unit_unknown",
         packets=[_packet(table="dlq_unit_unknown", row_value=1)],
         writer=_FailWriter(),
-        config=SimpleNamespace(dlq_enabled=True, dlq_tmp_cleanup_on_error=False),
+        config=SimpleNamespace(),
         result=result,
         result_lock=result_lock,
         inc=inc,
@@ -154,7 +133,7 @@ async def test_spool_to_dlq_and_rescue_uses_unique_file_names_when_timestamps_ma
         table="dlq_unit_unknown",
         packets=[_packet(table="dlq_unit_unknown", row_value=2)],
         writer=_FailWriter(),
-        config=SimpleNamespace(dlq_enabled=True, dlq_tmp_cleanup_on_error=False),
+        config=SimpleNamespace(),
         result=result,
         result_lock=result_lock,
         inc=inc,

@@ -86,28 +86,6 @@ class StubRouter(IRouter[str]):
 class StubMapper(IMapper):
     def normalize(self, *, packet: FramePacket) -> FramePacket:
         return packet
-
-
-def test_duckdb_writer_concurrency_warning(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
-    writer = DuckDBWriter(str(tmp_path / "warn.duckdb"))
-    cfg = ResolvedClientConfig(requests_per_minute=60, writer_concurrency=2)
-    caplog.set_level("WARNING", logger="vertex_forager.debug")
-    try:
-        VertexForager(
-            router=StubRouter(),
-            http=HttpExecutor(client=StubClient()),
-            writer=writer,
-            mapper=StubMapper(),
-            config=cfg,
-            controller=StubClient().controller,
-        )
-    finally:
-        import asyncio
-
-        asyncio.run(writer.close())
-    assert "writer_concurrency=2 requested with DuckDBWriter" in caplog.text
-
-
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_pipeline_records_writer_validation_errors(

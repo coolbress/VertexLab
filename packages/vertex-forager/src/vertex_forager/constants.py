@@ -40,6 +40,8 @@ HTTP_MAX_KEEPALIVE_CONNECTIONS: Final[int] = 100
 HTTP_MAX_CONNECTIONS: Final[int] = 200
 HTTP_USER_AGENT: Final[str] = "vertex-forager"
 DLQ_TMP_RETENTION_S: Final[int] = 86_400
+MEM_THRESHOLD_RATIO: Final[float] = 0.70
+MEM_THRESHOLD_ABS_MB: Final[int] = 4096
 
 FLUSH_THRESHOLD_ROWS: Final[int] = 500_000
 
@@ -71,4 +73,5 @@ QUEUE_DEFAULT: Final[int] = 500
 
 # Writer (DuckDB) defaults
 WRITER_DUCKDB_MAX_WORKERS: Final[int] = 1
+WRITER_CHUNK_ROWS: Final[int] = 20_000
 WAL_AUTOCHECKPOINT_LIMIT: Final[str] = "1GB"

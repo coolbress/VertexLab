@@ -10,7 +10,12 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
-from vertex_forager.constants import FLUSH_THRESHOLD_ROWS, HTTP_TIMEOUT_S
+from vertex_forager.constants import (
+    FLUSH_THRESHOLD_ROWS,
+    HTTP_TIMEOUT_S,
+    MEM_THRESHOLD_ABS_MB,
+    MEM_THRESHOLD_RATIO,
+)
 from vertex_forager.core.config import (
     AdaptiveThrottleConfig,
     AdvancedConfig,
@@ -90,24 +95,18 @@ class _NormalizedClientSettings:
     runtime_config: ResolvedClientConfig
     http_timeout_s: float
     http_limits: HTTPConfig
-    memory_threshold_ratio: float
-    memory_threshold_absolute: int | None
 
 
 def _normalize_client_settings(
     *,
     rate_limit: int,
-    metrics_enabled: bool | None,
     structured_logs: bool | None,
     log_verbose: bool | None,
-    dlq_enabled: bool | None,
     schedule: SchedulerConfig | dict[str, Any] | None,
     retry: RetryConfig | dict[str, Any] | None,
     adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None,
     concurrency: int | None,
     flush_threshold_rows: int | None,
-    writer_chunk_rows: int | None,
-    writer_concurrency: int | None,
     checkpoint_retention_days: int | None,
     run_history_retention_days: int | None,
     http_timeout_s: float | None,
@@ -124,17 +123,13 @@ def _normalize_client_settings(
 
     runtime_config = ResolvedClientConfig(
         requests_per_minute=rate_limit,
-        metrics_enabled=_parse_flag(metrics_enabled, False),
         structured_logs=_parse_flag(structured_logs, False),
         log_verbose=_parse_flag(log_verbose, False),
-        dlq_enabled=_parse_flag(dlq_enabled, True),
         schedule=schedule_config,
         retry=retry_config,
         adaptive_throttle=adaptive_throttle_config,
         concurrency=concurrency,
         flush_threshold_rows=flush_threshold_rows if flush_threshold_rows is not None else FLUSH_THRESHOLD_ROWS,
-        writer_chunk_rows=writer_chunk_rows,
-        writer_concurrency=writer_concurrency if writer_concurrency is not None else 1,
         http_timeout_s=http_timeout_s if http_timeout_s is not None else HTTP_TIMEOUT_S,
         limits=limits_config,
         advanced=advanced_config,
@@ -147,10 +142,6 @@ def _normalize_client_settings(
         runtime_config=runtime_config,
         http_timeout_s=runtime_config.http_timeout_s,
         http_limits=runtime_config.limits,
-        memory_threshold_ratio=runtime_config.advanced.mem_threshold_ratio,
-        memory_threshold_absolute=None
-        if runtime_config.advanced.mem_threshold_abs_mb is None
-        else runtime_config.advanced.mem_threshold_abs_mb * 1024 * 1024,
     )
 
 
@@ -212,17 +203,13 @@ class BaseClient(ABC, Generic[T]):
         *,
         api_key: str | None = None,
         rate_limit: int,
-        metrics_enabled: bool | None = None,
         structured_logs: bool | None = None,
         log_verbose: bool | None = None,
-        dlq_enabled: bool | None = None,
         schedule: SchedulerConfig | dict[str, Any] | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
         adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
         concurrency: int | None = None,
         flush_threshold_rows: int | None = None,
-        writer_chunk_rows: int | None = None,
-        writer_concurrency: int | None = None,
         checkpoint_retention_days: int | None = None,
         run_history_retention_days: int | None = None,
         http_timeout_s: float | None = None,
@@ -234,17 +221,13 @@ class BaseClient(ABC, Generic[T]):
         Args:
             api_key: API key for the provider (optional, depends on provider).
             rate_limit: Maximum requests per minute (RPM) allowed for this client.
-            metrics_enabled: Enables metrics emission when True.
             structured_logs: Enables structured stage logs when True.
             log_verbose: Promotes structured logs to INFO when True.
-            dlq_enabled: Enables DLQ spooling on persistence failures.
             schedule: Grouped scheduler configuration for always-on DRR fairness.
             retry: Grouped retry policy configuration.
             adaptive_throttle: Grouped adaptive throttle policy configuration.
             concurrency: Explicit fetch concurrency limit.
             flush_threshold_rows: Buffered row threshold before flush begins.
-            writer_chunk_rows: Transitional write chunk-size tuning.
-            writer_concurrency: Transitional writer worker count tuning.
             checkpoint_retention_days: Retention window for completed checkpoints.
             run_history_retention_days: Retention window for run-history records.
             http_timeout_s: HTTP request timeout in seconds.
@@ -254,17 +237,13 @@ class BaseClient(ABC, Generic[T]):
         self.api_key = api_key
         normalized = _normalize_client_settings(
             rate_limit=rate_limit,
-            metrics_enabled=metrics_enabled,
             structured_logs=structured_logs,
             log_verbose=log_verbose,
-            dlq_enabled=dlq_enabled,
             schedule=schedule,
             retry=retry,
             adaptive_throttle=adaptive_throttle,
             concurrency=concurrency,
             flush_threshold_rows=flush_threshold_rows,
-            writer_chunk_rows=writer_chunk_rows,
-            writer_concurrency=writer_concurrency,
             checkpoint_retention_days=checkpoint_retention_days,
             run_history_retention_days=run_history_retention_days,
             http_timeout_s=http_timeout_s,
@@ -277,8 +256,6 @@ class BaseClient(ABC, Generic[T]):
         self._log_verbose = bool(self._config.log_verbose)
         self._http_timeout_s = normalized.http_timeout_s
         self._http_limits = normalized.http_limits
-        self._memory_threshold_ratio = normalized.memory_threshold_ratio
-        self._memory_threshold_absolute = normalized.memory_threshold_absolute
 
         self.controller = FlowController(
             requests_per_minute=self._config.requests_per_minute,
@@ -311,8 +288,8 @@ class BaseClient(ABC, Generic[T]):
             symbols=symbols,
             connect_db=connect_db,
             bytes_per_item=bytes_per_item,
-            threshold_ratio=self._memory_threshold_ratio,
-            threshold_absolute=self._memory_threshold_absolute,
+            threshold_ratio=MEM_THRESHOLD_RATIO,
+            threshold_absolute=MEM_THRESHOLD_ABS_MB * 1024 * 1024,
         )
 
     async def aclose(self) -> None:
@@ -619,18 +596,16 @@ class BaseClient(ABC, Generic[T]):
 
         df = writer.collect_table(table_name, sort_cols=sort_cols)
 
-        # Merge any post-collection counters (e.g., in-memory dedup) into RunResult when metrics enabled
-        if getattr(self._config, "metrics_enabled", False):
-            try:
-                counters = getattr(writer, "get_counters_and_reset", None)
-                if callable(counters):
-                    writer_counts = dict(counters())
-                    if self.last_run is not None:
-                        base = dict(self.last_run.metrics_counters or {})
-                        for k, v in writer_counts.items():
-                            base[k] = base.get(k, 0) + int(v)
-                        self.last_run.metrics_counters = base
-            except Exception as e:
-                logger.debug("Merging writer counters after collect_table failed: error=%s", e)
+        try:
+            counters = getattr(writer, "get_counters_and_reset", None)
+            if callable(counters):
+                writer_counts = dict(counters())
+                if self.last_run is not None:
+                    base = dict(self.last_run.metrics_counters or {})
+                    for k, v in writer_counts.items():
+                        base[k] = base.get(k, 0) + int(v)
+                    self.last_run.metrics_counters = base
+        except Exception as e:
+            logger.debug("Merging writer counters after collect_table failed: error=%s", e)
 
         return df

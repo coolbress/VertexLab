@@ -24,7 +24,7 @@ async def test_flexible_schema_add_column_evolution() -> None:
     mock_http = MagicMock()
     mock_mapper = MagicMock()
     mock_controller = MagicMock()
-    cfg = ResolvedClientConfig(requests_per_minute=60, writer_chunk_rows=None)
+    cfg = ResolvedClientConfig(requests_per_minute=60)
     vf = VertexForager(
         router=mock_router,
         http=mock_http,

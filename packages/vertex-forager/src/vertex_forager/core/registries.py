@@ -207,17 +207,13 @@ class ClientFactory(Protocol):
         *,
         api_key: str | None = None,
         rate_limit: int,
-        metrics_enabled: bool | None = None,
         structured_logs: bool | None = None,
         log_verbose: bool | None = None,
-        dlq_enabled: bool | None = None,
         schedule: SchedulerConfig | dict[str, Any] | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
         adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
         concurrency: int | None = None,
         flush_threshold_rows: int | None = None,
-        writer_chunk_rows: int | None = None,
-        writer_concurrency: int | None = None,
         checkpoint_retention_days: int | None = None,
         run_history_retention_days: int | None = None,
         http_timeout_s: float | None = None,
@@ -229,17 +225,13 @@ class ClientFactory(Protocol):
         Args:
             api_key: API key for the provider, or None if not required.
             rate_limit: Rate limit in requests per minute.
-            metrics_enabled: Enables metrics emission when True.
             structured_logs: Enables structured stage logs when True.
             log_verbose: Promotes structured logs to INFO when True.
-            dlq_enabled: Enables DLQ spooling when True.
             schedule: Grouped scheduler configuration for always-on DRR fairness.
             retry: Grouped retry policy configuration.
             adaptive_throttle: Grouped adaptive throttle policy configuration.
             concurrency: Explicit fetch concurrency limit.
             flush_threshold_rows: Buffered row threshold before flush.
-            writer_chunk_rows: Transitional write chunk-size tuning.
-            writer_concurrency: Transitional writer worker count tuning.
             checkpoint_retention_days: Retention window for completed checkpoints.
             run_history_retention_days: Retention window for run-history records.
             http_timeout_s: HTTP request timeout in seconds.

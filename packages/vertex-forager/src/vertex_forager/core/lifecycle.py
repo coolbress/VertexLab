@@ -52,7 +52,6 @@ def create_run_queues(
     queue_max: int,
     checkpoint_retention_days: int,
     run_history_retention_days: int,
-    dlq_tmp_periodic_cleanup: bool,
     dlq_tmp_retention_s: int,
     cache_dir: Path,
     logger: Any,
@@ -70,17 +69,14 @@ def create_run_queues(
         )
     except Exception as cleanup_error:
         logger.warning("PIPELINE: State retention cleanup failed: %s", cleanup_error)
-    if dlq_tmp_periodic_cleanup:
-        try:
-            cleanup_dlq_tmp(cache_dir / "dlq", dlq_tmp_retention_s)
-        except Exception as cleanup_error:
-            logger.warning("PIPELINE: DLQ periodic cleanup failed: %s", cleanup_error)
+    try:
+        cleanup_dlq_tmp(cache_dir / "dlq", dlq_tmp_retention_s)
+    except Exception as cleanup_error:
+        logger.warning("PIPELINE: DLQ periodic cleanup failed: %s", cleanup_error)
     return req_q, pkt_q
 
 
-def init_metrics_for_run(*, metrics_enabled: bool) -> tuple[dict[str, int], dict[str, deque[float]], dict[str, float]]:
-    if not metrics_enabled:
-        return {}, {}, {}
+def init_metrics_for_run() -> tuple[dict[str, int], dict[str, deque[float]], dict[str, float]]:
     counters: dict[str, int] = {"pipeline_runs": 1}
     return counters, {}, {}
 
