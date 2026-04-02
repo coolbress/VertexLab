@@ -25,7 +25,7 @@ def main() -> None:
         kwargs["api_key"] = os.environ["SHARADAR_API_KEY"]
         rl = os.getenv("SHARADAR_RATE_LIMIT") or os.getenv("VF_RATE_LIMIT")
         kwargs["rate_limit"] = int(rl) if rl else 120
-    client = create_client(provider=provider, metrics_enabled=True, **kwargs)
+    client = create_client(provider=provider, **kwargs)
 
     tickers = _tickers_from_env()
     db = _db_path()

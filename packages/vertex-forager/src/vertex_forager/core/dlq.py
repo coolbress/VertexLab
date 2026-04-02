@@ -82,33 +82,6 @@ async def _rescue_packets(
     return rescued, failed_packets
 
 
-async def _handle_dlq_disabled(
-    *,
-    table: str,
-    rescued: int,
-    remaining: int,
-    inc: Any,
-    result: RunResult,
-    result_lock: asyncio.Lock,
-) -> DLQStatus:
-    inc("dlq_disabled_total", 1)
-    inc(f"dlq_disabled.{table}", 1)
-    if rescued:
-        inc("dlq_rescued_total", int(rescued))
-        inc(f"dlq_rescued.{table}", int(rescued))
-    if remaining:
-        inc("dlq_remaining_total", int(remaining))
-        inc(f"dlq_remaining.{table}", int(remaining))
-    await _update_dlq_counts(
-        table=table,
-        rescued=rescued,
-        remaining=remaining,
-        result=result,
-        result_lock=result_lock,
-    )
-    return {"status": "disabled", "rescued": rescued, "remaining": remaining, "path": None, "error": None}
-
-
 def _spool_failed_packets(
     *,
     table: str,
@@ -155,7 +128,6 @@ async def _on_spool_failed(
     failed_packets: list[FramePacket],
     rescued: int,
     exc: Exception,
-    config: Any,
     inc: Any,
     result: RunResult,
     result_lock: asyncio.Lock,
@@ -164,10 +136,6 @@ async def _on_spool_failed(
         pending = result.dlq_pending.get(table, [])
         pending.extend(failed_packets)
         result.dlq_pending[table] = pending
-    if getattr(config, "dlq_tmp_cleanup_on_error", False):
-        with suppress(Exception):
-            for candidate in (get_cache_dir() / "dlq" / table).glob("*.tmp"):
-                candidate.unlink()
     remaining_count = len(failed_packets)
     inc("dlq_spool_failed_total", 1)
     if rescued:
@@ -218,15 +186,6 @@ async def spool_to_dlq_and_rescue(
             result_lock=result_lock,
         )
         return {"status": "rescued_only", "rescued": rescued, "remaining": 0, "path": None, "error": None}
-    if not bool(getattr(config, "dlq_enabled", True)):
-        return await _handle_dlq_disabled(
-            table=table,
-            rescued=rescued,
-            remaining=remaining,
-            inc=inc,
-            result=result,
-            result_lock=result_lock,
-        )
     try:
         path = _spool_failed_packets(table=table, failed_packets=failed_packets)
     except Exception as exc:
@@ -235,7 +194,6 @@ async def spool_to_dlq_and_rescue(
             failed_packets=failed_packets,
             rescued=rescued,
             exc=exc,
-            config=config,
             inc=inc,
             result=result,
             result_lock=result_lock,

@@ -56,7 +56,6 @@ def _child_run_memory_peak(chunk_rows: int, conn: Connection) -> None:
         total_rows = rows_per_frame * num_frames
         cfg = ResolvedClientConfig(
             requests_per_minute=100,
-            writer_chunk_rows=chunk_rows if chunk_rows > 0 else None,
             flush_threshold_rows=total_rows + 1,
         )
         vf = VertexForager(

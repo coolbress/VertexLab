@@ -5,17 +5,19 @@ Chunked flush reduces memory peaks by writing in bounded batches. Tune threshold
 ## Concepts
 
 - `flush_threshold_rows`: rows buffered per table before a flush is triggered.
-- `writer_chunk_rows`: per‑chunk row target during a flush (>= 10_000 when set).
+- `WRITER_CHUNK_ROWS`: internal per‑chunk row target during a flush.
 
 ## Guidelines
 
 - Start with:
   - `flush_threshold_rows`: 500_000 (default)
-  - `writer_chunk_rows`: 10_000–50_000, depending on row width and disk speed.
-- Increase chunk size if:
+  - Keep `flush_threshold_rows` at default and rely on internal chunking unless you have a clear reason to tune flush cadence.
+- Increase `flush_threshold_rows` if:
   - Write throughput is low but memory headroom is ample.
-- Decrease chunk size if:
+- Decrease `flush_threshold_rows` if:
   - Peak memory or GC pressure increases during merges.
+
+Note: chunk size (`WRITER_CHUNK_ROWS`) is an internal constant and not user-configurable.
 
 ## Example
 
@@ -27,8 +29,6 @@ client = create_client(
     api_key="...",
     rate_limit=120,
     flush_threshold_rows=500_000,
-    writer_chunk_rows=20_000,  # must be >= 10_000 when specified
-    metrics_enabled=True,      # observe writer_rows.* histograms
 )
 ```
 

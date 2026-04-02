@@ -11,6 +11,8 @@ from vertex_forager.constants import (
     DEFAULT_RETRY_BASE_BACKOFF_S,
     DEFAULT_RETRY_MAX_ATTEMPTS,
     DEFAULT_RETRY_MAX_BACKOFF_S,
+    MEM_THRESHOLD_ABS_MB,
+    MEM_THRESHOLD_RATIO,
     RESERVED_PIPELINE_KEYS,
 )
 from vertex_forager.core.config import (
@@ -70,17 +72,13 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         *,
         api_key: str | None = None,
         rate_limit: int = DEFAULT_RATE_LIMIT,
-        metrics_enabled: bool | None = None,
         structured_logs: bool | None = None,
         log_verbose: bool | None = None,
-        dlq_enabled: bool | None = None,
         schedule: SchedulerConfig | dict[str, Any] | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
         adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
         concurrency: int | None = None,
         flush_threshold_rows: int | None = None,
-        writer_chunk_rows: int | None = None,
-        writer_concurrency: int | None = None,
         checkpoint_retention_days: int | None = None,
         run_history_retention_days: int | None = None,
         http_timeout_s: float | None = None,
@@ -92,10 +90,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         Args:
             api_key (str | None): Unused for yfinance. Kept for API symmetry. Default is None.
             rate_limit (int): Requests per minute cap. Default is 60.
-            metrics_enabled (bool | None): Enable metrics collection when True. Default is None.
             structured_logs (bool | None): Enable structured logs when True. Default is None.
             log_verbose (bool | None): Enable verbose client logging when True. Default is None.
-            dlq_enabled (bool | None): Preserve failed write batches for recovery when True. Default is None.
             schedule: Grouped scheduler configuration for always-on DRR fairness.
             retry (RetryConfig | dict[str, Any] | None): Retry settings for fetch failures. Default is None.
             adaptive_throttle (
@@ -103,8 +99,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             ): Adaptive throttle settings. Default is None.
             concurrency (int | None): Maximum concurrent fetch workers. Default is None.
             flush_threshold_rows (int | None): Buffered row threshold before writer flush. Default is None.
-            writer_chunk_rows (int | None): Per-table flush chunk size in rows. Default is None.
-            writer_concurrency (int | None): Number of writer workers. Default is None.
             checkpoint_retention_days (int | None): Days to retain completed checkpoint state before pruning.
                 Default is None, which resolves to the runtime default of 7 days.
             run_history_retention_days (int | None): Days to retain persisted run history before pruning.
@@ -132,17 +126,13 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         super().__init__(
             api_key=None,
             rate_limit=normalized,
-            metrics_enabled=metrics_enabled,
             structured_logs=structured_logs,
             log_verbose=log_verbose,
-            dlq_enabled=dlq_enabled,
             schedule=schedule,
             retry=retry,
             adaptive_throttle=adaptive_throttle,
             concurrency=concurrency,
             flush_threshold_rows=flush_threshold_rows,
-            writer_chunk_rows=writer_chunk_rows,
-            writer_concurrency=writer_concurrency,
             checkpoint_retention_days=checkpoint_retention_days,
             run_history_retention_days=run_history_retention_days,
             http_timeout_s=http_timeout_s,
@@ -892,8 +882,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             symbols=symbols,
             connect_db=connect_db,
             bytes_per_item=bytes_per_item,
-            threshold_ratio=self._memory_threshold_ratio,
-            threshold_absolute=self._memory_threshold_absolute,
+            threshold_ratio=MEM_THRESHOLD_RATIO,
+            threshold_absolute=MEM_THRESHOLD_ABS_MB * 1024 * 1024,
         )
 
         result_obj: pl.DataFrame | RunResult = (

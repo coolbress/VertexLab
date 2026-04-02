@@ -42,7 +42,6 @@ def build_sweep_combinations(
     timeouts = _parse_positive_int_list(timeout_list, [30, 45], "timeout_list")
     combos = [
         {
-            "metrics_enabled": True,
             "concurrency": c,
             "flush_threshold_rows": f,
             "http_timeout_s": t,

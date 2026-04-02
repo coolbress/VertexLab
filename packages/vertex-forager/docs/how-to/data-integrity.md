@@ -14,7 +14,7 @@ mapper = SchemaMapper(strict_validation=False)  # default
 strict_mapper = SchemaMapper(strict_validation=True)  # raises on missing columns / strict casts
 ```
 
-Counters (metrics enabled only):
+Counters:
 
 - `schema_missing_cols_filled`: cells filled as `null` in non‑strict mode
 - `schema_extra_cols_preserved_count`: extra input columns preserved
@@ -38,13 +38,13 @@ df = writer.collect_table("yfinance_price")
 
 If collecting via a provider client, the schema’s `unique_key` is automatically passed to the in‑memory writer when available.
 
-Counter (metrics enabled only):
+Counter:
 
 - `inmem_dedup_dropped_rows`: number of rows removed by dedup/upsert
 
 ## Notes
 
-- Metrics gating: counters are merged into `RunResult.metrics_counters` only when `create_client(..., metrics_enabled=True)` is used.
+- Metrics counters are always merged into `RunResult.metrics_counters`.
 - Defaults are unchanged unless you opt in to these features.
 
 ## Data Quality Rules

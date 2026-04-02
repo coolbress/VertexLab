@@ -10,15 +10,11 @@ Public runtime configuration is now centered on `create_client(...)` plus groupe
 
 ## Top-Level Client Parameters
 
-- `metrics_enabled: bool = False`
 - `structured_logs: bool = False`
 - `log_verbose: bool = False`
-- `dlq_enabled: bool = True`
 - `schedule: SchedulerConfig = SchedulerConfig()`
 - `concurrency: int | None = None`
 - `flush_threshold_rows: int`
-- `writer_chunk_rows: int | None = None`
-- `writer_concurrency: int = 1`
 - `checkpoint_retention_days: int = 7`
 - `run_history_retention_days: int = 90`
 - `http_timeout_s: float`
@@ -51,8 +47,6 @@ Public runtime configuration is now centered on `create_client(...)` plus groupe
 
 - `tracer: Any | None`
 - `otel_enabled: bool | None`
-- `mem_threshold_ratio: float`
-- `mem_threshold_abs_mb: int | None`
 
 ### SchedulerConfig
 
@@ -60,7 +54,7 @@ Public runtime configuration is now centered on `create_client(...)` plus groupe
 - `max_pending_per_symbol: int | None = None`
 - `backpressure_threshold: int | None = None`
 
-DLQ temporary-file cleanup remains an internal housekeeping behavior. `dlq_tmp_cleanup_on_error`, `dlq_tmp_periodic_cleanup`, and `dlq_tmp_retention_s` are not intended as user-facing tuning knobs.
+DLQ spooling, periodic cleanup, writer chunking, writer worker count, and memory guard thresholds are internal defaults and are no longer public tuning knobs.
 
 ## Example
 
@@ -78,7 +72,6 @@ client = create_client(
     provider="sharadar",
     api_key="...",
     rate_limit=300,
-    metrics_enabled=True,
     concurrency=4,
     checkpoint_retention_days=7,
     run_history_retention_days=90,
@@ -147,5 +140,5 @@ The pipeline has two shutdown paths. See `_stop_impl()`, `stop()`, `_try_flush_o
 
 ## Notes
 
-- When `dlq_enabled=False`, DLQ files are not written. Summaries include `DLQ=disabled…`, and per‑table counts populate `RunResult.dlq_counts`.
-- When `metrics_enabled=False`, counters/histograms are not emitted, but `RunResult.dlq_counts` and summaries still populate.
+- Metrics and DLQ handling are always on.
+- Writer chunking and memory guard thresholds use internal constants rather than public config.

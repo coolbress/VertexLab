@@ -80,7 +80,6 @@ async def test_pagination_fairness_serves_new_symbol_before_long_tail(monkeypatc
     config = ResolvedClientConfig(
         requests_per_minute=60,
         concurrency=1,
-        metrics_enabled=False,
         structured_logs=False,
         schedule=SchedulerConfig(quantum=2),
     )

@@ -7,13 +7,12 @@ import duckdb
 import polars as pl
 import pytest
 
-from vertex_forager.core.config import FramePacket, ResolvedClientConfig
+from vertex_forager.core.config import FramePacket
 from vertex_forager.exceptions import (
     InputError,
     PrimaryKeyMissingError,
     PrimaryKeyNullError,
     SchemaMapError,
-    VertexForagerError,
 )
 from vertex_forager.writers.duckdb import DuckDBWriter
 
@@ -368,17 +367,3 @@ async def test_duckdb_writer_nested_types_roundtrip(tmp_path: Path) -> None:
             assert res == (9.5, "tech", 2.0)
     finally:
         await writer.close()
-
-
-def test_runtime_config_writer_chunk_rows_coercion_and_lower_bound() -> None:
-    cfg = ResolvedClientConfig(requests_per_minute=60)
-    cfg.writer_chunk_rows = "20000"  # type: ignore[assignment]
-    cfg.assert_valid()
-    assert isinstance(cfg.writer_chunk_rows, int)
-    assert cfg.writer_chunk_rows == 20000
-    cfg.writer_chunk_rows = "not-an-int"  # type: ignore[assignment]
-    with pytest.raises(VertexForagerError, match="writer_chunk_rows must be an integer or None"):
-        cfg.assert_valid()
-    cfg2 = ResolvedClientConfig(requests_per_minute=60, writer_chunk_rows=9_999)
-    with pytest.raises(ValueError, match="writer_chunk_rows must be >= 10_000"):
-        cfg2.assert_valid()

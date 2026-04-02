@@ -47,7 +47,6 @@ def test_create_run_queues_and_metrics_and_result() -> None:
         queue_max=10,
         checkpoint_retention_days=7,
         run_history_retention_days=90,
-        dlq_tmp_periodic_cleanup=False,
         dlq_tmp_retention_s=86400,
         cache_dir=Path("."),
         logger=type("L", (), {"warning": lambda *args, **kwargs: None})(),
@@ -55,7 +54,7 @@ def test_create_run_queues_and_metrics_and_result() -> None:
     assert req_q.maxsize == 10
     assert pkt_q.maxsize == 10
 
-    counters, hists, summary = init_metrics_for_run(metrics_enabled=True)
+    counters, hists, summary = init_metrics_for_run()
     assert counters["pipeline_runs"] == 1
     assert hists == {}
     assert summary == {}
@@ -86,7 +85,6 @@ def test_create_run_queues_passes_dlq_tmp_retention_s_to_cleanup(
         queue_max=10,
         checkpoint_retention_days=custom_checkpoint_retention,
         run_history_retention_days=custom_run_history_retention,
-        dlq_tmp_periodic_cleanup=False,
         dlq_tmp_retention_s=custom_dlq_retention,
         cache_dir=Path("."),
         logger=type("L", (), {"warning": lambda *args, **kwargs: None})(),

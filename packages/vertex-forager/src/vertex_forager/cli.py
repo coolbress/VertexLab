@@ -498,7 +498,7 @@ def tune_profile(
         db_path = out_dir / "profile_run.duckdb"
         if db_path.exists():
             db_path.unlink()
-        client = YFinanceClient(rate_limit=60, metrics_enabled=True, structured_logs=False)
+        client = YFinanceClient(rate_limit=60, structured_logs=False)
         _tickers = [t.strip().upper() for t in (tickers or "AAPL,MSFT,NVDA,GOOGL,AMZN").split(",")]
         run = client.get_price_data(
             tickers=_tickers,
@@ -527,7 +527,7 @@ def tune_profile(
                 ","
             )
         ]
-        yfc = YFinanceClient(rate_limit=60, metrics_enabled=True, structured_logs=False)
+        yfc = YFinanceClient(rate_limit=60, structured_logs=False)
         yf_run = yfc.get_financials(
             kind="income_stmt",
             period="annual",
@@ -542,7 +542,6 @@ def tune_profile(
                 shc = SharadarClient(
                     api_key=sh_key,
                     rate_limit=60,
-                    metrics_enabled=True,
                     structured_logs=False,
                 )
                 sh_run = shc.get_fundamental_data(

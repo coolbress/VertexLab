@@ -121,15 +121,15 @@ The CLI now reads environment variables and supports `vertex-forager collect`, `
 
 ### DLQ spool
 
-Dead Letter Queue spooling is enabled by default. Failed write packets are persisted to disk with `fsync` and atomic replace. Disable it with `create_client(..., dlq_enabled=False)`.
+Dead Letter Queue spooling is always enabled; failed write packets are persisted to disk with `fsync` and atomic replace.
 
 ### Writer chunked flush
 
-Writers support chunked flush via `create_client(..., writer_chunk_rows=...)` to bound memory usage during large writes.
+Writers use internal chunked flush to bound memory usage during large writes.
 
 ### RunResult summaries
 
-Pipeline runs return `RunResult` with per-table DLQ counts, regardless of `metrics_enabled` setting.
+Pipeline runs return `RunResult` with per-table DLQ counts.
 
 **Action required**: Update imports to use the package root and review any code that parses `RunResult`.
 

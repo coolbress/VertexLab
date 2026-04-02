@@ -30,35 +30,30 @@ def _resolve_paths() -> tuple[Path, Path, Path]:
 def _build_combos() -> list[dict[str, Any]]:
     return [
         {
-            "metrics_enabled": True,
             "concurrency": 8,
             "flush_threshold_rows": 100_000,
             "http_timeout_s": 30,
             "limits": {"max_keepalive_connections": 100, "max_connections": 200},
         },
         {
-            "metrics_enabled": True,
             "concurrency": 12,
             "flush_threshold_rows": 150_000,
             "http_timeout_s": 30,
             "limits": {"max_keepalive_connections": 150, "max_connections": 300},
         },
         {
-            "metrics_enabled": True,
             "concurrency": 16,
             "flush_threshold_rows": 200_000,
             "http_timeout_s": 45,
             "limits": {"max_keepalive_connections": 200, "max_connections": 400},
         },
         {
-            "metrics_enabled": True,
             "concurrency": 20,
             "flush_threshold_rows": 250_000,
             "http_timeout_s": 45,
             "limits": {"max_keepalive_connections": 200, "max_connections": 400},
         },
         {
-            "metrics_enabled": True,
             "concurrency": 24,
             "flush_threshold_rows": 300_000,
             "http_timeout_s": 45,

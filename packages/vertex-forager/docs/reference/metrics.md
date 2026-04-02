@@ -1,6 +1,6 @@
 # Metrics Reference
 
-Enable with `create_client(..., metrics_enabled=True)`. When disabled, counters and histograms are not collected or merged into `RunResult.metrics_*`.
+Metrics are always collected and merged into `RunResult.metrics_*`.
 
 ## Counters
 

@@ -3,7 +3,7 @@
 Common operations with both code and CLI.
 
 > Note
-> The `vertex-forager collect` CLI currently accepts only `--symbol` / `-s` and `--source`, and it does not write to DuckDB. Use the Python API when you need DuckDB persistence or DLQ configuration.
+> The `vertex-forager collect` CLI currently accepts only `--symbol` / `-s` and `--source`, and it does not write to DuckDB. Use the Python API when you need DuckDB persistence.
 
 ## Fetch price data (Sharadar) from the CLI
 
@@ -19,17 +19,10 @@ Common operations with both code and CLI.
 - CLI
   - Not available today; `collect` prints results and summaries instead of writing to DuckDB.
 
-## Operate with DLQ disabled
-
-- Code
-  - `create_client(..., dlq_enabled=False)`
-- CLI
-  - Not available today; DLQ toggles are configured through the Python API.
-
 ## Tune chunked flush
 
 - Code
-  - `create_client(..., writer_chunk_rows=20000, flush_threshold_rows=500000)`
+  - `create_client(..., flush_threshold_rows=500000)`
 - CLI
   - `vertex-forager tune profile --source yfinance --symbol "AAPL,MSFT"`
   - `vertex-forager tune sweep --source yfinance --symbol "AAPL,MSFT"`

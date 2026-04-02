@@ -26,13 +26,12 @@ flowchart TD
 2) Parse & normalize with Polars and provider schemas.
 3) Buffer packets per table until `flush_threshold_rows`.
 4) Flush and write:
-   - Streaming chunked merge/write when `writer_chunk_rows` is set.
+   - Streaming chunked merge/write using internal defaults.
    - PK validation and per‑chunk accounting.
 5) Error handling and DLQ:
    - Attempt per‑packet rescue writes.
    - On remaining failures:
-     - If `dlq_enabled=True`, spool to DLQ with atomic replace and fsync.
-     - If `dlq_enabled=False`, skip spooling and record summaries/counters only.
+     - Spool to DLQ with atomic replace and fsync.
 
 ## Design Notes
 

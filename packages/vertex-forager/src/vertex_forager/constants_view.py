@@ -15,6 +15,7 @@ def _global_constants_map(constants_mod: Any) -> dict[str, object]:
         "DEFAULT_RETRY_BASE_BACKOFF_S": constants_mod.DEFAULT_RETRY_BASE_BACKOFF_S,
         "DEFAULT_RETRY_MAX_BACKOFF_S": constants_mod.DEFAULT_RETRY_MAX_BACKOFF_S,
         "FLUSH_THRESHOLD_ROWS": constants_mod.FLUSH_THRESHOLD_ROWS,
+        "WRITER_CHUNK_ROWS": constants_mod.WRITER_CHUNK_ROWS,
         "PRIORITY_PAGINATION": constants_mod.PRIORITY_PAGINATION,
         "PRIORITY_NEW_JOB": constants_mod.PRIORITY_NEW_JOB,
         "PRIORITY_SENTINEL": constants_mod.PRIORITY_SENTINEL,

@@ -10,11 +10,10 @@
 
 - `concurrency`: Max concurrent fetch jobs/requests.
 - `flush_threshold_rows`: Buffer rows per table before flush.
-- `metrics_enabled`: Enable metrics collection.
 - `http_timeout_s`: HTTP request timeout in seconds.
 - `schedule=SchedulerConfig(...)`: Grouped scheduler controls for DRR fairness and backlog pressure.
 - `limits=HTTPConfig(...)`: HTTP client max keepalive and total connection counts.
-- `advanced=AdvancedConfig(...)`: Advanced resource controls such as `mem_threshold_ratio` and `mem_threshold_abs_mb`.
+- `advanced=AdvancedConfig(...)`: Advanced tracing controls.
 
 ## Convenience Environment Variables
 
@@ -44,7 +43,6 @@ client = create_client(
     provider="sharadar",
     api_key="...",
     rate_limit=500,
-    metrics_enabled=True,
     concurrency=12,
     flush_threshold_rows=500_000,
     http_timeout_s=30.0,
@@ -56,10 +54,7 @@ client = create_client(
         max_connections=200,
         max_keepalive_connections=100,
     ),
-    advanced=AdvancedConfig(
-        mem_threshold_ratio=0.85,
-        mem_threshold_abs_mb=4096,
-    ),
+    advanced=AdvancedConfig(),
 )
 ```
 

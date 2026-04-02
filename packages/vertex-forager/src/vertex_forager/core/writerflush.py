@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import polars as pl
 
+from vertex_forager.constants import WRITER_CHUNK_ROWS
 from vertex_forager.core.config import FramePacket, RunResult
 from vertex_forager.core.errors import (
     PrimaryKeyMissingError,
@@ -42,7 +43,7 @@ class WriterLike(Protocol):
 
 @runtime_checkable
 class ConfigLike(Protocol):
-    writer_chunk_rows: int | None
+    pass
 
 
 @dataclass(frozen=True)
@@ -543,7 +544,6 @@ async def flush_writer_table(
     result: RunResult,
     result_lock: asyncio.Lock,
     get_table_schema: Callable[[str], object | None],
-    writer_chunk_rows: int | None,
     flush_chunked_table: AsyncFunc,
     flush_legacy_table: AsyncFunc,
     handle_writer_flush_error: AsyncFunc,
@@ -560,7 +560,7 @@ async def flush_writer_table(
         return
     first = packets[0]
     schema = get_table_schema(first.table)
-    chunk_size = writer_chunk_rows
+    chunk_size = WRITER_CHUNK_ROWS
     try:
         if isinstance(chunk_size, int) and chunk_size > 0:
             await flush_chunked_table(

@@ -32,6 +32,7 @@ import logging
 import os
 import time
 from typing import TYPE_CHECKING, Any, Literal, cast
+from uuid import uuid4
 
 import httpx
 from polars.exceptions import ComputeError
@@ -48,6 +49,7 @@ from vertex_forager.core.checkpoint import (
     Checkpoint,
     find_latest_checkpoint,
     get_cache_dir,
+    register_dlq_entry,
     save_checkpoint,
     save_run_history,
 )
@@ -202,6 +204,17 @@ def _count_requested_symbol_units(symbols: Symbols | None) -> int | None:
     return total
 
 
+def _fsync_dir(path: str) -> None:
+    try:
+        dir_fd = os.open(path, os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    except OSError:
+        pass
+
+
 def _count_pending_request_jobs(req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] | None) -> int:
     """Count pending (non-sentinel) jobs in a request queue.
 
@@ -294,7 +307,6 @@ class VertexForager:
         self._mapper = mapper
         self._config = config
         self.controller = controller
-        self._metrics_enabled = bool(config.metrics_enabled)
         self._structured_logs = bool(config.structured_logs)
         self._log_verbose = bool(config.log_verbose)
         self._counters: dict[str, int] = {}
@@ -322,12 +334,6 @@ class VertexForager:
             # We treat 1 billion rows as effectively infinite for memory buffer
             self._flush_threshold = self.FLUSH_THRESHOLD_INFINITE
             logger.debug("PIPELINE: Detected InMemoryBufferWriter. Disabled intermediate flushing.")
-        if DuckDBWriterType is not None and isinstance(writer, DuckDBWriterType) and int(config.writer_concurrency) > 1:
-            logger.warning(
-                "PIPELINE: writer_concurrency=%s requested with DuckDBWriter; DuckDB writes remain serialized.",
-                config.writer_concurrency,
-            )
-
         workers = getattr(self.controller, "concurrency_limit", None)
         try:
             w_int = int(workers) if workers is not None else None
@@ -412,8 +418,6 @@ class VertexForager:
 
     def _inc(self, name: str, amount: int = 1) -> None:
         self._progress_counters[name] = self._progress_counters.get(name, 0) + amount
-        if not self._metrics_enabled:
-            return
         self._counters[name] = self._counters.get(name, 0) + amount
         sink = self._metrics_sink
         if sink is not None:
@@ -421,8 +425,6 @@ class VertexForager:
                 sink.inc(name, amount)
 
     def _observe(self, name: str, value: float) -> None:
-        if not self._metrics_enabled:
-            return
         bucket = self._hists.get(name)
         if bucket is None:
             bucket = deque(maxlen=self._MAX_HIST_SAMPLES)
@@ -434,9 +436,6 @@ class VertexForager:
                 sink.observe(name, float(value))
 
     def _compute_summary(self) -> dict[str, float]:
-        if not self._metrics_enabled:
-            return {}
-
         def _pctl(values: list[float], p: float) -> float:
             if not values:
                 return 0.0
@@ -770,7 +769,7 @@ class VertexForager:
                 self._writer_worker(pkt_q=pkt_q, result=result, result_lock=result_lock),
                 name=f"vertex-forager:writer:{i}",
             )
-            for i in range(self._config.writer_concurrency)
+            for i in range(1)
         ]
         order_counter = itertools.count()
         fetch_tasks = [
@@ -853,25 +852,22 @@ class VertexForager:
                 symbol="*",
                 stage="producer_done",
             )
-            if self._metrics_enabled:
-                with suppress(Exception):
-                    self._summary["req_q_len_after_producer"] = float(req_q.qsize())
-                    self._summary["pkt_q_len_after_producer"] = float(pkt_q.qsize())
+            with suppress(Exception):
+                self._summary["req_q_len_after_producer"] = float(req_q.qsize())
+                self._summary["pkt_q_len_after_producer"] = float(pkt_q.qsize())
         await req_q.join()
         await wait_for_pagination_drain_impl(fairness_state=self._fair_state)
         logger.info("PIPELINE: Request queue joined, sending sentinel signals...")
-        if self._metrics_enabled:
-            with suppress(Exception):
-                self._summary["req_q_len_after_req_join"] = float(req_q.qsize())
+        with suppress(Exception):
+            self._summary["req_q_len_after_req_join"] = float(req_q.qsize())
         for _ in range(concurrency):
             await self._put_request_queue(req_q=req_q, item=(self.PRIORITY_SENTINEL, 0, None))
         logger.info("PIPELINE: Waiting for fetch tasks to complete...")
         await asyncio.gather(*fetch_tasks)
         logger.info("PIPELINE: Fetch tasks completed, waiting for packet queue...")
         await pkt_q.join()
-        if self._metrics_enabled:
-            with suppress(Exception):
-                self._summary["pkt_q_len_after_pkt_join"] = float(pkt_q.qsize())
+        with suppress(Exception):
+            self._summary["pkt_q_len_after_pkt_join"] = float(pkt_q.qsize())
         for _ in writer_tasks:
             await pkt_q.put(None)
 
@@ -942,7 +938,6 @@ class VertexForager:
             queue_max=self._config.queue_max,
             checkpoint_retention_days=self._config.checkpoint_retention_days,
             run_history_retention_days=self._config.run_history_retention_days,
-            dlq_tmp_periodic_cleanup=self._config.dlq_tmp_periodic_cleanup,
             dlq_tmp_retention_s=self._config.dlq_tmp_retention_s,
             cache_dir=get_cache_dir(),
             logger=logger,
@@ -953,9 +948,7 @@ class VertexForager:
         )
 
     def _init_metrics_for_run(self) -> None:
-        counters, hists, summary = init_metrics_for_run_impl(metrics_enabled=self._metrics_enabled)
-        if not self._metrics_enabled:
-            return
+        counters, hists, summary = init_metrics_for_run_impl()
         self._counters = counters
         self._hists = hists
         self._summary = summary
@@ -1012,17 +1005,16 @@ class VertexForager:
         logger.debug("PIPELINE: Flushing writer buffer...")
         await self._try_flush_once(suppress=False, consume=True)
         logger.info("PIPELINE: Run completed. Total errors: %s", len(result.errors))
-        if self._metrics_enabled:
-            self._merge_component_counters()
-            result.metrics_counters = dict(self._counters)
-            result.metrics_histograms = {k: list(v) for k, v in self._hists.items()}
-            self._summary = self._compute_summary()
-            result.metrics_summary = dict(self._summary)
-            sink = self._metrics_sink
-            if sink is not None:
-                with suppress(Exception):
-                    sink.summary(dict(self._summary))
-            self._emit_pipeline_summary_log(dataset=dataset, started_monotonic=started_monotonic)
+        self._merge_component_counters()
+        result.metrics_counters = dict(self._counters)
+        result.metrics_histograms = {k: list(v) for k, v in self._hists.items()}
+        self._summary.update(self._compute_summary())
+        result.metrics_summary = dict(self._summary)
+        sink = self._metrics_sink
+        if sink is not None:
+            with suppress(Exception):
+                sink.summary(dict(self._summary))
+        self._emit_pipeline_summary_log(dataset=dataset, started_monotonic=started_monotonic)
         result.finished_at = time.time()
         result.duration_s = time.monotonic() - started_monotonic
         async with self._checkpoint_lock:
@@ -1319,40 +1311,43 @@ class VertexForager:
                         result.tables[wr.table] = result.tables.get(wr.table, 0) + wr.rows
                 self._inc("rows_written_total", int(wr.rows))
             except Exception as e:
-                dlq_enabled = bool(getattr(self._config, "dlq_enabled", True))
-                if dlq_enabled:
+                try:
+                    dlq_dir = get_cache_dir() / "dlq" / pkt.table
+                    dlq_dir.mkdir(parents=True, exist_ok=True)
+                    ts_ns = time.time_ns()
+                    file_id = f"{ts_ns}_{uuid4().hex}"
+                    fpath = dlq_dir / f"packet_{file_id}.ipc"
+                    tmp_path = fpath.parent / f"{fpath.name}.tmp"
+                    fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                    with os.fdopen(fd, "wb") as fh:
+                        pkt.frame.write_ipc(fh)
+                        fh.flush()
+                        os.fsync(fh.fileno())
+                    os.replace(tmp_path, fpath)
+                    _fsync_dir(str(dlq_dir))
                     try:
-                        dlq_dir = get_cache_dir() / "dlq" / pkt.table
-                        dlq_dir.mkdir(parents=True, exist_ok=True)
-                        ts_ns = time.time_ns()
-                        fpath = dlq_dir / f"packet_{ts_ns}.ipc"
-                        tmp_path = fpath.parent / (f"{fpath.name}.tmp")
-                        fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-                        with os.fdopen(fd, "wb") as fh:
-                            pkt.frame.write_ipc(fh)
-                            fh.flush()
-                            os.fsync(fh.fileno())
-                        os.replace(tmp_path, fpath)
-                        with suppress(Exception):
-                            dir_fd = os.open(str(dlq_dir), os.O_RDONLY)
-                            try:
-                                os.fsync(dir_fd)
-                            finally:
-                                os.close(dir_fd)
-                        self._inc("dlq_spooled_files_total", 1)
-                        self._inc(f"dlq_spooled_files.{pkt.table}", 1)
-                    except Exception as e2:
-                        logger.exception("PIPELINE: DLQ spool failed for drained packet: %s", e2)
-                        if result is not None and result_lock is not None:
-                            async with result_lock:
-                                pending = result.dlq_pending.get(pkt.table, [])
-                                pending.append(pkt)
-                                result.dlq_pending[pkt.table] = pending
+                        register_dlq_entry(path=fpath, table=pkt.table, provider=pkt.provider, row_count=len(pkt.frame))
+                    except Exception as reg_err:
+                        with suppress(OSError):
+                            fpath.unlink()
+                            _fsync_dir(str(dlq_dir))
+                        raise reg_err
+                    self._inc("dlq_spooled_files_total", 1)
+                    self._inc(f"dlq_spooled_files.{pkt.table}", 1)
+                except Exception as e2:
+                    logger.exception("PIPELINE: DLQ spool failed for drained packet: %s", e2)
+                    if result is not None and result_lock is not None:
+                        async with result_lock:
+                            pending = result.dlq_pending.get(pkt.table, [])
+                            pending.append(pkt)
+                            result.dlq_pending[pkt.table] = pending
                 if result is not None and result_lock is not None:
                     async with result_lock:
                         entry = result.dlq_counts.get(pkt.table) or {"rescued": 0, "remaining": 0}
                         entry["remaining"] = entry.get("remaining", 0) + 1
                         result.dlq_counts[pkt.table] = entry
+                        self._inc("dlq_remaining_total", 1)
+                        self._inc(f"dlq_remaining.{pkt.table}", 1)
                         result.errors.append(RunError.from_exception(e, pkt.provider, pkt.table, ""))
 
     async def _fetch_worker(
@@ -2083,7 +2078,6 @@ class VertexForager:
             result=result,
             result_lock=result_lock,
             get_table_schema=ctx.get_table_schema,
-            writer_chunk_rows=getattr(ctx.config, "writer_chunk_rows", None),
             flush_chunked_table=_flush_chunked_table,
             flush_legacy_table=_flush_legacy_table,
             handle_writer_flush_error=_handle_writer_flush_error,

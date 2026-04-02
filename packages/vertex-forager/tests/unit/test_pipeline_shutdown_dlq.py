@@ -31,7 +31,7 @@ class _StubClient:
 @pytest.mark.asyncio
 async def test_persist_packets_with_dlq_spool_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Engine with failing writer to force DLQ spool path
-    config = ResolvedClientConfig(requests_per_minute=60, concurrency=1, dlq_enabled=True)
+    config = ResolvedClientConfig(requests_per_minute=60, concurrency=1)
     controller = FlowController(requests_per_minute=60, concurrency_limit=1)
     eng = VertexForager(
         router=None,  # type: ignore[arg-type]
