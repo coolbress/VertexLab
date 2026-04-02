@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.22.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.21.0...vertex-forager-v0.22.0) (2026-04-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **vertex-forager:** align logging model with OSS Python standard ([#429](https://github.com/coolbress/VertexLab/issues/429))
+
+### Code Refactoring
+
+* **vertex-forager:** align logging model with OSS Python standard ([#429](https://github.com/coolbress/VertexLab/issues/429)) ([407eba4](https://github.com/coolbress/VertexLab/commit/407eba4022548e39240487cb58a18fe7a4b1fa19))
+
 ## [0.21.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.20.0...vertex-forager-v0.21.0) (2026-04-02)
 
 
