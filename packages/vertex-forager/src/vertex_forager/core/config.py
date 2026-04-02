@@ -295,8 +295,6 @@ class ResolvedClientConfig(BaseModel):
     """
 
     requests_per_minute: int = Field(..., gt=0)
-    structured_logs: bool = False
-    log_verbose: bool = False
     schedule: SchedulerConfig = Field(default_factory=SchedulerConfig)
     retry: RetryConfig = Field(default_factory=RetryConfig)
     adaptive_throttle: AdaptiveThrottleConfig = Field(default_factory=AdaptiveThrottleConfig)

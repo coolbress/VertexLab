@@ -113,8 +113,6 @@ class SharadarClient(BaseClient[SharadarDataset]):
         *,
         api_key: str,
         rate_limit: int,
-        structured_logs: bool | None = None,
-        log_verbose: bool | None = None,
         schedule: SchedulerConfig | dict[str, Any] | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
         adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
@@ -131,8 +129,6 @@ class SharadarClient(BaseClient[SharadarDataset]):
         Args:
             api_key: Valid API key for the provider.
             rate_limit: Requests per minute (int).
-            structured_logs: Enables structured stage logs when True.
-            log_verbose: Promotes structured logs to INFO when True.
             schedule: Grouped scheduler configuration for always-on DRR fairness.
             retry: Grouped retry policy configuration.
             adaptive_throttle: Grouped adaptive throttle policy configuration.
@@ -153,8 +149,6 @@ class SharadarClient(BaseClient[SharadarDataset]):
         super().__init__(
             api_key=api_key,
             rate_limit=rate_limit,
-            structured_logs=structured_logs,
-            log_verbose=log_verbose,
             schedule=schedule,
             retry=retry,
             adaptive_throttle=adaptive_throttle,

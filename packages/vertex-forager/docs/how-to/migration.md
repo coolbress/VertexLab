@@ -131,6 +131,21 @@ Writers use internal chunked flush to bound memory usage during large writes.
 
 Pipeline runs return `RunResult` with per-table DLQ counts.
 
+### Logging model
+
+OBS/stage logs are now always emitted at DEBUG level with structured `extra` fields on the `vertex_forager` logger. Configure visibility in the host app:
+
+```python
+import logging
+
+logging.getLogger("vertex_forager").setLevel(logging.DEBUG)
+```
+
+Removed parameters:
+
+- `structured_logs`
+- `log_verbose`
+
 **Action required**: Update imports to use the package root and review any code that parses `RunResult`.
 
 ## 0.1.0

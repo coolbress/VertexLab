@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
 import importlib.util
+import logging
 import warnings
 
 import pytest
 
+import vertex_forager
 from vertex_forager import (
     AdaptiveThrottleConfig,
     AdvancedConfig,
@@ -97,13 +99,25 @@ def test_removed_legacy_advanced_kwargs_are_rejected() -> None:
 @pytest.mark.parametrize(
     "removed_kwargs",
     [
+        {"structured_logs": True},
+        {"log_verbose": True},
+    ],
+)
+def test_removed_runtime_kwargs_are_rejected(removed_kwargs: dict[str, object]) -> None:
+    with pytest.raises(TypeError):
+        create_client(provider="yfinance", rate_limit=60, **removed_kwargs)
+
+
+@pytest.mark.parametrize(
+    "removed_kwargs",
+    [
         {"metrics_enabled": True},
         {"dlq_enabled": False},
         {"writer_chunk_rows": 20_000},
         {"writer_concurrency": 2},
     ],
 )
-def test_removed_runtime_kwargs_are_rejected(removed_kwargs: dict[str, object]) -> None:
+def test_other_removed_runtime_kwargs_are_rejected(removed_kwargs: dict[str, object]) -> None:
     with pytest.raises(TypeError):
         create_client(provider="yfinance", rate_limit=60, **removed_kwargs)
 
@@ -122,17 +136,15 @@ def test_removed_advanced_config_kwargs_are_rejected(advanced_kwargs: dict[str, 
         create_client(provider="yfinance", rate_limit=60, advanced=advanced_kwargs)
 
 
-def test_string_flag_inputs_normalize_correctly() -> None:
-    client = create_client(
-        provider="yfinance",
-        rate_limit=60,
-        structured_logs="0",  # type: ignore[arg-type]
-        log_verbose="no",  # type: ignore[arg-type]
-    )
+def test_removed_logging_kwargs_are_rejected_by_provider_constructor() -> None:
+    with pytest.raises(TypeError):
+        YFinanceClient(rate_limit=60, structured_logs=True)  # type: ignore[call-arg]
 
-    assert isinstance(client, YFinanceClient)
-    assert client.config.structured_logs is False
-    assert client.config.log_verbose is False
+
+def test_vertex_forager_root_logger_has_null_handler() -> None:
+    logger = logging.getLogger("vertex_forager")
+    assert any(isinstance(handler, logging.NullHandler) for handler in logger.handlers)
+    assert vertex_forager.__version__
 
 
 def test_non_auth_env_vars_no_longer_backfill_client_config(monkeypatch: pytest.MonkeyPatch) -> None:

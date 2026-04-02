@@ -101,8 +101,6 @@ class RunFinalizer:
         mapper: object,
         writer: object,
         inc: Any,
-        structured_logs: bool,
-        log_verbose: bool,
         provider: str,
         sanitize_field: Any,
         logger: Any,
@@ -110,8 +108,6 @@ class RunFinalizer:
         self._mapper = mapper
         self._writer = writer
         self._inc = inc
-        self._structured_logs = structured_logs
-        self._log_verbose = log_verbose
         self._provider = provider
         self._sanitize_field = sanitize_field
         self._logger = logger
@@ -131,8 +127,6 @@ class RunFinalizer:
         summary: dict[str, float],
     ) -> None:
         emit_pipeline_summary_log(
-            structured_logs=self._structured_logs,
-            log_verbose=self._log_verbose,
             provider=self._provider,
             dataset=dataset,
             started_monotonic=started_monotonic,
@@ -162,8 +156,6 @@ def merge_component_counters(
 
 def emit_pipeline_summary_log(
     *,
-    structured_logs: bool,
-    log_verbose: bool,
     provider: str,
     dataset: str,
     started_monotonic: float,
@@ -171,15 +163,14 @@ def emit_pipeline_summary_log(
     sanitize_field: Any,
     logger: Any,
 ) -> None:
-    if not structured_logs:
-        return
     dur_run = time.monotonic() - started_monotonic
-    msg_s = (
-        f"OBS provider={sanitize_field(provider)} "
-        f"dataset={sanitize_field(dataset)} symbol=* stage=pipeline_summary attempt=0 "
-        f"duration={dur_run:.3f}s " + " ".join(f"{k}={v:.3f}" for k, v in sorted(summary.items()))
-    )
-    if log_verbose:
-        logger.info(msg_s)
-    else:
-        logger.debug(msg_s)
+    extra: dict[str, object] = {
+        "vf_provider": sanitize_field(provider),
+        "vf_dataset": sanitize_field(dataset),
+        "vf_symbol": "*",
+        "vf_stage": "pipeline_summary",
+        "vf_attempt": 0,
+        "vf_duration_s": round(dur_run, 3),
+    }
+    extra.update({f"vf_{k}": round(v, 3) for k, v in sorted(summary.items())})
+    logger.debug("vertex_forager stage", extra=extra)

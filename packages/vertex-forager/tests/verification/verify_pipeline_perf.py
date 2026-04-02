@@ -121,7 +121,7 @@ def main() -> None:
             return
         raise
 
-    client = YFinanceClient(rate_limit=60, structured_logs=False)
+    client = YFinanceClient(rate_limit=60)
     tickers = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN"]
     fixture_map = {ticker: _build_fixture_frame(ticker) for ticker in tickers}
     warmup_db_path = out_dir / "profile_run_warmup.duckdb"

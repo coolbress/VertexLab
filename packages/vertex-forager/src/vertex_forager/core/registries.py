@@ -207,8 +207,6 @@ class ClientFactory(Protocol):
         *,
         api_key: str | None = None,
         rate_limit: int,
-        structured_logs: bool | None = None,
-        log_verbose: bool | None = None,
         schedule: SchedulerConfig | dict[str, Any] | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
         adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
@@ -225,8 +223,6 @@ class ClientFactory(Protocol):
         Args:
             api_key: API key for the provider, or None if not required.
             rate_limit: Rate limit in requests per minute.
-            structured_logs: Enables structured stage logs when True.
-            log_verbose: Promotes structured logs to INFO when True.
             schedule: Grouped scheduler configuration for always-on DRR fairness.
             retry: Grouped retry policy configuration.
             adaptive_throttle: Grouped adaptive throttle policy configuration.

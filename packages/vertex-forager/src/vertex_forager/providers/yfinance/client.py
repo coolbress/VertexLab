@@ -72,8 +72,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         *,
         api_key: str | None = None,
         rate_limit: int = DEFAULT_RATE_LIMIT,
-        structured_logs: bool | None = None,
-        log_verbose: bool | None = None,
         schedule: SchedulerConfig | dict[str, Any] | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
         adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
@@ -90,8 +88,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         Args:
             api_key (str | None): Unused for yfinance. Kept for API symmetry. Default is None.
             rate_limit (int): Requests per minute cap. Default is 60.
-            structured_logs (bool | None): Enable structured logs when True. Default is None.
-            log_verbose (bool | None): Enable verbose client logging when True. Default is None.
             schedule: Grouped scheduler configuration for always-on DRR fairness.
             retry (RetryConfig | dict[str, Any] | None): Retry settings for fetch failures. Default is None.
             adaptive_throttle (
@@ -126,8 +122,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         super().__init__(
             api_key=None,
             rate_limit=normalized,
-            structured_logs=structured_logs,
-            log_verbose=log_verbose,
             schedule=schedule,
             retry=retry,
             adaptive_throttle=adaptive_throttle,
@@ -896,8 +890,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
                 rate_limit=self._config.requests_per_minute,
                 start_date=start_date,
                 end_date=end_date,
-                structured_logs=self._config.structured_logs,
-                log_verbose=self._config.log_verbose,
                 **{k: v for k, v in kwargs.items() if k in {PRICE_BATCH_SIZE_KEY}},
             )
 

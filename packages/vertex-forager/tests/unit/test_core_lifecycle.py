@@ -119,21 +119,15 @@ def test_merge_component_counters_merges_from_mapper_and_writer() -> None:
     assert counters["writer_rows"] == 3
 
 
-def test_emit_pipeline_summary_log_writes_debug_line() -> None:
-    messages: list[str] = []
+def test_emit_pipeline_summary_log_writes_debug_extra_fields() -> None:
+    records: list[tuple[str, dict[str, object]]] = []
 
     class _Logger:
         @staticmethod
-        def debug(message: str) -> None:
-            messages.append(message)
-
-        @staticmethod
-        def info(message: str) -> None:
-            messages.append(message)
+        def debug(message: str, *, extra: dict[str, object]) -> None:
+            records.append((message, extra))
 
     emit_pipeline_summary_log(
-        structured_logs=True,
-        log_verbose=False,
         provider="sharadar",
         dataset="price",
         started_monotonic=0.0,
@@ -141,4 +135,10 @@ def test_emit_pipeline_summary_log_writes_debug_line() -> None:
         sanitize_field=lambda x: x,
         logger=_Logger(),
     )
-    assert any("stage=pipeline_summary" in message for message in messages)
+    assert records
+    message, extra = records[0]
+    assert message == "vertex_forager stage"
+    assert extra["vf_stage"] == "pipeline_summary"
+    assert extra["vf_provider"] == "sharadar"
+    assert extra["vf_dataset"] == "price"
+    assert extra["vf_http_duration_s_p95"] == 1.2

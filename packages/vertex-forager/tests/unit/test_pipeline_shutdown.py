@@ -180,7 +180,6 @@ async def test_stop_triggers_writer_flush() -> None:
     config = ResolvedClientConfig(
         requests_per_minute=60,
         concurrency=1,
-        structured_logs=False,
     )
     controller = FlowController(requests_per_minute=60, concurrency_limit=1)
     engine = VertexForager(router=router, http=http, writer=writer, mapper=None, config=config, controller=controller)

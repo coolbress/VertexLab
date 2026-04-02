@@ -307,8 +307,6 @@ class VertexForager:
         self._mapper = mapper
         self._config = config
         self.controller = controller
-        self._structured_logs = bool(config.structured_logs)
-        self._log_verbose = bool(config.log_verbose)
         self._counters: dict[str, int] = {}
         self._progress_counters: dict[str, int] = {}
         self._hists: dict[str, deque[float]] = {}
@@ -370,8 +368,6 @@ class VertexForager:
             mapper=self._mapper,
             writer=self._writer,
             inc=self._inc,
-            structured_logs=self._structured_logs,
-            log_verbose=self._log_verbose,
             provider=str(getattr(self._router, "provider", "")),
             sanitize_field=sanitize_field,
             logger=logger,
@@ -523,21 +519,17 @@ class VertexForager:
         attempt: int | None = None,
         duration_s: float | None = None,
     ) -> None:
-        if not self._structured_logs:
-            return
-        att = attempt if attempt is not None else 0
-        dur = f"{duration_s:.3f}s" if duration_s is not None else "-"
-        msg = (
-            f"OBS provider={sanitize_field(provider)} "
-            f"dataset={sanitize_field(dataset)} "
-            f"symbol={sanitize_field(symbol)} "
-            f"stage={sanitize_field(stage)} "
-            f"attempt={att} duration={dur}"
+        logger.debug(
+            "vertex_forager stage",
+            extra={
+                "vf_provider": sanitize_field(provider),
+                "vf_dataset": sanitize_field(dataset),
+                "vf_symbol": sanitize_field(symbol),
+                "vf_stage": sanitize_field(stage),
+                "vf_attempt": int(attempt if attempt is not None else 0),
+                "vf_duration_s": None if duration_s is None else round(float(duration_s), 3),
+            },
         )
-        if self._log_verbose:
-            logger.info(msg)
-        else:
-            logger.debug(msg)
 
     def _update_checkpoint(
         self,

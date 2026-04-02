@@ -32,8 +32,6 @@ def _register_sharadar() -> None:
         *,
         api_key: str | None = None,
         rate_limit: int,
-        structured_logs: bool | None = None,
-        log_verbose: bool | None = None,
         schedule: SchedulerConfig | dict[str, Any] | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
         adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
@@ -48,8 +46,6 @@ def _register_sharadar() -> None:
         return SharadarClient(
             api_key=api_key or "",
             rate_limit=rate_limit,
-            structured_logs=structured_logs,
-            log_verbose=log_verbose,
             schedule=schedule,
             retry=retry,
             adaptive_throttle=adaptive_throttle,
@@ -79,8 +75,6 @@ def _register_yfinance() -> None:
         *,
         api_key: str | None = None,
         rate_limit: int,
-        structured_logs: bool | None = None,
-        log_verbose: bool | None = None,
         schedule: SchedulerConfig | dict[str, Any] | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
         adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
@@ -95,8 +89,6 @@ def _register_yfinance() -> None:
         return YFinanceClient(
             api_key=api_key or "",
             rate_limit=rate_limit,
-            structured_logs=structured_logs,
-            log_verbose=log_verbose,
             schedule=schedule,
             retry=retry,
             adaptive_throttle=adaptive_throttle,
@@ -123,8 +115,6 @@ def create_client(
     provider: str,
     api_key: str | None = None,
     rate_limit: int | None = None,
-    structured_logs: bool | None = None,
-    log_verbose: bool | None = None,
     schedule: SchedulerConfig | dict[str, Any] | None = None,
     retry: RetryConfig | dict[str, Any] | None = None,
     throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
@@ -143,8 +133,6 @@ def create_client(
         provider: The provider identifier (e.g., "sharadar").
         api_key: API key. If not provided, will look up provider-specific env var.
         rate_limit: Rate limit in requests per minute.
-        structured_logs: Enables structured stage logs when True.
-        log_verbose: Promotes structured logs to INFO when True.
         schedule: Grouped scheduler configuration for always-on DRR fairness.
         retry: Grouped retry policy configuration.
         throttle: Grouped adaptive throttle policy configuration.
@@ -163,7 +151,6 @@ def create_client(
         ValueError: If API key is missing.
         KeyError: If provider is unknown.
     """
-
     try:
         registration = client_registry.get(provider)
     except KeyError:
@@ -195,8 +182,6 @@ def create_client(
         return registration.factory(
             api_key=None,
             rate_limit=effective_limit,
-            structured_logs=structured_logs,
-            log_verbose=log_verbose,
             schedule=schedule,
             retry=retry,
             adaptive_throttle=throttle,
@@ -213,8 +198,6 @@ def create_client(
     return registration.factory(
         api_key=resolved_key,
         rate_limit=rate_limit,
-        structured_logs=structured_logs,
-        log_verbose=log_verbose,
         schedule=schedule,
         retry=retry,
         adaptive_throttle=throttle,
