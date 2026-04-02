@@ -9,7 +9,6 @@ from unittest.mock import patch
 
 import pytest
 
-from vertex_forager import SharadarConfig
 from vertex_forager.api import create_client
 
 
@@ -25,17 +24,6 @@ class TestClientFactory:
         # Verify internal config using private attributes if necessary,
         # or check public properties if available.
         # Here we just check type as that confirms factory worked.
-
-    def test_create_sharadar_client_accepts_sharadar_config(self) -> None:
-        client = create_client(
-            provider="sharadar",
-            api_key="test_api_key",  # pragma: allowlist secret (test)
-            rate_limit=100,
-            sharadar=SharadarConfig(metadata_cache_days=7),
-        )
-
-        assert client.__class__.__name__ == "SharadarClient"
-        assert client.config.sharadar.metadata_cache_days == 7
 
     def test_create_client_with_env_var(self):
         """Test creating client using environment variable for API key."""
@@ -62,12 +50,4 @@ class TestClientFactory:
                 provider="invalid_provider",
                 api_key="key",  # pragma: allowlist secret (test)
                 rate_limit=100,
-            )
-
-    def test_create_client_rejects_sharadar_config_for_yfinance(self) -> None:
-        with pytest.raises(ValueError, match="sharadar config is only supported"):
-            create_client(
-                provider="yfinance",
-                rate_limit=100,
-                sharadar=SharadarConfig(metadata_cache_days=7),
             )

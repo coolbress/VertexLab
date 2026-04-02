@@ -72,7 +72,7 @@ This split keeps vendor-specific logic out of the shared pipeline while preservi
 - The transport choice is internal; users still work through the same client methods
 - Once payloads are normalized into shared frame/table structures, downstream pipeline stages remain provider-agnostic
 
-Sharadar also keeps a provider-specific disk cache for ticker metadata. The cache is stored under `~/.cache/vertex-forager/sharadar/metadata.parquet` and is refreshed according to `SharadarConfig.metadata_cache_days`. This keeps smart batching accurate without refetching the full TICKERS dataset on every new session.
+Sharadar can optionally use caller-provided ticker metadata for smart batching. When a method receives `meta=...`, the client reads `sharadar_tickers` from that DuckDB and passes `ticker`, `firstpricedate`, and `lastpricedate` into the router. When `meta=None`, the router falls back to heuristic batching and correctness still comes from cursor-based pagination.
 
 For a library-backed provider such as yfinance, the flow is:
 

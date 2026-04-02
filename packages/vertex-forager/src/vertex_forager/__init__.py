@@ -14,7 +14,6 @@ from vertex_forager.core import (
     RetryConfig,
     RunResult,
     SchedulerConfig,
-    SharadarConfig,
 )
 from vertex_forager.core.errors import RunError
 from vertex_forager.core.quality import (
@@ -48,7 +47,6 @@ __all__ = [
     "RunResult",
     "SchedulerConfig",
     "SharadarClient",
-    "SharadarConfig",
     "ValidationError",
     "WriterError",
     "YFinanceClient",

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -30,10 +31,9 @@ class TestClientVisualization:
         with patch("vertex_forager.clients.base.VertexForager") as MockPipeline:
             mock_pipeline_instance = MockPipeline.return_value
             mock_pipeline_instance.run = AsyncMock(return_value=MagicMock())
-            with patch.object(sharadar_client, "_load_metadata_from_disk", return_value=None):
-                await sharadar_client._get_ticker_info_async()
+            await sharadar_client._get_ticker_info_async()
 
-                assert mock_pipeline_instance.run.await_args.kwargs["progress"] is False
+            assert mock_pipeline_instance.run.await_args.kwargs["progress"] is False
 
     @pytest.mark.asyncio
     async def test_get_price_data_uses_tqdm(self, sharadar_client, tmp_path):
@@ -136,6 +136,92 @@ class TestClientIntegration:
         assert len(result.errors) == 0
 
     @pytest.mark.asyncio
+    async def test_get_price_data_passes_meta_dataframe_to_fetcher(
+        self,
+        sharadar_client,
+        tmp_path: Path,
+    ) -> None:
+        meta_path = tmp_path / "meta.duckdb"
+        import duckdb
+
+        with duckdb.connect(str(meta_path)) as conn:
+            conn.execute(
+                """
+                CREATE TABLE sharadar_tickers (
+                    ticker VARCHAR,
+                    firstpricedate DATE,
+                    lastpricedate DATE
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO sharadar_tickers VALUES
+                ('AAPL', DATE '1980-12-12', DATE '2024-01-31')
+                """
+            )
+
+        captured: dict[str, object] = {}
+
+        async def _fake_fetch(cfg, *, ticker_metadata=None):  # type: ignore[no-untyped-def]
+            captured["dataset"] = cfg.dataset
+            captured["ticker_metadata"] = ticker_metadata
+            return pl.DataFrame()
+
+        with patch.object(sharadar_client, "_fetch_per_ticker", _fake_fetch):
+            await sharadar_client._get_price_data_async(
+                tickers=["AAPL"],
+                meta=meta_path,
+                start_date="2024-01-01",
+                end_date="2024-01-31",
+            )
+
+        ticker_metadata = captured["ticker_metadata"]
+        assert captured["dataset"] == "price"
+        assert isinstance(ticker_metadata, pl.DataFrame)
+        assert ticker_metadata.columns == ["ticker", "firstpricedate", "lastpricedate"]
+        assert ticker_metadata.get_column("ticker").to_list() == ["AAPL"]
+
+    @pytest.mark.asyncio
+    async def test_get_price_data_passes_none_meta_to_fetcher(self, sharadar_client) -> None:
+        captured: dict[str, object] = {}
+
+        async def _fake_fetch(cfg, *, ticker_metadata=None):  # type: ignore[no-untyped-def]
+            captured["dataset"] = cfg.dataset
+            captured["ticker_metadata"] = ticker_metadata
+            return pl.DataFrame()
+
+        with patch.object(sharadar_client, "_fetch_per_ticker", _fake_fetch):
+            await sharadar_client._get_price_data_async(
+                tickers=["AAPL"],
+                meta=None,
+                start_date="2024-01-01",
+                end_date="2024-01-31",
+            )
+
+        assert captured["dataset"] == "price"
+        assert captured["ticker_metadata"] is None
+
+    @pytest.mark.asyncio
+    async def test_get_ticker_info_none_calls_pagination_directly(self, sharadar_client) -> None:
+        async def _fake_pagination(cfg):  # type: ignore[no-untyped-def]
+            assert cfg.dataset == "tickers"
+            assert cfg.symbols is None
+            return pl.DataFrame({"ticker": ["AAPL"]})
+
+        async def _fail_fetch(*args: object, **kwargs: object) -> pl.DataFrame:
+            raise AssertionError("get_ticker_info(None) should not use per-ticker fetch")
+
+        with (
+            patch.object(sharadar_client, "_fetch_pagination", _fake_pagination),
+            patch.object(sharadar_client, "_fetch_per_ticker", _fail_fetch),
+        ):
+            result = await sharadar_client._get_ticker_info_async(tickers=None)
+
+        assert isinstance(result, pl.DataFrame)
+        assert result.get_column("ticker").to_list() == ["AAPL"]
+
+    @pytest.mark.asyncio
     async def test_get_daily_metrics_handles_financial_data(
         self,
         sharadar_client,
@@ -219,9 +305,7 @@ class TestClientErrorHandling:
     ) -> None:
         """Test that client handles empty API responses gracefully."""
         # Arrange
-        mock_response_obj: dict[str, object] = {
-            "datatable": {"data": [], "columns": []}
-        }
+        mock_response_obj: dict[str, object] = {"datatable": {"data": [], "columns": []}}
         mock_http_executor.fetch.return_value = json.dumps(mock_response_obj).encode()
 
         # Act

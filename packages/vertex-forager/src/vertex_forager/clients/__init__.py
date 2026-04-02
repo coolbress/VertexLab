@@ -22,7 +22,6 @@ if TYPE_CHECKING:
         HTTPConfig,
         RetryConfig,
         SchedulerConfig,
-        SharadarConfig,
     )
 
 
@@ -48,7 +47,6 @@ def _register_sharadar() -> None:
         run_history_retention_days: int | None = None,
         http_timeout_s: float | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
-        sharadar: SharadarConfig | dict[str, Any] | None = None,
         advanced: AdvancedConfig | dict[str, Any] | None = None,
     ) -> BaseClient:
         return SharadarClient(
@@ -69,7 +67,6 @@ def _register_sharadar() -> None:
             run_history_retention_days=run_history_retention_days,
             http_timeout_s=http_timeout_s,
             limits=limits,
-            sharadar=sharadar,
             advanced=advanced,
         )
 
@@ -105,7 +102,6 @@ def _register_yfinance() -> None:
         run_history_retention_days: int | None = None,
         http_timeout_s: float | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
-        sharadar: SharadarConfig | dict[str, Any] | None = None,
         advanced: AdvancedConfig | dict[str, Any] | None = None,
     ) -> BaseClient:
         return YFinanceClient(
@@ -158,7 +154,6 @@ def create_client(
     run_history_retention_days: int | None = None,
     http_timeout_s: float | None = None,
     limits: HTTPConfig | dict[str, Any] | None = None,
-    sharadar: SharadarConfig | dict[str, Any] | None = None,
     advanced: AdvancedConfig | dict[str, Any] | None = None,
 ) -> BaseClient:
     """
@@ -183,7 +178,6 @@ def create_client(
         run_history_retention_days: Retention window for run-history records.
         http_timeout_s: HTTP request timeout in seconds.
         limits: Grouped HTTP connection-pool configuration.
-        sharadar: Grouped Sharadar-specific metadata-cache configuration.
         advanced: Grouped advanced and transitional settings.
 
     Returns:
@@ -206,11 +200,6 @@ def create_client(
             registration = client_registry.get(provider)
         else:
             raise KeyError(f"Unsupported client: {provider}") from None
-
-    if sharadar is not None and provider != "sharadar":
-        raise ValueError(
-            f"sharadar config is only supported for provider='sharadar', got provider='{provider}'"
-        )
 
     resolved_key = api_key
     if not resolved_key and registration.env_api_key:
@@ -270,7 +259,6 @@ def create_client(
                 run_history_retention_days=run_history_retention_days,
                 http_timeout_s=http_timeout_s,
                 limits=limits,
-                sharadar=sharadar,
                 advanced=advanced,
             ),
         )

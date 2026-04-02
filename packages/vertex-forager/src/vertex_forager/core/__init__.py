@@ -21,7 +21,6 @@ from vertex_forager.core.config import (
     RetryConfig,
     RunResult,
     SchedulerConfig,
-    SharadarConfig,
 )
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor
@@ -63,7 +62,6 @@ __all__ = [
     "RetryConfig",
     "RunResult",
     "SchedulerConfig",
-    "SharadarConfig",
     "VertexForager",
     "retry",
 ]
