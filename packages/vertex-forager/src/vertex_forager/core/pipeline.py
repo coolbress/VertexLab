@@ -1313,18 +1313,16 @@ class VertexForager:
                         fh.flush()
                         os.fsync(fh.fileno())
                     os.replace(tmp_path, fpath)
+                    with os.open(str(dlq_dir), os.O_RDONLY) as dir_fd:
+                        os.fsync(dir_fd)
                     try:
                         register_dlq_entry(path=fpath, table=pkt.table, provider=pkt.provider, row_count=len(pkt.frame))
                     except Exception as reg_err:
                         with suppress(OSError):
                             fpath.unlink()
+                            with os.open(str(dlq_dir), os.O_RDONLY) as dir_fd:
+                                os.fsync(dir_fd)
                         raise reg_err
-                    with suppress(Exception):
-                        dir_fd = os.open(str(dlq_dir), os.O_RDONLY)
-                        try:
-                            os.fsync(dir_fd)
-                        finally:
-                            os.close(dir_fd)
                     self._inc("dlq_spooled_files_total", 1)
                     self._inc(f"dlq_spooled_files.{pkt.table}", 1)
                 except Exception as e2:
