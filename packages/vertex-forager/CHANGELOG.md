@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.20.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.19.1...vertex-forager-v0.20.0) (2026-04-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **vertex-forager:** replace implicit Sharadar metadata cache with explicit meta input ([#423](https://github.com/coolbress/VertexLab/issues/423))
+
+### Code Refactoring
+
+* **vertex-forager:** replace implicit Sharadar metadata cache with explicit meta input ([#423](https://github.com/coolbress/VertexLab/issues/423)) ([ab69b1e](https://github.com/coolbress/VertexLab/commit/ab69b1ee88ed16511ffd58f84f23e4a8280fed0b))
+
 ## [0.19.1](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.19.0...vertex-forager-v0.19.1) (2026-04-01)
 
 
