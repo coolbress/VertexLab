@@ -64,7 +64,7 @@ async def main_async() -> None:
                 "CSCO",
             ],
         )
-        yfc = YFinanceClient(rate_limit=60, structured_logs=False)
+        yfc = YFinanceClient(rate_limit=60)
         try:
             yf_run = yfc.get_financials(
                 kind="income_stmt",
@@ -85,7 +85,7 @@ async def main_async() -> None:
         sh_error: str | None = None
         if sh_key:
             try:
-                shc = SharadarClient(api_key=sh_key, rate_limit=60, structured_logs=False)
+                shc = SharadarClient(api_key=sh_key, rate_limit=60)
                 sh_run = shc.get_fundamental_data(
                     tickers=yf_tickers[:5],
                     connect_db=db_path,

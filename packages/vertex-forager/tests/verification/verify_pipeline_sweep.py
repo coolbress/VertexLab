@@ -17,7 +17,7 @@ def _get_yfinance_client(client_config: dict[str, Any]) -> Any:
         if err.name in {"pandas", "yfinance"}:
             raise RuntimeError(f"Skipping verification: {_YF_OPTIONAL_DEPS_MSG}") from err
         raise
-    return YFinanceClient(rate_limit=60, structured_logs=False, **client_config)
+    return YFinanceClient(rate_limit=60, **client_config)
 
 
 def _resolve_paths() -> tuple[Path, Path, Path]:
@@ -131,7 +131,7 @@ def _measure_yfinance_financials(
 
 
 def _measure_sharadar(*, db_path: Path, inputs: dict[str, Any], client_config: dict[str, Any]) -> dict[str, Any]:
-    shc = SharadarClient(api_key=inputs["sh_key"], rate_limit=60, structured_logs=False, **client_config)
+    shc = SharadarClient(api_key=inputs["sh_key"], rate_limit=60, **client_config)
     t0 = time.monotonic()
     sh_fin = shc.get_fundamental_data(
         tickers=inputs["sh_tickers"],

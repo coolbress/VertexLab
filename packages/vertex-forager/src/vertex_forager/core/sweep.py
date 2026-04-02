@@ -81,7 +81,7 @@ def _measure_yfinance_price(
 ) -> dict[str, Any]:
     from vertex_forager.providers.yfinance.client import YFinanceClient
 
-    client = YFinanceClient(rate_limit=60, structured_logs=False, **client_config)
+    client = YFinanceClient(rate_limit=60, **client_config)
     t0 = time.monotonic()
     run_result = client.get_price_data(
         tickers=tickers,
@@ -102,7 +102,7 @@ def _measure_yfinance_financials(
 ) -> dict[str, Any]:
     from vertex_forager.providers.yfinance.client import YFinanceClient
 
-    client = YFinanceClient(rate_limit=60, structured_logs=False, **client_config)
+    client = YFinanceClient(rate_limit=60, **client_config)
     t0 = time.monotonic()
     run_result = client.get_financials(
         kind="income_stmt",
@@ -126,7 +126,7 @@ def _measure_sharadar(
 ) -> dict[str, Any]:
     from vertex_forager.providers.sharadar.client import SharadarClient
 
-    client = SharadarClient(api_key=api_key, rate_limit=60, structured_logs=False, **client_config)
+    client = SharadarClient(api_key=api_key, rate_limit=60, **client_config)
     t0 = time.monotonic()
     run_result = client.get_fundamental_data(
         tickers=tickers,

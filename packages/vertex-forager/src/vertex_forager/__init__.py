@@ -1,3 +1,5 @@
+import logging as stdlib_logging
+
 from vertex_forager.api import (
     BaseClient,
     BaseRouter,
@@ -27,6 +29,8 @@ from vertex_forager.exceptions import (
     ValidationError,
     WriterError,
 )
+
+stdlib_logging.getLogger("vertex_forager").addHandler(stdlib_logging.NullHandler())
 
 __version__ = "0.21.0"
 

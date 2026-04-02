@@ -24,6 +24,7 @@ class StubRouter:
     @property
     def provider(self) -> str:
         return "stub"
+
     async def generate_jobs(
         self,
         *,
@@ -37,6 +38,7 @@ class StubRouter:
             symbol="AAPL",
             spec=RequestSpec(url="https://example.com"),
         )
+
     def parse(self, *, job: FetchJob, payload: bytes) -> ParseResult:
         return ParseResult(packets=[], next_jobs=[])
 
@@ -48,8 +50,10 @@ class StubWriter:
             rows=int(packet.frame.height),
             partitions={},
         )
+
     async def flush(self) -> None:
         return None
+
     async def close(self) -> None:
         return None
 
@@ -63,6 +67,7 @@ class _Resp:
     def __init__(self, content: bytes, status_code: int = 200) -> None:
         self.content = content
         self.status_code = status_code
+
     def raise_for_status(self) -> None:
         if not (200 <= self.status_code < 300):
             req = httpx.Request("GET", "https://example.com")
@@ -73,14 +78,16 @@ class _Resp:
 
 class StubClient:
     def __init__(self) -> None:
-        self._config = ResolvedClientConfig(requests_per_minute=60, structured_logs=True)
+        self._config = ResolvedClientConfig(requests_per_minute=60)
         self.controller = FlowController(requests_per_minute=60, concurrency_limit=1)
         self._calls = 0
+
     async def run_async(self, method: str, url: str, **kwargs: Any) -> _Resp:
         self._calls += 1
         if self._calls == 1:
             return _Resp(b"first", status_code=429)
         return _Resp(b"second", status_code=200)
+
     @asynccontextmanager
     async def _http_client(self):
         yield None
@@ -109,14 +116,14 @@ async def test_fetch_with_retry_logs_and_succeeds_on_429_then_200(
     )
     payload = await pipeline._fetch_with_retry(job)
     assert payload == b"second"
-    messages = [
-        rec.message for rec in caplog.records if rec.name == "vertex_forager.debug"
+    stages = [
+        getattr(rec, "vf_stage", None)
+        for rec in caplog.records
+        if rec.name == "vertex_forager.debug" and rec.message == "vertex_forager stage"
     ]
-    assert any("stage=http_start" in m for m in messages)
-    assert any(
-        "stage=http_retry" in m or "stage=http_retry_reason" in m for m in messages
-    )
-    assert any("stage=http_end" in m for m in messages)
+    assert "http_start" in stages
+    assert any(isinstance(stage, str) and stage.startswith("http_retry_reason:") for stage in stages)
+    assert "http_end" in stages
 
 
 @pytest.mark.asyncio

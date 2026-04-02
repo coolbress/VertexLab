@@ -76,20 +76,6 @@ def default_async_client() -> httpx.AsyncClient:
     return _default_async_client()
 
 
-def _parse_flag(value: Any, default: bool) -> Any:
-    if value is None:
-        return default
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        normalized = value.strip().lower()
-        if normalized in {"true", "1", "yes"}:
-            return True
-        if normalized in {"false", "0", "no"}:
-            return False
-    return value
-
-
 @dataclass
 class _NormalizedClientSettings:
     runtime_config: ResolvedClientConfig
@@ -100,8 +86,6 @@ class _NormalizedClientSettings:
 def _normalize_client_settings(
     *,
     rate_limit: int,
-    structured_logs: bool | None,
-    log_verbose: bool | None,
     schedule: SchedulerConfig | dict[str, Any] | None,
     retry: RetryConfig | dict[str, Any] | None,
     adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None,
@@ -123,8 +107,6 @@ def _normalize_client_settings(
 
     runtime_config = ResolvedClientConfig(
         requests_per_minute=rate_limit,
-        structured_logs=_parse_flag(structured_logs, False),
-        log_verbose=_parse_flag(log_verbose, False),
         schedule=schedule_config,
         retry=retry_config,
         adaptive_throttle=adaptive_throttle_config,
@@ -203,8 +185,6 @@ class BaseClient(ABC, Generic[T]):
         *,
         api_key: str | None = None,
         rate_limit: int,
-        structured_logs: bool | None = None,
-        log_verbose: bool | None = None,
         schedule: SchedulerConfig | dict[str, Any] | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
         adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
@@ -221,8 +201,6 @@ class BaseClient(ABC, Generic[T]):
         Args:
             api_key: API key for the provider (optional, depends on provider).
             rate_limit: Maximum requests per minute (RPM) allowed for this client.
-            structured_logs: Enables structured stage logs when True.
-            log_verbose: Promotes structured logs to INFO when True.
             schedule: Grouped scheduler configuration for always-on DRR fairness.
             retry: Grouped retry policy configuration.
             adaptive_throttle: Grouped adaptive throttle policy configuration.
@@ -237,8 +215,6 @@ class BaseClient(ABC, Generic[T]):
         self.api_key = api_key
         normalized = _normalize_client_settings(
             rate_limit=rate_limit,
-            structured_logs=structured_logs,
-            log_verbose=log_verbose,
             schedule=schedule,
             retry=retry,
             adaptive_throttle=adaptive_throttle,
@@ -252,8 +228,6 @@ class BaseClient(ABC, Generic[T]):
         )
 
         self._config = normalized.runtime_config
-        self._structured_logs = bool(self._config.structured_logs)
-        self._log_verbose = bool(self._config.log_verbose)
         self._http_timeout_s = normalized.http_timeout_s
         self._http_limits = normalized.http_limits
 
@@ -431,20 +405,20 @@ class BaseClient(ABC, Generic[T]):
         }
         run_kwargs = filter_reserved_kwargs(kwargs, reserved)
 
-        # Structured log: start
-        if self._structured_logs:
-            sym_count = len(symbols or [])
-            attempt = self._safe_int(run_kwargs.get("attempt", 0))
-            msg_s = (
-                f"OBS provider={sanitize_field(router.provider)} "
-                f"dataset={sanitize_field(dataset)} "
-                f"symbol=* symbols={sym_count} "
-                f"stage=client_run_start attempt={attempt} duration=0.000s"
-            )
-            if self._log_verbose:
-                logger.info(msg_s)
-            else:
-                logger.debug(msg_s)
+        sym_count = len(symbols or [])
+        attempt = self._safe_int(run_kwargs.get("attempt", 0))
+        logger.debug(
+            "vertex_forager stage",
+            extra={
+                "vf_provider": sanitize_field(router.provider),
+                "vf_dataset": sanitize_field(dataset),
+                "vf_symbol": "*",
+                "vf_stage": "client_run_start",
+                "vf_symbols": sym_count,
+                "vf_attempt": attempt,
+                "vf_duration_s": 0.0,
+            },
+        )
 
         # Delegate orchestration to dispatcher
         from vertex_forager.clients.dispatcher import run_pipeline_for
@@ -464,21 +438,21 @@ class BaseClient(ABC, Generic[T]):
             **run_kwargs,
         )
 
-        # Structured log: end
-        if self._structured_logs:
-            err_n = len(self.last_run.errors) if self.last_run else 0
-            dur = time.monotonic() - t0
-            attempt = self._safe_int(run_kwargs.get("attempt", 0))
-            msg_e = (
-                f"OBS provider={sanitize_field(router.provider)} "
-                f"dataset={sanitize_field(dataset)} "
-                f"symbol=* stage=client_run_end errors={err_n} "
-                f"attempt={attempt} duration={dur:.3f}s"
-            )
-            if self._log_verbose:
-                logger.info(msg_e)
-            else:
-                logger.debug(msg_e)
+        err_n = len(self.last_run.errors) if self.last_run else 0
+        dur = round(time.monotonic() - t0, 3)
+        attempt = self._safe_int(run_kwargs.get("attempt", 0))
+        logger.debug(
+            "vertex_forager stage",
+            extra={
+                "vf_provider": sanitize_field(router.provider),
+                "vf_dataset": sanitize_field(dataset),
+                "vf_symbol": "*",
+                "vf_stage": "client_run_end",
+                "vf_errors": err_n,
+                "vf_attempt": attempt,
+                "vf_duration_s": dur,
+            },
+        )
         return self.last_run
 
     @asynccontextmanager

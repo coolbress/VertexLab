@@ -160,16 +160,6 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             )
             bs_int = self.PRICE_BATCH_SIZE
         self._price_batch_size = max(1, min(PRICE_BATCH_MAX, bs_int))
-        structured_logs_arg = kwargs.get("structured_logs")
-        log_verbose_arg = kwargs.get("log_verbose")
-        if structured_logs_arg is not None:
-            self._structured_logs = _parse_bool(structured_logs_arg)
-        else:
-            self._structured_logs = False
-        if log_verbose_arg is not None:
-            self._log_verbose = _parse_bool(log_verbose_arg)
-        else:
-            self._log_verbose = False
         allow_pickle_arg = kwargs.get("allow_pickle_compat")
         if allow_pickle_arg is not None:
             self._allow_pickle_compat = _parse_bool(allow_pickle_arg)
@@ -450,20 +440,19 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         duration: float,
         rows: int | None,
     ) -> None:
-        if not self._structured_logs:
-            return
         attempt_num = attempt or 0
-        rows_part = "" if rows is None else f" packets=1 rows={rows}"
-        msg = (
-            f"OBS provider={sanitize_field(self.provider)} "
-            f"dataset={sanitize_field(dataset)} "
-            f"symbol={sanitize_field(symbol)} "
-            f"stage={stage} attempt={attempt_num} duration={duration:.3f}s{rows_part}"
-        )
-        if self._log_verbose:
-            logger.info(msg)
-        else:
-            logger.debug(msg)
+        extra: dict[str, object] = {
+            "vf_provider": sanitize_field(self.provider),
+            "vf_dataset": sanitize_field(dataset),
+            "vf_symbol": sanitize_field(symbol),
+            "vf_stage": sanitize_field(stage),
+            "vf_attempt": int(attempt_num),
+            "vf_duration_s": round(float(duration), 3),
+            "vf_packets": 1,
+        }
+        if rows is not None:
+            extra["vf_rows"] = int(rows)
+        logger.debug("vertex_forager stage", extra=extra)
 
     # --------------------------------------
     # Generate Jobs Helpers

@@ -10,14 +10,14 @@ Public runtime configuration is now centered on `create_client(...)` plus groupe
 
 ## Top-Level Client Parameters
 
-- `structured_logs: bool = False`
-- `log_verbose: bool = False`
 - `schedule: SchedulerConfig = SchedulerConfig()`
 - `concurrency: int | None = None`
 - `flush_threshold_rows: int`
 - `checkpoint_retention_days: int = 7`
 - `run_history_retention_days: int = 90`
 - `http_timeout_s: float`
+
+Stage logs are always emitted at DEBUG level; the host application controls visibility and formatting via standard `logging` configuration.
 
 ## Grouped Public Config
 

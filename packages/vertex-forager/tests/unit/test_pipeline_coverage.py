@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 import itertools
+import logging
 from pathlib import Path
 import time
 from typing import Any, cast
@@ -87,7 +88,6 @@ def _make_engine(
     config = ResolvedClientConfig(
         requests_per_minute=60,
         concurrency=concurrency,
-        structured_logs=False,
         schedule=schedule or SchedulerConfig(),
     )
     controller = FlowController(requests_per_minute=60, concurrency_limit=concurrency)
@@ -100,6 +100,31 @@ def _make_engine(
         controller=controller,
     )
     return engine, w
+
+
+def test_log_structured_emits_debug_record_with_extra_fields(caplog: pytest.LogCaptureFixture) -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    caplog.set_level(logging.DEBUG, logger="vertex_forager.debug")
+
+    engine._log_structured(
+        provider="sharadar",
+        dataset="price",
+        symbol="AAPL",
+        stage="fetch_done",
+        attempt=2,
+        duration_s=1.2345,
+    )
+
+    record = next(
+        rec for rec in caplog.records if rec.name == "vertex_forager.debug" and rec.message == "vertex_forager stage"
+    )
+    assert record.vf_provider == "sharadar"
+    assert record.vf_dataset == "price"
+    assert record.vf_symbol == "AAPL"
+    assert record.vf_stage == "fetch_done"
+    assert record.vf_attempt == 2
+    assert record.vf_duration_s == 1.234
 
 
 # ─── Test 1: always-on DRR behavior ─────────────────────────────────────
