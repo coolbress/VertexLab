@@ -181,16 +181,25 @@ class SharadarClient(BaseClient[SharadarDataset]):
 
         self._mapper = SchemaMapper()
 
-    def _load_ticker_metadata_from_meta_db(self, meta: str | Path | None) -> pl.DataFrame | None:
+    def _load_ticker_metadata_from_meta_db(
+        self, meta: str | Path | None, symbols: list[str] | None = None
+    ) -> pl.DataFrame | None:
         if meta is None:
             return None
-        with duckdb.connect(str(meta), read_only=True) as conn:
-            df = conn.table(DATASET_TABLE["tickers"]).select(*META_REQUIRED_COLUMNS).pl()
+        try:
+            with duckdb.connect(str(meta), read_only=True) as conn:
+                query = f'SELECT {",".join(META_REQUIRED_COLUMNS)} FROM "{DATASET_TABLE["tickers"]}"'  # noqa: S608
+                if symbols:
+                    ticker_list = ", ".join(f"'{t}'" for t in symbols)
+                    query += f" WHERE ticker IN ({ticker_list})"
+                df = conn.execute(query).pl()
+        except duckdb.CatalogException as e:
+            raise InputError(
+                "meta DuckDB must contain sharadar_tickers with ticker, firstpricedate, lastpricedate"
+            ) from e
         if df.is_empty():
             return None
-        if any(col not in df.columns for col in META_REQUIRED_COLUMNS):
-            raise InputError("meta DuckDB must contain sharadar_tickers with ticker, firstpricedate, lastpricedate")
-        return df.select(list(META_REQUIRED_COLUMNS)).unique(subset=["ticker"], keep="last", maintain_order=True)
+        return df.unique(subset=["ticker"], keep="last", maintain_order=True)
 
     # ----------------------------------------------------------------
     # Public User Methods
@@ -408,7 +417,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             progress=progress,
             on_progress=on_progress,
         )
-        return await self._fetch_per_ticker(cfg, ticker_metadata=self._load_ticker_metadata_from_meta_db(meta))
+        return await self._fetch_per_ticker(cfg, ticker_metadata=self._load_ticker_metadata_from_meta_db(meta, tickers))
 
     def get_fundamental_data(
         self,
@@ -489,7 +498,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             progress=progress,
             on_progress=on_progress,
         )
-        return await self._fetch_per_ticker(cfg, ticker_metadata=self._load_ticker_metadata_from_meta_db(meta))
+        return await self._fetch_per_ticker(cfg, ticker_metadata=self._load_ticker_metadata_from_meta_db(meta, tickers))
 
     def get_daily_metrics(
         self,
@@ -565,7 +574,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             progress=progress,
             on_progress=on_progress,
         )
-        return await self._fetch_per_ticker(cfg, ticker_metadata=self._load_ticker_metadata_from_meta_db(meta))
+        return await self._fetch_per_ticker(cfg, ticker_metadata=self._load_ticker_metadata_from_meta_db(meta, tickers))
 
     def get_corporate_actions(
         self,
@@ -641,9 +650,9 @@ class SharadarClient(BaseClient[SharadarDataset]):
             progress=progress,
             on_progress=on_progress,
         )
-        return await self._fetch_per_ticker(cfg, ticker_metadata=self._load_ticker_metadata_from_meta_db(meta))
+        return await self._fetch_per_ticker(cfg, ticker_metadata=self._load_ticker_metadata_from_meta_db(meta, tickers))
 
-    def get_insider_trading(
+    def get_insider_transactions(
         self,
         *,
         tickers: list[str],
@@ -717,7 +726,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             progress=progress,
             on_progress=on_progress,
         )
-        return await self._fetch_per_ticker(cfg, ticker_metadata=self._load_ticker_metadata_from_meta_db(meta))
+        return await self._fetch_per_ticker(cfg, ticker_metadata=self._load_ticker_metadata_from_meta_db(meta, tickers))
 
     def get_institutional_ownership(
         self,
@@ -793,7 +802,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             progress=progress,
             on_progress=on_progress,
         )
-        return await self._fetch_per_ticker(cfg, ticker_metadata=self._load_ticker_metadata_from_meta_db(meta))
+        return await self._fetch_per_ticker(cfg, ticker_metadata=self._load_ticker_metadata_from_meta_db(meta, tickers))
 
     # ----------------------------------------------------------------
     # Internal Data Fetchers
