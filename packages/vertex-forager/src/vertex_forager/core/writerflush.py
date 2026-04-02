@@ -26,6 +26,8 @@ IncFunc = Callable[[str, int], None]
 ObserveFunc = Callable[[str, float], None]
 AsyncFunc = Callable[..., Awaitable[None]]
 
+_WRITER_CHUNK_ROWS = 20_000
+
 
 @runtime_checkable
 class LoggerLike(Protocol):
@@ -560,7 +562,7 @@ async def flush_writer_table(
         return
     first = packets[0]
     schema = get_table_schema(first.table)
-    chunk_size = writer_chunk_rows
+    chunk_size = writer_chunk_rows if writer_chunk_rows is not None else _WRITER_CHUNK_ROWS
     try:
         if isinstance(chunk_size, int) and chunk_size > 0:
             await flush_chunked_table(

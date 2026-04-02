@@ -44,7 +44,7 @@ from vertex_forager.constants import FLUSH_THRESHOLD_ROWS as DEFAULT_FLUSH_THRES
 from vertex_forager.constants import PRIORITY_NEW_JOB as CONST_PRIORITY_NEW_JOB
 from vertex_forager.constants import PRIORITY_PAGINATION as CONST_PRIORITY_PAGINATION
 from vertex_forager.constants import PRIORITY_SENTINEL as CONST_PRIORITY_SENTINEL
-from vertex_forager.constants import PROGRESS_LOG_CHUNK_ROWS, WRITER_CHUNK_ROWS
+from vertex_forager.constants import PROGRESS_LOG_CHUNK_ROWS
 from vertex_forager.core.checkpoint import (
     Checkpoint,
     find_latest_checkpoint,
@@ -1332,6 +1332,7 @@ class VertexForager:
                         entry = result.dlq_counts.get(pkt.table) or {"rescued": 0, "remaining": 0}
                         entry["remaining"] = entry.get("remaining", 0) + 1
                         result.dlq_counts[pkt.table] = entry
+                        self._inc("dlq_remaining_total", 1)
                         result.errors.append(RunError.from_exception(e, pkt.provider, pkt.table, ""))
 
     async def _fetch_worker(
@@ -2062,7 +2063,7 @@ class VertexForager:
             result=result,
             result_lock=result_lock,
             get_table_schema=ctx.get_table_schema,
-            writer_chunk_rows=WRITER_CHUNK_ROWS,
+            writer_chunk_rows=None,
             flush_chunked_table=_flush_chunked_table,
             flush_legacy_table=_flush_legacy_table,
             handle_writer_flush_error=_handle_writer_flush_error,
