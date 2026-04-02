@@ -675,6 +675,8 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
             return max(1, int(days * TRADING_DAYS_RATIO))
         elif dataset in ("fundamental", "insider", "institutional"):
             return max(1, int(days * QUARTERLY_DAYS_RATIO))
+        elif dataset == "tickers":
+            return 1
         else:
             return days
 

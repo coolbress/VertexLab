@@ -18,10 +18,6 @@ LOG_PARSE_UNEXPECTED_ERROR: Final[str] = "{prefix}: Unexpected error in parse fo
 LOG_POLARS_CONVERT_FAIL: Final[str] = "{prefix}: Failed to convert data to Polars: {error}"
 LOG_POLARS_CONVERT_UNEXPECTED: Final[str] = "{prefix}: Unexpected failure converting data to Polars"
 
-# Client common
-LOG_META_CACHE_MISS: Final[str] = "{prefix}: Metadata cache miss. Fetching ticker metadata first..."
-LOG_META_CACHED_COUNT: Final[str] = "{prefix}: Metadata cached: {count} tickers"
-LOG_META_PREFETCH_FAIL: Final[str] = "{prefix}: Failed to prefetch metadata: {error}. Smart batching will be disabled."
 LOG_RATE_LIMIT_INVALID_INT: Final[str] = "{prefix}: rate_limit {value} is invalid; falling back to default."
 LOG_RATE_LIMIT_EXCEEDS_DEFAULT: Final[str] = "{prefix}: rate_limit {value} exceeds default; API may throttle."
 LOG_RATE_LIMIT_INVALID_TYPE: Final[str] = "{prefix}: rate_limit '{value}' is invalid; falling back to default."

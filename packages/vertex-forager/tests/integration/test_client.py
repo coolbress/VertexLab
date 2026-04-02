@@ -30,10 +30,10 @@ class TestClientVisualization:
         with patch("vertex_forager.clients.base.VertexForager") as MockPipeline:
             mock_pipeline_instance = MockPipeline.return_value
             mock_pipeline_instance.run = AsyncMock(return_value=MagicMock())
+            with patch.object(sharadar_client, "_load_metadata_from_disk", return_value=None):
+                await sharadar_client._get_ticker_info_async()
 
-            await sharadar_client._get_ticker_info_async()
-
-            assert mock_pipeline_instance.run.await_args.kwargs["progress"] is False
+                assert mock_pipeline_instance.run.await_args.kwargs["progress"] is False
 
     @pytest.mark.asyncio
     async def test_get_price_data_uses_tqdm(self, sharadar_client, tmp_path):

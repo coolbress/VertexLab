@@ -60,6 +60,12 @@ Public runtime configuration is now centered on `create_client(...)` plus groupe
 - `max_pending_per_symbol: int | None = None`
 - `backpressure_threshold: int | None = None`
 
+### SharadarConfig
+
+- `metadata_cache_days: int = 1`
+
+`SharadarConfig` is provider-specific. Pass it only when `provider="sharadar"`. The client persists ticker metadata to `~/.cache/vertex-forager/sharadar/metadata.parquet` and reuses fresh rows across sessions to avoid refetching the full TICKERS dataset on cold starts.
+
 DLQ temporary-file cleanup remains an internal housekeeping behavior. `dlq_tmp_cleanup_on_error`, `dlq_tmp_periodic_cleanup`, and `dlq_tmp_retention_s` are not intended as user-facing tuning knobs.
 
 ## Example
@@ -71,6 +77,7 @@ from vertex_forager import (
     HTTPConfig,
     RetryConfig,
     SchedulerConfig,
+    SharadarConfig,
     create_client,
 )
 
@@ -90,6 +97,7 @@ client = create_client(
     retry=RetryConfig(max_attempts=3),
     throttle=AdaptiveThrottleConfig(enabled=False),
     limits=HTTPConfig(max_connections=200, max_keepalive_connections=100),
+    sharadar=SharadarConfig(metadata_cache_days=1),
     advanced=AdvancedConfig(),
 )
 ```

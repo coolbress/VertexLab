@@ -143,6 +143,14 @@ class HTTPConfig(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+class SharadarConfig(BaseModel):
+    """Provider-specific Sharadar settings."""
+
+    metadata_cache_days: int = Field(default=1, ge=0)
+
+    model_config = {"extra": "forbid"}
+
+
 class AdvancedConfig(BaseModel):
     """Advanced and transitional client settings.
 
@@ -295,7 +303,7 @@ class ResolvedClientConfig(BaseModel):
 
     Public callers should set configuration through `create_client(...)` and the
     grouped public config objects (`RetryConfig`, `AdaptiveThrottleConfig`, `HTTPConfig`,
-    `AdvancedConfig`, `SchedulerConfig`) rather than constructing this model directly.
+    `AdvancedConfig`, `SchedulerConfig`, `SharadarConfig`) rather than constructing this model directly.
     """
 
     requests_per_minute: int = Field(..., gt=0)
@@ -312,6 +320,7 @@ class ResolvedClientConfig(BaseModel):
     writer_concurrency: int = Field(default=1, ge=1)
     http_timeout_s: float = Field(default=HTTP_TIMEOUT_S, gt=0)
     limits: HTTPConfig = Field(default_factory=HTTPConfig)
+    sharadar: SharadarConfig = Field(default_factory=SharadarConfig)
     advanced: AdvancedConfig = Field(default_factory=AdvancedConfig)
     checkpoint_retention_days: int = Field(default=7, ge=0)
     run_history_retention_days: int = Field(default=90, ge=0)
@@ -549,4 +558,5 @@ __all__ = [
     "RetryConfig",
     "RunResult",
     "SchedulerConfig",
+    "SharadarConfig",
 ]

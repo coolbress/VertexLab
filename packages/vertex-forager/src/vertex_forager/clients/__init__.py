@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from vertex_forager.clients.base import BaseClient
 from vertex_forager.constants import DEFAULT_RATE_LIMIT
@@ -22,6 +22,7 @@ if TYPE_CHECKING:
         HTTPConfig,
         RetryConfig,
         SchedulerConfig,
+        SharadarConfig,
     )
 
 
@@ -47,6 +48,7 @@ def _register_sharadar() -> None:
         run_history_retention_days: int | None = None,
         http_timeout_s: float | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
+        sharadar: SharadarConfig | dict[str, Any] | None = None,
         advanced: AdvancedConfig | dict[str, Any] | None = None,
     ) -> BaseClient:
         return SharadarClient(
@@ -67,6 +69,7 @@ def _register_sharadar() -> None:
             run_history_retention_days=run_history_retention_days,
             http_timeout_s=http_timeout_s,
             limits=limits,
+            sharadar=sharadar,
             advanced=advanced,
         )
 
@@ -102,6 +105,7 @@ def _register_yfinance() -> None:
         run_history_retention_days: int | None = None,
         http_timeout_s: float | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
+        sharadar: SharadarConfig | dict[str, Any] | None = None,
         advanced: AdvancedConfig | dict[str, Any] | None = None,
     ) -> BaseClient:
         return YFinanceClient(
@@ -154,6 +158,7 @@ def create_client(
     run_history_retention_days: int | None = None,
     http_timeout_s: float | None = None,
     limits: HTTPConfig | dict[str, Any] | None = None,
+    sharadar: SharadarConfig | dict[str, Any] | None = None,
     advanced: AdvancedConfig | dict[str, Any] | None = None,
 ) -> BaseClient:
     """
@@ -178,6 +183,7 @@ def create_client(
         run_history_retention_days: Retention window for run-history records.
         http_timeout_s: HTTP request timeout in seconds.
         limits: Grouped HTTP connection-pool configuration.
+        sharadar: Grouped Sharadar-specific metadata-cache configuration.
         advanced: Grouped advanced and transitional settings.
 
     Returns:
@@ -200,6 +206,11 @@ def create_client(
             registration = client_registry.get(provider)
         else:
             raise KeyError(f"Unsupported client: {provider}") from None
+
+    if sharadar is not None and provider != "sharadar":
+        raise ValueError(
+            f"sharadar config is only supported for provider='sharadar', got provider='{provider}'"
+        )
 
     resolved_key = api_key
     if not resolved_key and registration.env_api_key:
@@ -235,6 +246,33 @@ def create_client(
             http_timeout_s=http_timeout_s,
             limits=limits,
             advanced=advanced,
+        )
+    if provider == "sharadar":
+        if rate_limit is None:
+            raise ValueError(f"Missing rate_limit for provider '{provider}'")
+        return cast(
+            "BaseClient",
+            cast("Any", registration.factory)(
+                api_key=resolved_key,
+                rate_limit=rate_limit,
+                metrics_enabled=metrics_enabled,
+                structured_logs=structured_logs,
+                log_verbose=log_verbose,
+                dlq_enabled=dlq_enabled,
+                schedule=schedule,
+                retry=retry,
+                adaptive_throttle=throttle,
+                concurrency=concurrency,
+                flush_threshold_rows=flush_threshold_rows,
+                writer_chunk_rows=writer_chunk_rows,
+                writer_concurrency=writer_concurrency,
+                checkpoint_retention_days=checkpoint_retention_days,
+                run_history_retention_days=run_history_retention_days,
+                http_timeout_s=http_timeout_s,
+                limits=limits,
+                sharadar=sharadar,
+                advanced=advanced,
+            ),
         )
     if rate_limit is None:
         raise ValueError(f"Missing rate_limit for provider '{provider}'")

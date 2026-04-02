@@ -1,25 +1,19 @@
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 import logging
+from pathlib import Path
 import re
 from typing import TYPE_CHECKING, Any, cast
 
-import duckdb
-import httpx
 import polars as pl
 
 from vertex_forager.clients.base import BaseClient
 from vertex_forager.constants import PAGES_UNIT, RESERVED_PIPELINE_KEYS, TICKERS_UNIT
+from vertex_forager.core.config import SharadarConfig
 from vertex_forager.core.types import JSONValue, SharadarDataset
 from vertex_forager.exceptions import InputError
-from vertex_forager.logging.constants import (
-    CLIENT_LOG_PREFIX,
-    LOG_META_CACHE_MISS,
-    LOG_META_CACHED_COUNT,
-    LOG_META_PREFETCH_FAIL,
-)
 from vertex_forager.providers.sharadar.constants import (
     BYTES_PER_TICKER_FULL as SH_BYTES_PER_TICKER_FULL,
 )
@@ -32,11 +26,10 @@ from vertex_forager.providers.sharadar.constants import (
 from vertex_forager.providers.sharadar.schema import DATASET_TABLE
 from vertex_forager.routers import create_router
 from vertex_forager.schema.mapper import SchemaMapper
-from vertex_forager.utils import run_sync_compat, validate_tickers
+from vertex_forager.utils import get_cache_dir, run_sync_compat, validate_tickers
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from pathlib import Path
 
     from vertex_forager.core.config import (
         AdaptiveThrottleConfig,
@@ -51,6 +44,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 TICKER_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
+METADATA_CACHE_FILE = "metadata.parquet"
+METADATA_REQUIRED_COLUMNS = ("ticker", "fetched_at")
 
 
 @dataclass(slots=True)
@@ -135,6 +130,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         run_history_retention_days: int | None = None,
         http_timeout_s: float | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
+        sharadar: SharadarConfig | dict[str, Any] | None = None,
         advanced: AdvancedConfig | dict[str, Any] | None = None,
     ) -> None:
         """Initialize the Sharadar client.
@@ -157,8 +153,12 @@ class SharadarClient(BaseClient[SharadarDataset]):
             run_history_retention_days: Retention window for run-history records.
             http_timeout_s: HTTP request timeout in seconds.
             limits: Grouped HTTP connection-pool configuration.
+            sharadar: Grouped Sharadar-specific metadata-cache configuration.
             advanced: Grouped advanced and transitional settings.
         """
+        sharadar_config = (
+            sharadar if isinstance(sharadar, SharadarConfig) else SharadarConfig.model_validate(sharadar or {})
+        )
         if not isinstance(api_key, str):
             raise InputError("Sharadar API Key must be a string")
         api_key = api_key.strip()
@@ -187,7 +187,91 @@ class SharadarClient(BaseClient[SharadarDataset]):
         )
 
         self._mapper = SchemaMapper()
-        self._metadata_cache: pl.DataFrame | None = None
+        self._config = self._config.model_copy(update={"sharadar": sharadar_config})
+
+    def _metadata_cache_path(self) -> Path:
+        return get_cache_dir() / "sharadar" / METADATA_CACHE_FILE
+
+    def _read_metadata_cache(self) -> pl.DataFrame | None:
+        cache_path = self._metadata_cache_path()
+        if not cache_path.exists():
+            return None
+        try:
+            return pl.read_parquet(cache_path)
+        except Exception as e:
+            logger.warning("Sharadar metadata cache read failed: %s", e)
+            return None
+
+    def _metadata_cutoff(self) -> datetime:
+        return datetime.now(timezone.utc) - timedelta(days=self._config.sharadar.metadata_cache_days)
+
+    def _filter_fresh_metadata(self, df: pl.DataFrame) -> pl.DataFrame:
+        if df.is_empty():
+            return df
+        cutoff = self._metadata_cutoff()
+        return df.filter(pl.col("fetched_at").cast(pl.Datetime(time_zone="UTC"), strict=False) >= pl.lit(cutoff))
+
+    def _load_metadata_parts_from_disk(self, tickers: list[str]) -> tuple[pl.DataFrame | None, list[str]]:
+        requested = list(dict.fromkeys(tickers))
+        cached = self._read_metadata_cache()
+        if cached is None or any(col not in cached.columns for col in METADATA_REQUIRED_COLUMNS):
+            return None, requested
+        fresh = self._filter_fresh_metadata(cached.filter(pl.col("ticker").is_in(requested)))
+        fresh_tickers = set(cast("list[str]", fresh.get_column("ticker").to_list())) if fresh.height > 0 else set()
+        missing = [ticker for ticker in requested if ticker not in fresh_tickers]
+        return (fresh if fresh.height > 0 else None), missing
+
+    def _load_metadata_from_disk(self, tickers: list[str] | None) -> pl.DataFrame | None:
+        cached = self._read_metadata_cache()
+        if cached is None or any(col not in cached.columns for col in METADATA_REQUIRED_COLUMNS):
+            return None
+        fresh = self._filter_fresh_metadata(cached)
+        if tickers is None:
+            if fresh.height != cached.height:
+                return None
+            return fresh
+        requested = list(dict.fromkeys(tickers))
+        filtered = fresh.filter(pl.col("ticker").is_in(requested))
+        cached_tickers = (
+            set(cast("list[str]", filtered.get_column("ticker").to_list())) if filtered.height > 0 else set()
+        )
+        if any(ticker not in cached_tickers for ticker in requested):
+            return None
+        return filtered
+
+    def _save_metadata_to_disk(self, df: pl.DataFrame) -> None:
+        if df.is_empty() or "ticker" not in df.columns:
+            return
+        cache_path = self._metadata_cache_path()
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        existing = self._read_metadata_cache()
+        merged = pl.concat([existing, df], how="diagonal_relaxed") if existing is not None else df
+        merged = merged.unique(subset=["ticker"], keep="last", maintain_order=True)
+        merged = self._filter_fresh_metadata(merged)
+        if merged.is_empty():
+            cache_path.unlink(missing_ok=True)
+            return
+        try:
+            merged.write_parquet(cache_path)
+        except Exception as e:
+            logger.warning("Sharadar metadata cache write failed: %s", e)
+
+    async def _get_partial_ticker_info_from_disk_or_api(
+        self, *, cfg: FetchConfig, tickers: list[str]
+    ) -> pl.DataFrame | RunResult:
+        cached_partial, missing_tickers = self._load_metadata_parts_from_disk(tickers)
+        if not missing_tickers:
+            return cached_partial if cached_partial is not None else pl.DataFrame()
+        cfg.symbols = missing_tickers
+        result = await self._fetch_per_ticker(cfg)
+        if not isinstance(result, pl.DataFrame):
+            return result
+        self._save_metadata_to_disk(result)
+        if cached_partial is None or cached_partial.is_empty():
+            return result
+        return pl.concat([cached_partial, result], how="diagonal_relaxed").unique(
+            subset=["ticker"], keep="last", maintain_order=True
+        )
 
     # ----------------------------------------------------------------
     # Public User Methods
@@ -755,6 +839,9 @@ class SharadarClient(BaseClient[SharadarDataset]):
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: object,
     ) -> pl.DataFrame | RunResult:
+        cached = self._load_metadata_from_disk(tickers)
+        if cached is not None:
+            return cached
         if tickers is None:
             cfg = FetchConfig(
                 dataset="tickers",
@@ -790,25 +877,9 @@ class SharadarClient(BaseClient[SharadarDataset]):
                 on_progress=on_progress,
                 extra=dict(kwargs),
             )
-            result = await self._fetch_per_ticker(cfg)
+            return await self._get_partial_ticker_info_from_disk_or_api(cfg=cfg, tickers=tickers)
         if isinstance(result, pl.DataFrame):
-            self._metadata_cache = result
-        elif connect_db:
-            try:
-                table = DATASET_TABLE["tickers"]
-                q_table = f'"{table}"'
-                from string import Template
-
-                with duckdb.connect(str(connect_db)) as conn:
-                    _tmpl = Template("SELECT ticker, firstpricedate, lastpricedate FROM ${t}")
-                    _q = _tmpl.substitute(t=q_table)
-                    df_pl = conn.execute(_q).pl()
-                self._metadata_cache = df_pl
-            except duckdb.Error as e:
-                logger.error("DuckDB error while loading ticker metadata cache: %s", e)
-            except Exception:
-                logger.exception("Unexpected error while loading ticker metadata cache")
-                raise
+            self._save_metadata_to_disk(result)
         return result
 
     async def _fetch_per_ticker(self, config: FetchConfig) -> pl.DataFrame | RunResult:
@@ -844,48 +915,35 @@ class SharadarClient(BaseClient[SharadarDataset]):
             bytes_per_item=bytes_per_item,
         )
 
-        # Sharadar-specific: Metadata caching for smart batching
-        if self._metadata_cache is None and config.dataset != "tickers":
-            logger.info(LOG_META_CACHE_MISS.format(prefix=CLIENT_LOG_PREFIX))
-            try:
+        ticker_metadata: pl.DataFrame | None = None
+        if config.dataset != "tickers" and config.symbols is not None:
+            cached_metadata, missing_tickers = self._load_metadata_parts_from_disk(config.symbols)
+            ticker_metadata = cached_metadata
+            if missing_tickers:
                 meta_result = await self._get_ticker_info_impl(
-                    tickers=None,
-                    connect_db=config.connect_db,
+                    tickers=missing_tickers,
+                    connect_db=None,
                     progress=False,
                 )
                 if isinstance(meta_result, pl.DataFrame):
-                    logger.info(LOG_META_CACHED_COUNT.format(prefix=CLIENT_LOG_PREFIX, count=len(meta_result)))
-            except (httpx.RequestError, asyncio.TimeoutError, OSError) as e:
-                logger.warning(LOG_META_PREFETCH_FAIL.format(prefix=CLIENT_LOG_PREFIX, error=type(e).__name__))
+                    self._save_metadata_to_disk(meta_result)
+                    ticker_metadata = (
+                        meta_result
+                        if ticker_metadata is None or ticker_metadata.is_empty()
+                        else pl.concat([ticker_metadata, meta_result], how="diagonal_relaxed").unique(
+                            subset=["ticker"], keep="last", maintain_order=True
+                        )
+                    )
 
-        total_items = (
-            config.total_items
-            if config.total_items is not None
-            else (
-                len(config.symbols)
-                if config.symbols
-                else (self.ESTIMATED_TOTAL_TICKERS if config.dataset == "tickers" else None)
-            )
-        )
-
-        router_kwargs: dict[str, JSONValue] = {
-            "start_date": config.start_date,
-            "end_date": config.end_date,
-        }
         pipeline_kwargs: dict[str, JSONValue] = {
             k: v for k, v in dict(config.extra).items() if k not in RESERVED_PIPELINE_KEYS
         }
 
         result_obj = await self._run_sharadar_pipeline(
             config=config,
-            total_items=total_items,
-            router_kwargs=router_kwargs,
             pipeline_kwargs=pipeline_kwargs,
+            ticker_metadata=ticker_metadata,
         )
-
-        if config.dataset == "tickers" and isinstance(result_obj, pl.DataFrame):
-            logger.debug("Caching full metadata from explicit get_ticker_info() call.")
-            self._metadata_cache = result_obj
         return result_obj
 
     async def _fetch_pagination(self, config: FetchConfig) -> pl.DataFrame | RunResult:
@@ -902,18 +960,12 @@ class SharadarClient(BaseClient[SharadarDataset]):
             pl.DataFrame for in-memory mode, RunResult for database mode.
         """
 
-        router_kwargs: dict[str, JSONValue] = {
-            "start_date": config.start_date,
-            "end_date": config.end_date,
-        }
         pipeline_kwargs: dict[str, JSONValue] = {
             k: v for k, v in dict(config.extra).items() if k not in RESERVED_PIPELINE_KEYS
         }
 
         result_obj = await self._run_sharadar_pipeline(
             config=config,
-            total_items=None,
-            router_kwargs=router_kwargs,
             pipeline_kwargs=pipeline_kwargs,
         )
         return result_obj
@@ -922,9 +974,8 @@ class SharadarClient(BaseClient[SharadarDataset]):
         self,
         *,
         config: FetchConfig,
-        total_items: int | None,
-        router_kwargs: dict[str, JSONValue],
         pipeline_kwargs: dict[str, JSONValue],
+        ticker_metadata: pl.DataFrame | None = None,
     ) -> pl.DataFrame | RunResult:
         async with self.managed_writer(config.connect_db, show_progress=config.progress) as writer:
             router = create_router(
@@ -933,7 +984,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
                 rate_limit=self._config.requests_per_minute,
                 start_date=config.start_date,
                 end_date=config.end_date,
-                ticker_metadata=self._metadata_cache,
+                ticker_metadata=ticker_metadata,
             )
 
             await self.run_pipeline(
