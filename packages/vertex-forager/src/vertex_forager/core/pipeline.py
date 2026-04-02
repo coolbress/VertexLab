@@ -204,6 +204,14 @@ def _count_requested_symbol_units(symbols: Symbols | None) -> int | None:
     return total
 
 
+def _fsync_dir(path: str) -> None:
+    dir_fd = os.open(str(path), os.O_RDONLY)
+    try:
+        os.fsync(dir_fd)
+    finally:
+        os.close(dir_fd)
+
+
 def _count_pending_request_jobs(req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] | None) -> int:
     """Count pending (non-sentinel) jobs in a request queue.
 
@@ -1313,21 +1321,13 @@ class VertexForager:
                         fh.flush()
                         os.fsync(fh.fileno())
                     os.replace(tmp_path, fpath)
-                    dir_fd = os.open(str(dlq_dir), os.O_RDONLY)
-                    try:
-                        os.fsync(dir_fd)
-                    finally:
-                        os.close(dir_fd)
+                    _fsync_dir(str(dlq_dir))
                     try:
                         register_dlq_entry(path=fpath, table=pkt.table, provider=pkt.provider, row_count=len(pkt.frame))
                     except Exception as reg_err:
                         with suppress(OSError):
                             fpath.unlink()
-                            dir_fd2 = os.open(str(dlq_dir), os.O_RDONLY)
-                            try:
-                                os.fsync(dir_fd2)
-                            finally:
-                                os.close(dir_fd2)
+                            _fsync_dir(str(dlq_dir))
                         raise reg_err
                     self._inc("dlq_spooled_files_total", 1)
                     self._inc(f"dlq_spooled_files.{pkt.table}", 1)
