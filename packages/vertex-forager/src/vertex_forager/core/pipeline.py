@@ -995,7 +995,7 @@ class VertexForager:
         self._merge_component_counters()
         result.metrics_counters = dict(self._counters)
         result.metrics_histograms = {k: list(v) for k, v in self._hists.items()}
-        self._summary = self._compute_summary()
+        self._summary.update(self._compute_summary())
         result.metrics_summary = dict(self._summary)
         sink = self._metrics_sink
         if sink is not None:

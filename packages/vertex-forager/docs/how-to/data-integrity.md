@@ -14,7 +14,7 @@ mapper = SchemaMapper(strict_validation=False)  # default
 strict_mapper = SchemaMapper(strict_validation=True)  # raises on missing columns / strict casts
 ```
 
-Counters (metrics enabled only):
+Counters:
 
 - `schema_missing_cols_filled`: cells filled as `null` in non‑strict mode
 - `schema_extra_cols_preserved_count`: extra input columns preserved

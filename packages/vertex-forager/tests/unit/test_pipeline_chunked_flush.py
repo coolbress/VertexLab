@@ -44,9 +44,10 @@ async def test_chunked_flush_writes_multiple_chunks() -> None:
     result_lock = asyncio.Lock()
 
     # WRITER_CHUNK_ROWS + 1 rows total -> chunks: WRITER_CHUNK_ROWS, 1
+    split_point = WRITER_CHUNK_ROWS - 1
     frames = [
-        pl.DataFrame({"id": list(range(12_000))}),
-        pl.DataFrame({"id": list(range(12_000, WRITER_CHUNK_ROWS))}),
+        pl.DataFrame({"id": list(range(split_point))}),
+        pl.DataFrame({"id": list(range(split_point, WRITER_CHUNK_ROWS))}),
         pl.DataFrame({"id": [WRITER_CHUNK_ROWS]}),
     ]
     for frame in frames:

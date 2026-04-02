@@ -12,10 +12,12 @@ Chunked flush reduces memory peaks by writing in bounded batches. Tune threshold
 - Start with:
   - `flush_threshold_rows`: 500_000 (default)
   - Keep `flush_threshold_rows` at default and rely on internal chunking unless you have a clear reason to tune flush cadence.
-- Increase chunk size if:
+- Increase `flush_threshold_rows` if:
   - Write throughput is low but memory headroom is ample.
-- Decrease chunk size if:
+- Decrease `flush_threshold_rows` if:
   - Peak memory or GC pressure increases during merges.
+
+Note: chunk size (`WRITER_CHUNK_ROWS`) is an internal constant and not user-configurable.
 
 ## Example
 

@@ -30,7 +30,7 @@
   - Inspect `RunResult.dlq_counts` and `RunResult.errors` for `DLQ=spooled` or `DLQ=spool_failed`.
 - Actions
   - Ensure the app root is writable.
-  - Use recovery CLI to reinject DLQ artifacts when spooling is enabled.
+  - Use recovery CLI to reinject DLQ artifacts.
 
 ## Writer validation failures (PK missing/null)
 

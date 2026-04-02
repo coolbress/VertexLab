@@ -121,7 +121,7 @@ The CLI now reads environment variables and supports `vertex-forager collect`, `
 
 ### DLQ spool
 
-Dead Letter Queue spooling is enabled by default. Failed write packets are persisted to disk with `fsync` and atomic replace.
+Dead Letter Queue spooling is always enabled; failed write packets are persisted to disk with `fsync` and atomic replace.
 
 ### Writer chunked flush
 
