@@ -102,7 +102,7 @@ def test_validate_unique_key_raises_missing_column() -> None:
 
 
 @pytest.mark.asyncio
-async def test_flush_writer_table_uses_legacy_when_chunk_size_missing() -> None:
+async def test_flush_writer_table_uses_chunked() -> None:
     buffers: dict[str, list[FramePacket]] = {"t": [_packet("t", rows=1)]}
     buffer_rows: dict[str, int] = {"t": 1}
     called = {"legacy": 0, "chunked": 0}
@@ -123,7 +123,6 @@ async def test_flush_writer_table_uses_legacy_when_chunk_size_missing() -> None:
         result=RunResult(provider="sharadar"),
         result_lock=asyncio.Lock(),
         get_table_schema=lambda _table: object(),
-        writer_chunk_rows=None,
         flush_chunked_table=_flush_chunked_table,
         flush_legacy_table=_flush_legacy_table,
         handle_writer_flush_error=_handle_writer_flush_error,
@@ -135,5 +134,5 @@ async def test_flush_writer_table_uses_legacy_when_chunk_size_missing() -> None:
         duckdb_module=None,
         logger=type("L", (), {"error": lambda *args, **kwargs: None, "exception": lambda *args, **kwargs: None})(),
     )
-    assert called["legacy"] == 1
-    assert called["chunked"] == 0
+    assert called["chunked"] == 1
+    assert called["legacy"] == 0

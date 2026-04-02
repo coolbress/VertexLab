@@ -49,6 +49,7 @@ from vertex_forager.core.checkpoint import (
     Checkpoint,
     find_latest_checkpoint,
     get_cache_dir,
+    register_dlq_entry,
     save_checkpoint,
     save_run_history,
 )
@@ -1312,6 +1313,7 @@ class VertexForager:
                         fh.flush()
                         os.fsync(fh.fileno())
                     os.replace(tmp_path, fpath)
+                    register_dlq_entry(path=fpath, table=pkt.table, provider=pkt.provider, row_count=len(pkt.frame))
                     with suppress(Exception):
                         dir_fd = os.open(str(dlq_dir), os.O_RDONLY)
                         try:
@@ -2063,7 +2065,6 @@ class VertexForager:
             result=result,
             result_lock=result_lock,
             get_table_schema=ctx.get_table_schema,
-            writer_chunk_rows=None,
             flush_chunked_table=_flush_chunked_table,
             flush_legacy_table=_flush_legacy_table,
             handle_writer_flush_error=_handle_writer_flush_error,
