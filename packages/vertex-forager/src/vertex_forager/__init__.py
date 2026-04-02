@@ -1,4 +1,4 @@
-from importlib import import_module
+import logging
 
 from vertex_forager.api import (
     BaseClient,
@@ -30,7 +30,7 @@ from vertex_forager.exceptions import (
     WriterError,
 )
 
-import_module("logging").getLogger("vertex_forager").addHandler(import_module("logging").NullHandler())
+logging.getLogger("vertex_forager").addHandler(logging.NullHandler())
 
 __version__ = "0.21.0"
 
