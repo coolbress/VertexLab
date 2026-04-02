@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.21.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.20.0...vertex-forager-v0.21.0) (2026-04-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **vertex-forager:** remove 6 deprecated client parameters and dead code ([#426](https://github.com/coolbress/VertexLab/issues/426))
+
+### Code Refactoring
+
+* **vertex-forager:** remove 6 deprecated client parameters and dead code ([#426](https://github.com/coolbress/VertexLab/issues/426)) ([c9eae53](https://github.com/coolbress/VertexLab/commit/c9eae5387de288bfaa5f7e5cc98dd3a6ac38db1e))
+
 ## [0.20.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.19.1...vertex-forager-v0.20.0) (2026-04-02)
 
 
