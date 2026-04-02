@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from vertex_forager.clients.base import BaseClient
 from vertex_forager.constants import DEFAULT_RATE_LIMIT

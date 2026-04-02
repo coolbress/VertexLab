@@ -188,11 +188,14 @@ class SharadarClient(BaseClient[SharadarDataset]):
             return None
         try:
             with duckdb.connect(str(meta), read_only=True) as conn:
-                query = f'SELECT {",".join(META_REQUIRED_COLUMNS)} FROM "{DATASET_TABLE["tickers"]}"'  # noqa: S608
+                cols = ", ".join(META_REQUIRED_COLUMNS)
+                query = f'SELECT {cols} FROM "{DATASET_TABLE["tickers"]}"'  # noqa: S608
                 if symbols:
-                    ticker_list = ", ".join(f"'{t}'" for t in symbols)
-                    query += f" WHERE ticker IN ({ticker_list})"
-                df = conn.execute(query).pl()
+                    placeholders = ", ".join(["?"] * len(symbols))
+                    query = f"{query} WHERE ticker IN ({placeholders})"
+                    df = conn.execute(query, symbols).pl()
+                else:
+                    df = conn.execute(query).pl()
         except duckdb.CatalogException as e:
             raise InputError(
                 "meta DuckDB must contain sharadar_tickers with ticker, firstpricedate, lastpricedate"
@@ -687,7 +690,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             WriterError: If persistence fails.
         """
         return run_sync_compat(
-            self._get_insider_trading_async(
+            self._get_insider_transactions_async(
                 tickers=tickers,
                 meta=meta,
                 connect_db=connect_db,
@@ -699,7 +702,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             )
         )
 
-    async def _get_insider_trading_async(
+    async def _get_insider_transactions_async(
         self,
         *,
         tickers: list[str],
