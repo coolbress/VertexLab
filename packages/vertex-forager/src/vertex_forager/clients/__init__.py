@@ -238,28 +238,25 @@ def create_client(
         )
     if rate_limit is None:
         raise ValueError(f"Missing rate_limit for provider '{provider}'")
-    return cast(
-        "BaseClient",
-        registration.factory(
-            api_key=resolved_key,
-            rate_limit=rate_limit,
-            metrics_enabled=metrics_enabled,
-            structured_logs=structured_logs,
-            log_verbose=log_verbose,
-            dlq_enabled=dlq_enabled,
-            schedule=schedule,
-            retry=retry,
-            adaptive_throttle=throttle,
-            concurrency=concurrency,
-            flush_threshold_rows=flush_threshold_rows,
-            writer_chunk_rows=writer_chunk_rows,
-            writer_concurrency=writer_concurrency,
-            checkpoint_retention_days=checkpoint_retention_days,
-            run_history_retention_days=run_history_retention_days,
-            http_timeout_s=http_timeout_s,
-            limits=limits,
-            advanced=advanced,
-        ),
+    return registration.factory(
+        api_key=resolved_key,
+        rate_limit=rate_limit,
+        metrics_enabled=metrics_enabled,
+        structured_logs=structured_logs,
+        log_verbose=log_verbose,
+        dlq_enabled=dlq_enabled,
+        schedule=schedule,
+        retry=retry,
+        adaptive_throttle=throttle,
+        concurrency=concurrency,
+        flush_threshold_rows=flush_threshold_rows,
+        writer_chunk_rows=writer_chunk_rows,
+        writer_concurrency=writer_concurrency,
+        checkpoint_retention_days=checkpoint_retention_days,
+        run_history_retention_days=run_history_retention_days,
+        http_timeout_s=http_timeout_s,
+        limits=limits,
+        advanced=advanced,
     )
 
 
