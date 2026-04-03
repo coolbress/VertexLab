@@ -25,9 +25,7 @@ async def test_gcra_enforces_rate_with_burst() -> None:
 
 @pytest.mark.asyncio
 async def test_gradient_limiter_bounds() -> None:
-    limiter = GradientConcurrencyLimiter(
-        initial_limit=3, min_limit=1, max_limit=5, queue_size=2, smoothing=0.2
-    )
+    limiter = GradientConcurrencyLimiter(initial_limit=3, min_limit=1, max_limit=5, queue_size=2, smoothing=0.2)
     await limiter.acquire()
     # Provide a baseline RTT then a larger RTT; ensure limit stays within bounds
     await limiter.release(0.1)
@@ -49,7 +47,6 @@ async def test_record_feedback_triggers_downshift() -> None:
     fc = FlowController(
         requests_per_minute=60,
         concurrency_limit=1,
-        adaptive_throttle_enabled=True,
         error_rate_threshold=0.2,
         rpm_floor_ratio=0.17,
         adaptive_throttle_window_s=60,
@@ -66,7 +63,6 @@ async def test_record_feedback_respects_floor() -> None:
     fc = FlowController(
         requests_per_minute=60,
         concurrency_limit=1,
-        adaptive_throttle_enabled=True,
         error_rate_threshold=0.0,
         rpm_floor_ratio=0.34,
         adaptive_throttle_window_s=1,

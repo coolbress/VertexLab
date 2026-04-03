@@ -11,8 +11,6 @@ import time
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from vertex_forager.constants import (
-    FLUSH_THRESHOLD_ROWS,
-    HTTP_TIMEOUT_S,
     MEM_THRESHOLD_ABS_MB,
     MEM_THRESHOLD_RATIO,
 )
@@ -24,11 +22,11 @@ from vertex_forager.core.config import (
     RetryConfig,
     RunResult,
     SchedulerConfig,
+    StorageConfig,
 )
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor as _HttpExecutor
 from vertex_forager.core.http import build_async_client
-from vertex_forager.core.http import default_async_client as _default_async_client
 from vertex_forager.core.pipeline import VertexForager as _VertexForager
 from vertex_forager.core.types import JSONValue, SharadarDataset, YFinanceDataset
 from vertex_forager.schema.registry import get_table_schema
@@ -71,14 +69,9 @@ def _coerce_grouped_config(value: Any, model_cls: type[Any]) -> Any:
     return model_cls.model_validate(value)
 
 
-def default_async_client() -> httpx.AsyncClient:
-    return _default_async_client()
-
-
 @dataclass
 class _NormalizedClientSettings:
     runtime_config: ResolvedClientConfig
-    http_timeout_s: float
     http_limits: HTTPConfig
 
 
@@ -87,38 +80,30 @@ def _normalize_client_settings(
     rate_limit: int,
     schedule: SchedulerConfig | dict[str, Any] | None,
     retry: RetryConfig | dict[str, Any] | None,
-    adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None,
+    throttle: AdaptiveThrottleConfig | dict[str, Any] | None,
     concurrency: int | None,
-    flush_threshold_rows: int | None,
-    checkpoint_retention_days: int | None,
-    run_history_retention_days: int | None,
-    http_timeout_s: float | None,
+    storage: StorageConfig | dict[str, Any] | None,
     limits: HTTPConfig | dict[str, Any] | None,
 ) -> _NormalizedClientSettings:
-    adaptive_throttle_config = (
-        _coerce_grouped_config(adaptive_throttle, AdaptiveThrottleConfig) or AdaptiveThrottleConfig()
-    )
+    throttle_config = _coerce_grouped_config(throttle, AdaptiveThrottleConfig) or AdaptiveThrottleConfig()
     schedule_config = _coerce_grouped_config(schedule, SchedulerConfig) or SchedulerConfig()
     limits_config = _coerce_grouped_config(limits, HTTPConfig) or HTTPConfig()
     retry_config = _coerce_grouped_config(retry, RetryConfig) or RetryConfig()
+    storage_config = _coerce_grouped_config(storage, StorageConfig) or StorageConfig()
 
     runtime_config = ResolvedClientConfig(
         requests_per_minute=rate_limit,
         schedule=schedule_config,
         retry=retry_config,
-        adaptive_throttle=adaptive_throttle_config,
+        throttle=throttle_config,
         concurrency=concurrency,
-        flush_threshold_rows=flush_threshold_rows if flush_threshold_rows is not None else FLUSH_THRESHOLD_ROWS,
-        http_timeout_s=http_timeout_s if http_timeout_s is not None else HTTP_TIMEOUT_S,
+        storage=storage_config,
         limits=limits_config,
-        checkpoint_retention_days=checkpoint_retention_days if checkpoint_retention_days is not None else 7,
-        run_history_retention_days=run_history_retention_days if run_history_retention_days is not None else 90,
     )
     runtime_config.assert_valid()
 
     return _NormalizedClientSettings(
         runtime_config=runtime_config,
-        http_timeout_s=runtime_config.http_timeout_s,
         http_limits=runtime_config.limits,
     )
 
@@ -183,12 +168,9 @@ class BaseClient(ABC, Generic[T]):
         rate_limit: int,
         schedule: SchedulerConfig | dict[str, Any] | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
-        adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
+        throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
         concurrency: int | None = None,
-        flush_threshold_rows: int | None = None,
-        checkpoint_retention_days: int | None = None,
-        run_history_retention_days: int | None = None,
-        http_timeout_s: float | None = None,
+        storage: StorageConfig | dict[str, Any] | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
     ) -> None:
         """Initialize the base client infrastructure.
@@ -198,12 +180,9 @@ class BaseClient(ABC, Generic[T]):
             rate_limit: Maximum requests per minute (RPM) allowed for this client.
             schedule: Grouped scheduler configuration for always-on DRR fairness.
             retry: Grouped retry policy configuration.
-            adaptive_throttle: Grouped adaptive throttle policy configuration.
+            throttle: Grouped adaptive throttle policy configuration.
             concurrency: Explicit fetch concurrency limit.
-            flush_threshold_rows: Buffered row threshold before flush begins.
-            checkpoint_retention_days: Retention window for completed checkpoints.
-            run_history_retention_days: Retention window for run-history records.
-            http_timeout_s: HTTP request timeout in seconds.
+            storage: Grouped data-lifecycle and write-path tuning settings.
             limits: Grouped HTTP connection-pool configuration.
         """
         self.api_key = api_key
@@ -211,35 +190,30 @@ class BaseClient(ABC, Generic[T]):
             rate_limit=rate_limit,
             schedule=schedule,
             retry=retry,
-            adaptive_throttle=adaptive_throttle,
+            throttle=throttle,
             concurrency=concurrency,
-            flush_threshold_rows=flush_threshold_rows,
-            checkpoint_retention_days=checkpoint_retention_days,
-            run_history_retention_days=run_history_retention_days,
-            http_timeout_s=http_timeout_s,
+            storage=storage,
             limits=limits,
         )
 
         self._config = normalized.runtime_config
-        self._http_timeout_s = normalized.http_timeout_s
         self._http_limits = normalized.http_limits
 
         self.controller = FlowController(
             requests_per_minute=self._config.requests_per_minute,
-            concurrency_limit=self._config.fetch_concurrency,
-            adaptive_throttle_enabled=self._config.adaptive_throttle_enabled,
-            adaptive_throttle_window_s=self._config.adaptive_throttle_window_s,
-            error_rate_threshold=self._config.error_rate_threshold,
-            rpm_floor_ratio=self._config.rpm_floor_ratio,
-            recovery_factor=self._config.recovery_factor,
-            healthy_window_s=self._config.healthy_window_s,
+            concurrency_limit=self._config.concurrency,
+            adaptive_throttle_window_s=self._config.throttle.window_s,
+            error_rate_threshold=self._config.throttle.error_rate_threshold,
+            rpm_floor_ratio=self._config.throttle.rpm_floor_ratio,
+            recovery_factor=self._config.throttle.recovery_factor,
+            healthy_window_s=self._config.throttle.healthy_window_s,
         )
         self.last_run: RunResult | None = None
         self._client: httpx.AsyncClient | None = None
 
     def _build_http_client(self) -> httpx.AsyncClient:
         return build_async_client(
-            timeout_s=self._http_timeout_s,
+            timeout_s=self._http_limits.timeout_s,
             max_keepalive_connections=self._http_limits.max_keepalive_connections,
             max_connections=self._http_limits.max_connections,
         )

@@ -8,22 +8,23 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Sequence
     from contextlib import AbstractContextManager
 
-    from vertex_forager.core.config import FetchJob, FramePacket, ParseResult, ProgressSnapshot, RunResult
+    from vertex_forager.core.config import FetchJob, FramePacket, HTTPConfig, ParseResult, ProgressSnapshot, RunResult
     from vertex_forager.writers.base import WriteResult
 
 
 T = TypeVar("T", bound=SharadarDataset | YFinanceDataset | str)
 T_contra = TypeVar("T_contra", bound=SharadarDataset | YFinanceDataset | str, contravariant=True)
 
+
 @runtime_checkable
 class HttpClientProtocol(Protocol):
     """Minimal async HTTP client protocol used by HttpExecutor."""
 
-    async def run_async(self, method: str, url: str, **kwargs: Any) -> Any:
-        ...
+    _http_limits: HTTPConfig
 
-    async def run_sync(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
-        ...
+    async def run_async(self, method: str, url: str, **kwargs: Any) -> Any: ...
+
+    async def run_sync(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any: ...
 
 
 @runtime_checkable
@@ -35,8 +36,7 @@ class TracerProtocol(Protocol):
         name: str,
         *,
         attributes: dict[str, object] | None = None,
-    ) -> AbstractContextManager[object] | None:
-        ...
+    ) -> AbstractContextManager[object] | None: ...
 
 
 class IRouter(Protocol, Generic[T_contra]):

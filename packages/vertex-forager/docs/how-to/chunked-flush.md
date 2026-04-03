@@ -22,13 +22,13 @@ Note: chunk size (`WRITER_CHUNK_ROWS`) is an internal constant and not user-conf
 ## Example
 
 ```python
-from vertex_forager import create_client
+from vertex_forager import StorageConfig, create_client
 
 client = create_client(
     provider="sharadar",
     api_key="...",
     rate_limit=120,
-    flush_threshold_rows=500_000,
+    storage=StorageConfig(flush_threshold_rows=500_000),
 )
 ```
 

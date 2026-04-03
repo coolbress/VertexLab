@@ -41,7 +41,6 @@ import psutil
 from tqdm.auto import tqdm
 
 from vertex_forager.constants import FLUSH_THRESHOLD_INFINITE as CONST_FLUSH_THRESHOLD_INFINITE
-from vertex_forager.constants import FLUSH_THRESHOLD_ROWS as DEFAULT_FLUSH_THRESHOLD_ROWS
 from vertex_forager.constants import PRIORITY_NEW_JOB as CONST_PRIORITY_NEW_JOB
 from vertex_forager.constants import PRIORITY_PAGINATION as CONST_PRIORITY_PAGINATION
 from vertex_forager.constants import PRIORITY_SENTINEL as CONST_PRIORITY_SENTINEL
@@ -282,10 +281,6 @@ class VertexForager:
             Gracefully stop the pipeline.
     """
 
-    # Configurable flush threshold
-    # Increased to 500k to allow better batching for large packets (125k rows each)
-    FLUSH_THRESHOLD_ROWS = DEFAULT_FLUSH_THRESHOLD_ROWS
-
     # Priority Constants
     PRIORITY_PAGINATION = CONST_PRIORITY_PAGINATION
     PRIORITY_NEW_JOB = CONST_PRIORITY_NEW_JOB
@@ -327,7 +322,7 @@ class VertexForager:
         # Since InMemoryBufferWriter just stores frames in a list, we can
         # avoid the overhead of intermediate merges by setting threshold to infinity.
         # This allows the worker to collect ALL frames and perform a SINGLE merge at the end.
-        self._flush_threshold = config.flush_threshold_rows
+        self._flush_threshold = config.storage.flush_threshold_rows
 
         if InMemoryBufferWriterType is not None and isinstance(writer, InMemoryBufferWriterType):
             # Override instance config (not the global config object)
@@ -345,13 +340,13 @@ class VertexForager:
             max_workers=w_int,
             thread_name_prefix="vertex-forager:parse",
         )
-        quantum = float(config.quantum)
+        quantum = float(config.schedule.quantum)
         # Global pagination fairness bookkeeping
         self._fair_lock = asyncio.Lock()
         self._fair_state = FairnessState(
             quantum=quantum,
-            max_pending_per_symbol=config.max_pending_per_symbol,
-            backpressure_threshold=config.backpressure_threshold,
+            max_pending_per_symbol=config.schedule.max_pending_per_symbol,
+            backpressure_threshold=config.schedule.backpressure_threshold,
         )
         # Writer flush idempotence
         self._writer_flushed: bool = False
@@ -790,11 +785,11 @@ class VertexForager:
         self._req_q = req_q
         self._pkt_q = pkt_q
         self._writer_tasks = writer_tasks
-        quantum = float(self._config.quantum)
+        quantum = float(self._config.schedule.quantum)
         self._fair_state = FairnessState(
             quantum=quantum,
-            max_pending_per_symbol=self._config.max_pending_per_symbol,
-            backpressure_threshold=self._config.backpressure_threshold,
+            max_pending_per_symbol=self._config.schedule.max_pending_per_symbol,
+            backpressure_threshold=self._config.schedule.backpressure_threshold,
         )
         self._writer_flush_attempted = False
         self._writer_flushed = False
@@ -911,9 +906,9 @@ class VertexForager:
     ]:
         req_q, pkt_q = create_run_queues_impl(
             queue_max=self._config.queue_max,
-            checkpoint_retention_days=self._config.checkpoint_retention_days,
-            run_history_retention_days=self._config.run_history_retention_days,
-            dlq_tmp_retention_s=self._config.dlq_tmp_retention_s,
+            checkpoint_retention_days=self._config.storage.checkpoint_retention_days,
+            run_history_retention_days=self._config.storage.run_history_retention_days,
+            dlq_tmp_retention_s=self._config.storage.dlq_tmp_retention_s,
             cache_dir=get_cache_dir(),
             logger=logger,
         )

@@ -236,15 +236,14 @@ def test_run_result_coerces_legacy_string_errors() -> None:
 
 def test_resolved_client_config_retention_defaults() -> None:
     config = ResolvedClientConfig(requests_per_minute=60)
-    assert config.checkpoint_retention_days == 7
-    assert config.run_history_retention_days == 90
+    assert config.storage.checkpoint_retention_days == 7
+    assert config.storage.run_history_retention_days == 90
 
 
 def test_resolved_client_config_retention_override() -> None:
     config = ResolvedClientConfig(
         requests_per_minute=60,
-        checkpoint_retention_days=3,
-        run_history_retention_days=45,
+        storage={"checkpoint_retention_days": 3, "run_history_retention_days": 45},
     )
-    assert config.checkpoint_retention_days == 3
-    assert config.run_history_retention_days == 45
+    assert config.storage.checkpoint_retention_days == 3
+    assert config.storage.run_history_retention_days == 45

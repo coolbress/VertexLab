@@ -44,7 +44,7 @@ def test_constants_json_global() -> None:
     runner = CliRunner()
     result = runner.invoke(cli_mod.main, ["constants", "--section", "global", "--format", "json"])
     assert result.exit_code == 0
-    assert "HTTP_TIMEOUT_S" in result.output
+    assert "DEFAULT_RATE_LIMIT" in result.output
 
 
 def test_clear_cancel(monkeypatch: pytest.MonkeyPatch) -> None:

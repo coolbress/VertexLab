@@ -16,7 +16,7 @@ import httpx
 import polars as pl
 
 from vertex_forager.clients import create_client
-from vertex_forager.constants import DEFAULT_RATE_LIMIT, DLQ_TMP_RETENTION_S
+from vertex_forager.constants import DEFAULT_RATE_LIMIT
 from vertex_forager.constants_view import (
     build_constants_preview,
     render_constants_preview,
@@ -836,7 +836,7 @@ def _print_recover_details(summary: dict[str, Any]) -> None:
 @click.option(
     "--retention-s",
     type=int,
-    default=DLQ_TMP_RETENTION_S,
+    default=86_400,
     show_default=True,
     help="Retention window for .ipc.tmp cleanup (seconds)",
 )

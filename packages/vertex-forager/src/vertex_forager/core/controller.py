@@ -180,7 +180,6 @@ class FlowController:
         requests_per_minute: int,
         concurrency_limit: int | None = None,
         *,
-        adaptive_throttle_enabled: bool = False,
         adaptive_throttle_window_s: int = 60,
         error_rate_threshold: float = 0.2,
         rpm_floor_ratio: float = 0.10,
@@ -192,7 +191,6 @@ class FlowController:
         Args:
             requests_per_minute: int — Allowed requests per minute (RPM).
             concurrency_limit: int | None — Optional max concurrent requests; if None, auto-computed.
-            adaptive_throttle_enabled: bool — Enable adaptive throttle.
             adaptive_throttle_window_s: int — Sliding window (seconds) for error-rate calculation.
             error_rate_threshold: float — Error/retry ratio threshold to trigger throttle decrease.
             rpm_floor_ratio: float — Minimum RPM as a ratio of ceiling (0.0-1.0) during throttle.
@@ -241,7 +239,6 @@ class FlowController:
         )
         self._rpm_ceiling = int(requests_per_minute)
         self._effective_rpm = int(requests_per_minute)
-        self._adaptive_throttle_enabled = bool(adaptive_throttle_enabled)
         win = float(adaptive_throttle_window_s)
         if not math.isfinite(win) or win < 1.0:
             win = 1.0
@@ -347,8 +344,6 @@ class FlowController:
             await self._concurrency_limiter.release(rtt)
 
     def record_feedback(self, *, status_code: int | None = None, retried: bool = False) -> None:
-        if not self._adaptive_throttle_enabled:
-            return
         now = time.monotonic()
         is_error = retried or (status_code in (429, 503))
         if retried:

@@ -15,9 +15,9 @@ def test_rpm_floor_ratio_resolves_to_absolute_floor(rpm: int, floor_ratio: float
     cfg = ResolvedClientConfig(
         requests_per_minute=rpm,
         concurrency=1,
-        adaptive_throttle=AdaptiveThrottleConfig(rpm_floor_ratio=floor_ratio),
+        throttle=AdaptiveThrottleConfig(rpm_floor_ratio=floor_ratio),
     )
-    assert cfg.rpm_floor_ratio == floor_ratio
+    assert cfg.throttle.rpm_floor_ratio == floor_ratio
 
 
 @given(
@@ -29,7 +29,6 @@ def test_flowcontroller_clamps_threshold_and_floor(err: float, floor_ratio: floa
     fc = FlowController(
         requests_per_minute=rpm,
         concurrency_limit=1,
-        adaptive_throttle_enabled=True,
         error_rate_threshold=err,
         rpm_floor_ratio=floor_ratio,
     )
@@ -45,7 +44,6 @@ def test_recovery_factor_resolves_to_absolute_step(rpm: int, recovery_factor: fl
     fc = FlowController(
         requests_per_minute=rpm,
         concurrency_limit=1,
-        adaptive_throttle_enabled=True,
         recovery_factor=recovery_factor,
     )
     expected_step = max(1, int(rpm * recovery_factor))

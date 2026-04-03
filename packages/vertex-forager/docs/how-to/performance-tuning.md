@@ -9,10 +9,9 @@
 ## Client Parameters
 
 - `concurrency`: Max concurrent fetch jobs/requests.
-- `flush_threshold_rows`: Buffer rows per table before flush.
-- `http_timeout_s`: HTTP request timeout in seconds.
 - `schedule=SchedulerConfig(...)`: Grouped scheduler controls for DRR fairness and backlog pressure.
-- `limits=HTTPConfig(...)`: HTTP client max keepalive and total connection counts.
+- `limits=HTTPConfig(...)`: HTTP connection pool settings (max connections, keepalive, timeout).
+- `storage=StorageConfig(...)`: Grouped data-lifecycle and write-path tuning settings.
 
 ## Convenience Environment Variables
 
@@ -36,15 +35,13 @@ Outputs JSON summaries (p95/p99 and rows) under the configured output directory.
 Example explicit SDK configuration:
 
 ```python
-from vertex_forager import HTTPConfig, SchedulerConfig, create_client
+from vertex_forager import HTTPConfig, SchedulerConfig, StorageConfig, create_client
 
 client = create_client(
     provider="sharadar",
     api_key="...",
     rate_limit=500,
     concurrency=12,
-    flush_threshold_rows=500_000,
-    http_timeout_s=30.0,
     schedule=SchedulerConfig(
         quantum=3,
         backpressure_threshold=12 * 3 * 10,
@@ -52,6 +49,10 @@ client = create_client(
     limits=HTTPConfig(
         max_connections=200,
         max_keepalive_connections=100,
+        timeout_s=30.0,
+    ),
+    storage=StorageConfig(
+        flush_threshold_rows=500_000,
     ),
 )
 ```
@@ -62,6 +63,6 @@ client = create_client(
 - Keep `schedule.quantum=3` as the default baseline, then lower it for more symbol interleaving or raise it when deep pagination dominates and fairness is less important.
 - When you need backlog protection, start `schedule.backpressure_threshold` near `concurrency × quantum × 10`.
 - Add `schedule.max_pending_per_symbol` only when one symbol can monopolize memory with exceptionally deep history.
-- Increase `flush_threshold_rows` to reduce flush frequency on large tables.
+- Increase `storage.flush_threshold_rows` to reduce flush frequency on large tables.
 - Tune `limits.max_keepalive_connections` and `limits.max_connections` to match concurrency and provider behavior.
 - Split processes per dataset if optimal parameters differ significantly.

@@ -100,23 +100,27 @@ uv run vertex-forager dlq clear --before 1d
 Retention is applied automatically when a pipeline starts.
 
 ```python
+from vertex_forager import StorageConfig, create_client
+
 client = create_client(
     provider="yfinance",
     rate_limit=60,
-    checkpoint_retention_days=7,
-    run_history_retention_days=90,
+    storage=StorageConfig(
+        checkpoint_retention_days=7,
+        run_history_retention_days=90,
+    ),
 )
 ```
 
-- `checkpoint_retention_days`
+- `storage.checkpoint_retention_days`
   - Default `7`
   - Keeps completed checkpoint rows only as long as they are likely useful for resume flows
-- `run_history_retention_days`
+- `storage.run_history_retention_days`
   - Default `90`
   - Keeps operational and audit history longer than checkpoints
 - DLQ retention
-  - Follows the internal `DLQ_TMP_RETENTION_S` housekeeping window
-  - Not exposed as a user-facing client setting
+  - Follows `storage.dlq_tmp_retention_s` housekeeping window
+  - Configurable via `StorageConfig(dlq_tmp_retention_s=...)`
 
 ## Clear state selectively
 
