@@ -4,13 +4,13 @@
 
 | Name                                                                |    Stmts |     Miss |   Cover |   Missing |
 |-------------------------------------------------------------------- | -------: | -------: | ------: | --------: |
-| packages/vertex-forager/src/vertex\_forager/clients/\_\_init\_\_.py |       43 |        1 |     98% |       197 |
-| packages/vertex-forager/src/vertex\_forager/clients/base.py         |      166 |       22 |     87% |72, 76, 318-320, 327-329, 348-349, 354-356, 466-467, 545, 562-567, 580, 582-583 |
+| packages/vertex-forager/src/vertex\_forager/clients/\_\_init\_\_.py |       43 |        1 |     98% |       189 |
+| packages/vertex-forager/src/vertex\_forager/clients/base.py         |      165 |       22 |     87% |71, 75, 311-313, 320-322, 341-342, 347-349, 459-460, 538, 555-560, 573, 575-576 |
 | packages/vertex-forager/src/vertex\_forager/clients/dispatcher.py   |       21 |        0 |    100% |           |
 | packages/vertex-forager/src/vertex\_forager/clients/validation.py   |        5 |        0 |    100% |           |
 | packages/vertex-forager/src/vertex\_forager/core/\_\_init\_\_.py    |       11 |        0 |    100% |           |
 | packages/vertex-forager/src/vertex\_forager/core/checkpoint.py      |      222 |       68 |     69% |124, 136, 139-140, 154, 261-262, 279, 294-295, 401-404, 420-423, 432-433, 474, 496-515, 528-529, 541-564, 581-584, 593-605 |
-| packages/vertex-forager/src/vertex\_forager/core/config.py          |      252 |       20 |     92% |76, 86, 121, 124, 232, 235, 238, 241, 357, 369, 372-373, 377, 379, 384-385, 391-392, 448, 467 |
+| packages/vertex-forager/src/vertex\_forager/core/config.py          |      240 |       19 |     92% |75, 85, 120, 123, 217, 220, 223, 226, 345, 348-349, 353, 355, 360-361, 367-368, 424, 443 |
 | packages/vertex-forager/src/vertex\_forager/core/contracts.py       |       21 |        0 |    100% |           |
 | packages/vertex-forager/src/vertex\_forager/core/controller.py      |      219 |       38 |     83% |121, 247, 249, 257, 261, 265, 267, 283-285, 303-306, 309-315, 355, 361-363, 387-390, 395-404 |
 | packages/vertex-forager/src/vertex\_forager/core/dlq.py             |      151 |       40 |     74% |47-48, 93-94, 119-121, 135-154, 178-188, 191-192, 239-250 |
@@ -19,10 +19,10 @@
 | packages/vertex-forager/src/vertex\_forager/core/library.py         |       25 |        1 |     96% |        26 |
 | packages/vertex-forager/src/vertex\_forager/core/lifecycle.py       |       74 |        6 |     92% |33-38, 70-71, 74-75 |
 | packages/vertex-forager/src/vertex\_forager/core/orchestration.py   |       74 |       10 |     86% |43-44, 92-93, 95-97, 125, 188-189 |
-| packages/vertex-forager/src/vertex\_forager/core/pipeline.py        |      896 |      121 |     86% |113-114, 140-141, 148-149, 171, 173, 178-179, 186-189, 208-215, 339-341, 420-421, 431-432, 484, 493-510, 561-562, 739-740, 961-962, 966, 980-982, 984-987, 1026-1027, 1053-1054, 1059-1065, 1107-1108, 1111-1112, 1115-1118, 1173, 1176-1181, 1247-1248, 1314-1328, 1423, 1435-1436, 1494-1495, 1557-1558, 1569, 1572, 1634-1636, 1645-1646, 1705-1706, 1715-1716, 1881-1882, 2053 |
+| packages/vertex-forager/src/vertex\_forager/core/pipeline.py        |      879 |      105 |     88% |114-115, 141-142, 149-150, 172, 174, 179-180, 187-190, 209-216, 341-343, 422-423, 433-434, 486, 544-545, 722-723, 944-945, 949, 963-965, 967-970, 1009-1010, 1036-1037, 1042-1048, 1090-1091, 1094-1095, 1098-1101, 1156, 1159-1164, 1230-1231, 1297-1311, 1406, 1418-1419, 1477-1478, 1540-1541, 1552, 1555, 1617-1619, 1628-1629, 1688-1689, 1698-1699, 1864-1865, 2036 |
 | packages/vertex-forager/src/vertex\_forager/core/quality.py         |       90 |        4 |     96% |120-121, 228-229 |
 | packages/vertex-forager/src/vertex\_forager/core/recover.py         |      114 |       18 |     84% |42-45, 89, 94, 144-146, 156-158, 178, 199, 221-224 |
-| packages/vertex-forager/src/vertex\_forager/core/registries.py      |       44 |        5 |     89% |85, 90, 113, 117, 121 |
+| packages/vertex-forager/src/vertex\_forager/core/registries.py      |       44 |        5 |     89% |84, 89, 112, 116, 120 |
 | packages/vertex-forager/src/vertex\_forager/core/retry.py           |       94 |        6 |     94% |73, 188-191, 202 |
 | packages/vertex-forager/src/vertex\_forager/core/scheduler.py       |      155 |       17 |     89% |40, 42, 44, 136-142, 144, 146-147, 159, 175, 200-201 |
 | packages/vertex-forager/src/vertex\_forager/core/sweep.py           |      143 |      104 |     27% |20, 63, 67, 82-94, 103-115, 127-139, 158-200, 210-239, 251-278, 290-318, 329-347 |
@@ -39,7 +39,7 @@
 | packages/vertex-forager/src/vertex\_forager/writers/constants.py    |       24 |        0 |    100% |           |
 | packages/vertex-forager/src/vertex\_forager/writers/duckdb.py       |      308 |       41 |     87% |141-142, 163, 242-243, 251-257, 313, 325-326, 348-350, 355-356, 386-387, 461-462, 486-493, 503-507, 513, 544-554, 636-637 |
 | packages/vertex-forager/src/vertex\_forager/writers/memory.py       |       60 |        8 |     87% |56, 111-118 |
-| **TOTAL**                                                           | **3905** |  **662** | **83%** |           |
+| **TOTAL**                                                           | **3875** |  **645** | **83%** |           |
 
 
 ## Setup coverage badge
