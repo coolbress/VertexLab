@@ -52,8 +52,6 @@ These types describe the request, retry, writer, and execution settings used thr
 
 ::: vertex_forager.core.config.HTTPConfig
 
-::: vertex_forager.core.config.AdvancedConfig
-
 ::: vertex_forager.core.config.SchedulerConfig
 
 ::: vertex_forager.core.config.RequestSpec

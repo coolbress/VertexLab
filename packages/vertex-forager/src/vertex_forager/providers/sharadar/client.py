@@ -32,7 +32,6 @@ if TYPE_CHECKING:
 
     from vertex_forager.core.config import (
         AdaptiveThrottleConfig,
-        AdvancedConfig,
         HTTPConfig,
         ProgressSnapshot,
         RetryConfig,
@@ -122,7 +121,6 @@ class SharadarClient(BaseClient[SharadarDataset]):
         run_history_retention_days: int | None = None,
         http_timeout_s: float | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
-        advanced: AdvancedConfig | dict[str, Any] | None = None,
     ) -> None:
         """Initialize the Sharadar client.
 
@@ -138,7 +136,6 @@ class SharadarClient(BaseClient[SharadarDataset]):
             run_history_retention_days: Retention window for run-history records.
             http_timeout_s: HTTP request timeout in seconds.
             limits: Grouped HTTP connection-pool configuration.
-            advanced: Grouped advanced and transitional settings.
         """
         if not isinstance(api_key, str):
             raise InputError("Sharadar API Key must be a string")
@@ -158,7 +155,6 @@ class SharadarClient(BaseClient[SharadarDataset]):
             run_history_retention_days=run_history_retention_days,
             http_timeout_s=http_timeout_s,
             limits=limits,
-            advanced=advanced,
         )
 
         self._mapper = SchemaMapper()

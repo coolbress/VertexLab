@@ -18,7 +18,6 @@ from vertex_forager.constants import (
 )
 from vertex_forager.core.config import (
     AdaptiveThrottleConfig,
-    AdvancedConfig,
     HTTPConfig,
     ProgressSnapshot,
     ResolvedClientConfig,
@@ -95,14 +94,12 @@ def _normalize_client_settings(
     run_history_retention_days: int | None,
     http_timeout_s: float | None,
     limits: HTTPConfig | dict[str, Any] | None,
-    advanced: AdvancedConfig | dict[str, Any] | None,
 ) -> _NormalizedClientSettings:
     adaptive_throttle_config = (
         _coerce_grouped_config(adaptive_throttle, AdaptiveThrottleConfig) or AdaptiveThrottleConfig()
     )
     schedule_config = _coerce_grouped_config(schedule, SchedulerConfig) or SchedulerConfig()
     limits_config = _coerce_grouped_config(limits, HTTPConfig) or HTTPConfig()
-    advanced_config = _coerce_grouped_config(advanced, AdvancedConfig) or AdvancedConfig()
     retry_config = _coerce_grouped_config(retry, RetryConfig) or RetryConfig()
 
     runtime_config = ResolvedClientConfig(
@@ -114,7 +111,6 @@ def _normalize_client_settings(
         flush_threshold_rows=flush_threshold_rows if flush_threshold_rows is not None else FLUSH_THRESHOLD_ROWS,
         http_timeout_s=http_timeout_s if http_timeout_s is not None else HTTP_TIMEOUT_S,
         limits=limits_config,
-        advanced=advanced_config,
         checkpoint_retention_days=checkpoint_retention_days if checkpoint_retention_days is not None else 7,
         run_history_retention_days=run_history_retention_days if run_history_retention_days is not None else 90,
     )
@@ -194,7 +190,6 @@ class BaseClient(ABC, Generic[T]):
         run_history_retention_days: int | None = None,
         http_timeout_s: float | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
-        advanced: AdvancedConfig | dict[str, Any] | None = None,
     ) -> None:
         """Initialize the base client infrastructure.
 
@@ -210,7 +205,6 @@ class BaseClient(ABC, Generic[T]):
             run_history_retention_days: Retention window for run-history records.
             http_timeout_s: HTTP request timeout in seconds.
             limits: Grouped HTTP connection-pool configuration.
-            advanced: Grouped advanced and transitional settings.
         """
         self.api_key = api_key
         normalized = _normalize_client_settings(
@@ -224,7 +218,6 @@ class BaseClient(ABC, Generic[T]):
             run_history_retention_days=run_history_retention_days,
             http_timeout_s=http_timeout_s,
             limits=limits,
-            advanced=advanced,
         )
 
         self._config = normalized.runtime_config

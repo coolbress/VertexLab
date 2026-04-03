@@ -3,7 +3,6 @@ import pytest
 
 from vertex_forager.core.config import (
     AdaptiveThrottleConfig,
-    AdvancedConfig,
     HTTPConfig,
     ResolvedClientConfig,
     RetryConfig,
@@ -47,8 +46,6 @@ def test_grouped_public_configs_forbid_unknown_fields() -> None:
         AdaptiveThrottleConfig(extra_field=True)
     with pytest.raises(ValidationError):
         HTTPConfig(extra_field=True)
-    with pytest.raises(ValidationError):
-        AdvancedConfig(extra_field=True)
 
 
 def test_runtime_config_retention_days_are_coerced_and_clamped() -> None:

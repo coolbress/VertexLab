@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 from uuid import uuid4
 
 import httpx
+from opentelemetry import trace as otel_trace
 from polars.exceptions import ComputeError
 import psutil
 from tqdm.auto import tqdm
@@ -254,6 +255,9 @@ def _format_progress_summary(*, provider: str, dataset: str, snapshot: ProgressS
     )
 
 
+_tracer = otel_trace.get_tracer("vertex_forager")
+
+
 class VertexForager:
     """High-performance asynchronous data pipeline engine.
 
@@ -310,8 +314,6 @@ class VertexForager:
         self._counters: dict[str, int] = {}
         self._progress_counters: dict[str, int] = {}
         self._hists: dict[str, deque[float]] = {}
-        self._tracer = config.advanced.tracer
-        self._otel_enabled = bool(config.advanced.otel_enabled)
 
         # Track active tasks for graceful shutdown
         self._active_tasks: list[asyncio.Future[Any]] = []
@@ -487,26 +489,7 @@ class VertexForager:
 
     @contextmanager
     def _span(self, name: str, **attributes: object) -> Iterator[None]:
-        if not self._otel_enabled or self._tracer is None:
-            yield
-            return
-        start_span = None
-        try:
-            start_span = getattr(self._tracer, "start_span", None)
-        except Exception:
-            start_span = None
-        if callable(start_span):
-            cm = None
-            try:
-                cm = start_span(f"vertex_forager.{name}", attributes=attributes)
-            except Exception:
-                cm = None
-            if cm is None:
-                yield
-            else:
-                with cm:
-                    yield
-        else:
+        with _tracer.start_as_current_span(f"vertex_forager.{name}", attributes=attributes):  # type: ignore[arg-type]
             yield
 
     def _log_structured(

@@ -10,7 +10,6 @@ import pytest
 import vertex_forager
 from vertex_forager import (
     AdaptiveThrottleConfig,
-    AdvancedConfig,
     HTTPConfig,
     RetryConfig,
     SchedulerConfig,
@@ -43,7 +42,6 @@ def test_create_client_accepts_grouped_public_configs() -> None:
         run_history_retention_days=45,
         http_timeout_s=15.0,
         limits=HTTPConfig(max_connections=50, max_keepalive_connections=25),
-        advanced=AdvancedConfig(otel_enabled=True),
     )
 
     assert isinstance(client, YFinanceClient)
@@ -57,7 +55,6 @@ def test_create_client_accepts_grouped_public_configs() -> None:
     assert client.config.flush_threshold_rows == 10_000
     assert client.config.checkpoint_retention_days == 5
     assert client.config.run_history_retention_days == 45
-    assert client.config.otel_enabled is True
     assert client._http_timeout_s == 15.0
     assert client._http_limits.max_connections == 50
     assert client._http_limits.max_keepalive_connections == 25
@@ -87,13 +84,16 @@ def test_removed_legacy_adaptive_throttle_kwargs_are_rejected() -> None:
         )
 
 
-def test_removed_legacy_advanced_kwargs_are_rejected() -> None:
+@pytest.mark.parametrize(
+    "removed_kwargs",
+    [
+        {"otel_enabled": True},
+        {"tracer": object()},
+    ],
+)
+def test_removed_legacy_advanced_kwargs_are_rejected(removed_kwargs: dict[str, object]) -> None:
     with pytest.raises(TypeError):
-        create_client(
-            provider="yfinance",
-            rate_limit=60,
-            otel_enabled=True,
-        )
+        create_client(provider="yfinance", rate_limit=60, **removed_kwargs)
 
 
 @pytest.mark.parametrize(
@@ -120,20 +120,6 @@ def test_removed_runtime_kwargs_are_rejected(removed_kwargs: dict[str, object]) 
 def test_other_removed_runtime_kwargs_are_rejected(removed_kwargs: dict[str, object]) -> None:
     with pytest.raises(TypeError):
         create_client(provider="yfinance", rate_limit=60, **removed_kwargs)
-
-
-@pytest.mark.parametrize(
-    "advanced_kwargs",
-    [
-        {"mem_threshold_ratio": 0.5},
-        {"mem_threshold_abs_mb": 1024},
-        {"dlq_tmp_cleanup_on_error": False},
-        {"dlq_tmp_periodic_cleanup": False},
-    ],
-)
-def test_removed_advanced_config_kwargs_are_rejected(advanced_kwargs: dict[str, object]) -> None:
-    with pytest.raises(ValueError, match=r".*"):
-        create_client(provider="yfinance", rate_limit=60, advanced=advanced_kwargs)
 
 
 def test_removed_logging_kwargs_are_rejected_by_provider_constructor() -> None:

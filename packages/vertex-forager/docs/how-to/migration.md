@@ -146,6 +146,28 @@ Removed parameters:
 - `structured_logs`
 - `log_verbose`
 
+### Tracing model
+
+Tracing now follows the OpenTelemetry library standard. The library acquires its own tracer via `trace.get_tracer("vertex_forager")` and emits spans unconditionally. The host application controls whether spans are exported by configuring a `TracerProvider`:
+
+```python
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+
+provider = TracerProvider()
+provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+trace.set_tracer_provider(provider)
+```
+
+When no `TracerProvider` is configured, the OTel SDK provides a no-op tracer automatically — no overhead, no spans exported.
+
+Removed parameters:
+
+- `otel_enabled`
+- `tracer`
+
 **Action required**: Update imports to use the package root and review any code that parses `RunResult`.
 
 ## 0.1.0

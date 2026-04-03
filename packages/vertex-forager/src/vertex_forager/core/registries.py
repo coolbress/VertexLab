@@ -26,7 +26,6 @@ if TYPE_CHECKING:
     from vertex_forager.clients.base import BaseClient
     from vertex_forager.core.config import (
         AdaptiveThrottleConfig,
-        AdvancedConfig,
         HTTPConfig,
         RetryConfig,
         SchedulerConfig,
@@ -216,7 +215,6 @@ class ClientFactory(Protocol):
         run_history_retention_days: int | None = None,
         http_timeout_s: float | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
-        advanced: AdvancedConfig | dict[str, Any] | None = None,
     ) -> BaseClient:
         """Create a client instance.
 
@@ -232,7 +230,6 @@ class ClientFactory(Protocol):
             run_history_retention_days: Retention window for run-history records.
             http_timeout_s: HTTP request timeout in seconds.
             limits: Grouped HTTP connection-pool configuration.
-            advanced: Grouped advanced and transitional settings.
 
         Returns:
             BaseClient: An initialized client instance.

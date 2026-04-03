@@ -17,7 +17,6 @@ from vertex_forager.constants import (
 )
 from vertex_forager.core.config import (
     AdaptiveThrottleConfig,
-    AdvancedConfig,
     HTTPConfig,
     RetryConfig,
     RunResult,
@@ -81,7 +80,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         run_history_retention_days: int | None = None,
         http_timeout_s: float | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
-        advanced: AdvancedConfig | dict[str, Any] | None = None,
     ) -> None:
         """Initialize the YFinance client.
 
@@ -101,7 +99,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
                 Default is None, which resolves to the runtime default of 90 days.
             http_timeout_s (float | None): HTTP request timeout in seconds. Default is None.
             limits (HTTPConfig | dict[str, Any] | None): HTTP connection pool settings. Default is None.
-            advanced (AdvancedConfig | dict[str, Any] | None): Advanced runtime options. Default is None.
         """
         normalized = rate_limit
         if isinstance(normalized, int):
@@ -131,7 +128,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             run_history_retention_days=run_history_retention_days,
             http_timeout_s=http_timeout_s,
             limits=limits,
-            advanced=advanced,
         )
         self._mapper = SchemaMapper()
 
