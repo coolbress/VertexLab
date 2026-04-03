@@ -152,7 +152,8 @@ Tracing now follows the OpenTelemetry library standard. The library acquires its
 
 > **Note**: The snippet below uses `TracerProvider`, `BatchSpanProcessor`, and `OTLPSpanExporter` from the OpenTelemetry SDK and OTLP exporter packages. These are **not included** in the vertex-forager runtime dependency — install them separately:
 
-> ```
+>
+> ```bash
 > pip install opentelemetry-sdk opentelemetry-exporter-otlp
 > ```
 
