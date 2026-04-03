@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.23.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.22.0...vertex-forager-v0.23.0) (2026-04-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* **vertex-forager:** align vertex-forager tracing with OpenTelemetry standard and remove AdvancedConfig ([#431](https://github.com/coolbress/VertexLab/issues/431))
+
+### Features
+
+* **vertex-forager:** align vertex-forager tracing with OpenTelemetry standard and remove AdvancedConfig ([#431](https://github.com/coolbress/VertexLab/issues/431)) ([2690255](https://github.com/coolbress/VertexLab/commit/2690255a961f7dc7f38a40081b027ac02939c591))
+
 ## [0.22.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.21.0...vertex-forager-v0.22.0) (2026-04-02)
 
 
