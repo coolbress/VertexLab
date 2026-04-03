@@ -38,6 +38,8 @@ def mock_async_client() -> AsyncMock:
 def http_executor(mock_async_client: AsyncMock, http_limits: HTTPConfig | None = None) -> HttpExecutor:
     if http_limits is not None:
         mock_async_client._http_limits = http_limits
+    elif not hasattr(mock_async_client, "_http_limits"):
+        mock_async_client._http_limits = HTTPConfig()
     return HttpExecutor(client=mock_async_client)
 
 
@@ -226,6 +228,11 @@ async def test_yfinance_unknown_or_unsupported_scheme_raises(
 
 
 class FakeClient:
+    _http_limits: HTTPConfig
+
+    def __init__(self) -> None:
+        self._http_limits = HTTPConfig()
+
     async def run_async(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         req = httpx.Request(method, url)
         return httpx.Response(200, request=req, content=b"ok")
@@ -252,6 +259,7 @@ async def test_http_executor_uses_client_protocol() -> None:
 
 @pytest.mark.asyncio
 async def test_executor_handles_concurrent_requests(mock_async_client: AsyncMock) -> None:
+    mock_async_client._http_limits = HTTPConfig()
     executor = HttpExecutor(client=mock_async_client)
     success_response = MagicMock(spec=Response)
     success_response.status_code = 200

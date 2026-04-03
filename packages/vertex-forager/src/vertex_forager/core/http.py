@@ -129,9 +129,7 @@ class HttpExecutor:
                 headers=headers,
                 json=spec.json_body,
                 content=spec.data,
-                timeout=(
-                    (lambda limits: limits.timeout_s if limits else None)(getattr(self._client, "_http_limits", None))
-                ),
+                timeout=self._client._http_limits.timeout_s,
             )
             resp.raise_for_status()
             return resp.content

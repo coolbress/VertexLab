@@ -10,6 +10,7 @@ import polars as pl
 from vertex_forager.core.config import (
     FetchJob,
     FramePacket,
+    HTTPConfig,
     ParseResult,
     RequestSpec,
     ResolvedClientConfig,
@@ -52,6 +53,11 @@ class _Router:
 
 
 class _FakeHttpClient:
+    _http_limits: HTTPConfig
+
+    def __init__(self) -> None:
+        self._http_limits = HTTPConfig()
+
     # Hook to exercise before_http_request path: inject test header
     def before_http_request(self, spec: RequestSpec) -> RequestSpec:
         updated_headers = dict(spec.headers)

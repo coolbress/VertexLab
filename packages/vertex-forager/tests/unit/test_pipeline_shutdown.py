@@ -10,6 +10,7 @@ import pytest
 from vertex_forager.core.config import (
     FetchJob,
     FramePacket,
+    HTTPConfig,
     ParseResult,
     RequestSpec,
     ResolvedClientConfig,
@@ -21,6 +22,11 @@ from vertex_forager.writers.base import WriteResult
 
 
 class _StubClient:
+    _http_limits: HTTPConfig
+
+    def __init__(self) -> None:
+        self._http_limits = HTTPConfig()
+
     async def aclose(self) -> None:
         return None
 
@@ -157,6 +163,11 @@ class FlushCountingWriter:
 
 
 class StubClient:
+    _http_limits: HTTPConfig
+
+    def __init__(self) -> None:
+        self._http_limits = HTTPConfig()
+
     async def run_async(self, method: str, url: str, **kwargs: Any) -> Any:
         class R:
             content = b"ok"

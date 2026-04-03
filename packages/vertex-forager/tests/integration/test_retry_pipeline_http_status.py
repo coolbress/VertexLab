@@ -10,6 +10,7 @@ import pytest
 from vertex_forager.core.config import (
     FetchJob,
     FramePacket,
+    HTTPConfig,
     ParseResult,
     RequestSpec,
     ResolvedClientConfig,
@@ -77,8 +78,11 @@ class _Resp:
 
 
 class StubClient:
+    _http_limits: HTTPConfig
+
     def __init__(self) -> None:
         self._config = ResolvedClientConfig(requests_per_minute=60)
+        self._http_limits = HTTPConfig()
         self.controller = FlowController(requests_per_minute=60, concurrency_limit=1)
         self._calls = 0
 
