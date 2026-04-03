@@ -7,10 +7,10 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
-from httpx import Response
+from httpx import AsyncClient, Response
 import pytest
 
-from vertex_forager.core.config import HttpMethod, RequestAuth, RequestSpec
+from vertex_forager.core.config import HTTPConfig, HttpMethod, RequestAuth, RequestSpec
 from vertex_forager.core.http import HttpExecutor
 
 try:
@@ -20,8 +20,30 @@ except ImportError:
 
 
 @pytest.fixture
-def http_executor(mock_async_client: AsyncMock) -> HttpExecutor:
+def mock_async_client() -> AsyncMock:
+    """Create a mock AsyncClient with run_async.
+
+    Returns:
+        AsyncMock: AsyncMock configured with spec=AsyncClient. It simulates an
+        HTTPX AsyncClient and provides a run_async coroutine used by the HTTP
+        executor. The added run_async method allows tests to await network-like
+        behavior without performing real I/O.
+    """
+    mock = AsyncMock(spec=AsyncClient)
+    mock.run_async = AsyncMock()
+    return mock
+
+
+@pytest.fixture
+def http_executor(mock_async_client: AsyncMock, http_limits: HTTPConfig | None = None) -> HttpExecutor:
+    if http_limits is not None:
+        mock_async_client._http_limits = http_limits
     return HttpExecutor(client=mock_async_client)
+
+
+@pytest.fixture
+def http_limits() -> HTTPConfig:
+    return HTTPConfig()
 
 
 @pytest.fixture
@@ -120,13 +142,13 @@ async def test_fetch_handles_http_and_network_errors(
 @pytest.mark.asyncio
 async def test_fetch_timeout_and_empty_response(
     http_executor: HttpExecutor,
-    mock_async_client: AsyncMock,
     success_response: Response,
     sample_request_spec: RequestSpec,
 ) -> None:
+    mock_async_client = http_executor._client
+    mock_async_client._http_limits = HTTPConfig(timeout_s=10.0)
     mock_async_client.run_async.return_value = success_response
-    await http_executor.fetch(RequestSpec(method=HttpMethod.GET, url="https://api.example.com/data", timeout_s=10.0))
-    # Assert timeout propagated to client
+    await http_executor.fetch(RequestSpec(method=HttpMethod.GET, url="https://api.example.com/data"))
     _, kwargs = mock_async_client.run_async.call_args
     assert kwargs.get("timeout") == 10.0
     empty = MagicMock(spec=Response)
@@ -148,13 +170,17 @@ async def test_yfinance_dispatch_ticker_attr_and_download(
     class DummyTicker:
         def __init__(self, symbol: str) -> None:
             self.symbol = symbol
+
         def info(self) -> dict[str, str]:
             return {"ok": "yes"}
+
     class DummyYF:
         def Ticker(self, sym: str) -> DummyTicker:
             return DummyTicker(sym)
+
         def download(self, **kwargs: object) -> str:
             return "downloaded"
+
     monkeypatch.setattr("vertex_forager.core.http.yf", DummyYF())
     mock_async_client.run_sync = AsyncMock(side_effect=lambda func: func())
     spec1 = RequestSpec(
@@ -203,6 +229,7 @@ class FakeClient:
     async def run_async(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         req = httpx.Request(method, url)
         return httpx.Response(200, request=req, content=b"ok")
+
     async def run_sync(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, func, *args)

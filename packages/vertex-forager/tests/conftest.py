@@ -22,7 +22,7 @@ from httpx import AsyncClient
 import polars as pl
 import pytest
 
-from vertex_forager.core.config import FetchJob, FramePacket, RequestSpec
+from vertex_forager.core.config import FetchJob, FramePacket, HTTPConfig, RequestSpec
 from vertex_forager.core.http import HttpExecutor
 from vertex_forager.providers.sharadar.router import SharadarRouter
 
@@ -73,6 +73,8 @@ def mock_async_client() -> AsyncMock:
     mock = AsyncMock(spec=AsyncClient)
     # Add run_async method that HTTP executor expects
     mock.run_async = AsyncMock()
+    # Add _http_limits for timeout access in HttpExecutor
+    mock._http_limits = HTTPConfig()
     return mock
 
 
@@ -228,6 +230,7 @@ def create_test_fetch_job() -> FetchJob:
         ),
     )
 
+
 @pytest.fixture
 def yfinance_router() -> YFinanceRouter:
     """Create a YFinanceRouter with explicit rate limiting.
@@ -241,6 +244,7 @@ def yfinance_router() -> YFinanceRouter:
     router_cls = _require_yfinance_router()
     return router_cls(rate_limit=500, allow_pickle_compat=False)
 
+
 @pytest.fixture
 def yfinance_router_allow_pickle(monkeypatch: pytest.MonkeyPatch) -> YFinanceRouter:
     """Create a YFinanceRouter with legacy pickle compatibility enabled (unsafe).
@@ -253,6 +257,7 @@ def yfinance_router_allow_pickle(monkeypatch: pytest.MonkeyPatch) -> YFinanceRou
     )
     router_cls = _require_yfinance_router()
     return router_cls(rate_limit=500, allow_pickle_compat=True)
+
 
 @pytest.fixture
 def yf_price_df() -> pd.DataFrame:
@@ -293,9 +298,11 @@ def create_test_frame_packet() -> FramePacket:
         observed_at=datetime(2024, 1, 2, tzinfo=timezone.utc),
     )
 
+
 @pytest.fixture
 def pkt_factory():
     """Factory fixture to build a FramePacket for a given table and DataFrame."""
+
     def _make(table: str, df: pl.DataFrame) -> FramePacket:
         return FramePacket(
             provider="test",
@@ -303,4 +310,5 @@ def pkt_factory():
             frame=df,
             observed_at=datetime.now(tz=timezone.utc),
         )
+
     return _make
