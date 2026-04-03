@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.24.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.23.0...vertex-forager-v0.24.0) (2026-04-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* **vertex-forager:** introduce StorageConfig, move http_timeout_s into HTTPConfig, and cleanup config layer ([#434](https://github.com/coolbress/VertexLab/issues/434))
+
+### Code Refactoring
+
+* **vertex-forager:** introduce StorageConfig, move http_timeout_s into HTTPConfig, and cleanup config layer ([#434](https://github.com/coolbress/VertexLab/issues/434)) ([ba65122](https://github.com/coolbress/VertexLab/commit/ba65122d8906906eac90f19b71455ba167721110))
+
 ## [0.23.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.22.0...vertex-forager-v0.23.0) (2026-04-03)
 
 
