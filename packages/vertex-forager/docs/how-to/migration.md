@@ -150,6 +150,11 @@ Removed parameters:
 
 Tracing now follows the OpenTelemetry library standard. The library acquires its own tracer via `trace.get_tracer("vertex_forager")` and emits spans unconditionally. The host application controls whether spans are exported by configuring a `TracerProvider`:
 
+> **Note**: The snippet below uses `TracerProvider`, `BatchSpanProcessor`, and `OTLPSpanExporter` from the OpenTelemetry SDK and OTLP exporter packages. These are **not included** in the vertex-forager runtime dependency — install them separately:
+> ```bash
+> pip install opentelemetry-sdk opentelemetry-exporter-otlp
+> ```
+
 ```python
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
@@ -161,12 +166,13 @@ provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
 trace.set_tracer_provider(provider)
 ```
 
-When no `TracerProvider` is configured, the OTel SDK provides a no-op tracer automatically — no overhead, no spans exported.
+When no `TracerProvider` is configured, the OTel SDK falls back to a no-recording tracer — spans are not recorded or exported.
 
 Removed parameters:
 
 - `otel_enabled`
 - `tracer`
+- `advanced` / `AdvancedConfig`
 
 **Action required**: Update imports to use the package root and review any code that parses `RunResult`.
 

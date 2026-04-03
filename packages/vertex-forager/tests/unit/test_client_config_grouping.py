@@ -89,6 +89,7 @@ def test_removed_legacy_adaptive_throttle_kwargs_are_rejected() -> None:
     [
         {"otel_enabled": True},
         {"tracer": object()},
+        {"advanced": object()},
     ],
 )
 def test_removed_legacy_advanced_kwargs_are_rejected(removed_kwargs: dict[str, object]) -> None:
