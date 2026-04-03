@@ -43,11 +43,6 @@ Stage logs are always emitted at DEBUG level; the host application controls visi
 - `max_connections: int`
 - `max_keepalive_connections: int`
 
-### AdvancedConfig
-
-- `tracer: Any | None`
-- `otel_enabled: bool | None`
-
 ### SchedulerConfig
 
 - `quantum: int = 3`
@@ -61,7 +56,6 @@ DLQ spooling, periodic cleanup, writer chunking, writer worker count, and memory
 ```python
 from vertex_forager import (
     AdaptiveThrottleConfig,
-    AdvancedConfig,
     HTTPConfig,
     RetryConfig,
     SchedulerConfig,
@@ -83,7 +77,6 @@ client = create_client(
     retry=RetryConfig(max_attempts=3),
     throttle=AdaptiveThrottleConfig(enabled=False),
     limits=HTTPConfig(max_connections=200, max_keepalive_connections=100),
-    advanced=AdvancedConfig(),
 )
 ```
 

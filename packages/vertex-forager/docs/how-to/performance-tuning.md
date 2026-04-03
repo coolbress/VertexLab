@@ -13,7 +13,6 @@
 - `http_timeout_s`: HTTP request timeout in seconds.
 - `schedule=SchedulerConfig(...)`: Grouped scheduler controls for DRR fairness and backlog pressure.
 - `limits=HTTPConfig(...)`: HTTP client max keepalive and total connection counts.
-- `advanced=AdvancedConfig(...)`: Advanced tracing controls.
 
 ## Convenience Environment Variables
 
@@ -37,7 +36,7 @@ Outputs JSON summaries (p95/p99 and rows) under the configured output directory.
 Example explicit SDK configuration:
 
 ```python
-from vertex_forager import AdvancedConfig, HTTPConfig, SchedulerConfig, create_client
+from vertex_forager import HTTPConfig, SchedulerConfig, create_client
 
 client = create_client(
     provider="sharadar",
@@ -54,7 +53,6 @@ client = create_client(
         max_connections=200,
         max_keepalive_connections=100,
     ),
-    advanced=AdvancedConfig(),
 )
 ```
 

@@ -23,11 +23,10 @@ from vertex_forager.constants import (
     QUEUE_MIN,
     QUEUE_TARGET_RAM_RATIO,
 )
-from vertex_forager.core.contracts import TracerProtocol  # Pydantic v2: requires runtime resolution
 from vertex_forager.core.errors import RunError, VertexForagerError
 from vertex_forager.core.types import JSONValue  # Pydantic v2: used in field types at runtime
 
-_RUNTIME_TYPE_REFERENCES = (Mapping, date, datetime, pl.DataFrame, TracerProtocol, JSONValue)
+_RUNTIME_TYPE_REFERENCES = (Mapping, date, datetime, pl.DataFrame, JSONValue)
 
 
 class RetryConfig(BaseModel):
@@ -141,20 +140,6 @@ class HTTPConfig(BaseModel):
     max_keepalive_connections: int = Field(default=100, ge=1)
 
     model_config = {"extra": "forbid"}
-
-
-class AdvancedConfig(BaseModel):
-    """Advanced and transitional client settings.
-
-    Attributes:
-        tracer: Optional tracing adapter implementing ``start_span``.
-        otel_enabled: Optional tracing toggle.
-    """
-
-    tracer: TracerProtocol | None = None
-    otel_enabled: bool | None = None
-
-    model_config = {"arbitrary_types_allowed": True, "extra": "forbid"}
 
 
 class SchedulerConfig(BaseModel):
@@ -291,7 +276,7 @@ class ResolvedClientConfig(BaseModel):
 
     Public callers should set configuration through `create_client(...)` and the
     grouped public config objects (`RetryConfig`, `AdaptiveThrottleConfig`, `HTTPConfig`,
-    `AdvancedConfig`, `SchedulerConfig`) rather than constructing this model directly.
+    `SchedulerConfig`) rather than constructing this model directly.
     """
 
     requests_per_minute: int = Field(..., gt=0)
@@ -302,7 +287,6 @@ class ResolvedClientConfig(BaseModel):
     flush_threshold_rows: int = FLUSH_THRESHOLD_ROWS
     http_timeout_s: float = Field(default=HTTP_TIMEOUT_S, gt=0)
     limits: HTTPConfig = Field(default_factory=HTTPConfig)
-    advanced: AdvancedConfig = Field(default_factory=AdvancedConfig)
     checkpoint_retention_days: int = Field(default=7, ge=0)
     run_history_retention_days: int = Field(default=90, ge=0)
 
@@ -338,7 +322,7 @@ class ResolvedClientConfig(BaseModel):
 
     @property
     def dlq_tmp_retention_s(self) -> int:
-        return getattr(self.advanced, "dlq_tmp_retention_s", DLQ_TMP_RETENTION_S)
+        return DLQ_TMP_RETENTION_S
 
     @property
     def quantum(self) -> int:
@@ -351,14 +335,6 @@ class ResolvedClientConfig(BaseModel):
     @property
     def backpressure_threshold(self) -> int | None:
         return self.schedule.backpressure_threshold
-
-    @property
-    def tracer(self) -> TracerProtocol | None:
-        return self.advanced.tracer
-
-    @property
-    def otel_enabled(self) -> bool | None:
-        return self.advanced.otel_enabled
 
     @property
     def queue_max(self) -> int:
@@ -504,7 +480,6 @@ class ParseResult:
 
 __all__ = [
     "AdaptiveThrottleConfig",
-    "AdvancedConfig",
     "FetchJob",
     "FramePacket",
     "HTTPConfig",

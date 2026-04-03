@@ -10,7 +10,6 @@ from vertex_forager.api import (
 )
 from vertex_forager.core import (
     AdaptiveThrottleConfig,
-    AdvancedConfig,
     HTTPConfig,
     ProgressSnapshot,
     RetryConfig,
@@ -36,7 +35,6 @@ __version__ = "0.22.0"
 
 __all__ = [
     "AdaptiveThrottleConfig",
-    "AdvancedConfig",
     "BaseClient",
     "BaseRouter",
     "DataQualityRule",

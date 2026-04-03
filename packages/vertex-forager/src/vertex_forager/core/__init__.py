@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING, Any
 
 from vertex_forager.core.config import (
     AdaptiveThrottleConfig,
-    AdvancedConfig,
     FetchJob,
     FramePacket,
     HTTPConfig,
@@ -52,7 +51,6 @@ def __getattr__(name: str) -> Any:
 
 __all__ = [
     "AdaptiveThrottleConfig",
-    "AdvancedConfig",
     "FetchJob",
     "FlowController",
     "FramePacket",

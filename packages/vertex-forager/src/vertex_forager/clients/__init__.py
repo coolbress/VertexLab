@@ -18,7 +18,6 @@ from vertex_forager.core.registries import (
 if TYPE_CHECKING:
     from vertex_forager.core.config import (
         AdaptiveThrottleConfig,
-        AdvancedConfig,
         HTTPConfig,
         RetryConfig,
         SchedulerConfig,
@@ -41,7 +40,6 @@ def _register_sharadar() -> None:
         run_history_retention_days: int | None = None,
         http_timeout_s: float | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
-        advanced: AdvancedConfig | dict[str, Any] | None = None,
     ) -> BaseClient:
         return SharadarClient(
             api_key=api_key or "",
@@ -55,7 +53,6 @@ def _register_sharadar() -> None:
             run_history_retention_days=run_history_retention_days,
             http_timeout_s=http_timeout_s,
             limits=limits,
-            advanced=advanced,
         )
 
     # Register known providers
@@ -84,7 +81,6 @@ def _register_yfinance() -> None:
         run_history_retention_days: int | None = None,
         http_timeout_s: float | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
-        advanced: AdvancedConfig | dict[str, Any] | None = None,
     ) -> BaseClient:
         return YFinanceClient(
             api_key=api_key or "",
@@ -98,7 +94,6 @@ def _register_yfinance() -> None:
             run_history_retention_days=run_history_retention_days,
             http_timeout_s=http_timeout_s,
             limits=limits,
-            advanced=advanced,
         )
 
     client_registry.register(
@@ -124,7 +119,6 @@ def create_client(
     run_history_retention_days: int | None = None,
     http_timeout_s: float | None = None,
     limits: HTTPConfig | dict[str, Any] | None = None,
-    advanced: AdvancedConfig | dict[str, Any] | None = None,
 ) -> BaseClient:
     """
     Create and configure a client instance for the specified provider.
@@ -142,7 +136,6 @@ def create_client(
         run_history_retention_days: Retention window for run-history records.
         http_timeout_s: HTTP request timeout in seconds.
         limits: Grouped HTTP connection-pool configuration.
-        advanced: Grouped advanced and transitional settings.
 
     Returns:
         Configured client instance inheriting from BaseClient.
@@ -191,7 +184,6 @@ def create_client(
             run_history_retention_days=run_history_retention_days,
             http_timeout_s=http_timeout_s,
             limits=limits,
-            advanced=advanced,
         )
     if rate_limit is None:
         raise ValueError(f"Missing rate_limit for provider '{provider}'")
@@ -207,7 +199,6 @@ def create_client(
         run_history_retention_days=run_history_retention_days,
         http_timeout_s=http_timeout_s,
         limits=limits,
-        advanced=advanced,
     )
 
 
