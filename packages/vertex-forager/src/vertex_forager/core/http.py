@@ -15,11 +15,7 @@ try:
     import yfinance as yf  # test compatibility: allow monkeypatching core.http.yf
 except ImportError:
     yf = None
-from vertex_forager.constants import (
-    HTTP_MAX_CONNECTIONS,
-    HTTP_MAX_KEEPALIVE_CONNECTIONS,
-    HTTP_USER_AGENT,
-)
+from vertex_forager.constants import HTTP_USER_AGENT
 from vertex_forager.core.config import RequestSpec
 from vertex_forager.core.library import get_library_fetcher
 
@@ -133,7 +129,7 @@ class HttpExecutor:
                 headers=headers,
                 json=spec.json_body,
                 content=spec.data,
-                timeout=self._client._http_limits.timeout_s,
+                timeout=getattr(self._client, "_http_limits", None) and self._client._http_limits.timeout_s,
             )
             resp.raise_for_status()
             return resp.content

@@ -78,7 +78,7 @@ client = create_client(
         backpressure_threshold=120,
     ),
     retry=RetryConfig(max_attempts=3),
-    throttle=AdaptiveThrottleConfig(enabled=False),
+    throttle=AdaptiveThrottleConfig(rpm_floor_ratio=1.0),
     limits=HTTPConfig(max_connections=200, max_keepalive_connections=100, timeout_s=30.0),
     storage=StorageConfig(
         flush_threshold_rows=500_000,
