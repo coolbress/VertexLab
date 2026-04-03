@@ -21,6 +21,7 @@ if TYPE_CHECKING:
         HTTPConfig,
         RetryConfig,
         SchedulerConfig,
+        StorageConfig,
     )
 
 
@@ -33,12 +34,9 @@ def _register_sharadar() -> None:
         rate_limit: int,
         schedule: SchedulerConfig | dict[str, Any] | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
-        adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
+        throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
         concurrency: int | None = None,
-        flush_threshold_rows: int | None = None,
-        checkpoint_retention_days: int | None = None,
-        run_history_retention_days: int | None = None,
-        http_timeout_s: float | None = None,
+        storage: StorageConfig | dict[str, Any] | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
     ) -> BaseClient:
         return SharadarClient(
@@ -46,12 +44,9 @@ def _register_sharadar() -> None:
             rate_limit=rate_limit,
             schedule=schedule,
             retry=retry,
-            adaptive_throttle=adaptive_throttle,
+            throttle=throttle,
             concurrency=concurrency,
-            flush_threshold_rows=flush_threshold_rows,
-            checkpoint_retention_days=checkpoint_retention_days,
-            run_history_retention_days=run_history_retention_days,
-            http_timeout_s=http_timeout_s,
+            storage=storage,
             limits=limits,
         )
 
@@ -74,12 +69,9 @@ def _register_yfinance() -> None:
         rate_limit: int,
         schedule: SchedulerConfig | dict[str, Any] | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
-        adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
+        throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
         concurrency: int | None = None,
-        flush_threshold_rows: int | None = None,
-        checkpoint_retention_days: int | None = None,
-        run_history_retention_days: int | None = None,
-        http_timeout_s: float | None = None,
+        storage: StorageConfig | dict[str, Any] | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
     ) -> BaseClient:
         return YFinanceClient(
@@ -87,12 +79,9 @@ def _register_yfinance() -> None:
             rate_limit=rate_limit,
             schedule=schedule,
             retry=retry,
-            adaptive_throttle=adaptive_throttle,
+            throttle=throttle,
             concurrency=concurrency,
-            flush_threshold_rows=flush_threshold_rows,
-            checkpoint_retention_days=checkpoint_retention_days,
-            run_history_retention_days=run_history_retention_days,
-            http_timeout_s=http_timeout_s,
+            storage=storage,
             limits=limits,
         )
 
@@ -114,10 +103,7 @@ def create_client(
     retry: RetryConfig | dict[str, Any] | None = None,
     throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
     concurrency: int | None = None,
-    flush_threshold_rows: int | None = None,
-    checkpoint_retention_days: int | None = None,
-    run_history_retention_days: int | None = None,
-    http_timeout_s: float | None = None,
+    storage: StorageConfig | dict[str, Any] | None = None,
     limits: HTTPConfig | dict[str, Any] | None = None,
 ) -> BaseClient:
     """
@@ -131,10 +117,7 @@ def create_client(
         retry: Grouped retry policy configuration.
         throttle: Grouped adaptive throttle policy configuration.
         concurrency: Explicit fetch concurrency limit.
-        flush_threshold_rows: Buffered row threshold before flush.
-        checkpoint_retention_days: Retention window for completed checkpoints.
-        run_history_retention_days: Retention window for run-history records.
-        http_timeout_s: HTTP request timeout in seconds.
+        storage: Grouped data-lifecycle and write-path tuning settings.
         limits: Grouped HTTP connection-pool configuration.
 
     Returns:
@@ -147,7 +130,6 @@ def create_client(
     try:
         registration = client_registry.get(provider)
     except KeyError:
-        # Lazy loading for known internal providers to avoid circular imports
         if provider == "sharadar":
             _register_sharadar()
             registration = client_registry.get(provider)
@@ -170,19 +152,15 @@ def create_client(
                 "Provided API key will be ignored for yfinance; continuing with api_key=None"
             )
 
-        # Determine effective rate limit with centralized default fallback
         effective_limit = rate_limit if rate_limit is not None else DEFAULT_RATE_LIMIT
         return registration.factory(
             api_key=None,
             rate_limit=effective_limit,
             schedule=schedule,
             retry=retry,
-            adaptive_throttle=throttle,
+            throttle=throttle,
             concurrency=concurrency,
-            flush_threshold_rows=flush_threshold_rows,
-            checkpoint_retention_days=checkpoint_retention_days,
-            run_history_retention_days=run_history_retention_days,
-            http_timeout_s=http_timeout_s,
+            storage=storage,
             limits=limits,
         )
     if rate_limit is None:
@@ -192,12 +170,9 @@ def create_client(
         rate_limit=rate_limit,
         schedule=schedule,
         retry=retry,
-        adaptive_throttle=throttle,
+        throttle=throttle,
         concurrency=concurrency,
-        flush_threshold_rows=flush_threshold_rows,
-        checkpoint_retention_days=checkpoint_retention_days,
-        run_history_retention_days=run_history_retention_days,
-        http_timeout_s=http_timeout_s,
+        storage=storage,
         limits=limits,
     )
 

@@ -22,7 +22,7 @@ Common operations with both code and CLI.
 ## Tune chunked flush
 
 - Code
-  - `create_client(..., flush_threshold_rows=500000)`
+  - `create_client(..., storage=StorageConfig(flush_threshold_rows=500000))`
 - CLI
   - `vertex-forager tune profile --source yfinance --symbol "AAPL,MSFT"`
   - `vertex-forager tune sweep --source yfinance --symbol "AAPL,MSFT"`

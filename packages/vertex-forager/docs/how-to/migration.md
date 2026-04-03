@@ -46,9 +46,9 @@ DLQ payloads stay as Arrow IPC files under `~/.cache/vertex-forager/dlq/<table>/
 **Action required**:
 
 - Remove `persist_run_history` from `create_client(...)` calls.
-- Replace it with retention controls when needed:
-  - `checkpoint_retention_days`
-  - `run_history_retention_days`
+- Replace it with retention controls via `StorageConfig`:
+  - `storage.checkpoint_retention_days`
+  - `storage.run_history_retention_days`
 
 ## 0.3.x → 0.4.x
 

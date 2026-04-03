@@ -11,19 +11,13 @@ import psutil
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
 from vertex_forager.constants import (
-    DEFAULT_RETRY_BASE_BACKOFF_S,
-    DEFAULT_RETRY_MAX_ATTEMPTS,
-    DEFAULT_RETRY_MAX_BACKOFF_S,
-    DLQ_TMP_RETENTION_S,
-    FLUSH_THRESHOLD_ROWS,
-    HTTP_TIMEOUT_S,
     PACKET_SIZE_EST_BYTES,
     QUEUE_DEFAULT,
     QUEUE_MAX,
     QUEUE_MIN,
     QUEUE_TARGET_RAM_RATIO,
 )
-from vertex_forager.core.errors import RunError, VertexForagerError
+from vertex_forager.core.errors import RunError
 from vertex_forager.core.types import JSONValue  # Pydantic v2: used in field types at runtime
 
 _RUNTIME_TYPE_REFERENCES = (Mapping, date, datetime, pl.DataFrame, JSONValue)
@@ -51,9 +45,9 @@ class RetryConfig(BaseModel):
           Use idempotency keys or upstream idempotent semantics before enabling broader codes.
     """
 
-    max_attempts: int = Field(default=DEFAULT_RETRY_MAX_ATTEMPTS, ge=1)
-    base_backoff_s: float = Field(default=DEFAULT_RETRY_BASE_BACKOFF_S, ge=0.0)
-    max_backoff_s: float = Field(default=DEFAULT_RETRY_MAX_BACKOFF_S, ge=0.0)
+    max_attempts: int = Field(default=3, ge=1)
+    base_backoff_s: float = Field(default=1.0, ge=0.0)
+    max_backoff_s: float = Field(default=30.0, ge=0.0)
     backoff_mode: Literal["full_jitter", "equal"] = "full_jitter"
     retry_status_codes: tuple[int, ...] = (429, 503)
 
@@ -70,7 +64,7 @@ class RetryConfig(BaseModel):
     @field_validator("max_backoff_s")
     @classmethod
     def _validate_backoff_window(cls, v: float, info: ValidationInfo) -> float:
-        base = info.data.get("base_backoff_s", DEFAULT_RETRY_BASE_BACKOFF_S)
+        base = info.data.get("base_backoff_s", 1.0)
         if v < base:
             raise ValueError("max_backoff_s must be >= base_backoff_s")
         return v
@@ -90,7 +84,6 @@ class AdaptiveThrottleConfig(BaseModel):
     """Adaptive throttle policy for dynamic RPM adjustment based on error rate.
 
     Attributes:
-        enabled: Enables adaptive throttle behavior.
         window_s: Sliding window in seconds used to evaluate recent error rate.
         error_rate_threshold: Error ratio that triggers throttle decrease.
         rpm_floor_ratio: Minimum RPM as a ratio of ceiling (0.0-1.0) maintained while throttled.
@@ -104,7 +97,6 @@ class AdaptiveThrottleConfig(BaseModel):
         - rpm_floor is resolved to an absolute value at init: floor = max(1, ceiling * rpm_floor_ratio).
     """
 
-    enabled: bool = False
     window_s: int = Field(default=60, ge=1)
     error_rate_threshold: float = Field(default=0.2, ge=0.0, le=1.0)
     rpm_floor_ratio: float = Field(default=0.10, ge=0.0, le=1.0)
@@ -134,10 +126,30 @@ class HTTPConfig(BaseModel):
     Attributes:
         max_connections: Maximum connection pool size.
         max_keepalive_connections: Maximum keep-alive pool size.
+        timeout_s: HTTP request timeout in seconds.
     """
 
     max_connections: int = Field(default=200, ge=1)
     max_keepalive_connections: int = Field(default=100, ge=1)
+    timeout_s: float = Field(default=30.0, gt=0)
+
+    model_config = {"extra": "forbid"}
+
+
+class StorageConfig(BaseModel):
+    """Data-lifecycle and write-path tuning settings.
+
+    Attributes:
+        flush_threshold_rows: DuckDB write buffer threshold before flush begins.
+        checkpoint_retention_days: Retention window for completed checkpoint state.
+        run_history_retention_days: Retention window for run-history records.
+        dlq_tmp_retention_s: Retention window for DLQ `.tmp` artefacts.
+    """
+
+    flush_threshold_rows: int = Field(default=500_000, ge=1)
+    checkpoint_retention_days: int = Field(default=7, ge=0)
+    run_history_retention_days: int = Field(default=90, ge=0)
+    dlq_tmp_retention_s: int = Field(default=86_400, ge=0)
 
     model_config = {"extra": "forbid"}
 
@@ -190,7 +202,6 @@ class RequestSpec(BaseModel):
         headers (dict[str, str]): HTTP headers as key-value pairs (default: empty dict).
         json_body (dict[str, JSONValue] | None): JSON payload for POST/PUT requests (default: None).
         data (bytes | None): Raw bytes payload for requests (default: None).
-        timeout_s (float): Request timeout in seconds (default: 30.0).
         auth (RequestAuth): Authentication strategy to apply (default: ``RequestAuth()``).
         idempotent (bool): Whether the request is safe to retry without side effects.
             Defaults to True; set to False to disable automatic retries for
@@ -203,7 +214,6 @@ class RequestSpec(BaseModel):
     headers: dict[str, str] = Field(default_factory=dict)
     json_body: dict[str, JSONValue] | None = None
     data: bytes | None = None
-    timeout_s: float = HTTP_TIMEOUT_S
     auth: RequestAuth = Field(default_factory=RequestAuth)
     idempotent: bool = True
 
@@ -282,59 +292,12 @@ class ResolvedClientConfig(BaseModel):
     requests_per_minute: int = Field(..., gt=0)
     schedule: SchedulerConfig = Field(default_factory=SchedulerConfig)
     retry: RetryConfig = Field(default_factory=RetryConfig)
-    adaptive_throttle: AdaptiveThrottleConfig = Field(default_factory=AdaptiveThrottleConfig)
+    throttle: AdaptiveThrottleConfig = Field(default_factory=AdaptiveThrottleConfig)
     concurrency: int | None = Field(default=None, gt=0)
-    flush_threshold_rows: int = FLUSH_THRESHOLD_ROWS
-    http_timeout_s: float = Field(default=HTTP_TIMEOUT_S, gt=0)
+    storage: StorageConfig = Field(default_factory=StorageConfig)
     limits: HTTPConfig = Field(default_factory=HTTPConfig)
-    checkpoint_retention_days: int = Field(default=7, ge=0)
-    run_history_retention_days: int = Field(default=90, ge=0)
 
     model_config = {"arbitrary_types_allowed": True}
-
-    @property
-    def fetch_concurrency(self) -> int | None:
-        return self.concurrency
-
-    @property
-    def adaptive_throttle_enabled(self) -> bool:
-        return self.adaptive_throttle.enabled
-
-    @property
-    def adaptive_throttle_window_s(self) -> int:
-        return self.adaptive_throttle.window_s
-
-    @property
-    def error_rate_threshold(self) -> float:
-        return self.adaptive_throttle.error_rate_threshold
-
-    @property
-    def rpm_floor_ratio(self) -> float:
-        return self.adaptive_throttle.rpm_floor_ratio
-
-    @property
-    def recovery_factor(self) -> float:
-        return self.adaptive_throttle.recovery_factor
-
-    @property
-    def healthy_window_s(self) -> int:
-        return self.adaptive_throttle.healthy_window_s
-
-    @property
-    def dlq_tmp_retention_s(self) -> int:
-        return DLQ_TMP_RETENTION_S
-
-    @property
-    def quantum(self) -> int:
-        return self.schedule.quantum
-
-    @property
-    def max_pending_per_symbol(self) -> int | None:
-        return self.schedule.max_pending_per_symbol
-
-    @property
-    def backpressure_threshold(self) -> int | None:
-        return self.schedule.backpressure_threshold
 
     @property
     def queue_max(self) -> int:
@@ -353,20 +316,6 @@ class ResolvedClientConfig(BaseModel):
             raise ValueError("requests_per_minute must be positive")
         if self.concurrency is not None and self.concurrency <= 0:
             raise ValueError("concurrency must be positive if specified")
-        try:
-            checkpoint_retention_days = (
-                7 if self.checkpoint_retention_days is None else int(self.checkpoint_retention_days)
-            )
-        except (TypeError, ValueError) as e:
-            raise VertexForagerError(f"checkpoint_retention_days must be an integer >= 0: {e}") from e
-        self.checkpoint_retention_days = max(0, checkpoint_retention_days)
-        try:
-            run_history_retention_days = (
-                90 if self.run_history_retention_days is None else int(self.run_history_retention_days)
-            )
-        except (TypeError, ValueError) as e:
-            raise VertexForagerError(f"run_history_retention_days must be an integer >= 0: {e}") from e
-        self.run_history_retention_days = max(0, run_history_retention_days)
 
 
 class RunResult(BaseModel):
@@ -491,4 +440,5 @@ __all__ = [
     "RetryConfig",
     "RunResult",
     "SchedulerConfig",
+    "StorageConfig",
 ]

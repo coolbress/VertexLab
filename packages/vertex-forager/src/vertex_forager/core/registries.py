@@ -29,6 +29,7 @@ if TYPE_CHECKING:
         HTTPConfig,
         RetryConfig,
         SchedulerConfig,
+        StorageConfig,
     )
     from vertex_forager.routers.base import BaseRouter
     from vertex_forager.writers.base import BaseWriter
@@ -208,12 +209,9 @@ class ClientFactory(Protocol):
         rate_limit: int,
         schedule: SchedulerConfig | dict[str, Any] | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
-        adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
+        throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
         concurrency: int | None = None,
-        flush_threshold_rows: int | None = None,
-        checkpoint_retention_days: int | None = None,
-        run_history_retention_days: int | None = None,
-        http_timeout_s: float | None = None,
+        storage: StorageConfig | dict[str, Any] | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
     ) -> BaseClient:
         """Create a client instance.
@@ -223,12 +221,9 @@ class ClientFactory(Protocol):
             rate_limit: Rate limit in requests per minute.
             schedule: Grouped scheduler configuration for always-on DRR fairness.
             retry: Grouped retry policy configuration.
-            adaptive_throttle: Grouped adaptive throttle policy configuration.
+            throttle: Grouped adaptive throttle policy configuration.
             concurrency: Explicit fetch concurrency limit.
-            flush_threshold_rows: Buffered row threshold before flush.
-            checkpoint_retention_days: Retention window for completed checkpoints.
-            run_history_retention_days: Retention window for run-history records.
-            http_timeout_s: HTTP request timeout in seconds.
+            storage: Grouped data-lifecycle and write-path tuning settings.
             limits: Grouped HTTP connection-pool configuration.
 
         Returns:

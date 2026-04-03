@@ -18,7 +18,6 @@ except ImportError:
 from vertex_forager.constants import (
     HTTP_MAX_CONNECTIONS,
     HTTP_MAX_KEEPALIVE_CONNECTIONS,
-    HTTP_TIMEOUT_S,
     HTTP_USER_AGENT,
 )
 from vertex_forager.core.config import RequestSpec
@@ -134,7 +133,7 @@ class HttpExecutor:
                 headers=headers,
                 json=spec.json_body,
                 content=spec.data,
-                timeout=spec.timeout_s,
+                timeout=self._client._http_limits.timeout_s,
             )
             resp.raise_for_status()
             return resp.content
@@ -216,25 +215,6 @@ class HttpExecutor:
             raise
 
 
-def default_async_client() -> httpx.AsyncClient:
-    """Create a default httpx AsyncClient instance.
-
-    Configured with centralized defaults (see vertex_forager.constants):
-    - User-Agent: HTTP_USER_AGENT
-    - Timeout: HTTP_TIMEOUT_S seconds
-    - Connection Pool: HTTP_MAX_CONNECTIONS (max), HTTP_MAX_KEEPALIVE_CONNECTIONS (keep-alive)
-
-    Returns:
-        httpx.AsyncClient: Configured client for HTTP operations.
-    """
-
-    return build_async_client(
-        timeout_s=HTTP_TIMEOUT_S,
-        max_keepalive_connections=HTTP_MAX_KEEPALIVE_CONNECTIONS,
-        max_connections=HTTP_MAX_CONNECTIONS,
-    )
-
-
 def build_async_client(
     *,
     timeout_s: float,
@@ -251,7 +231,6 @@ def build_async_client(
     Returns:
         Configured HTTP client instance.
     """
-
     return httpx.AsyncClient(
         headers={"User-Agent": HTTP_USER_AGENT},
         timeout=httpx.Timeout(timeout_s),

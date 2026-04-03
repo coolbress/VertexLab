@@ -7,14 +7,9 @@ from typing import Any
 
 def _global_constants_map(constants_mod: Any) -> dict[str, object]:
     return {
-        "HTTP_TIMEOUT_S": constants_mod.HTTP_TIMEOUT_S,
         "HTTP_MAX_CONNECTIONS": constants_mod.HTTP_MAX_CONNECTIONS,
         "HTTP_MAX_KEEPALIVE_CONNECTIONS": constants_mod.HTTP_MAX_KEEPALIVE_CONNECTIONS,
         "DEFAULT_RATE_LIMIT": constants_mod.DEFAULT_RATE_LIMIT,
-        "DEFAULT_RETRY_MAX_ATTEMPTS": constants_mod.DEFAULT_RETRY_MAX_ATTEMPTS,
-        "DEFAULT_RETRY_BASE_BACKOFF_S": constants_mod.DEFAULT_RETRY_BASE_BACKOFF_S,
-        "DEFAULT_RETRY_MAX_BACKOFF_S": constants_mod.DEFAULT_RETRY_MAX_BACKOFF_S,
-        "FLUSH_THRESHOLD_ROWS": constants_mod.FLUSH_THRESHOLD_ROWS,
         "WRITER_CHUNK_ROWS": constants_mod.WRITER_CHUNK_ROWS,
         "PRIORITY_PAGINATION": constants_mod.PRIORITY_PAGINATION,
         "PRIORITY_NEW_JOB": constants_mod.PRIORITY_NEW_JOB,
@@ -43,6 +38,7 @@ def _queue_constants_map(constants_mod: Any) -> dict[str, object]:
         "QUEUE_MAX": constants_mod.QUEUE_MAX,
         "QUEUE_DEFAULT": constants_mod.QUEUE_DEFAULT,
     }
+
 
 def _collect_env_overrides() -> dict[str, object]:
     env_vals = {

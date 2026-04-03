@@ -8,9 +8,6 @@ import polars as pl
 from vertex_forager.clients.base import BaseClient
 from vertex_forager.constants import (
     DEFAULT_RATE_LIMIT,
-    DEFAULT_RETRY_BASE_BACKOFF_S,
-    DEFAULT_RETRY_MAX_ATTEMPTS,
-    DEFAULT_RETRY_MAX_BACKOFF_S,
     MEM_THRESHOLD_ABS_MB,
     MEM_THRESHOLD_RATIO,
     RESERVED_PIPELINE_KEYS,
@@ -21,6 +18,7 @@ from vertex_forager.core.config import (
     RetryConfig,
     RunResult,
     SchedulerConfig,
+    StorageConfig,
 )
 from vertex_forager.core.types import YFinanceDataset
 from vertex_forager.exceptions import InputError
@@ -73,12 +71,9 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         rate_limit: int = DEFAULT_RATE_LIMIT,
         schedule: SchedulerConfig | dict[str, Any] | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
-        adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
+        throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
         concurrency: int | None = None,
-        flush_threshold_rows: int | None = None,
-        checkpoint_retention_days: int | None = None,
-        run_history_retention_days: int | None = None,
-        http_timeout_s: float | None = None,
+        storage: StorageConfig | dict[str, Any] | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
     ) -> None:
         """Initialize the YFinance client.
@@ -88,16 +83,11 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             rate_limit (int): Requests per minute cap. Default is 60.
             schedule: Grouped scheduler configuration for always-on DRR fairness.
             retry (RetryConfig | dict[str, Any] | None): Retry settings for fetch failures. Default is None.
-            adaptive_throttle (
+            throttle (
                 AdaptiveThrottleConfig | dict[str, Any] | None,
             ): Adaptive throttle settings. Default is None.
             concurrency (int | None): Maximum concurrent fetch workers. Default is None.
-            flush_threshold_rows (int | None): Buffered row threshold before writer flush. Default is None.
-            checkpoint_retention_days (int | None): Days to retain completed checkpoint state before pruning.
-                Default is None, which resolves to the runtime default of 7 days.
-            run_history_retention_days (int | None): Days to retain persisted run history before pruning.
-                Default is None, which resolves to the runtime default of 90 days.
-            http_timeout_s (float | None): HTTP request timeout in seconds. Default is None.
+            storage: Grouped data-lifecycle and write-path tuning settings.
             limits (HTTPConfig | dict[str, Any] | None): HTTP connection pool settings. Default is None.
         """
         normalized = rate_limit
@@ -111,22 +101,15 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             logger.warning(LOG_RATE_LIMIT_INVALID_TYPE.format(prefix=CLIENT_LOG_PREFIX, value=normalized))
             normalized = DEFAULT_RATE_LIMIT
         if retry is None:
-            retry = RetryConfig(
-                max_attempts=DEFAULT_RETRY_MAX_ATTEMPTS,
-                base_backoff_s=DEFAULT_RETRY_BASE_BACKOFF_S,
-                max_backoff_s=DEFAULT_RETRY_MAX_BACKOFF_S,
-            )
+            retry = RetryConfig()
         super().__init__(
             api_key=None,
             rate_limit=normalized,
             schedule=schedule,
             retry=retry,
-            adaptive_throttle=adaptive_throttle,
+            throttle=throttle,
             concurrency=concurrency,
-            flush_threshold_rows=flush_threshold_rows,
-            checkpoint_retention_days=checkpoint_retention_days,
-            run_history_retention_days=run_history_retention_days,
-            http_timeout_s=http_timeout_s,
+            storage=storage,
             limits=limits,
         )
         self._mapper = SchemaMapper()

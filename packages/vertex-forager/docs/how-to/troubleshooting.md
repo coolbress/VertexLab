@@ -19,7 +19,7 @@
 - Checks
   - Review `writer_rows.{table}` and `writer_flush_duration_s.{table}` histograms.
 - Actions
-  - Adjust `flush_threshold_rows` to control batch sizes.
+  - Adjust `storage.flush_threshold_rows` to control batch sizes.
   - Consider splitting workloads by dataset or symbols if necessary.
 
 ## DLQ persistence
@@ -47,5 +47,5 @@
 - Symptoms
   - Timeouts or connection pool exhaustion.
 - Actions
-  - Tune HTTP: `http_timeout_s`, `limits.max_connections`, `limits.max_keepalive_connections`.
+  - Tune HTTP: `limits.timeout_s`, `limits.max_connections`, `limits.max_keepalive_connections`.
   - Reduce concurrency or increase keepalive where appropriate.

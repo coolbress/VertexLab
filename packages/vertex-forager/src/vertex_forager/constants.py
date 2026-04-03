@@ -16,10 +16,6 @@ from typing import Final
 
 DEFAULT_RATE_LIMIT: Final[int] = 60
 
-DEFAULT_RETRY_MAX_ATTEMPTS: Final[int] = 3
-DEFAULT_RETRY_BASE_BACKOFF_S: Final[float] = 1.0
-DEFAULT_RETRY_MAX_BACKOFF_S: Final[float] = 30.0
-
 RESERVED_PIPELINE_KEYS: Final[set[str]] = {
     "router",
     "dataset",
@@ -35,15 +31,11 @@ DATE_FMT: Final[str] = "%Y-%m-%d"
 ISO8601_Z_SUFFIX: Final[str] = "+00:00"
 DEFAULT_TIME_ZONE: Final[str] = "UTC"
 
-HTTP_TIMEOUT_S: Final[float] = 30.0
 HTTP_MAX_KEEPALIVE_CONNECTIONS: Final[int] = 100
 HTTP_MAX_CONNECTIONS: Final[int] = 200
 HTTP_USER_AGENT: Final[str] = "vertex-forager"
-DLQ_TMP_RETENTION_S: Final[int] = 86_400
 MEM_THRESHOLD_RATIO: Final[float] = 0.70
 MEM_THRESHOLD_ABS_MB: Final[int] = 4096
-
-FLUSH_THRESHOLD_ROWS: Final[int] = 500_000
 
 TICKERS_UNIT: Final[str] = "tickers"
 PAGES_UNIT: Final[str] = "pages"

@@ -6,6 +6,7 @@ from vertex_forager.core.config import (
     HTTPConfig,
     ResolvedClientConfig,
     RetryConfig,
+    StorageConfig,
 )
 
 
@@ -46,12 +47,26 @@ def test_grouped_public_configs_forbid_unknown_fields() -> None:
         AdaptiveThrottleConfig(extra_field=True)
     with pytest.raises(ValidationError):
         HTTPConfig(extra_field=True)
+    with pytest.raises(ValidationError):
+        StorageConfig(extra_field=True)
 
 
-def test_runtime_config_retention_days_are_coerced_and_clamped() -> None:
+def test_storage_config_retention_days_default() -> None:
     cfg = ResolvedClientConfig(requests_per_minute=60, retry=RetryConfig())
-    cfg.checkpoint_retention_days = -5
-    cfg.run_history_retention_days = "12"  # type: ignore[assignment]
-    cfg.assert_valid()
-    assert cfg.checkpoint_retention_days == 0
-    assert cfg.run_history_retention_days == 12
+    assert cfg.storage.checkpoint_retention_days == 7
+    assert cfg.storage.run_history_retention_days == 90
+
+
+def test_storage_config_custom_retention_days() -> None:
+    cfg = ResolvedClientConfig(
+        requests_per_minute=60,
+        retry=RetryConfig(),
+        storage=StorageConfig(checkpoint_retention_days=30, run_history_retention_days=180),
+    )
+    assert cfg.storage.checkpoint_retention_days == 30
+    assert cfg.storage.run_history_retention_days == 180
+
+
+def test_storage_config_flush_threshold_rows_default() -> None:
+    cfg = ResolvedClientConfig(requests_per_minute=60, retry=RetryConfig())
+    assert cfg.storage.flush_threshold_rows > 0

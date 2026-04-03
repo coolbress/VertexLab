@@ -37,6 +37,7 @@ if TYPE_CHECKING:
         RetryConfig,
         RunResult,
         SchedulerConfig,
+        StorageConfig,
     )
 
 logger = logging.getLogger(__name__)
@@ -114,12 +115,9 @@ class SharadarClient(BaseClient[SharadarDataset]):
         rate_limit: int,
         schedule: SchedulerConfig | dict[str, Any] | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
-        adaptive_throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
+        throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
         concurrency: int | None = None,
-        flush_threshold_rows: int | None = None,
-        checkpoint_retention_days: int | None = None,
-        run_history_retention_days: int | None = None,
-        http_timeout_s: float | None = None,
+        storage: StorageConfig | dict[str, Any] | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
     ) -> None:
         """Initialize the Sharadar client.
@@ -129,12 +127,9 @@ class SharadarClient(BaseClient[SharadarDataset]):
             rate_limit: Requests per minute (int).
             schedule: Grouped scheduler configuration for always-on DRR fairness.
             retry: Grouped retry policy configuration.
-            adaptive_throttle: Grouped adaptive throttle policy configuration.
+            throttle: Grouped adaptive throttle policy configuration.
             concurrency: Explicit fetch concurrency limit.
-            flush_threshold_rows: Buffered row threshold before flush begins.
-            checkpoint_retention_days: Retention window for completed checkpoints.
-            run_history_retention_days: Retention window for run-history records.
-            http_timeout_s: HTTP request timeout in seconds.
+            storage: Grouped data-lifecycle and write-path tuning settings.
             limits: Grouped HTTP connection-pool configuration.
         """
         if not isinstance(api_key, str):
@@ -148,12 +143,9 @@ class SharadarClient(BaseClient[SharadarDataset]):
             rate_limit=rate_limit,
             schedule=schedule,
             retry=retry,
-            adaptive_throttle=adaptive_throttle,
+            throttle=throttle,
             concurrency=concurrency,
-            flush_threshold_rows=flush_threshold_rows,
-            checkpoint_retention_days=checkpoint_retention_days,
-            run_history_retention_days=run_history_retention_days,
-            http_timeout_s=http_timeout_s,
+            storage=storage,
             limits=limits,
         )
 

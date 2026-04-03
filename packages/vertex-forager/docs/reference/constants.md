@@ -4,11 +4,11 @@ This document summarizes centralized constants across the codebase. The goal is 
 
 ## Global (`vertex_forager/constants.py`)
 
-- HTTP_TIMEOUT_S, HTTP_MAX_CONNECTIONS, HTTP_MAX_KEEPALIVE_CONNECTIONS, HTTP_USER_AGENT
-- DEFAULT_RATE_LIMIT, DEFAULT_RETRY_MAX_ATTEMPTS, DEFAULT_RETRY_BASE_BACKOFF_S, DEFAULT_RETRY_MAX_BACKOFF_S
+- HTTP_MAX_CONNECTIONS, HTTP_MAX_KEEPALIVE_CONNECTIONS, HTTP_USER_AGENT
+- DEFAULT_RATE_LIMIT
 - RESERVED_PIPELINE_KEYS
 - DATE_FMT, ISO8601_Z_SUFFIX, DEFAULT_TIME_ZONE
-- FLUSH_THRESHOLD_ROWS, FLUSH_THRESHOLD_INFINITE
+- FLUSH_THRESHOLD_INFINITE
 - PRIORITY_PAGINATION, PRIORITY_NEW_JOB, PRIORITY_SENTINEL
 - PROGRESS_LOG_CHUNK_ROWS
 - TICKERS_UNIT, PAGES_UNIT
@@ -54,9 +54,7 @@ This document summarizes centralized constants across the codebase. The goal is 
 
 ## Units/Scope/Impact Notes
 
-- HTTP_TIMEOUT_S (seconds): RequestSpec.default timeout; lowering may increase failures, raising may stall retries.
 - DEFAULT_RATE_LIMIT (rpm): FlowController rate; affects overall throughput and API throttling risk.
-- FLUSH_THRESHOLD_ROWS (rows): Pipeline buffering threshold; high values reduce merges but increase memory.
 - TRADING_DAYS_PER_YEAR (days): Batch estimation heuristic; used for Sharadar range sizing.
 - WAL_AUTOCHECKPOINT_LIMIT (bytes string): DuckDB WAL auto-checkpoint; larger limits reduce checkpoint overhead during bursts.
 - DEFAULT_TIME_ZONE (tz): All timestamps stored consistently; switching impacts downstream parsing/queries.
