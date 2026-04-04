@@ -48,6 +48,7 @@ def test_no_future_dates_handles_date_and_datetime_columns() -> None:
         }
     ).with_columns(pl.col("observed_at").cast(pl.Datetime(time_unit="us", time_zone="UTC")))
     rule = NoFutureDates(date_columns=["date", "observed_at"])
+    rule._current_time = lambda: now.astimezone(timezone.utc)  # type: ignore[method-assign]
     violations = rule.validate(df)
     assert len(violations) == 2
     assert any("date" in v for v in violations)

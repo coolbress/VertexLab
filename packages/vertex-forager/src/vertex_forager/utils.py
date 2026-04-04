@@ -11,7 +11,7 @@ import shutil
 import sys
 import threading
 import time
-from typing import Any, Literal, TypeVar
+from typing import Any, Literal, ParamSpec, Protocol, TypeVar, cast
 import warnings
 
 from dotenv import load_dotenv
@@ -23,7 +23,13 @@ from vertex_forager.core.errors import RunError
 from vertex_forager.exceptions import InputError
 
 logger = logging.getLogger(__name__)
+P = ParamSpec("P")
 T = TypeVar("T")
+R = TypeVar("R")
+
+
+class _SupportsRunSyncCompat(Protocol):
+    def _run_sync_compat(self, coro: Coroutine[Any, Any, R]) -> R: ...
 
 
 def _safe_get_ipython() -> Any:
@@ -722,21 +728,13 @@ def load_env_file(env_file: Path | None = None) -> None:
     load_dotenv(dotenv_path=env_file, override=False)
 
 
-def jupyter_safe(async_func: Callable[..., Any]) -> Callable[..., Any]:
-    """Run an async function in both scripts and Jupyter environments.
-
-    Args:
-        async_func: Async callable to wrap.
-
-    Returns:
-        A callable that returns the awaited result.
-    """
-
+def make_sync(async_func: Callable[P, Coroutine[Any, Any, R]]) -> Callable[P, R]:
     @functools.wraps(async_func)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
-        return run_sync_compat(async_func(*args, **kwargs))
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        self = cast("_SupportsRunSyncCompat", args[0])
+        return self._run_sync_compat(async_func(*args, **kwargs))
 
-    return wrapper
+    return cast("Callable[P, R]", wrapper)
 
 
 def run_sync_compat(coro: Coroutine[Any, Any, T]) -> T:

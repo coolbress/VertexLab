@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from datetime import datetime, timezone
-import importlib
 import json
 import types
 from typing import TYPE_CHECKING, Any
@@ -106,31 +105,16 @@ def sharadar_client(
     """Sharadar client instance with mocked HttpExecutor."""
     from unittest.mock import patch
 
-    # Define a no-op decorator to bypass jupyter_safe
-    def no_op_decorator(func):
-        return func
+    from vertex_forager.providers.sharadar.client import SharadarClient
 
-    # Patch jupyter_safe in the utils module where it is defined
-    with patch("vertex_forager.utils.jupyter_safe", side_effect=no_op_decorator):
-        # Reload the client module to apply the patched decorator
-        import vertex_forager.providers.sharadar.client as client_module
+    with patch("vertex_forager.clients.base.HttpExecutor") as MockHttpExecutorClass:
+        MockHttpExecutorClass.return_value = mock_http_executor
+        client = SharadarClient(
+            api_key=sharadar_client_config["api_key"],
+            rate_limit=sharadar_client_config["rate_limit"],
+        )
 
-        importlib.reload(client_module)
-
-        from vertex_forager.providers.sharadar.client import SharadarClient
-
-        # Patch HttpExecutor in the base client module (where _run is defined)
-        # Ensure that when the client creates an HttpExecutor, it gets our mock
-        with patch("vertex_forager.clients.base.HttpExecutor") as MockHttpExecutorClass:
-            MockHttpExecutorClass.return_value = mock_http_executor
-
-            # Create real client
-            client = SharadarClient(
-                api_key=sharadar_client_config["api_key"],
-                rate_limit=sharadar_client_config["rate_limit"],
-            )
-
-            yield client
+        yield client
 
 
 @pytest.fixture
