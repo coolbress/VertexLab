@@ -188,6 +188,7 @@ __all__ = [
     "NoDuplicateRows",
     "NoFutureDates",
     "NoNegativePrices",
+    "get_table_schema",
     "parse_violation_count",
     "validate_data_quality",
 ]

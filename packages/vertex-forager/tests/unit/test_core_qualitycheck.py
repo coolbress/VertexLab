@@ -10,6 +10,7 @@ from vertex_forager.core.quality import (
     NoDuplicateRows,
     NoFutureDates,
     NoNegativePrices,
+    get_table_schema,
     parse_violation_count,
     validate_data_quality,
 )
@@ -135,3 +136,14 @@ def test_yfinance_quality_rules_are_assigned() -> None:
     assert YFINANCE_TABLES["yfinance_calendar"].quality_rules == ()
     assert YFINANCE_TABLES["yfinance_info"].quality_rules == ()
     assert YFINANCE_TABLES["yfinance_fast_info"].quality_rules == ()
+
+
+def test_quality_module_exports_get_table_schema() -> None:
+    assert callable(get_table_schema)
+
+
+def test_yfinance_financials_duplicate_rule_matches_full_unique_key() -> None:
+    duplicate_rule = YFINANCE_TABLES["yfinance_financials"].quality_rules[1]
+
+    assert isinstance(duplicate_rule, NoDuplicateRows)
+    assert duplicate_rule.subset == ["date", "ticker", "provider", "period", "metric"]

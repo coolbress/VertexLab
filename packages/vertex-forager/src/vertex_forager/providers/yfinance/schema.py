@@ -109,7 +109,7 @@ YFINANCE_DIVIDENDS_SCHEMA = TableSchema(
     analysis_date_col="date",
     quality_rules=(
         NoFutureDates(["date"]),
-        NoDuplicateRows(["ticker", "date"]),
+        NoDuplicateRows(["date", "ticker", "provider", "period", "metric"]),
     ),
 )
 
@@ -126,7 +126,7 @@ YFINANCE_SPLITS_SCHEMA = TableSchema(
     analysis_date_col="date",
     quality_rules=(
         NoFutureDates(["date"]),
-        NoDuplicateRows(["ticker", "date"]),
+        NoDuplicateRows(["date", "ticker", "provider", "period", "metric"]),
     ),
 )
 
@@ -218,7 +218,7 @@ YFINANCE_FINANCIALS_SCHEMA = TableSchema(
     analysis_date_col="date",
     quality_rules=(
         NoFutureDates(["date"]),
-        NoDuplicateRows(["ticker", "date"]),
+        NoDuplicateRows(["date", "ticker", "provider", "period", "metric"]),
     ),
 )
 

@@ -317,6 +317,8 @@ class ResolvedClientConfig(BaseModel):
             raise ValueError("requests_per_minute must be positive")
         if self.concurrency is not None and self.concurrency <= 0:
             raise ValueError("concurrency must be positive if specified")
+        if self.quality_check not in {"warn", "error"}:
+            raise ValueError("quality_check must be either 'warn' or 'error'")
 
 
 class RunResult(BaseModel):
