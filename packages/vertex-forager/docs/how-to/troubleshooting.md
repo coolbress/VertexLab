@@ -19,7 +19,7 @@
 - Checks
   - Review `writer_rows.{table}` and `writer_flush_duration_s.{table}` histograms.
 - Actions
-  - Adjust `storage.flush_threshold_rows` to control batch sizes.
+  - Adjust `storage.flush_threshold_rows` to control when buffered rows flush into chunked writes.
   - Consider splitting workloads by dataset or symbols if necessary.
 
 ## DLQ persistence

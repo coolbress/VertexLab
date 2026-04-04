@@ -7,6 +7,7 @@ from datetime import datetime
 import polars as pl
 import pytest
 
+from vertex_forager.constants import WRITER_CHUNK_ROWS
 from vertex_forager.core.config import FramePacket, RunResult
 from vertex_forager.core.writerflush import (
     buffer_or_flush_packet,
@@ -105,16 +106,11 @@ def test_validate_unique_key_raises_missing_column() -> None:
 async def test_flush_writer_table_uses_chunked() -> None:
     buffers: dict[str, list[FramePacket]] = {"t": [_packet("t", rows=1)]}
     buffer_rows: dict[str, int] = {"t": 1}
-    called = {"legacy": 0, "chunked": 0}
+    called = {"chunked": 0, "chunk_size": None}
 
     async def _flush_chunked_table(**kwargs: object) -> None:
         called["chunked"] += 1
-
-    async def _flush_legacy_table(**kwargs: object) -> None:
-        called["legacy"] += 1
-
-    async def _handle_writer_flush_error(**kwargs: object) -> None:
-        raise AssertionError("should not be called")
+        called["chunk_size"] = kwargs["chunk_size"]
 
     await flush_writer_table(
         table="t",
@@ -124,15 +120,6 @@ async def test_flush_writer_table_uses_chunked() -> None:
         result_lock=asyncio.Lock(),
         get_table_schema=lambda _table: object(),
         flush_chunked_table=_flush_chunked_table,
-        flush_legacy_table=_flush_legacy_table,
-        handle_writer_flush_error=_handle_writer_flush_error,
-        compute_error_cls=Exception,
-        validation_error_cls=Exception,
-        primary_key_missing_error_cls=PrimaryKeyMissingError,
-        primary_key_null_error_cls=Exception,
-        dlq_spool_error_cls=Exception,
-        duckdb_module=None,
-        logger=type("L", (), {"error": lambda *args, **kwargs: None, "exception": lambda *args, **kwargs: None})(),
     )
     assert called["chunked"] == 1
-    assert called["legacy"] == 0
+    assert called["chunk_size"] == WRITER_CHUNK_ROWS

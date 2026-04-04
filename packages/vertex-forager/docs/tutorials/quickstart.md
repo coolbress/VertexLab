@@ -87,5 +87,5 @@ con.close()
 
 - Configure concurrency, retries, and grouped runtime settings: see [Configuration](../reference/config.md)
 - Tune local collection behavior: see [Performance tuning](../how-to/performance-tuning.md)
-- Tune write batch sizes: see [Chunked flush tuning](../how-to/chunked-flush.md)
+- Tune write flush thresholds: see [Chunked flush tuning](../how-to/chunked-flush.md)
 - Resume runs and operate on local state: see [Resume and recovery](../how-to/resume-and-recovery.md)
