@@ -102,7 +102,7 @@ def test_tune_profile_financials_writes_metrics(tmp_path: Path, monkeypatch: pyt
     assert "yfinance_financials" in captured["payload"]
 
 
-def test_tune_profile_financials_ignores_yf_tickers_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_tune_profile_financials_prefers_cli_tickers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
 
     class DummyRun:
@@ -129,10 +129,34 @@ def test_tune_profile_financials_ignores_yf_tickers_env(tmp_path: Path, monkeypa
     monkeypatch.setattr(cli_mod, "_atomic_write_json", lambda path, payload: None, raising=True)
 
     runner = CliRunner()
-    res = runner.invoke(cli_mod.main, ["tune", "profile", "--kind", "financials", "--output-dir", str(tmp_path)])
+    res = runner.invoke(
+        cli_mod.main,
+        [
+            "tune",
+            "profile",
+            "--kind",
+            "financials",
+            "--output-dir",
+            str(tmp_path),
+            "--tickers",
+            "CUSTOM1,CUSTOM2",
+        ],
+    )
 
     assert res.exit_code == 0
-    assert captured["tickers"] == ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "NFLX", "ADBE", "CSCO"]
+    assert captured["tickers"] == ["CUSTOM1", "CUSTOM2"]
+
+
+def test_tune_profile_rejects_empty_ticker_tokens(tmp_path: Path) -> None:
+    runner = CliRunner()
+
+    res = runner.invoke(
+        cli_mod.main,
+        ["tune", "profile", "--kind", "financials", "--output-dir", str(tmp_path), "--tickers", "AAPL,"],
+    )
+
+    assert res.exit_code != 0
+    assert "tickers must be a comma-separated list of non-empty symbols" in res.output
 
 
 def test_tune_sweep_sampling_and_writes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

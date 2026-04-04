@@ -484,6 +484,13 @@ def tune_profile(
     """
     out_dir = output_dir or Path(os.getenv("VF_PROFILE_OUTPUT_DIR") or (Path.cwd() / "output" / "forager-profiles"))
     out_dir.mkdir(parents=True, exist_ok=True)
+    ticker_tokens = tickers.split(",")
+    cleaned_tickers = [token.strip().upper() for token in ticker_tokens if token.strip()]
+    if len(cleaned_tickers) != len(ticker_tokens) or not cleaned_tickers:
+        raise click.BadParameter(
+            "tickers must be a comma-separated list of non-empty symbols",
+            param_hint="--tickers",
+        )
     if kind == "price":
         from vertex_forager.providers.yfinance.client import YFinanceClient
         from vertex_forager.utils import as_dict
@@ -492,9 +499,8 @@ def tune_profile(
         if db_path.exists():
             db_path.unlink()
         client = YFinanceClient(rate_limit=60)
-        _tickers = [t.strip().upper() for t in (tickers or "AAPL,MSFT,NVDA,GOOGL,AMZN").split(",")]
         run = client.get_price_data(
-            tickers=_tickers,
+            tickers=cleaned_tickers,
             connect_db=db_path,
             progress=False,
             start_date=start_date,
@@ -514,12 +520,11 @@ def tune_profile(
         db_path = out_dir / "profile_financials.duckdb"
         if db_path.exists():
             db_path.unlink()
-        yf_tickers = [t.strip().upper() for t in tickers.split(",")]
         yfc = YFinanceClient(rate_limit=60)
         yf_run = yfc.get_financials(
             kind="income_stmt",
             period="annual",
-            tickers=yf_tickers,
+            tickers=cleaned_tickers,
             connect_db=db_path,
             progress=False,
         )
@@ -532,7 +537,7 @@ def tune_profile(
                     rate_limit=60,
                 )
                 sh_run = shc.get_fundamental_data(
-                    tickers=yf_tickers[:5],
+                    tickers=cleaned_tickers[:5],
                     connect_db=db_path,
                     dimension="MRT",
                 )
