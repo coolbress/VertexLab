@@ -48,6 +48,7 @@ if TYPE_CHECKING:
     from vertex_forager.providers.sharadar.client import SharadarClient
 
 logger = logging.getLogger(__name__)
+YF_PROFILE_DEFAULT_TICKERS = "AAPL,MSFT,NVDA,GOOGL,AMZN,META,TSLA,NFLX,ADBE,CSCO"
 
 
 def _atomic_write_bytes(path: Path, data: bytes) -> None:
@@ -417,13 +418,13 @@ def dlq_list() -> None:
     "db_path",
     type=click.Path(path_type=Path),
     default=None,
-    help="Target DuckDB file path (or set VF_RECOVER_DB)",
+    help="Target DuckDB file path",
 )
 def dlq_retry(table_name: str, db_path: Path | None) -> None:
     """Retry pending DLQ entries for a table."""
     target_db = _resolve_target_db(db_path, False)
     if target_db is None:
-        raise click.ClickException("Missing target DB. Provide --db or set VF_RECOVER_DB")
+        raise click.ClickException("Missing target DB. Provide --db")
     success_count, failure_count = asyncio.run(_retry_pending_dlq_entries(table_name=table_name, target_db=target_db))
     if success_count == 0 and failure_count == 0:
         click.echo(f"No pending DLQ entries for table {table_name}.")
@@ -459,13 +460,13 @@ def tune() -> None:
 @tune.command("profile")
 @click.option("--kind", type=click.Choice(["price", "financials"]), default="price")
 @click.option("--output-dir", type=click.Path(path_type=Path), default=None)
-@click.option("--tickers", type=str, default=None)
+@click.option("--tickers", type=str, default=YF_PROFILE_DEFAULT_TICKERS, show_default=True)
 @click.option("--start-date", type=str, default=None)
 @click.option("--end-date", type=str, default=None)
 def tune_profile(
     kind: str,
     output_dir: Path | None,
-    tickers: str | None,
+    tickers: str,
     start_date: str | None,
     end_date: str | None,
 ) -> None:
@@ -474,7 +475,7 @@ def tune_profile(
     Args:
         kind: Type of profile ('price' or 'financials').
         output_dir: Directory for result JSON. If None, uses VF_PROFILE_OUTPUT_DIR or default path.
-        tickers: Comma-separated list of ticker symbols (e.g., 'AAPL,MSFT'). If None, uses defaults.
+        tickers: Comma-separated list of ticker symbols (e.g., 'AAPL,MSFT').
         start_date: Start date for price data (YYYY-MM-DD). If None, uses provider default.
         end_date: End date for price data (YYYY-MM-DD). If None, uses provider default.
 
@@ -513,12 +514,7 @@ def tune_profile(
         db_path = out_dir / "profile_financials.duckdb"
         if db_path.exists():
             db_path.unlink()
-        yf_tickers = [
-            t.strip().upper()
-            for t in (tickers or os.getenv("YF_TICKERS") or "AAPL,MSFT,NVDA,GOOGL,AMZN,META,TSLA,NFLX,ADBE,CSCO").split(
-                ","
-            )
-        ]
+        yf_tickers = [t.strip().upper() for t in tickers.split(",")]
         yfc = YFinanceClient(rate_limit=60)
         yf_run = yfc.get_financials(
             kind="income_stmt",
@@ -754,10 +750,9 @@ def _resolve_recover_base(dlq_dir: Path | None) -> Path:
 
 
 def _resolve_target_db(db_path: Path | None, dry_run: bool) -> Path | None:
-    env_db = os.getenv("VF_RECOVER_DB")
-    target_db = db_path or (Path(env_db) if env_db and env_db.strip() else None)
+    target_db = db_path
     if not dry_run and target_db is None:
-        raise click.ClickException("Missing target DB. Provide --db or set VF_RECOVER_DB")
+        raise click.ClickException("Missing target DB. Provide --db")
     return target_db
 
 
@@ -820,7 +815,7 @@ def _print_recover_details(summary: dict[str, Any]) -> None:
     "db_path",
     type=click.Path(path_type=Path),
     default=None,
-    help="Target DuckDB file path (or set VF_RECOVER_DB)",
+    help="Target DuckDB file path",
 )
 @click.option("--dry-run", is_flag=True, default=False, help="Scan and report without writing")
 @click.option("--delete-on-success", is_flag=True, default=False, help="Delete IPC files after successful reinjection")
@@ -872,7 +867,7 @@ def recover(
     Args:
         dlq_dir: Base DLQ directory containing per-table subdirectories.
         tables: Specific table(s) to recover; if empty, recover all.
-        db_path: Target DuckDB database file path (or environment VF_RECOVER_DB).
+        db_path: Target DuckDB database file path.
         dry_run: When True, do not write — only report counts.
         delete_on_success: Remove IPC files after successful reinjection.
         clean_tmp: Remove stale .ipc.tmp files before recovery.

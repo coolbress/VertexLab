@@ -6,7 +6,7 @@ from pathlib import Path
 
 from vertex_forager.exceptions import VertexForagerError
 from vertex_forager.providers.sharadar.client import SharadarClient
-from vertex_forager.utils import as_dict, load_tickers_env
+from vertex_forager.utils import as_dict
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,6 @@ async def main_async() -> None:
     Env Vars:
         VF_PROFILE_OUTPUT_DIR: Directory for output files
             (default: output/forager-profiles).
-        YF_TICKERS: Comma-separated tickers for YFinance (default: top 10 tech).
         SHARADAR_API_KEY: If present, runs Sharadar verification.
 
     Side Effects:
@@ -49,21 +48,18 @@ async def main_async() -> None:
                 return
             raise
         # ---------- YFinance Financials ----------
-        yf_tickers = load_tickers_env(
-            "YF_TICKERS",
-            [
-                "AAPL",
-                "MSFT",
-                "NVDA",
-                "GOOGL",
-                "AMZN",
-                "META",
-                "TSLA",
-                "NFLX",
-                "ADBE",
-                "CSCO",
-            ],
-        )
+        yf_tickers = [
+            "AAPL",
+            "MSFT",
+            "NVDA",
+            "GOOGL",
+            "AMZN",
+            "META",
+            "TSLA",
+            "NFLX",
+            "ADBE",
+            "CSCO",
+        ]
         yfc = YFinanceClient(rate_limit=60)
         try:
             yf_run = yfc.get_financials(

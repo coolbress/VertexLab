@@ -102,6 +102,39 @@ def test_tune_profile_financials_writes_metrics(tmp_path: Path, monkeypatch: pyt
     assert "yfinance_financials" in captured["payload"]
 
 
+def test_tune_profile_financials_ignores_yf_tickers_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    class DummyRun:
+        def __init__(self) -> None:
+            self.metrics_counters = {}
+            self.metrics_histograms = {}
+            self.metrics_summary = {}
+            self.tables = {}
+            self.errors = []
+
+    class DummyYF:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def get_financials(self, **kwargs):  # pragma: no cover
+            captured["tickers"] = kwargs["tickers"]
+            return DummyRun()
+
+    import vertex_forager.providers.yfinance.client as yf_client
+
+    monkeypatch.setattr(yf_client, "YFinanceClient", DummyYF, raising=True)
+    monkeypatch.setenv("IRRELEVANT_PROFILE_TICKERS", "IBM,ORCL")
+    monkeypatch.delenv("SHARADAR_API_KEY", raising=False)
+    monkeypatch.setattr(cli_mod, "_atomic_write_json", lambda path, payload: None, raising=True)
+
+    runner = CliRunner()
+    res = runner.invoke(cli_mod.main, ["tune", "profile", "--kind", "financials", "--output-dir", str(tmp_path)])
+
+    assert res.exit_code == 0
+    assert captured["tickers"] == ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "NFLX", "ADBE", "CSCO"]
+
+
 def test_tune_sweep_sampling_and_writes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     def _run_sweep_measurements(combos, out_dir, include_sharadar):  # type: ignore[no-untyped-def]
         return {"results": [], "best": {"client_config": {"concurrency": 8}}}
@@ -144,24 +177,28 @@ def test_tune_export_best_writes_file(tmp_path: Path, monkeypatch: pytest.Monkey
     # Monkeypatch Path.exists and read_text for best file
     original_exists = cli_mod.Path.exists
     original_read_text = cli_mod.Path.read_text
+
     def _exists(self: Path) -> bool:  # type: ignore[no-redef]
         return self.name == "profile_tuning_best.json" or original_exists(self)
 
     def _read_text(self: Path) -> str:  # type: ignore[no-redef]
         if self.name == "profile_tuning_best.json":
             return (
-                '{'
+                "{"
                 '"yfinance_price":{"client_config":{"concurrency":8}},'
                 '"yfinance_financials":{"client_config":{"http_timeout_s":30}}'
-                '}'
+                "}"
             )
         return original_read_text(self)
+
     monkeypatch.setattr(cli_mod.Path, "exists", _exists, raising=False)
     monkeypatch.setattr(cli_mod.Path, "read_text", _read_text, raising=False)
     captured = {}
+
     def _write_text(path: Path, content: str) -> None:
         captured["path"] = path
         captured["content"] = content
+
     monkeypatch.setattr(cli_mod, "_atomic_write_text", _write_text, raising=True)
     runner = CliRunner()
     write_file = out / "exports.sh"
@@ -171,7 +208,7 @@ def test_tune_export_best_writes_file(tmp_path: Path, monkeypatch: pytest.Monkey
     )
     assert res.exit_code == 0
     assert captured.get("path") == write_file
-    assert "\"concurrency\": 8" in captured.get("content", "")
+    assert '"concurrency": 8' in captured.get("content", "")
 
 
 def test_tune_export_best_missing_file(tmp_path: Path) -> None:
@@ -188,10 +225,10 @@ def test_tune_export_best_prints_stdout(tmp_path: Path) -> None:
     out.mkdir()
     best = out / "profile_tuning_best.json"
     best.write_text(
-        '{'
+        "{"
         '"yfinance_price":{"client_config":{"concurrency":8}},'
         '"yfinance_financials":{"client_config":{"http_timeout_s":30}}'
-        '}'
+        "}"
     )
     runner = CliRunner()
     res = runner.invoke(cli_mod.main, ["tune", "export-best", "--output-dir", str(out)])
