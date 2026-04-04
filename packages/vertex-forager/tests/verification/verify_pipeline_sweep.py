@@ -64,14 +64,14 @@ def _build_combos() -> list[dict[str, Any]]:
 
 def _collect_env_inputs() -> dict[str, Any]:
     return {
-        "yf_tickers_price": load_tickers_env("YF_TICKERS_PRICE", ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN"]),
-        "yf_tickers_fin": load_tickers_env("YF_TICKERS_FIN", ["AAPL", "MSFT", "NVDA"]),
-        "yf_start": os.getenv("YF_PRICE_START_DATE"),
-        "yf_end": os.getenv("YF_PRICE_END_DATE"),
+        "yf_tickers_price": load_tickers_env("YF_SWEEP_PRICE_SYMBOLS", ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN"]),
+        "yf_tickers_fin": load_tickers_env("YF_SWEEP_FIN_SYMBOLS", ["AAPL", "MSFT", "NVDA"]),
+        "yf_start": None,
+        "yf_end": None,
         "sh_key": os.getenv("SHARADAR_API_KEY"),
         "sh_tickers": load_tickers_env("SH_TICKERS", ["AAPL", "MSFT", "NVDA"]),
-        "sh_start": os.getenv("SH_START_DATE"),
-        "sh_end": os.getenv("SH_END_DATE"),
+        "sh_start": None,
+        "sh_end": None,
     }
 
 

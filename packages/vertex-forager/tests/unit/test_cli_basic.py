@@ -420,9 +420,8 @@ def test_recover_dedup_tables_argument_parsing(tmp_path, monkeypatch: pytest.Mon
     assert "✅ Recover summary:" in res.output
 
 
-def test_recover_env_db_empty_rejected(tmp_path, monkeypatch: pytest.MonkeyPatch):
+def test_recover_missing_db_rejected(tmp_path, monkeypatch: pytest.MonkeyPatch):
     _make_dlq(tmp_path, monkeypatch, "t2")
-    monkeypatch.setenv("VF_RECOVER_DB", "")
     runner = CliRunner()
     res = runner.invoke(cli_mod.main, ["recover", "--dir", str(get_cache_dir() / "dlq")])
     assert res.exit_code != 0
