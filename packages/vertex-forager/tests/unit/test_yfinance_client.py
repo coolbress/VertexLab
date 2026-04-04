@@ -36,6 +36,10 @@ class TestYFinanceClientDefaults:
 
         assert client._pickle_compat_datasets == ["price", "financials"]
 
+    def test_client_init_rejects_non_list_pickle_compat_datasets(self) -> None:
+        with pytest.raises(InputError, match="pickle_compat_datasets must be a list"):
+            YFinanceClient(pickle_compat_datasets="price")  # type: ignore[arg-type]
+
     def test_create_client_without_api_key(self) -> None:
         client = create_client(provider="yfinance")
         assert isinstance(client, YFinanceClient)

@@ -137,23 +137,6 @@ def create_client(
 ) -> SharadarClient: ...
 
 
-@overload
-def create_client(
-    *,
-    provider: str,
-    api_key: str | None = None,
-    rate_limit: int | None = None,
-    schedule: SchedulerConfig | dict[str, Any] | None = None,
-    retry: RetryConfig | dict[str, Any] | None = None,
-    throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
-    quality_check: Literal["warn", "error"] = "warn",
-    pickle_compat_datasets: list[str] | None = None,
-    concurrency: int | None = None,
-    storage: StorageConfig | dict[str, Any] | None = None,
-    limits: HTTPConfig | dict[str, Any] | None = None,
-) -> BaseClient: ...
-
-
 def create_client(
     *,
     provider: str,
@@ -231,7 +214,7 @@ def create_client(
         )
     if pickle_compat_datasets is not None:
         raise TypeError("pickle_compat_datasets is only supported when provider='yfinance'")
-    if not rate_limit_supplied:
+    if not rate_limit_supplied or rate_limit is None:
         raise ValueError(f"Missing rate_limit for provider '{provider}'")
     return registration.factory(
         api_key=resolved_key,

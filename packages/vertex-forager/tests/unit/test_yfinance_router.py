@@ -20,9 +20,12 @@ try:
     import pandas as pd
 
     from vertex_forager.providers.yfinance.router import YFinanceRouter as _YFinanceRouter
-except ImportError:
-    pd = None
-    _YFinanceRouter = None
+except ImportError as err:
+    if err.name in {"pandas", "yfinance"}:
+        pd = None
+        _YFinanceRouter = None
+    else:
+        raise
 YFinanceRouter = cast("type[YFinanceRouter] | None", _YFinanceRouter)
 pytestmark = pytest.mark.skipif(
     pd is None or YFinanceRouter is None,

@@ -47,6 +47,8 @@ logger = logging.getLogger(__name__)
 def _normalize_pickle_compat_datasets(value: list[str] | None) -> list[str] | None:
     if value is None:
         return None
+    if not isinstance(value, list):
+        raise InputError("pickle_compat_datasets must be a list of strings")
     normalized: list[str] = []
     for item in value:
         if not isinstance(item, str):

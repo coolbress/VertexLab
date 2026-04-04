@@ -158,6 +158,15 @@ def test_create_client_rejects_pickle_compat_datasets_for_non_yfinance() -> None
         )
 
 
+def test_create_client_requires_non_none_rate_limit_for_sharadar() -> None:
+    with pytest.raises(ValueError, match="Missing rate_limit"):
+        create_client(
+            provider="sharadar",
+            api_key="test",
+            rate_limit=None,  # type: ignore[arg-type]
+        )
+
+
 def test_vertex_forager_root_logger_has_null_handler() -> None:
     logger = logging.getLogger("vertex_forager")
     assert any(isinstance(handler, logging.NullHandler) for handler in logger.handlers)
