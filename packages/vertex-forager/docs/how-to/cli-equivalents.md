@@ -22,7 +22,7 @@ Common operations with both code and CLI.
 ## Tune chunked flush
 
 - Code
-  - `from vertex_forager import create_client, StorageConfig; create_client(provider="yfinance", rate_limit=60, storage=StorageConfig(flush_threshold_rows=500000))`
+  - `from vertex_forager import create_client, StorageConfig; create_client(provider="yfinance", storage=StorageConfig(flush_threshold_rows=500000))`
 - CLI
   - `vertex-forager tune profile --source yfinance --symbol "AAPL,MSFT"`
   - `vertex-forager tune sweep --source yfinance --symbol "AAPL,MSFT"`

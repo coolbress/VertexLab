@@ -242,21 +242,27 @@ def yfinance_router() -> YFinanceRouter:
         YFinanceRouter: Router instance configured with rate_limit=500 (requests/min).
     """
     router_cls = _require_yfinance_router()
-    return router_cls(rate_limit=500, allow_pickle_compat=False)
+    return router_cls(rate_limit=500, pickle_compat_datasets=None)
 
 
 @pytest.fixture
-def yfinance_router_allow_pickle(monkeypatch: pytest.MonkeyPatch) -> YFinanceRouter:
+def yfinance_router_allow_pickle() -> YFinanceRouter:
     """Create a YFinanceRouter with legacy pickle compatibility enabled (unsafe).
 
     This fixture is only for tests that require pickled payloads.
     """
-    monkeypatch.setenv(
-        "VF_PICKLE_ALLOWED_DATASETS",
-        "price,financials,news,calendar,insider_purchases,recommendations",
-    )
     router_cls = _require_yfinance_router()
-    return router_cls(rate_limit=500, allow_pickle_compat=True)
+    return router_cls(
+        rate_limit=500,
+        pickle_compat_datasets=[
+            "price",
+            "financials",
+            "news",
+            "calendar",
+            "insider_purchases",
+            "recommendations",
+        ],
+    )
 
 
 @pytest.fixture

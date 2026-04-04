@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import logging
 import os
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast, overload
 
 from vertex_forager.clients.base import BaseClient
 from vertex_forager.constants import DEFAULT_RATE_LIMIT
@@ -23,6 +22,11 @@ if TYPE_CHECKING:
         SchedulerConfig,
         StorageConfig,
     )
+    from vertex_forager.providers.sharadar.client import SharadarClient
+    from vertex_forager.providers.yfinance.client import YFinanceClient
+
+
+_UNSET = object()
 
 
 def _register_sharadar() -> None:
@@ -39,6 +43,7 @@ def _register_sharadar() -> None:
         concurrency: int | None = None,
         storage: StorageConfig | dict[str, Any] | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
+        **_kwargs: Any,
     ) -> BaseClient:
         return SharadarClient(
             api_key=api_key or "",
@@ -73,9 +78,11 @@ def _register_yfinance() -> None:
         retry: RetryConfig | dict[str, Any] | None = None,
         throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
         quality_check: Literal["warn", "error"] = "warn",
+        pickle_compat_datasets: list[str] | None = None,
         concurrency: int | None = None,
         storage: StorageConfig | dict[str, Any] | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
+        **_kwargs: Any,
     ) -> BaseClient:
         return YFinanceClient(
             api_key=api_key or "",
@@ -84,6 +91,7 @@ def _register_yfinance() -> None:
             retry=retry,
             throttle=throttle,
             quality_check=quality_check,
+            pickle_compat_datasets=pickle_compat_datasets,
             concurrency=concurrency,
             storage=storage,
             limits=limits,
@@ -98,6 +106,38 @@ def _register_yfinance() -> None:
     )
 
 
+@overload
+def create_client(
+    *,
+    provider: Literal["yfinance"],
+    schedule: SchedulerConfig | dict[str, Any] | None = None,
+    retry: RetryConfig | dict[str, Any] | None = None,
+    throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
+    quality_check: Literal["warn", "error"] = "warn",
+    pickle_compat_datasets: list[str] | None = None,
+    concurrency: int | None = None,
+    storage: StorageConfig | dict[str, Any] | None = None,
+    limits: HTTPConfig | dict[str, Any] | None = None,
+) -> YFinanceClient: ...
+
+
+@overload
+def create_client(
+    *,
+    provider: Literal["sharadar"],
+    api_key: str | None = None,
+    rate_limit: int,
+    schedule: SchedulerConfig | dict[str, Any] | None = None,
+    retry: RetryConfig | dict[str, Any] | None = None,
+    throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
+    quality_check: Literal["warn", "error"] = "warn",
+    concurrency: int | None = None,
+    storage: StorageConfig | dict[str, Any] | None = None,
+    limits: HTTPConfig | dict[str, Any] | None = None,
+) -> SharadarClient: ...
+
+
+@overload
 def create_client(
     *,
     provider: str,
@@ -107,6 +147,23 @@ def create_client(
     retry: RetryConfig | dict[str, Any] | None = None,
     throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
     quality_check: Literal["warn", "error"] = "warn",
+    pickle_compat_datasets: list[str] | None = None,
+    concurrency: int | None = None,
+    storage: StorageConfig | dict[str, Any] | None = None,
+    limits: HTTPConfig | dict[str, Any] | None = None,
+) -> BaseClient: ...
+
+
+def create_client(
+    *,
+    provider: str,
+    api_key: object = _UNSET,
+    rate_limit: object = _UNSET,
+    schedule: SchedulerConfig | dict[str, Any] | None = None,
+    retry: RetryConfig | dict[str, Any] | None = None,
+    throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
+    quality_check: Literal["warn", "error"] = "warn",
+    pickle_compat_datasets: list[str] | None = None,
     concurrency: int | None = None,
     storage: StorageConfig | dict[str, Any] | None = None,
     limits: HTTPConfig | dict[str, Any] | None = None,
@@ -116,12 +173,13 @@ def create_client(
 
     Args:
         provider: The provider identifier (e.g., "sharadar").
-        api_key: API key. If not provided, will look up provider-specific env var.
-        rate_limit: Rate limit in requests per minute.
+        api_key: Provider API key where supported.
+        rate_limit: Provider rate limit in requests per minute where supported.
         schedule: Grouped scheduler configuration for always-on DRR fairness.
         retry: Grouped retry policy configuration.
         throttle: Grouped adaptive throttle policy configuration.
         quality_check: Data quality violation handling mode.
+        pickle_compat_datasets: YFinance-only pickle compatibility dataset allowlist.
         concurrency: Explicit fetch concurrency limit.
         storage: Grouped data-lifecycle and write-path tuning settings.
         limits: Grouped HTTP connection-pool configuration.
@@ -145,7 +203,9 @@ def create_client(
         else:
             raise KeyError(f"Unsupported client: {provider}") from None
 
-    resolved_key = api_key
+    api_key_supplied = api_key is not _UNSET
+    rate_limit_supplied = rate_limit is not _UNSET
+    resolved_key = None if api_key is _UNSET else cast("str | None", api_key)
     if not resolved_key and registration.env_api_key:
         resolved_key = os.getenv(registration.env_api_key)
 
@@ -153,28 +213,29 @@ def create_client(
         raise ValueError(f"Missing api_key (set api_key or {registration.env_api_key} in environment/.env)")
 
     if provider == "yfinance":
-        if api_key is not None:
-            logging.getLogger(__name__).warning(
-                "Provided API key will be ignored for yfinance; continuing with api_key=None"
-            )
-
-        effective_limit = rate_limit if rate_limit is not None else DEFAULT_RATE_LIMIT
+        if api_key_supplied:
+            raise TypeError("api_key is not supported when provider='yfinance'")
+        if rate_limit_supplied:
+            raise TypeError("rate_limit is not supported when provider='yfinance'")
         return registration.factory(
             api_key=None,
-            rate_limit=effective_limit,
+            rate_limit=DEFAULT_RATE_LIMIT,
             schedule=schedule,
             retry=retry,
             throttle=throttle,
             quality_check=quality_check,
+            pickle_compat_datasets=pickle_compat_datasets,
             concurrency=concurrency,
             storage=storage,
             limits=limits,
         )
-    if rate_limit is None:
+    if pickle_compat_datasets is not None:
+        raise TypeError("pickle_compat_datasets is only supported when provider='yfinance'")
+    if not rate_limit_supplied:
         raise ValueError(f"Missing rate_limit for provider '{provider}'")
     return registration.factory(
         api_key=resolved_key,
-        rate_limit=rate_limit,
+        rate_limit=cast("int", rate_limit),
         schedule=schedule,
         retry=retry,
         throttle=throttle,

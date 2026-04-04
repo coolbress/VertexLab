@@ -36,7 +36,7 @@ vertex-forager is currently distributed from GitHub rather than PyPI. The exampl
 ```python
 from vertex_forager import create_client
 
-client = create_client(provider="yfinance", rate_limit=60)
+client = create_client(provider="yfinance")
 result = client.get_price_data(tickers=["AAPL", "MSFT"])
 print(result)
 ```

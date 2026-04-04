@@ -40,7 +40,7 @@ pip install https://github.com/coolbress/VertexLab/releases/download/vertex-fora
 ```python
 from vertex_forager import create_client
 
-client = create_client(provider="yfinance", rate_limit=60)
+client = create_client(provider="yfinance")
 df = client.get_price_data(tickers=["AAPL", "MSFT"])
 print(df)
 ```
@@ -50,7 +50,7 @@ Persist to DuckDB:
 ```python
 from vertex_forager import create_client
 
-client = create_client(provider="yfinance", rate_limit=60)
+client = create_client(provider="yfinance")
 res = client.get_price_data(tickers=["AAPL", "MSFT"], connect_db="duckdb://./forager.duckdb")
 print(res)  # RunResult
 ```

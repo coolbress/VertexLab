@@ -395,8 +395,16 @@ class VertexForager:
         self._pending_jobs: list[FetchJob] = []
         self._checkpoint_lock = asyncio.Lock()
 
-        if str(os.getenv("VF_ALLOW_PICKLE_COMPAT", "")).lower() in {"1", "true", "yes"}:
-            logger.warning("PIPELINE: VF_ALLOW_PICKLE_COMPAT is enabled; pickled payloads may be accepted")
+        pickle_compat_datasets = getattr(self._router, "pickle_compat_datasets", ())
+        if not isinstance(pickle_compat_datasets, tuple):
+            pickle_compat_datasets = (
+                tuple(pickle_compat_datasets) if isinstance(pickle_compat_datasets, (list, set)) else ()
+            )
+        if pickle_compat_datasets:
+            logger.warning(
+                "PIPELINE: YFinance pickle compatibility enabled for datasets=%s",
+                ",".join(sorted(str(dataset) for dataset in pickle_compat_datasets)),
+            )
             self._inc("pickle_compat_enabled", 1)
 
     def _initialize_progress_runtime(self) -> None:

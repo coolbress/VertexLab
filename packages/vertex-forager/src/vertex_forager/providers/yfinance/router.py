@@ -5,7 +5,6 @@ import importlib
 import io
 import json
 import logging
-import os
 import time
 from typing import TYPE_CHECKING, Any, Final
 import uuid
@@ -63,24 +62,24 @@ class YFinanceJobContext(TypedDict):
     is_batch: NotRequired[bool]
 
 
-def _parse_bool(value: Any) -> bool:
-    if isinstance(value, bool):
-        return value
+def _normalize_pickle_compat_datasets(value: Any) -> tuple[str, ...]:
     if value is None:
-        return False
-    if isinstance(value, (int, float)):
-        return bool(int(value))
+        return ()
     if isinstance(value, str):
-        s = value.strip().lower()
-        if s in ("1", "true", "yes", "on"):
-            return True
-        if s in ("0", "false", "no", "off", ""):
-            return False
-        try:
-            return bool(int(s))
-        except (ValueError, TypeError):
-            return False
-    return False
+        items = [value]
+    elif isinstance(value, list):
+        items = value
+    else:
+        raise TypeError("pickle_compat_datasets must be a list of dataset names or None")
+
+    normalized: list[str] = []
+    for item in items:
+        if not isinstance(item, str):
+            raise TypeError("pickle_compat_datasets must contain only strings")
+        dataset = item.strip()
+        if dataset and dataset not in normalized:
+            normalized.append(dataset)
+    return tuple(normalized)
 
 
 class YFinanceRouter(BaseRouter[YFinanceDataset]):
@@ -122,6 +121,7 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         rate_limit: int = 60,
         start_date: str | None = None,
         end_date: str | None = None,
+        pickle_compat_datasets: list[str] | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialize YFinanceRouter.
@@ -147,6 +147,8 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             self._rate_limit = 60
         self._start_date = start_date
         self._end_date = end_date
+        self._pickle_compat_datasets = _normalize_pickle_compat_datasets(pickle_compat_datasets)
+        self._pickle_compat_dataset_set = set(self._pickle_compat_datasets)
         raw_bs = kwargs.get("price_batch_size", self.PRICE_BATCH_SIZE)
         try:
             bs_int = int(raw_bs)
@@ -160,13 +162,10 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             )
             bs_int = self.PRICE_BATCH_SIZE
         self._price_batch_size = max(1, min(PRICE_BATCH_MAX, bs_int))
-        allow_pickle_arg = kwargs.get("allow_pickle_compat")
-        if allow_pickle_arg is not None:
-            self._allow_pickle_compat = _parse_bool(allow_pickle_arg)
-        else:
-            # SECURITY: pickle compatibility is disabled by default
-            v_pickle = os.getenv("VF_ALLOW_PICKLE_COMPAT", "0")
-            self._allow_pickle_compat = _parse_bool(v_pickle)
+
+    @property
+    def pickle_compat_datasets(self) -> tuple[str, ...]:
+        return self._pickle_compat_datasets
 
     @property
     def provider(self) -> str:
@@ -359,7 +358,7 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         read_ipc_err: Exception,
         json_err: Exception,
     ) -> Any:
-        if not self._allow_pickle_compat:
+        if not self._pickle_compat_dataset_set:
             msg = f"IPC decode failed: {read_ipc_err}; JSON decode failed: {json_err}"
             raise ValueError(msg) from None
         lib_type_val, allowed = self._pickle_fallback_policy(job=job)
@@ -370,7 +369,7 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             )
             raise ValueError(msg) from None
         logger.warning(
-            "YFinance pickle fallback used: dataset=%s symbol=%s lib_type=%s",
+            "YFinance pickle fallback used for configured dataset: dataset=%s symbol=%s lib_type=%s",
             job.dataset,
             sanitize_field(job.context.get("symbol")),
             lib_type_val,
@@ -392,9 +391,7 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         if isinstance(t, str):
             lib_type_val = t
             lib_ok = t in {"ticker_attr", "download"}
-        ds_env = os.getenv("VF_PICKLE_ALLOWED_DATASETS", "")
-        allowed_ds = {s.strip() for s in ds_env.split(",") if s.strip()}
-        ds_ok = bool(allowed_ds) and (job.dataset in allowed_ds)
+        ds_ok = job.dataset in self._pickle_compat_dataset_set
         return lib_type_val, lib_ok and ds_ok
 
     def _transform_dataset_frame(self, *, df_pl: pl.DataFrame, dataset: str) -> pl.DataFrame:

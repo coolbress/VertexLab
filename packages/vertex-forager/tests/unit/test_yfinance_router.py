@@ -1,10 +1,11 @@
 """Unit tests for YFinanceRouter behavior and parsing."""
+
 from __future__ import annotations
 
 import io
 import json
 import pickle
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import polars as pl
 import pytest
@@ -17,10 +18,16 @@ if TYPE_CHECKING:
 
 try:
     import pandas as pd
+
+    from vertex_forager.providers.yfinance.router import YFinanceRouter as _YFinanceRouter
 except ImportError:
     pd = None
-pytestmark = pytest.mark.skipif(pd is None, reason="pandas is required for yfinance router unit tests")
-
+    _YFinanceRouter = None
+YFinanceRouter = cast("type[YFinanceRouter] | None", _YFinanceRouter)
+pytestmark = pytest.mark.skipif(
+    pd is None or YFinanceRouter is None,
+    reason="pandas and yfinance router are required for yfinance router unit tests",
+)
 
 
 class TestYFinanceRouterUnit:
@@ -43,30 +50,16 @@ class TestYFinanceRouterUnit:
         assert yfinance_router.provider == "yfinance"
 
     @pytest.mark.asyncio
-    async def test_generate_jobs_requires_symbols_for_non_tickers(
-        self, yfinance_router: YFinanceRouter
-    ) -> None:
+    async def test_generate_jobs_requires_symbols_for_non_tickers(self, yfinance_router: YFinanceRouter) -> None:
         """Ensure ValueError when symbols are missing for non-tickers datasets."""
         with pytest.raises(ValueError, match=r".*"):
-            _ = [
-                job
-                async for job in yfinance_router.generate_jobs(
-                    dataset="price", symbols=None
-                )
-            ]
+            _ = [job async for job in yfinance_router.generate_jobs(dataset="price", symbols=None)]
 
     @pytest.mark.asyncio
-    async def test_generate_jobs_builds_per_symbol_jobs_for_price(
-        self, yfinance_router: YFinanceRouter
-    ) -> None:
+    async def test_generate_jobs_builds_per_symbol_jobs_for_price(self, yfinance_router: YFinanceRouter) -> None:
         """Ensure per-symbol jobs are generated for price dataset."""
         symbols = ["AAPL", "MSFT", "TSLA"]
-        jobs = [
-            job
-            async for job in yfinance_router.generate_jobs(
-                dataset="price", symbols=symbols
-            )
-        ]
+        jobs = [job async for job in yfinance_router.generate_jobs(dataset="price", symbols=symbols)]
         assert len(jobs) == len(symbols)
         for i, sym in enumerate(symbols):
             job = jobs[i]
@@ -93,9 +86,7 @@ class TestYFinanceRouterUnit:
         assert packet.frame.height == 2
         assert {"date", "open", "close", "ticker"}.issubset(set(packet.frame.columns))
 
-    def test_parse_handles_empty_dataframe(
-        self, yfinance_router_allow_pickle: YFinanceRouter
-    ) -> None:
+    def test_parse_handles_empty_dataframe(self, yfinance_router_allow_pickle: YFinanceRouter) -> None:
         """Verify parse returns zero packets for empty DataFrame payload."""
         empty_df = pd.DataFrame(columns=["date", "open", "close", "ticker"])
         payload = pickle.dumps(empty_df)
@@ -104,9 +95,7 @@ class TestYFinanceRouterUnit:
         assert isinstance(result, ParseResult)
         assert len(result.packets) == 0
 
-    def test_transform_financials_melts_and_normalizes_date(
-        self, yfinance_router_allow_pickle: YFinanceRouter
-    ) -> None:
+    def test_transform_financials_melts_and_normalizes_date(self, yfinance_router_allow_pickle: YFinanceRouter) -> None:
         df = pd.DataFrame(
             {
                 "breakdown": ["Revenue", "NetIncome"],
@@ -125,9 +114,7 @@ class TestYFinanceRouterUnit:
         dates = frame.get_column("date").cast(pl.Utf8, strict=False).to_list()
         assert all((" " not in (d or "")) and ("T" not in (d or "")) for d in dates)
 
-    def test_transform_news_defensive_paths(
-        self, yfinance_router_allow_pickle: YFinanceRouter
-    ) -> None:
+    def test_transform_news_defensive_paths(self, yfinance_router_allow_pickle: YFinanceRouter) -> None:
         good = [
             {
                 "id": 1,
@@ -146,14 +133,10 @@ class TestYFinanceRouterUnit:
         result = yfinance_router_allow_pickle.parse(job=job, payload=payload)
         assert isinstance(result, ParseResult)
         frame = result.packets[0].frame
-        assert {"title", "publisher", "type", "link", "published_at"}.issubset(
-            set(frame.columns)
-        )
+        assert {"title", "publisher", "type", "link", "published_at"}.issubset(set(frame.columns))
         assert frame.height == 2
 
-    def test_transform_calendar_list_to_first(
-        self, yfinance_router_allow_pickle: YFinanceRouter
-    ) -> None:
+    def test_transform_calendar_list_to_first(self, yfinance_router_allow_pickle: YFinanceRouter) -> None:
         payload = pickle.dumps([{"earnings_date": ["2024-01-01", "2024-01-02"]}])
         job = self.make_fetch_job(dataset="calendar", symbol="AAPL")
         result = yfinance_router_allow_pickle.parse(job=job, payload=payload)
@@ -162,29 +145,43 @@ class TestYFinanceRouterUnit:
         assert "earnings_date" in frame.columns
         assert frame.get_column("earnings_date").to_list()[0] == "2024-01-01"
 
-    def test_parse_invalid_payload_raises(
-        self, yfinance_router_allow_pickle: YFinanceRouter
-    ) -> None:
+    def test_parse_invalid_payload_raises(self, yfinance_router_allow_pickle: YFinanceRouter) -> None:
         job = self.make_fetch_job(dataset="price", symbol="AAPL")
         with pytest.raises(pickle.UnpicklingError):
             _ = yfinance_router_allow_pickle.parse(job=job, payload=b"not a pickle")
 
-    def test_parse_invalid_payload_raises_when_pickle_not_allowed(
-        self, yfinance_router: YFinanceRouter
-    ) -> None:
+    def test_parse_invalid_payload_raises_when_pickle_not_allowed(self, yfinance_router: YFinanceRouter) -> None:
         """When pickle compat is disabled, invalid payload should raise ValueError."""
         job = self.make_fetch_job(dataset="price", symbol="AAPL")
         with pytest.raises(TransformError):
             _ = yfinance_router.parse(job=job, payload=b"not a pickle")
 
-    def test_transform_insider_purchases_normalizes_columns(
-        self, yfinance_router_allow_pickle: YFinanceRouter
-    ) -> None:
+    def test_pickle_compat_allowlist_is_dataset_specific(self) -> None:
+        router = YFinanceRouter(rate_limit=60, pickle_compat_datasets=["price"])
+        payload = pickle.dumps(pd.DataFrame({"breakdown": ["Revenue"], "2024-01-01": [1]}))
+        job = self.make_fetch_job(dataset="financials", symbol="AAPL")
+
+        with pytest.raises(TransformError):
+            _ = router.parse(job=job, payload=payload)
+
+    def test_pickle_compat_env_vars_no_longer_enable_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("VF_ALLOW_PICKLE_COMPAT", "1")
+        monkeypatch.setenv("VF_PICKLE_ALLOWED_DATASETS", "price")
+        router = YFinanceRouter(rate_limit=60)
+        payload = pickle.dumps(pd.DataFrame({"date": ["2024-01-01"], "open": [1.0]}))
+        job = self.make_fetch_job(dataset="price", symbol="AAPL")
+
+        with pytest.raises(TransformError):
+            _ = router.parse(job=job, payload=payload)
+
+    def test_transform_insider_purchases_normalizes_columns(self, yfinance_router_allow_pickle: YFinanceRouter) -> None:
         """Verify insider_purchases transform maps and filters columns correctly."""
-        df = pd.DataFrame({
-            "Insider Purchases (Last 6 months)": ["Purchases", None, "Sales"],
-            "other_col": [1, 2, 3],
-        })
+        df = pd.DataFrame(
+            {
+                "Insider Purchases (Last 6 months)": ["Purchases", None, "Sales"],
+                "other_col": [1, 2, 3],
+            }
+        )
         payload = pickle.dumps(df)
         job = self.make_fetch_job(dataset="insider_purchases", symbol="AAPL")
         result = yfinance_router_allow_pickle.parse(job=job, payload=payload)
@@ -197,15 +194,15 @@ class TestYFinanceRouterUnit:
         ]
         assert frame.get_column("other_col").to_list() == [1, 3]
 
-    def test_transform_recommendations_includes_period(
-        self, yfinance_router_allow_pickle: YFinanceRouter
-    ) -> None:
+    def test_transform_recommendations_includes_period(self, yfinance_router_allow_pickle: YFinanceRouter) -> None:
         """Verify recommendations transform includes period column."""
-        df = pd.DataFrame({
-            "period": ["0m", "-1m", "-2m"],
-            "strongBuy": [5, 3, 2],
-            "buy": [10, 8, 6],
-        })
+        df = pd.DataFrame(
+            {
+                "period": ["0m", "-1m", "-2m"],
+                "strongBuy": [5, 3, 2],
+                "buy": [10, 8, 6],
+            }
+        )
         payload = pickle.dumps(df)
         job = self.make_fetch_job(dataset="recommendations", symbol="AAPL")
         result = yfinance_router_allow_pickle.parse(job=job, payload=payload)
@@ -235,9 +232,7 @@ class TestYFinanceRouterUnit:
         assert packet.frame.height == 2
         assert {"date", "open", "close", "ticker"}.issubset(set(packet.frame.columns))
 
-    def test_parse_news_json_with_secure_router(
-        self, yfinance_router: YFinanceRouter
-    ) -> None:
+    def test_parse_news_json_with_secure_router(self, yfinance_router: YFinanceRouter) -> None:
         """Decodes JSON-prefixed payload for news dataset."""
         good = [
             {
@@ -257,7 +252,5 @@ class TestYFinanceRouterUnit:
         result = yfinance_router.parse(job=job, payload=payload)
         assert isinstance(result, ParseResult)
         frame = result.packets[0].frame
-        assert {"title", "publisher", "type", "link", "published_at"}.issubset(
-            set(frame.columns)
-        )
+        assert {"title", "publisher", "type", "link", "published_at"}.issubset(set(frame.columns))
         assert frame.height == 2

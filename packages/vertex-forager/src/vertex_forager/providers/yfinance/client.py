@@ -44,6 +44,19 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _normalize_pickle_compat_datasets(value: list[str] | None) -> list[str] | None:
+    if value is None:
+        return None
+    normalized: list[str] = []
+    for item in value:
+        if not isinstance(item, str):
+            raise InputError("pickle_compat_datasets must contain only strings")
+        dataset = item.strip()
+        if dataset and dataset not in normalized:
+            normalized.append(dataset)
+    return normalized or None
+
+
 class YFinanceClient(BaseClient[YFinanceDataset]):
     """Client for Yahoo Finance datasets via yfinance.
 
@@ -71,6 +84,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         retry: RetryConfig | dict[str, Any] | None = None,
         throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
         quality_check: Literal["warn", "error"] = "warn",
+        pickle_compat_datasets: list[str] | None = None,
         concurrency: int | None = None,
         storage: StorageConfig | dict[str, Any] | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
@@ -86,6 +100,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
                 AdaptiveThrottleConfig | dict[str, Any] | None,
             ): Adaptive throttle settings. Default is None.
             quality_check: Data quality violation handling mode.
+            pickle_compat_datasets: Dataset allowlist for YFinance pickle compatibility fallback.
             concurrency (int | None): Maximum concurrent fetch workers. Default is None.
             storage: Grouped data-lifecycle and write-path tuning settings.
             limits (HTTPConfig | dict[str, Any] | None): HTTP connection pool settings. Default is None.
@@ -100,6 +115,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         else:
             logger.warning(LOG_RATE_LIMIT_INVALID_TYPE.format(prefix=CLIENT_LOG_PREFIX, value=normalized))
             normalized = DEFAULT_RATE_LIMIT
+        self._pickle_compat_datasets = _normalize_pickle_compat_datasets(pickle_compat_datasets)
         if retry is None:
             retry = RetryConfig()
         super().__init__(
@@ -867,6 +883,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
                 rate_limit=self._config.requests_per_minute,
                 start_date=start_date,
                 end_date=end_date,
+                pickle_compat_datasets=self._pickle_compat_datasets,
                 **{k: v for k, v in kwargs.items() if k in {PRICE_BATCH_SIZE_KEY}},
             )
 

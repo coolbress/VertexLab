@@ -22,12 +22,12 @@ pip install "vertex-forager[notebook] @ git+https://github.com/coolbress/VertexL
 Start with the minimum client setup:
 
 - `provider` selects the built-in data source
-- `rate_limit` sets the requests-per-minute target you want the client to respect
+- `rate_limit` is required for providers like Sharadar; YFinance uses an internal default through `create_client(...)`
 
 ```python
 from vertex_forager import create_client
 
-client = create_client(provider="yfinance", rate_limit=60)
+client = create_client(provider="yfinance")
 ```
 
 For Sharadar, pass an API key when creating the client:
@@ -49,7 +49,7 @@ If you do not pass `connect_db`, the result stays in memory and you get a Polars
 ```python
 from vertex_forager import create_client
 
-client = create_client(provider="yfinance", rate_limit=60)
+client = create_client(provider="yfinance")
 prices = client.get_price_data(tickers=["AAPL", "MSFT"])
 print(prices.head())
 ```
@@ -63,7 +63,7 @@ Add `connect_db` when you want to build or update a local DuckDB database. In pe
 ```python
 from vertex_forager import create_client
 
-client = create_client(provider="yfinance", rate_limit=60)
+client = create_client(provider="yfinance")
 run = client.get_price_data(
     tickers=["AAPL", "MSFT"],
     connect_db="duckdb://./forager.duckdb",
