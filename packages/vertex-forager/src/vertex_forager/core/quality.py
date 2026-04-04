@@ -51,7 +51,7 @@ class NoNegativePrices:
 
 
 class NoFutureDates:
-    def __init__(self, date_columns: list[str] | None = None):
+    def __init__(self, date_columns: list[str] | None = None, timezone: str | None = None):
         self.date_columns = date_columns or [
             "date",
             "timestamp",
@@ -61,13 +61,21 @@ class NoFutureDates:
             "observed_at",
             "created_at",
         ]
+        self.timezone = timezone
 
-    def validate(self, df: pl.DataFrame) -> list[str]:
+    def _current_time(self) -> Any:
         import datetime
         from zoneinfo import ZoneInfo
 
+        if self.timezone:
+            return datetime.datetime.now(ZoneInfo(self.timezone))
+        return datetime.datetime.now().astimezone()
+
+    def validate(self, df: pl.DataFrame) -> list[str]:
+        from zoneinfo import ZoneInfo
+
         violations: list[str] = []
-        current_time = datetime.datetime.now(datetime.timezone.utc)
+        current_time = self._current_time()
         for col in self.date_columns:
             if col not in df.columns:
                 continue

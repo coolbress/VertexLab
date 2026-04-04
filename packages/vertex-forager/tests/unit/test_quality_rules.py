@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import polars as pl
 
@@ -45,9 +46,7 @@ def test_no_future_dates_handles_date_and_datetime_columns() -> None:
             "date": [today, today + timedelta(days=1)],
             "observed_at": [now, now + timedelta(hours=1)],
         }
-    ).with_columns(
-        pl.col("observed_at").cast(pl.Datetime(time_unit="us", time_zone="UTC"))
-    )
+    ).with_columns(pl.col("observed_at").cast(pl.Datetime(time_unit="us", time_zone="UTC")))
     rule = NoFutureDates(date_columns=["date", "observed_at"])
     violations = rule.validate(df)
     assert len(violations) == 2
@@ -62,9 +61,7 @@ def test_no_future_dates_boundary_equal_to_now() -> None:
             "date": [now.date()],
             "observed_at": [now],
         }
-    ).with_columns(
-        pl.col("observed_at").cast(pl.Datetime(time_unit="us", time_zone="UTC"))
-    )
+    ).with_columns(pl.col("observed_at").cast(pl.Datetime(time_unit="us", time_zone="UTC")))
     rule = NoFutureDates(date_columns=["date", "observed_at"])
     violations = rule.validate(df)
     assert violations == []
@@ -75,6 +72,21 @@ def test_no_future_dates_skips_non_date_columns() -> None:
     rule = NoFutureDates(date_columns=["name", "value"])
     violations = rule.validate(df)
     assert violations == []
+
+
+def test_no_future_dates_date_uses_configured_local_timezone() -> None:
+    now_utc = datetime(2025, 1, 2, 0, 30, tzinfo=timezone.utc)
+    df = pl.DataFrame({"date": [now_utc.date()]})
+    utc_rule = NoFutureDates(date_columns=["date"], timezone="UTC")
+    utc_rule._current_time = lambda: now_utc.astimezone(timezone.utc)  # type: ignore[method-assign]
+    violations_without_local_tz = utc_rule.validate(df)
+
+    local_rule = NoFutureDates(date_columns=["date"], timezone="America/New_York")
+    local_rule._current_time = lambda: now_utc.astimezone(ZoneInfo("America/New_York"))  # type: ignore[method-assign]
+    violations_with_local_tz = local_rule.validate(df)
+
+    assert violations_without_local_tz == []
+    assert violations_with_local_tz == ["Column 'date' contains 1 future dates"]
 
 
 def test_no_duplicate_rows_subset_and_all_columns() -> None:
