@@ -32,7 +32,6 @@ pytestmark = pytest.mark.skipif(
 def test_create_client_accepts_grouped_public_configs() -> None:
     client = create_client(
         provider="yfinance",
-        rate_limit=120,
         schedule=SchedulerConfig(quantum=3),
         retry=RetryConfig(max_attempts=5),
         throttle=AdaptiveThrottleConfig(window_s=30, recovery_factor=0.05),
@@ -47,7 +46,7 @@ def test_create_client_accepts_grouped_public_configs() -> None:
     )
 
     assert isinstance(client, YFinanceClient)
-    assert client.config.requests_per_minute == 120
+    assert client.config.requests_per_minute == 60
     assert client.config.schedule.quantum == 3
     assert client.config.retry.max_attempts == 5
     assert client.config.throttle.window_s == 30
@@ -63,7 +62,7 @@ def test_create_client_accepts_grouped_public_configs() -> None:
 
 
 def test_create_client_schedule_defaults_are_applied() -> None:
-    client = create_client(provider="yfinance", rate_limit=60)
+    client = create_client(provider="yfinance")
 
     assert isinstance(client, YFinanceClient)
     assert client.config.schedule == SchedulerConfig()
@@ -74,14 +73,13 @@ def test_create_client_schedule_defaults_are_applied() -> None:
 
 def test_removed_pagination_max_burst_kwarg_is_rejected() -> None:
     with pytest.raises(TypeError):
-        create_client(provider="yfinance", rate_limit=60, pagination_max_burst=3)
+        create_client(provider="yfinance", pagination_max_burst=3)
 
 
 def test_removed_legacy_adaptive_throttle_kwargs_are_rejected() -> None:
     with pytest.raises(TypeError):
         create_client(
             provider="yfinance",
-            rate_limit=60,
             adaptive_throttle_enabled=True,
         )
 
@@ -96,7 +94,7 @@ def test_removed_legacy_adaptive_throttle_kwargs_are_rejected() -> None:
 )
 def test_removed_legacy_advanced_kwargs_are_rejected(removed_kwargs: dict[str, object]) -> None:
     with pytest.raises(TypeError):
-        create_client(provider="yfinance", rate_limit=60, **removed_kwargs)
+        create_client(provider="yfinance", **removed_kwargs)
 
 
 @pytest.mark.parametrize(
@@ -108,7 +106,7 @@ def test_removed_legacy_advanced_kwargs_are_rejected(removed_kwargs: dict[str, o
 )
 def test_removed_runtime_kwargs_are_rejected(removed_kwargs: dict[str, object]) -> None:
     with pytest.raises(TypeError):
-        create_client(provider="yfinance", rate_limit=60, **removed_kwargs)
+        create_client(provider="yfinance", **removed_kwargs)
 
 
 @pytest.mark.parametrize(
@@ -122,12 +120,51 @@ def test_removed_runtime_kwargs_are_rejected(removed_kwargs: dict[str, object]) 
 )
 def test_other_removed_runtime_kwargs_are_rejected(removed_kwargs: dict[str, object]) -> None:
     with pytest.raises(TypeError):
-        create_client(provider="yfinance", rate_limit=60, **removed_kwargs)
+        create_client(provider="yfinance", **removed_kwargs)
 
 
 def test_removed_logging_kwargs_are_rejected_by_provider_constructor() -> None:
     with pytest.raises(TypeError):
         YFinanceClient(rate_limit=60, structured_logs=True)  # type: ignore[call-arg]
+
+
+def test_create_client_accepts_yfinance_pickle_compat_datasets() -> None:
+    client = create_client(
+        provider="yfinance",
+        pickle_compat_datasets=["price", "financials"],
+    )
+
+    assert isinstance(client, YFinanceClient)
+    assert client._pickle_compat_datasets == ["price", "financials"]
+
+
+def test_create_client_rejects_rate_limit_for_yfinance() -> None:
+    with pytest.raises(TypeError):
+        create_client(provider="yfinance", rate_limit=60)
+
+
+def test_create_client_rejects_api_key_for_yfinance() -> None:
+    with pytest.raises(TypeError):
+        create_client(provider="yfinance", api_key="ignored")
+
+
+def test_create_client_rejects_pickle_compat_datasets_for_non_yfinance() -> None:
+    with pytest.raises(TypeError):
+        create_client(
+            provider="sharadar",
+            api_key="test",
+            rate_limit=60,
+            pickle_compat_datasets=["price"],
+        )
+
+
+def test_create_client_requires_non_none_rate_limit_for_sharadar() -> None:
+    with pytest.raises(ValueError, match="Missing rate_limit"):
+        create_client(
+            provider="sharadar",
+            api_key="test",
+            rate_limit=None,  # type: ignore[arg-type]
+        )
 
 
 def test_vertex_forager_root_logger_has_null_handler() -> None:
@@ -139,7 +176,7 @@ def test_vertex_forager_root_logger_has_null_handler() -> None:
 def test_non_auth_env_vars_no_longer_backfill_client_config(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("VF_HTTP_TIMEOUT_S", "11")
 
-    client = create_client(provider="yfinance", rate_limit=60)
+    client = create_client(provider="yfinance")
 
     assert isinstance(client, YFinanceClient)
     assert client._http_limits.timeout_s == HTTPConfig().timeout_s
@@ -152,7 +189,7 @@ def test_client_creation_ignores_non_auth_env_vars_without_warnings(monkeypatch:
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        client = create_client(provider="yfinance", rate_limit=60)
+        client = create_client(provider="yfinance")
 
     assert isinstance(client, YFinanceClient)
     assert client._http_limits.timeout_s == HTTPConfig().timeout_s
@@ -175,7 +212,7 @@ def test_create_client_rejects_removed_retry_flag_in_mapping_subclass() -> None:
             return values[key]
 
     with pytest.raises(ValueError, match="has been removed"):
-        create_client(provider="yfinance", rate_limit=60, retry=_RetryMapping())
+        create_client(provider="yfinance", retry=_RetryMapping())
 
 
 def test_build_http_client_uses_normalized_defaults_without_rereading_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -195,7 +232,6 @@ def test_build_http_client_uses_normalized_defaults_without_rereading_env(monkey
 
     client = create_client(
         provider="yfinance",
-        rate_limit=60,
         limits=HTTPConfig(timeout_s=HTTPConfig().timeout_s),
     )
 
@@ -212,7 +248,6 @@ def test_build_http_client_uses_normalized_defaults_without_rereading_env(monkey
 def test_rpm_floor_ratio_stored_in_config_and_resolves_in_controller() -> None:
     client = create_client(
         provider="yfinance",
-        rate_limit=60,
         throttle=AdaptiveThrottleConfig(rpm_floor_ratio=0.10),
     )
     assert client.config.throttle.rpm_floor_ratio == 0.10

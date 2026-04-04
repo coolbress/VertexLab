@@ -124,24 +124,19 @@ def collect(symbol: tuple[str, ...], source: str) -> None:
     try:
         # imports moved to module level to satisfy import ordering rules
 
-        # API Key lookup
-        api_key = None
-        if source == "sharadar":
-            api_key_env = "SHARADAR_API_KEY"  # pragma: allowlist secret (env var name only)
-            api_key = os.getenv(api_key_env)
-            if not api_key:
-                raise click.ClickException(f"Environment variable {api_key_env} is not set.")
+        if source != "sharadar":
+            raise click.ClickException(f"`{source}` is not supported by `collect` yet.")
+
+        api_key_env = "SHARADAR_API_KEY"  # pragma: allowlist secret (env var name only)
+        api_key = os.getenv(api_key_env)
+        if not api_key:
+            raise click.ClickException(f"Environment variable {api_key_env} is not set.")
 
         async def _run_collect() -> RunResult | None:
-            async with create_client(provider=source, api_key=api_key, rate_limit=DEFAULT_RATE_LIMIT) as client:
-                if source == "sharadar":
-                    # For Sharadar, we use the specialized client method
-                    # In the future, this can be generalized via a CollectorCore interface
-                    sc = cast("SharadarClient", client)
-                    result = cast("RunResult | None", await sc._get_price_data_async(tickers=list(symbol)))
-                    return result
-                else:
-                    raise click.ClickException(f"`{source}` is not supported by `collect` yet.")
+            async with create_client(provider="sharadar", api_key=api_key, rate_limit=DEFAULT_RATE_LIMIT) as client:
+                sc = cast("SharadarClient", client)
+                result = cast("RunResult | None", await sc._get_price_data_async(tickers=list(symbol)))
+                return result
 
         result = asyncio.run(_run_collect())
 

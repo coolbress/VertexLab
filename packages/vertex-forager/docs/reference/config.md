@@ -5,8 +5,8 @@ Public runtime configuration is now centered on `create_client(...)` plus groupe
 ## Required Inputs
 
 - `provider: str` — provider identifier such as `"sharadar"` or `"yfinance"`
-- `api_key: str | None` — required for Sharadar, unused for YFinance
-- `rate_limit: int` — requests per minute
+- `api_key: str | None` — required for Sharadar, not accepted by the `yfinance` overload
+- `rate_limit: int` — required for Sharadar; the `yfinance` overload uses an internal default
 
 ## Top-Level Client Parameters
 
@@ -17,6 +17,18 @@ Public runtime configuration is now centered on `create_client(...)` plus groupe
 Stage logs are always emitted at DEBUG level; the host application controls visibility and formatting via standard `logging` configuration.
 
 `quality_check="warn"` records quality-rule violations in `RunResult.quality_violations` and continues. `quality_check="error"` raises `DataQualityError` on the first violating flush.
+
+## Provider-Specific Direct Clients
+
+Some provider-specific configuration only exists on the concrete client, not on `create_client(...)`.
+
+### YFinanceClient
+
+- `pickle_compat_datasets: list[str] | None = None`
+  - `None` or `[]` disables pickle compatibility
+  - a non-empty list enables pickle fallback only for the named datasets
+  - available on `YFinanceClient(...)` and on `create_client(provider="yfinance", ...)`
+- `create_client(provider="yfinance", ...)` uses an internal default rate limit and does not accept `api_key` or `rate_limit`
 
 ## Grouped Public Config
 

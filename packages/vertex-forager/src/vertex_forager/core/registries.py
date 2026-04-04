@@ -214,6 +214,7 @@ class ClientFactory(Protocol):
         concurrency: int | None = None,
         storage: StorageConfig | dict[str, Any] | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> BaseClient:
         """Create a client instance.
 
@@ -227,6 +228,7 @@ class ClientFactory(Protocol):
             concurrency: Explicit fetch concurrency limit.
             storage: Grouped data-lifecycle and write-path tuning settings.
             limits: Grouped HTTP connection-pool configuration.
+            **kwargs: Additional provider-specific arguments.
 
         Returns:
             BaseClient: An initialized client instance.

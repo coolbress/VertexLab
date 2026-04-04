@@ -21,42 +21,55 @@ pytestmark = pytest.mark.skipif(
     reason="requires optional dependency: vertex-forager[yfinance]",
 )
 
+
 class TestYFinanceClientDefaults:
     """Verify default configuration and client creation behavior."""
+
     def test_client_init_defaults(self) -> None:
         client = YFinanceClient()
         assert client.api_key is None
         assert client._config.requests_per_minute == 60
+        assert client._pickle_compat_datasets is None
+
+    def test_client_init_accepts_pickle_compat_datasets(self) -> None:
+        client = YFinanceClient(pickle_compat_datasets=["price", " price ", "financials"])
+
+        assert client._pickle_compat_datasets == ["price", "financials"]
+
+    def test_client_init_rejects_non_list_pickle_compat_datasets(self) -> None:
+        with pytest.raises(InputError, match="pickle_compat_datasets must be a list"):
+            YFinanceClient(pickle_compat_datasets="price")  # type: ignore[arg-type]
 
     def test_create_client_without_api_key(self) -> None:
-        client = create_client(provider="yfinance", rate_limit=1_000)
+        client = create_client(provider="yfinance")
         assert isinstance(client, YFinanceClient)
         assert client.api_key is None
-        # It allows higher rate limits but warns
-        assert client._config.requests_per_minute == 1_000
+        assert client._config.requests_per_minute == 60
 
-    def test_create_client_ignores_user_api_key(self) -> None:
+    def test_create_client_accepts_pickle_compat_datasets_for_yfinance(self) -> None:
         client = create_client(
             provider="yfinance",
-            api_key="user_supplied",
-            rate_limit=5,
+            pickle_compat_datasets=["price"],
         )
+
         assert isinstance(client, YFinanceClient)
-        assert client.api_key is None
-        assert client._config.requests_per_minute == 5
+        assert client._pickle_compat_datasets == ["price"]
+
+    def test_create_client_ignores_user_api_key(self) -> None:
+        with pytest.raises(TypeError):
+            create_client(
+                provider="yfinance",
+                api_key="user_supplied",
+            )
 
 
 class TestYFinanceRouterDateParams:
     """Verify date-parameter behavior for YFinanceRouter price jobs."""
+
     @pytest.mark.asyncio
     async def test_price_jobs_without_dates_omit_start_end(self) -> None:
         router = YFinanceRouter(rate_limit=60, start_date=None, end_date=None)
-        jobs = [
-            job
-            async for job in router.generate_jobs(
-                dataset="price", symbols=["AAPL", "MSFT"]
-            )
-        ]
+        jobs = [job async for job in router.generate_jobs(dataset="price", symbols=["AAPL", "MSFT"])]
         assert len(jobs) == 2
         for job in jobs:
             params = job.spec.params
@@ -70,12 +83,7 @@ class TestYFinanceRouterDateParams:
     async def test_generate_jobs_invalid_symbols_raises(self) -> None:
         router = YFinanceRouter(rate_limit=60, start_date=None, end_date=None)
         with pytest.raises(ValueError, match=r".*"):
-            _ = [
-                job
-                async for job in router.generate_jobs(
-                    dataset="price", symbols=["", "   ", "@@"]
-                )
-            ]
+            _ = [job async for job in router.generate_jobs(dataset="price", symbols=["", "   ", "@@"])]
 
 
 @pytest.mark.asyncio
@@ -205,7 +213,7 @@ async def test_get_financials_rejects_quarterly_earnings_async() -> None:
 
 @pytest.mark.asyncio
 async def test_fetch_per_ticker_filters_pipeline_kwargs(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = YFinanceClient()
+    client = YFinanceClient(pickle_compat_datasets=["price"])
     captured: dict[str, Any] = {}
 
     class _Ctx:
@@ -255,6 +263,7 @@ async def test_fetch_per_ticker_filters_pipeline_kwargs(monkeypatch: pytest.Monk
     assert captured["router_provider"] == "yfinance"
     assert captured["router_kwargs"]["rate_limit"] == client.config.requests_per_minute
     assert captured["router_kwargs"]["price_batch_size"] == 123
+    assert captured["router_kwargs"]["pickle_compat_datasets"] == ["price"]
     assert "custom_flag" not in captured["router_kwargs"]
     assert captured["run_pipeline_kwargs"]["dataset"] == "price"
     assert captured["run_pipeline_kwargs"]["symbols"] == ["AAPL"]

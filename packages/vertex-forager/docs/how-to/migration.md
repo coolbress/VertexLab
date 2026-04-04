@@ -50,6 +50,34 @@ DLQ payloads stay as Arrow IPC files under `~/.cache/vertex-forager/dlq/<table>/
   - `storage.checkpoint_retention_days`
   - `storage.run_history_retention_days`
 
+### YFinance pickle compatibility env vars removed
+
+YFinance pickle compatibility is no longer configured by environment variables.
+
+Removed env vars:
+
+- `VF_ALLOW_PICKLE_COMPAT`
+- `VF_PICKLE_ALLOWED_DATASETS`
+
+Use `YFinanceClient(...)` directly instead:
+
+```python
+from vertex_forager import create_client
+from vertex_forager.providers.yfinance.client import YFinanceClient
+
+client = YFinanceClient(
+    rate_limit=60,
+    pickle_compat_datasets=["price"],
+)
+
+client2 = create_client(
+    provider="yfinance",
+    pickle_compat_datasets=["price"],
+)
+```
+
+`create_client(...)` exposes `pickle_compat_datasets` only for `provider="yfinance"` overloads, and the yfinance overload no longer accepts `api_key` or `rate_limit`.
+
 ## 0.3.x → 0.4.x
 
 ### `RequestSpec.idempotent` flag

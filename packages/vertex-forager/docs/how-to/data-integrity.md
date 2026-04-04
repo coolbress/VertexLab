@@ -95,7 +95,7 @@ If you want the run to stop on the first quality violation:
 ```python
 from vertex_forager import create_client
 
-client = create_client(provider="yfinance", rate_limit=60, quality_check="error")
+client = create_client(provider="yfinance", quality_check="error")
 ```
 
 In `quality_check="error"` mode, the pipeline raises `DataQualityError(table=..., rule=..., violations=[...])` instead of returning a `RunResult`.
