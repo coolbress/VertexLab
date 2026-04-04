@@ -119,9 +119,20 @@ class DLQSpoolError(VertexForagerError):
         super().__init__(msg)
 
 
+class DataQualityError(VertexForagerError):
+    """Raised when data-quality validation fails in strict mode."""
+
+    def __init__(self, *, table: str, rule: str, violations: list[str]) -> None:
+        self.table = table
+        self.rule = rule
+        self.violations = violations
+        super().__init__(f"Data quality validation failed for table '{table}' with rule '{rule}'")
+
+
 __all__ = [
     "ComputeError",
     "DLQSpoolError",
+    "DataQualityError",
     "FetchError",
     "InputError",
     "PrimaryKeyMissingError",

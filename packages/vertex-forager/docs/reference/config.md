@@ -11,9 +11,12 @@ Public runtime configuration is now centered on `create_client(...)` plus groupe
 ## Top-Level Client Parameters
 
 - `schedule: SchedulerConfig = SchedulerConfig()`
+- `quality_check: Literal["warn", "error"] = "warn"`
 - `concurrency: int | None = None`
 
 Stage logs are always emitted at DEBUG level; the host application controls visibility and formatting via standard `logging` configuration.
+
+`quality_check="warn"` records quality-rule violations in `RunResult.quality_violations` and continues. `quality_check="error"` raises `DataQualityError` on the first violating flush.
 
 ## Grouped Public Config
 

@@ -131,6 +131,27 @@ Writers use internal chunked flush to bound memory usage during large writes.
 
 Pipeline runs return `RunResult` with per-table DLQ counts.
 
+### In-memory collect return type
+
+Client collect methods now always return `RunResult`.
+
+Before:
+
+```python
+df = client.get_price_data(tickers=["AAPL"])
+```
+
+After:
+
+```python
+result = client.get_price_data(tickers=["AAPL"])
+df = result.data
+```
+
+### Data quality policy
+
+Provider table schemas now ship with built-in quality rules. The default `quality_check="warn"` mode records counts in `RunResult.quality_violations`; `quality_check="error"` raises `DataQualityError` and aborts the run.
+
 ### Logging model
 
 OBS/stage logs are now always emitted at DEBUG level with structured `extra` fields on the `vertex_forager` logger. Configure visibility in the host app:

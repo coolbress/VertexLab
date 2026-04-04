@@ -36,6 +36,7 @@ def test_create_client_accepts_grouped_public_configs() -> None:
         schedule=SchedulerConfig(quantum=3),
         retry=RetryConfig(max_attempts=5),
         throttle=AdaptiveThrottleConfig(window_s=30, recovery_factor=0.05),
+        quality_check="error",
         concurrency=4,
         storage=StorageConfig(
             flush_threshold_rows=10_000,
@@ -51,6 +52,7 @@ def test_create_client_accepts_grouped_public_configs() -> None:
     assert client.config.retry.max_attempts == 5
     assert client.config.throttle.window_s == 30
     assert client.config.throttle.recovery_factor == 0.05
+    assert client.config.quality_check == "error"
     assert client.config.concurrency == 4
     assert client.config.storage.flush_threshold_rows == 10_000
     assert client.config.storage.checkpoint_retention_days == 5

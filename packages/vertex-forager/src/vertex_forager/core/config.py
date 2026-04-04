@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 import polars as pl
 import psutil
-from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_serializer, field_validator, model_validator
 
 from vertex_forager.constants import (
     PACKET_SIZE_EST_BYTES,
@@ -293,6 +293,7 @@ class ResolvedClientConfig(BaseModel):
     schedule: SchedulerConfig = Field(default_factory=SchedulerConfig)
     retry: RetryConfig = Field(default_factory=RetryConfig)
     throttle: AdaptiveThrottleConfig = Field(default_factory=AdaptiveThrottleConfig)
+    quality_check: Literal["warn", "error"] = "warn"
     concurrency: int | None = Field(default=None, gt=0)
     storage: StorageConfig = Field(default_factory=StorageConfig)
     limits: HTTPConfig = Field(default_factory=HTTPConfig)
@@ -316,6 +317,8 @@ class ResolvedClientConfig(BaseModel):
             raise ValueError("requests_per_minute must be positive")
         if self.concurrency is not None and self.concurrency <= 0:
             raise ValueError("concurrency must be positive if specified")
+        if self.quality_check not in {"warn", "error"}:
+            raise ValueError("quality_check must be either 'warn' or 'error'")
 
 
 class RunResult(BaseModel):
@@ -329,6 +332,7 @@ class RunResult(BaseModel):
         finished_at (float | None): Timestamp when the run finished (default: None).
         duration_s (float | None): Duration of the run in seconds (default: None).
         coverage_pct (float | None): Coverage percentage for the run (default: None).
+        data (pl.DataFrame | None): In-memory collected payload for non-persisted runs.
         tables (dict[str, int]): Dictionary mapping table names to row counts (default: empty dict).
         errors (list[RunError]): List of structured error information (default: empty list).
         dlq_pending (dict[str, list[FramePacket]]): Packets preserved for post-mortem/dead-letter
@@ -349,8 +353,9 @@ class RunResult(BaseModel):
     coverage_pct: float | None = Field(default=None)
     tables: dict[str, int] = Field(default_factory=dict)
     errors: list[RunError] = Field(default_factory=list)
-    metrics_counters: dict[str, int] = Field(default_factory=dict)
-    metrics_histograms: dict[str, list[float]] = Field(default_factory=dict)
+    data: pl.DataFrame | None = Field(default=None)
+    metrics_counters: dict[str, int] = Field(default_factory=dict, exclude=True)
+    metrics_histograms: dict[str, list[float]] = Field(default_factory=dict, exclude=True)
     metrics_summary: dict[str, float] = Field(default_factory=dict)
     dlq_pending: dict[str, list[FramePacket]] = Field(
         default_factory=dict,
@@ -365,6 +370,8 @@ class RunResult(BaseModel):
         default_factory=dict,
         description="Per-table quality violation counts",
     )
+
+    model_config = {"arbitrary_types_allowed": True}
 
     @field_validator("errors", mode="before")
     @classmethod
@@ -387,6 +394,12 @@ class RunResult(BaseModel):
             else:
                 result.append(item)
         return result
+
+    @field_serializer("data", when_used="json")
+    def _serialize_data_for_json(self, value: pl.DataFrame | None) -> list[dict[str, Any]] | None:
+        if value is None:
+            return None
+        return value.to_dicts()
 
     def add_rows(self, *, table: str, rows: int) -> None:
         self.tables[table] = self.tables.get(table, 0) + rows

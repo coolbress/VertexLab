@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from functools import partial
 import logging
 import time
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar
 
 from vertex_forager.constants import (
     MEM_THRESHOLD_ABS_MB,
@@ -45,7 +45,6 @@ if TYPE_CHECKING:
     from types import TracebackType
 
     import httpx
-    import polars as pl
 
     from vertex_forager.core.contracts import IMapper, IRouter, IWriter
     from vertex_forager.writers.base import BaseWriter
@@ -81,6 +80,7 @@ def _normalize_client_settings(
     schedule: SchedulerConfig | dict[str, Any] | None,
     retry: RetryConfig | dict[str, Any] | None,
     throttle: AdaptiveThrottleConfig | dict[str, Any] | None,
+    quality_check: Literal["warn", "error"],
     concurrency: int | None,
     storage: StorageConfig | dict[str, Any] | None,
     limits: HTTPConfig | dict[str, Any] | None,
@@ -96,6 +96,7 @@ def _normalize_client_settings(
         schedule=schedule_config,
         retry=retry_config,
         throttle=throttle_config,
+        quality_check=quality_check,
         concurrency=concurrency,
         storage=storage_config,
         limits=limits_config,
@@ -169,6 +170,7 @@ class BaseClient(ABC, Generic[T]):
         schedule: SchedulerConfig | dict[str, Any] | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
         throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
+        quality_check: Literal["warn", "error"] = "warn",
         concurrency: int | None = None,
         storage: StorageConfig | dict[str, Any] | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
@@ -181,6 +183,7 @@ class BaseClient(ABC, Generic[T]):
             schedule: Grouped scheduler configuration for always-on DRR fairness.
             retry: Grouped retry policy configuration.
             throttle: Grouped adaptive throttle policy configuration.
+            quality_check: Data quality violation handling mode.
             concurrency: Explicit fetch concurrency limit.
             storage: Grouped data-lifecycle and write-path tuning settings.
             limits: Grouped HTTP connection-pool configuration.
@@ -191,6 +194,7 @@ class BaseClient(ABC, Generic[T]):
             schedule=schedule,
             retry=retry,
             throttle=throttle,
+            quality_check=quality_check,
             concurrency=concurrency,
             storage=storage,
             limits=limits,
@@ -492,7 +496,7 @@ class BaseClient(ABC, Generic[T]):
         connect_db: str | Path | None,
         *,
         sort_by_unique_key: bool = True,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         """Collect and return results from writer.
 
         Common result collection logic that handles both database and in-memory scenarios.
@@ -504,16 +508,17 @@ class BaseClient(ABC, Generic[T]):
             sort_by_unique_key: Whether to sort by schema's unique key if available
 
         Returns:
-            pl.DataFrame if in-memory mode, RunResult if database mode
+            RunResult for both in-memory and database modes
         """
+        if self.last_run is None:
+            raise RuntimeError(
+                f"No pipeline result available for table '{table_name}'. "
+                "Ensure run_pipeline completed before collecting results."
+            )
+        run_result = self.last_run
         if connect_db is not None:
-            # Database mode: return RunResult from pipeline
-            if self.last_run is None:
-                raise RuntimeError(
-                    f"No pipeline result available for table '{table_name}'. "
-                    "Ensure run_pipeline completed before collecting database results."
-                )
-            return self.last_run
+            run_result.data = None
+            return run_result
 
         # In-memory mode: collect DataFrame from writer
         sort_cols = None
@@ -549,4 +554,5 @@ class BaseClient(ABC, Generic[T]):
         except Exception as e:
             logger.debug("Merging writer counters after collect_table failed: error=%s", e)
 
-        return df
+        run_result.data = df
+        return run_result

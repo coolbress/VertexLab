@@ -42,6 +42,14 @@ def test_runtime_config_concurrency_validation() -> None:
     ).assert_valid()
 
 
+def test_runtime_config_quality_check_validation_after_mutation() -> None:
+    cfg = ResolvedClientConfig(requests_per_minute=60, retry=RetryConfig())
+    cfg.quality_check = "typo"  # type: ignore[assignment]
+
+    with pytest.raises(ValueError, match="quality_check"):
+        cfg.assert_valid()
+
+
 def test_grouped_public_configs_forbid_unknown_fields() -> None:
     with pytest.raises(ValidationError):
         AdaptiveThrottleConfig(extra_field=True)

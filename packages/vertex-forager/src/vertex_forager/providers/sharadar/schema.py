@@ -5,6 +5,7 @@ from typing import Final
 import polars as pl
 
 from vertex_forager.constants import DEFAULT_TIME_ZONE
+from vertex_forager.core.quality import NoDuplicateRows, NoFutureDates, NoNegativePrices
 from vertex_forager.providers.sharadar.constants import (
     DATASET_ENDPOINT,
     DATE_FILTER_COL,
@@ -29,6 +30,11 @@ SHARADAR_SEP: Final[TableSchema] = TableSchema(
     },
     unique_key=("provider", "ticker", "date"),
     analysis_date_col="date",
+    quality_rules=(
+        NoFutureDates(["date"]),
+        NoNegativePrices(["open", "high", "low", "close", "closeadj", "closeunadj"]),
+        NoDuplicateRows(["ticker", "date"]),
+    ),
 )
 
 
@@ -68,6 +74,10 @@ SHARADAR_TICKERS: Final[TableSchema] = TableSchema(
     },
     unique_key=("provider", "ticker"),
     analysis_date_col=None,
+    quality_rules=(
+        NoFutureDates(["lastupdated"]),
+        NoDuplicateRows(["ticker"]),
+    ),
 )
 
 
@@ -191,6 +201,10 @@ SHARADAR_SF1: Final[TableSchema] = TableSchema(
     },
     unique_key=("provider", "ticker", "dimension", "calendardate", "reportperiod"),
     analysis_date_col="datekey",
+    quality_rules=(
+        NoFutureDates(["calendardate", "datekey", "reportperiod"]),
+        NoDuplicateRows(["ticker", "dimension", "calendardate", "reportperiod"]),
+    ),
 )
 
 
@@ -226,6 +240,10 @@ SHARADAR_SF2: Final[TableSchema] = TableSchema(
     },
     unique_key=("provider", "ticker", "filingdate", "rownum"),
     analysis_date_col="filingdate",
+    quality_rules=(
+        NoFutureDates(["filingdate"]),
+        NoDuplicateRows(["ticker", "filingdate", "rownum"]),
+    ),
 )
 
 
@@ -244,6 +262,10 @@ SHARADAR_SF3: Final[TableSchema] = TableSchema(
     },
     unique_key=("provider", "ticker", "calendardate", "investorname", "securitytype"),
     analysis_date_col="calendardate",
+    quality_rules=(
+        NoFutureDates(["calendardate"]),
+        NoDuplicateRows(["ticker", "calendardate", "investorname", "securitytype"]),
+    ),
 )
 
 
@@ -262,6 +284,10 @@ SHARADAR_ACTIONS: Final[TableSchema] = TableSchema(
     },
     unique_key=("provider", "ticker", "date", "action"),
     analysis_date_col="date",
+    quality_rules=(
+        NoFutureDates(["date"]),
+        NoDuplicateRows(["ticker", "date", "action"]),
+    ),
 )
 
 
@@ -283,6 +309,10 @@ SHARADAR_DAILY: Final[TableSchema] = TableSchema(
     },
     unique_key=("provider", "ticker", "date"),
     analysis_date_col="date",
+    quality_rules=(
+        NoFutureDates(["date"]),
+        NoDuplicateRows(["ticker", "date"]),
+    ),
 )
 
 
@@ -301,6 +331,10 @@ SHARADAR_SP500: Final[TableSchema] = TableSchema(
     },
     unique_key=("provider", "ticker", "date", "action"),
     analysis_date_col="date",
+    quality_rules=(
+        NoFutureDates(["date"]),
+        NoDuplicateRows(["ticker", "date", "action"]),
+    ),
 )
 
 

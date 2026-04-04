@@ -25,6 +25,7 @@ from vertex_forager.core.quality import (
     NoNegativePrices,
 )
 from vertex_forager.exceptions import (
+    DataQualityError,
     FetchError,
     ValidationError,
     WriterError,
@@ -38,6 +39,7 @@ __all__ = [
     "AdaptiveThrottleConfig",
     "BaseClient",
     "BaseRouter",
+    "DataQualityError",
     "DataQualityRule",
     "FetchError",
     "HTTPConfig",

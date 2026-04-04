@@ -18,7 +18,7 @@ Usage:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar, overload
+from typing import TYPE_CHECKING, Any, Generic, Literal, Protocol, TypeVar, overload
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -210,6 +210,7 @@ class ClientFactory(Protocol):
         schedule: SchedulerConfig | dict[str, Any] | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
         throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
+        quality_check: Literal["warn", "error"] = "warn",
         concurrency: int | None = None,
         storage: StorageConfig | dict[str, Any] | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
@@ -222,6 +223,7 @@ class ClientFactory(Protocol):
             schedule: Grouped scheduler configuration for always-on DRR fairness.
             retry: Grouped retry policy configuration.
             throttle: Grouped adaptive throttle policy configuration.
+            quality_check: Data quality violation handling mode.
             concurrency: Explicit fetch concurrency limit.
             storage: Grouped data-lifecycle and write-path tuning settings.
             limits: Grouped HTTP connection-pool configuration.
