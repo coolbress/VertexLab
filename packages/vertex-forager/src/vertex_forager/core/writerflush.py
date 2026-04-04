@@ -497,45 +497,6 @@ async def flush_chunked_table(
             return
 
 
-async def flush_legacy_table(
-    *,
-    table: str,
-    packets: list[FramePacket],
-    schema: object,
-    result: RunResult,
-    result_lock: asyncio.Lock,
-    concat_frames_with_flex: Callable[..., pl.DataFrame],
-    validate_unique_key: Callable[..., None],
-    validate_data_quality: AsyncFunc,
-    write_merged_packet: AsyncFunc,
-    logger: LoggerLike,
-) -> None:
-    first = packets[0]
-    merged_frame = concat_frames_with_flex(
-        frames=[p.frame for p in packets],
-        table_name=first.table,
-        schema=schema,
-        rechunk=True,
-    )
-    validate_unique_key(schema=schema, table=table, frame=merged_frame)
-    merged_packet = FramePacket(
-        provider=first.provider,
-        table=first.table,
-        frame=merged_frame,
-        observed_at=first.observed_at,
-        context=first.context,
-    )
-    logger.debug("WRITER: Flushing %s packets (%s rows) for %s", len(packets), len(merged_frame), table)
-    await validate_data_quality(table=table, df=merged_frame, result=result, result_lock=result_lock)
-    await write_merged_packet(
-        table=table,
-        packet=merged_packet,
-        stage="write_flush",
-        result=result,
-        result_lock=result_lock,
-    )
-
-
 async def flush_writer_table(
     *,
     table: str,
@@ -545,86 +506,24 @@ async def flush_writer_table(
     result_lock: asyncio.Lock,
     get_table_schema: Callable[[str], object | None],
     flush_chunked_table: AsyncFunc,
-    flush_legacy_table: AsyncFunc,
-    handle_writer_flush_error: AsyncFunc,
-    compute_error_cls: type[Exception],
-    validation_error_cls: type[Exception],
-    primary_key_missing_error_cls: type[Exception],
-    primary_key_null_error_cls: type[Exception],
-    dlq_spool_error_cls: type[Exception],
-    duckdb_module: object | None,
-    logger: LoggerLike,
 ) -> None:
     packets = buffers.get(table, [])
     if not packets:
         return
     first = packets[0]
     schema = get_table_schema(first.table)
-    chunk_size = WRITER_CHUNK_ROWS
-    try:
-        if isinstance(chunk_size, int) and chunk_size > 0:
-            await flush_chunked_table(
-                table=table,
-                packets=packets,
-                schema=schema,
-                chunk_size=chunk_size,
-                buffers=buffers,
-                buffer_rows=buffer_rows,
-                result=result,
-                result_lock=result_lock,
-            )
-        else:
-            await flush_legacy_table(
-                table=table,
-                packets=packets,
-                schema=schema,
-                result=result,
-                result_lock=result_lock,
-            )
-        buffers[table] = []
-        buffer_rows[table] = 0
-    except Exception as exc:
-        if isinstance(exc, (compute_error_cls, validation_error_cls)):
-            await handle_writer_flush_error(
-                table=table,
-                packets=packets,
-                exc=exc,
-                prefix="WriterError",
-                buffers=buffers,
-                buffer_rows=buffer_rows,
-                result=result,
-                result_lock=result_lock,
-            )
-            if isinstance(exc, primary_key_missing_error_cls):
-                logger.error("WRITER: PKMissing table=%s column=%s", table, getattr(exc, "column", ""))
-            elif isinstance(exc, primary_key_null_error_cls):
-                logger.error(
-                    "WRITER: PKNull table=%s column=%s nulls=%s",
-                    table,
-                    getattr(exc, "column", ""),
-                    getattr(exc, "null_count", ""),
-                )
-            else:
-                logger.error("WRITER: Error writing batch for %s: %s", table, exc)
-            return
-        if isinstance(exc, dlq_spool_error_cls):
-            raise
-        is_duckdb_error = _is_duckdb_error(duckdb_module, exc)
-        prefix = "DuckDBError" if is_duckdb_error else "UnexpectedWriterError"
-        await handle_writer_flush_error(
-            table=table,
-            packets=packets,
-            exc=exc,
-            prefix=prefix,
-            buffers=buffers,
-            buffer_rows=buffer_rows,
-            result=result,
-            result_lock=result_lock,
-        )
-        if prefix == "DuckDBError":
-            logger.exception("WRITER: DuckDB error for %s: %s", table, exc)
-        else:
-            logger.exception("WRITER: Unexpected error writing batch for %s: %s", table, exc)
+    await flush_chunked_table(
+        table=table,
+        packets=packets,
+        schema=schema,
+        chunk_size=WRITER_CHUNK_ROWS,
+        buffers=buffers,
+        buffer_rows=buffer_rows,
+        result=result,
+        result_lock=result_lock,
+    )
+    buffers[table] = []
+    buffer_rows[table] = 0
 
 
 def _is_duckdb_error(duckdb_module: object | None, exc: Exception) -> bool:

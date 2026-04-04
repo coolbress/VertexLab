@@ -2,8 +2,8 @@
 
 ## Overview
 
-- The pipeline fetches raw data over HTTP, parses into structured packets, normalizes schemas, buffers for efficient bulk writes, and persists to a user-connected database (DuckDB by default).
-- Failures during batch writes are handled via a Dead Letter Queue (DLQ) with Arrow IPC artifacts and a per-packet rescue path to maximize successful persistence.
+- The pipeline fetches raw data over HTTP, parses into structured packets, normalizes schemas, buffers rows for chunked flushes, and persists to a user-connected database (DuckDB by default).
+- Failures during chunked writes are handled via a Dead Letter Queue (DLQ) with Arrow IPC artifacts and a per-packet rescue path to maximize successful persistence.
 - Observability includes structured logs, counters, histograms, and a summary; data-loss prevention policies ensure that failed data is retained and recoverable.
 
 ## Request → Parse

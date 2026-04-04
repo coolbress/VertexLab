@@ -99,7 +99,6 @@ from vertex_forager.core.writerflush import (
     concat_frames_with_flex,
     flush_all_writer_buffers,
     flush_chunked_table,
-    flush_legacy_table,
     flush_on_writer_cancel,
     flush_writer_table,
     handle_writer_flush_error,
@@ -2029,27 +2028,6 @@ class VertexForager:
                 logger=ctx.logger,
             )
 
-        async def _flush_legacy_table(
-            *,
-            table: str,
-            packets: list[FramePacket],
-            schema: object,
-            result: RunResult,
-            result_lock: asyncio.Lock,
-        ) -> None:
-            await flush_legacy_table(
-                table=table,
-                packets=packets,
-                schema=schema,
-                result=result,
-                result_lock=result_lock,
-                concat_frames_with_flex=_concat_frames_with_flex,
-                validate_unique_key=validate_unique_key,
-                validate_data_quality=ctx.validate_data_quality,
-                write_merged_packet=_write_merged_packet,
-                logger=ctx.logger,
-            )
-
         await flush_writer_table(
             table=table,
             buffers=buffers,
@@ -2058,15 +2036,6 @@ class VertexForager:
             result_lock=result_lock,
             get_table_schema=ctx.get_table_schema,
             flush_chunked_table=_flush_chunked_table,
-            flush_legacy_table=_flush_legacy_table,
-            handle_writer_flush_error=_handle_writer_flush_error,
-            compute_error_cls=ctx.compute_error_cls,
-            validation_error_cls=ctx.validation_error_cls,
-            primary_key_missing_error_cls=PrimaryKeyMissingError,
-            primary_key_null_error_cls=PrimaryKeyNullError,
-            dlq_spool_error_cls=ctx.dlq_spool_error_cls,
-            duckdb_module=ctx.duckdb_module,
-            logger=ctx.logger,
         )
 
     async def _fetch_with_retry(self, job: FetchJob) -> bytes:
