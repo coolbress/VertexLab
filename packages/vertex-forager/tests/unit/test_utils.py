@@ -27,9 +27,9 @@ from vertex_forager.utils import (  # type: ignore[attr-defined]
     env_int,
     get_app_root,
     get_cache_dir,
-    jupyter_safe,
     load_env_file,
     load_tickers_env,
+    make_sync,
     process_symbols,
     sanitize_field,
     set_env,
@@ -505,21 +505,25 @@ def test_get_app_root_with_env(tmp_path, monkeypatch: pytest.MonkeyPatch) -> Non
     assert root.is_dir()
 
 
-def test_jupyter_safe_sync_and_async_contexts() -> None:
-    async def _afunc(x: int) -> int:
-        return x + 1
+def test_make_sync_sync_and_async_contexts() -> None:
+    class _Dummy:
+        def _run_sync_compat(self, coro):
+            from vertex_forager.utils import run_sync_compat
 
-    safe = jupyter_safe(_afunc)
-    # Sync context (no running loop)
-    assert safe(1) == 2
+            return run_sync_compat(coro)
 
-    # Async context: call inside a running loop
+        async def _afunc(self, x: int) -> int:
+            return x + 1
+
+    safe = make_sync(_Dummy._afunc)
+    dummy = _Dummy()
+    assert safe(dummy, 1) == 2
+
     import asyncio
+    import importlib.util
 
     async def _runner():
-        return safe(2)
-
-    import importlib.util
+        return safe(dummy, 2)
 
     if importlib.util.find_spec("nest_asyncio") is None:
         with pytest.raises(RuntimeError) as excinfo:

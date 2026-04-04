@@ -19,7 +19,7 @@ def main() -> None:
     if provider == "sharadar":
         kwargs["api_key"] = os.environ["SHARADAR_API_KEY"]
     client = create_client(provider=provider, **kwargs)
-    # jupyter_safe wrapper allows sync usage of async methods
+    # Public client methods run through the sync compatibility bridge
     df = client.get_price_data(tickers=tickers, progress=False)
     try:
         print(df.head())  # type: ignore[attr-defined]

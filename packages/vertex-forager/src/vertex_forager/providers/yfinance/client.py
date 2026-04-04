@@ -33,7 +33,7 @@ from vertex_forager.providers.yfinance.constants import (
 from vertex_forager.providers.yfinance.constants import SIZE_MAP as YF_SIZE_MAP
 from vertex_forager.routers import create_router
 from vertex_forager.schema.mapper import SchemaMapper
-from vertex_forager.utils import run_sync_compat, validate_memory_usage, validate_tickers
+from vertex_forager.utils import make_sync, validate_memory_usage, validate_tickers
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -139,7 +139,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
 
     # --- Reference Data ---
 
-    def get_info(
+    async def _get_info_async(
         self,
         *,
         tickers: list[str],
@@ -166,25 +166,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        return run_sync_compat(
-            self._get_info_async(
-                tickers=tickers,
-                connect_db=connect_db,
-                progress=progress,
-                on_progress=on_progress,
-                **kwargs,
-            )
-        )
-
-    async def _get_info_async(
-        self,
-        *,
-        tickers: list[str],
-        connect_db: str | Path | None = None,
-        progress: bool = False,
-        on_progress: Callable[[ProgressSnapshot], None] | None = None,
-        **kwargs: Any,
-    ) -> RunResult:
         return await self._dispatch_fetch(
             dataset="info",
             tickers=tickers,
@@ -195,9 +176,11 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs,
         )
 
+    get_info = make_sync(_get_info_async)
+
     # --- Market Data ---
 
-    def get_price_data(
+    async def _get_price_data_async(
         self,
         *,
         tickers: list[str],
@@ -231,29 +214,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        return run_sync_compat(
-            self._get_price_data_async(
-                tickers=tickers,
-                connect_db=connect_db,
-                start_date=start_date,
-                end_date=end_date,
-                progress=progress,
-                on_progress=on_progress,
-                **kwargs,
-            )
-        )
-
-    async def _get_price_data_async(
-        self,
-        *,
-        tickers: list[str],
-        connect_db: str | Path | None = None,
-        start_date: str | None = None,
-        end_date: str | None = None,
-        progress: bool = False,
-        on_progress: Callable[[ProgressSnapshot], None] | None = None,
-        **kwargs: Any,
-    ) -> RunResult:
         return await self._dispatch_fetch(
             dataset="price",
             tickers=tickers,
@@ -266,9 +226,11 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs,
         )
 
+    get_price_data = make_sync(_get_price_data_async)
+
     # --- Financials ---
 
-    def get_financials(
+    async def _get_financials_async(
         self,
         *,
         kind: Literal["balance_sheet", "income_stmt", "cashflow", "earnings"] = "income_stmt",
@@ -304,29 +266,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        return run_sync_compat(
-            self._get_financials_async(
-                kind=kind,
-                period=period,
-                tickers=tickers,
-                connect_db=connect_db,
-                progress=progress,
-                on_progress=on_progress,
-                **kwargs,
-            )
-        )
-
-    async def _get_financials_async(
-        self,
-        *,
-        kind: Literal["balance_sheet", "income_stmt", "cashflow", "earnings"] = "income_stmt",
-        period: Literal["annual", "quarterly"] = "annual",
-        tickers: list[str],
-        connect_db: str | Path | None = None,
-        progress: bool = False,
-        on_progress: Callable[[ProgressSnapshot], None] | None = None,
-        **kwargs: Any,
-    ) -> RunResult:
         target_kind = "financials" if kind in ("income_stmt", "earnings") else kind
         if kind == "earnings":
             logger.warning(
@@ -346,9 +285,11 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs,
         )
 
+    get_financials = make_sync(_get_financials_async)
+
     # --- Corporate Actions ---
 
-    def get_actions(
+    async def _get_actions_async(
         self,
         *,
         kind: Literal["dividends", "splits"] = "dividends",
@@ -381,31 +322,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        return run_sync_compat(
-            self._get_actions_async(
-                kind=kind,
-                tickers=tickers,
-                connect_db=connect_db,
-                start_date=start_date,
-                end_date=end_date,
-                progress=progress,
-                on_progress=on_progress,
-                **kwargs,
-            )
-        )
-
-    async def _get_actions_async(
-        self,
-        *,
-        kind: Literal["dividends", "splits"] = "dividends",
-        tickers: list[str],
-        connect_db: str | Path | None = None,
-        start_date: str | None = None,
-        end_date: str | None = None,
-        progress: bool = False,
-        on_progress: Callable[[ProgressSnapshot], None] | None = None,
-        **kwargs: Any,
-    ) -> RunResult:
         return await self._dispatch_fetch(
             dataset=cast("YFinanceDataset", kind),
             tickers=tickers,
@@ -418,9 +334,11 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs,
         )
 
+    get_actions = make_sync(_get_actions_async)
+
     # --- Holders ---
 
-    def get_holders(
+    async def _get_holders_async(
         self,
         *,
         kind: Literal["institutional", "mutualfund"] = "institutional",
@@ -449,27 +367,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        return run_sync_compat(
-            self._get_holders_async(
-                kind=kind,
-                tickers=tickers,
-                connect_db=connect_db,
-                progress=progress,
-                on_progress=on_progress,
-                **kwargs,
-            )
-        )
-
-    async def _get_holders_async(
-        self,
-        *,
-        kind: Literal["institutional", "mutualfund"] = "institutional",
-        tickers: list[str],
-        connect_db: str | Path | None = None,
-        progress: bool = False,
-        on_progress: Callable[[ProgressSnapshot], None] | None = None,
-        **kwargs: Any,
-    ) -> RunResult:
         dataset = f"{kind}_holders"
         return await self._dispatch_fetch(
             dataset=cast("YFinanceDataset", dataset),
@@ -481,7 +378,9 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs,
         )
 
-    def get_major_holders(
+    get_holders = make_sync(_get_holders_async)
+
+    async def _get_major_holders_async(
         self,
         *,
         tickers: list[str],
@@ -508,25 +407,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        return run_sync_compat(
-            self._get_major_holders_async(
-                tickers=tickers,
-                connect_db=connect_db,
-                progress=progress,
-                on_progress=on_progress,
-                **kwargs,
-            )
-        )
-
-    async def _get_major_holders_async(
-        self,
-        *,
-        tickers: list[str],
-        connect_db: str | Path | None = None,
-        progress: bool = False,
-        on_progress: Callable[[ProgressSnapshot], None] | None = None,
-        **kwargs: Any,
-    ) -> RunResult:
         return await self._dispatch_fetch(
             dataset="major_holders",
             tickers=tickers,
@@ -537,9 +417,11 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs,
         )
 
+    get_major_holders = make_sync(_get_major_holders_async)
+
     # --- Insider ---
 
-    def get_insider_roster_holders(
+    async def _get_insider_roster_holders_async(
         self,
         *,
         tickers: list[str],
@@ -566,25 +448,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        return run_sync_compat(
-            self._get_insider_roster_holders_async(
-                tickers=tickers,
-                connect_db=connect_db,
-                progress=progress,
-                on_progress=on_progress,
-                **kwargs,
-            )
-        )
-
-    async def _get_insider_roster_holders_async(
-        self,
-        *,
-        tickers: list[str],
-        connect_db: str | Path | None = None,
-        progress: bool = False,
-        on_progress: Callable[[ProgressSnapshot], None] | None = None,
-        **kwargs: Any,
-    ) -> RunResult:
         return await self._dispatch_fetch(
             dataset="insider_roster_holders",
             tickers=tickers,
@@ -595,7 +458,9 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs,
         )
 
-    def get_insider_purchases(
+    get_insider_roster_holders = make_sync(_get_insider_roster_holders_async)
+
+    async def _get_insider_purchases_async(
         self,
         *,
         tickers: list[str],
@@ -622,25 +487,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        return run_sync_compat(
-            self._get_insider_purchases_async(
-                tickers=tickers,
-                connect_db=connect_db,
-                progress=progress,
-                on_progress=on_progress,
-                **kwargs,
-            )
-        )
-
-    async def _get_insider_purchases_async(
-        self,
-        *,
-        tickers: list[str],
-        connect_db: str | Path | None = None,
-        progress: bool = False,
-        on_progress: Callable[[ProgressSnapshot], None] | None = None,
-        **kwargs: Any,
-    ) -> RunResult:
         return await self._dispatch_fetch(
             dataset="insider_purchases",
             tickers=tickers,
@@ -651,9 +497,11 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs,
         )
 
+    get_insider_purchases = make_sync(_get_insider_purchases_async)
+
     # --- Calendar ---
 
-    def get_calendar(
+    async def _get_calendar_async(
         self,
         *,
         tickers: list[str],
@@ -680,25 +528,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        return run_sync_compat(
-            self._get_calendar_async(
-                tickers=tickers,
-                connect_db=connect_db,
-                progress=progress,
-                on_progress=on_progress,
-                **kwargs,
-            )
-        )
-
-    async def _get_calendar_async(
-        self,
-        *,
-        tickers: list[str],
-        connect_db: str | Path | None = None,
-        progress: bool = False,
-        on_progress: Callable[[ProgressSnapshot], None] | None = None,
-        **kwargs: Any,
-    ) -> RunResult:
         return await self._dispatch_fetch(
             dataset="calendar",
             tickers=tickers,
@@ -709,9 +538,11 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs,
         )
 
+    get_calendar = make_sync(_get_calendar_async)
+
     # --- Analyst Recommendations ---
 
-    def get_recommendations(
+    async def _get_recommendations_async(
         self,
         *,
         tickers: list[str],
@@ -738,25 +569,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        return run_sync_compat(
-            self._get_recommendations_async(
-                tickers=tickers,
-                connect_db=connect_db,
-                progress=progress,
-                on_progress=on_progress,
-                **kwargs,
-            )
-        )
-
-    async def _get_recommendations_async(
-        self,
-        *,
-        tickers: list[str],
-        connect_db: str | Path | None = None,
-        progress: bool = False,
-        on_progress: Callable[[ProgressSnapshot], None] | None = None,
-        **kwargs: Any,
-    ) -> RunResult:
         return await self._dispatch_fetch(
             dataset="recommendations",
             tickers=tickers,
@@ -767,9 +579,11 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs,
         )
 
+    get_recommendations = make_sync(_get_recommendations_async)
+
     # --- news ---
 
-    def get_news(
+    async def _get_news_async(
         self,
         *,
         tickers: list[str],
@@ -796,25 +610,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        return run_sync_compat(
-            self._get_news_async(
-                tickers=tickers,
-                connect_db=connect_db,
-                progress=progress,
-                on_progress=on_progress,
-                **kwargs,
-            )
-        )
-
-    async def _get_news_async(
-        self,
-        *,
-        tickers: list[str],
-        connect_db: str | Path | None = None,
-        progress: bool = False,
-        on_progress: Callable[[ProgressSnapshot], None] | None = None,
-        **kwargs: Any,
-    ) -> RunResult:
         return await self._dispatch_fetch(
             dataset="news",
             tickers=tickers,
@@ -824,6 +619,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             on_progress=on_progress,
             **kwargs,
         )
+
+    get_news = make_sync(_get_news_async)
 
     # ----------------------------------------------------------------
     # Internal Data Fetchers

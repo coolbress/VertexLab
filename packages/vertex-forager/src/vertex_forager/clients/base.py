@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC
 import asyncio
-from collections.abc import Mapping
+from collections.abc import Coroutine, Mapping
 from contextlib import AsyncExitStack, asynccontextmanager, nullcontext
 from dataclasses import dataclass
 from functools import partial
@@ -32,6 +32,7 @@ from vertex_forager.core.types import JSONValue, SharadarDataset, YFinanceDatase
 from vertex_forager.schema.registry import get_table_schema
 from vertex_forager.utils import (
     Spinner,
+    run_sync_compat,
     sanitize_field,
 )
 from vertex_forager.utils import (
@@ -212,8 +213,11 @@ class BaseClient(ABC, Generic[T]):
             recovery_factor=self._config.throttle.recovery_factor,
             healthy_window_s=self._config.throttle.healthy_window_s,
         )
-        self.last_run: RunResult | None = None
         self._client: httpx.AsyncClient | None = None
+        self.last_run: RunResult | None = None
+
+    def _run_sync_compat(self, coro: Coroutine[Any, Any, Any]) -> Any:
+        return run_sync_compat(coro)
 
     def _build_http_client(self) -> httpx.AsyncClient:
         return build_async_client(
