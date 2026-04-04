@@ -132,16 +132,13 @@ def collect(symbol: tuple[str, ...], source: str) -> None:
             if not api_key:
                 raise click.ClickException(f"Environment variable {api_key_env} is not set.")
 
-        async def _run_collect() -> pl.DataFrame | RunResult | None:
+        async def _run_collect() -> RunResult | None:
             async with create_client(provider=source, api_key=api_key, rate_limit=DEFAULT_RATE_LIMIT) as client:
                 if source == "sharadar":
                     # For Sharadar, we use the specialized client method
                     # In the future, this can be generalized via a CollectorCore interface
                     sc = cast("SharadarClient", client)
-                    result = cast(
-                        "pl.DataFrame | RunResult | None",
-                        await sc._get_price_data_async(tickers=list(symbol)),
-                    )
+                    result = cast("RunResult | None", await sc._get_price_data_async(tickers=list(symbol)))
                     return result
                 else:
                     raise click.ClickException(f"`{source}` is not supported by `collect` yet.")
@@ -154,8 +151,8 @@ def collect(symbol: tuple[str, ...], source: str) -> None:
                 click.echo(f"✅ Completed: processed {total_rows} rows.")
                 for table, count in result.tables.items():
                     click.echo(f"  - {table}: {count} rows")
-            elif isinstance(result, pl.DataFrame):
-                click.echo(f"✅ Completed: processed {len(result)} rows.")
+            elif result.data is not None:
+                click.echo(f"✅ Completed: processed {len(result.data)} rows.")
             else:
                 click.echo(f"✅ Completed: {result}")
 

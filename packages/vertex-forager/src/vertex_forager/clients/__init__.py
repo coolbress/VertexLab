@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from vertex_forager.clients.base import BaseClient
 from vertex_forager.constants import DEFAULT_RATE_LIMIT
@@ -35,6 +35,7 @@ def _register_sharadar() -> None:
         schedule: SchedulerConfig | dict[str, Any] | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
         throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
+        quality_check: Literal["warn", "error"] = "warn",
         concurrency: int | None = None,
         storage: StorageConfig | dict[str, Any] | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
@@ -45,6 +46,7 @@ def _register_sharadar() -> None:
             schedule=schedule,
             retry=retry,
             throttle=throttle,
+            quality_check=quality_check,
             concurrency=concurrency,
             storage=storage,
             limits=limits,
@@ -70,6 +72,7 @@ def _register_yfinance() -> None:
         schedule: SchedulerConfig | dict[str, Any] | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
         throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
+        quality_check: Literal["warn", "error"] = "warn",
         concurrency: int | None = None,
         storage: StorageConfig | dict[str, Any] | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
@@ -80,6 +83,7 @@ def _register_yfinance() -> None:
             schedule=schedule,
             retry=retry,
             throttle=throttle,
+            quality_check=quality_check,
             concurrency=concurrency,
             storage=storage,
             limits=limits,
@@ -102,6 +106,7 @@ def create_client(
     schedule: SchedulerConfig | dict[str, Any] | None = None,
     retry: RetryConfig | dict[str, Any] | None = None,
     throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
+    quality_check: Literal["warn", "error"] = "warn",
     concurrency: int | None = None,
     storage: StorageConfig | dict[str, Any] | None = None,
     limits: HTTPConfig | dict[str, Any] | None = None,
@@ -116,6 +121,7 @@ def create_client(
         schedule: Grouped scheduler configuration for always-on DRR fairness.
         retry: Grouped retry policy configuration.
         throttle: Grouped adaptive throttle policy configuration.
+        quality_check: Data quality violation handling mode.
         concurrency: Explicit fetch concurrency limit.
         storage: Grouped data-lifecycle and write-path tuning settings.
         limits: Grouped HTTP connection-pool configuration.
@@ -159,6 +165,7 @@ def create_client(
             schedule=schedule,
             retry=retry,
             throttle=throttle,
+            quality_check=quality_check,
             concurrency=concurrency,
             storage=storage,
             limits=limits,
@@ -171,6 +178,7 @@ def create_client(
         schedule=schedule,
         retry=retry,
         throttle=throttle,
+        quality_check=quality_check,
         concurrency=concurrency,
         storage=storage,
         limits=limits,

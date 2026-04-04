@@ -79,10 +79,11 @@ class TestClientIntegration:
             end_date="2024-01-31",
             connect_db=None,
         )
-        assert isinstance(result, pl.DataFrame)
-        assert result.height == 2
-        assert "ticker" in result.columns
-        assert "close" in result.columns
+        assert isinstance(result, RunResult)
+        assert result.data is not None
+        assert result.data.height == 2
+        assert "ticker" in result.data.columns
+        assert "close" in result.data.columns
 
     @pytest.mark.asyncio
     async def test_get_price_data_returns_dataframe_with_correct_structure(
@@ -102,12 +103,13 @@ class TestClientIntegration:
         )
 
         # Assert
-        assert isinstance(result, pl.DataFrame)
-        assert result.height == 2
-        assert "ticker" in result.columns
-        assert "close" in result.columns
-        assert "provider" in result.columns
-        assert "fetched_at" in result.columns
+        assert isinstance(result, RunResult)
+        assert result.data is not None
+        assert result.data.height == 2
+        assert "ticker" in result.data.columns
+        assert "close" in result.data.columns
+        assert "provider" in result.data.columns
+        assert "fetched_at" in result.data.columns
 
     @pytest.mark.asyncio
     async def test_get_price_data_with_persistence_returns_run_result(
@@ -133,6 +135,7 @@ class TestClientIntegration:
         # but we expect 2 rows processed.
         assert "sharadar_sep" in result.tables
         assert result.tables["sharadar_sep"] == 2
+        assert result.data is None
         assert len(result.errors) == 0
 
     @pytest.mark.asyncio
@@ -207,7 +210,7 @@ class TestClientIntegration:
         async def _fake_pagination(cfg):  # type: ignore[no-untyped-def]
             assert cfg.dataset == "tickers"
             assert cfg.symbols is None
-            return pl.DataFrame({"ticker": ["AAPL"]})
+            return RunResult(provider="sharadar", data=pl.DataFrame({"ticker": ["AAPL"]}))
 
         async def _fail_fetch(*args: object, **kwargs: object) -> pl.DataFrame:
             raise AssertionError("get_ticker_info(None) should not use per-ticker fetch")
@@ -218,8 +221,9 @@ class TestClientIntegration:
         ):
             result = await sharadar_client._get_ticker_info_async(tickers=None)
 
-        assert isinstance(result, pl.DataFrame)
-        assert result.get_column("ticker").to_list() == ["AAPL"]
+        assert isinstance(result, RunResult)
+        assert result.data is not None
+        assert result.data.get_column("ticker").to_list() == ["AAPL"]
 
     @pytest.mark.asyncio
     async def test_get_daily_metrics_handles_financial_data(
@@ -251,11 +255,12 @@ class TestClientIntegration:
         )
 
         # Assert
-        assert isinstance(result, pl.DataFrame)
-        assert result.height == 1
-        assert result.get_column("ticker").to_list() == ["AAPL"]
+        assert isinstance(result, RunResult)
+        assert result.data is not None
+        assert result.data.height == 1
+        assert result.data.get_column("ticker").to_list() == ["AAPL"]
         # Polars infers or converts to float for financial metrics
-        assert result.get_column("ev").to_list() == [100.0]
+        assert result.data.get_column("ev").to_list() == [100.0]
 
     @pytest.mark.asyncio
     async def test_get_corporate_actions_processes_dividend_events(
@@ -288,9 +293,10 @@ class TestClientIntegration:
         )
 
         # Assert
-        assert isinstance(result, pl.DataFrame)
-        assert result.height == 1
-        assert result.get_column("action").to_list() == ["dividend"]
+        assert isinstance(result, RunResult)
+        assert result.data is not None
+        assert result.data.height == 1
+        assert result.data.get_column("action").to_list() == ["dividend"]
 
 
 @pytest.mark.asyncio
@@ -318,8 +324,9 @@ class TestClientErrorHandling:
 
         # Assert
         # Should return empty DataFrame or handle gracefully
-        assert isinstance(result, pl.DataFrame)
-        assert result.height == 0
+        assert isinstance(result, RunResult)
+        assert result.data is not None
+        assert result.data.height == 0
 
     @pytest.mark.asyncio
     async def test_client_handles_api_error_gracefully(
@@ -341,8 +348,9 @@ class TestClientErrorHandling:
 
         # Assert
         # Should return empty DataFrame when all retries fail
-        assert isinstance(result, pl.DataFrame)
-        assert result.height == 0
+        assert isinstance(result, RunResult)
+        assert result.data is not None
+        assert result.data.height == 0
 
     @pytest.mark.asyncio
     async def test_client_maintains_rate_limiting(
@@ -371,8 +379,8 @@ class TestClientErrorHandling:
         )
 
         # Assert
-        assert isinstance(result1, pl.DataFrame)
-        assert isinstance(result2, pl.DataFrame)
+        assert isinstance(result1, RunResult)
+        assert isinstance(result2, RunResult)
         # Check that http executor was called multiple times
         # Note: Depending on batching, it might be called once or twice per request
         assert mock_http_executor.fetch.call_count >= 2

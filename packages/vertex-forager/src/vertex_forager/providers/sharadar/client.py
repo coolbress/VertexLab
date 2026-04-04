@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 import logging
 from pathlib import Path
 import re
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import duckdb
 import polars as pl
@@ -116,6 +116,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         schedule: SchedulerConfig | dict[str, Any] | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
         throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
+        quality_check: Literal["warn", "error"] = "warn",
         concurrency: int | None = None,
         storage: StorageConfig | dict[str, Any] | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
@@ -128,6 +129,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             schedule: Grouped scheduler configuration for always-on DRR fairness.
             retry: Grouped retry policy configuration.
             throttle: Grouped adaptive throttle policy configuration.
+            quality_check: Data quality violation handling mode.
             concurrency: Explicit fetch concurrency limit.
             storage: Grouped data-lifecycle and write-path tuning settings.
             limits: Grouped HTTP connection-pool configuration.
@@ -144,6 +146,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             schedule=schedule,
             retry=retry,
             throttle=throttle,
+            quality_check=quality_check,
             concurrency=concurrency,
             storage=storage,
             limits=limits,
@@ -185,7 +188,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: object,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         """Fetch metadata for all or specific tickers (TICKERS).
 
         Args:
@@ -196,7 +199,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             **kwargs: Additional provider-specific options forwarded to the pipeline.
 
         Returns:
-            pl.DataFrame in memory mode; RunResult when persisting to DuckDB.
+            RunResult. In-memory payload is available via `result.data`.
 
         Raises:
             InputError: If parameters (tickers) are invalid.
@@ -222,7 +225,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: object,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         if tickers is None:
             cfg = FetchConfig(
                 dataset="tickers",
@@ -264,7 +267,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: object,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         """Fetch S&P 500 component history.
 
         Args:
@@ -274,7 +277,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             **kwargs: Additional provider-specific options forwarded to the pipeline.
 
         Returns:
-            pl.DataFrame in memory mode; RunResult when persisting to DuckDB.
+            RunResult. In-memory payload is available via `result.data`.
 
         Raises:
             FetchError: If network/API errors occur during data retrieval.
@@ -297,7 +300,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: object,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         cfg = self._build_fetch_config(
             dataset="sp500",
             symbols=None,
@@ -325,7 +328,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: object,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         """Get price data for specified tickers.
 
         This method delegates to `fetch_per_ticker` to retrieve price data.
@@ -341,8 +344,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             **kwargs: Additional arguments passed to the fetcher.
 
         Returns:
-            polars.DataFrame | RunResult: DataFrame if fetching in-memory,
-            or RunResult object if storing to database.
+            RunResult. In-memory payload is available via `result.data`.
 
         Raises:
             InputError: If tickers list is empty or invalid.
@@ -374,7 +376,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: object,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         self._require_valid_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="price",
@@ -404,7 +406,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: object,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         """Fetch fundamental data (SF1).
 
         Args:
@@ -419,8 +421,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             **kwargs: Additional provider-specific options.
 
         Returns:
-            pl.DataFrame in memory mode; RunResult when persisting to DuckDB.
-            Rows include SF1 metrics keyed by ticker and calendardate.
+            RunResult. In-memory payload is available via `result.data`.
 
         Raises:
             InputError: If tickers list is empty or invalid.
@@ -454,7 +455,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: object,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         self._require_valid_tickers(tickers)
         extras = {**dict(kwargs), "dimension": dimension}
         cfg = self._build_fetch_config(
@@ -484,7 +485,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: object,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         """Fetch daily metrics (DAILY).
 
         Args:
@@ -498,8 +499,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             **kwargs: Additional provider-specific options.
 
         Returns:
-            pl.DataFrame in memory mode; RunResult when persisting.
-            Data includes per-day metrics keyed by ticker and date.
+            RunResult. In-memory payload is available via `result.data`.
 
         Raises:
             InputError: If tickers list is empty or invalid.
@@ -531,7 +531,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: object,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         self._require_valid_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="daily",
@@ -560,7 +560,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: object,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         """Fetch corporate actions (ACTIONS).
 
         Args:
@@ -574,8 +574,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             **kwargs: Additional provider-specific options.
 
         Returns:
-            pl.DataFrame in memory; RunResult when persisting.
-            Rows include dividends/splits keyed by ticker and date.
+            RunResult. In-memory payload is available via `result.data`.
 
         Raises:
             InputError: If tickers list is empty or invalid.
@@ -607,7 +606,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: object,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         self._require_valid_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="actions",
@@ -636,7 +635,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: object,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         """Fetch insider trading data (SF2).
 
         Args:
@@ -650,8 +649,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             **kwargs: Additional provider-specific options.
 
         Returns:
-            pl.DataFrame in memory; RunResult when persisting.
-            Data includes insider transactions keyed by ticker and filingdate.
+            RunResult. In-memory payload is available via `result.data`.
 
         Raises:
             InputError: If tickers list is empty or invalid.
@@ -683,7 +681,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: object,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         self._require_valid_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="insider",
@@ -712,7 +710,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: object,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         """Fetch institutional ownership data (SF3).
 
         Args:
@@ -726,8 +724,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             **kwargs: Additional provider-specific options.
 
         Returns:
-            pl.DataFrame in memory; RunResult when persisting.
-            Data includes institutional positions keyed by ticker and calendardate.
+            RunResult. In-memory payload is available via `result.data`.
 
         Raises:
             InputError: If tickers are empty or invalid.
@@ -759,7 +756,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: object,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         self._require_valid_tickers(tickers)
         cfg = self._build_fetch_config(
             dataset="institutional",
@@ -786,7 +783,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         config: FetchConfig,
         *,
         ticker_metadata: pl.DataFrame | None = None,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         """Fetch data for specific tickers using per-ticker batching.
 
         This method implements the per-ticker fetching pattern using BaseClient's
@@ -797,7 +794,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             ticker_metadata: Optional preloaded metadata used by the router for smart batching.
 
         Returns:
-            pl.DataFrame for in-memory mode, RunResult for database mode
+            RunResult for both in-memory and database modes
         """
         symbols = config.symbols
 
@@ -824,7 +821,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         )
         return result_obj
 
-    async def _fetch_pagination(self, config: FetchConfig) -> pl.DataFrame | RunResult:
+    async def _fetch_pagination(self, config: FetchConfig) -> RunResult:
         """Fetch full dataset via pagination (e.g., SP500, All Tickers).
 
         This method implements pagination using BaseClient infrastructure with
@@ -835,7 +832,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
                 table_name, progress, total_items, unit, start_date, end_date, and extra.
 
         Returns:
-            pl.DataFrame for in-memory mode, RunResult for database mode.
+            RunResult for both in-memory and database modes.
         """
 
         pipeline_kwargs: dict[str, JSONValue] = {
@@ -854,7 +851,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         config: FetchConfig,
         pipeline_kwargs: dict[str, JSONValue],
         ticker_metadata: pl.DataFrame | None = None,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         async with self.managed_writer(config.connect_db, show_progress=config.progress) as writer:
             router = create_router(
                 "sharadar",

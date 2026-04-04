@@ -1825,6 +1825,7 @@ class VertexForager:
             df=df,
             result=result,
             result_lock=result_lock,
+            quality_check=self._config.quality_check,
             logger=logger,
         )
 

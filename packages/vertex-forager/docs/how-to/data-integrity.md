@@ -1,4 +1,4 @@
-# Data integrity controls (opt-in)
+# Data integrity controls
 
 Enable stricter validation and lightweight dedup/upsert without changing defaults.
 
@@ -88,4 +88,14 @@ price_schema = TableSchema(
 - Use `NoFutureDates` when provider timestamps must never exceed the observation time for the run.
 - Use `NoNegativePrices` when market data should always remain non-negative and you want quick anomaly detection.
 
-Violations are logged, aggregated into `RunResult.quality_violations`, and kept separate from schema-mapping failures so you can decide whether to treat them as warnings or operational alerts.
+Violations are logged and aggregated into `RunResult.quality_violations` by default.
+
+If you want the run to stop on the first quality violation:
+
+```python
+from vertex_forager import create_client
+
+client = create_client(provider="yfinance", rate_limit=60, quality_check="error")
+```
+
+In `quality_check="error"` mode, the pipeline raises `DataQualityError(table=..., rule=..., violations=[...])` instead of returning a `RunResult`.

@@ -29,6 +29,7 @@ from typing import Final
 import polars as pl
 
 from vertex_forager.constants import DEFAULT_TIME_ZONE
+from vertex_forager.core.quality import NoDuplicateRows, NoFutureDates, NoNegativePrices
 from vertex_forager.providers.yfinance.constants import (
     DATASET_ENDPOINT,
     DATE_FILTER_COL,
@@ -88,6 +89,11 @@ YFINANCE_PRICE_SCHEMA = TableSchema(
     },
     unique_key=("provider", "ticker", "date"),
     analysis_date_col="date",
+    quality_rules=(
+        NoFutureDates(["date"]),
+        NoNegativePrices(["open", "high", "low", "close", "adj_close"]),
+        NoDuplicateRows(["ticker", "date"]),
+    ),
 )
 
 YFINANCE_DIVIDENDS_SCHEMA = TableSchema(
@@ -101,6 +107,10 @@ YFINANCE_DIVIDENDS_SCHEMA = TableSchema(
     },
     unique_key=("provider", "ticker", "date"),
     analysis_date_col="date",
+    quality_rules=(
+        NoFutureDates(["date"]),
+        NoDuplicateRows(["ticker", "date"]),
+    ),
 )
 
 YFINANCE_SPLITS_SCHEMA = TableSchema(
@@ -114,6 +124,10 @@ YFINANCE_SPLITS_SCHEMA = TableSchema(
     },
     unique_key=("provider", "ticker", "date"),
     analysis_date_col="date",
+    quality_rules=(
+        NoFutureDates(["date"]),
+        NoDuplicateRows(["ticker", "date"]),
+    ),
 )
 
 YFINANCE_ACTIONS_SCHEMA = TableSchema(
@@ -128,6 +142,10 @@ YFINANCE_ACTIONS_SCHEMA = TableSchema(
     },
     unique_key=("provider", "ticker", "date"),
     analysis_date_col="date",
+    quality_rules=(
+        NoFutureDates(["date"]),
+        NoDuplicateRows(["ticker", "date"]),
+    ),
 )
 
 YFINANCE_CALENDAR_SCHEMA = TableSchema(
@@ -198,6 +216,10 @@ YFINANCE_FINANCIALS_SCHEMA = TableSchema(
     },
     unique_key=("date", "ticker", "provider", "period", "metric"),
     analysis_date_col="date",
+    quality_rules=(
+        NoFutureDates(["date"]),
+        NoDuplicateRows(["ticker", "date"]),
+    ),
 )
 
 # For Holders
@@ -217,6 +239,7 @@ YFINANCE_HOLDERS_SCHEMA = TableSchema(
     },
     unique_key=("provider", "ticker", "holder", "date_reported"),
     analysis_date_col="date_reported",
+    quality_rules=(NoFutureDates(["date_reported"]),),
 )
 
 YFINANCE_FAST_INFO_SCHEMA = TableSchema(
@@ -276,6 +299,7 @@ YFINANCE_INSIDER_ROSTER_SCHEMA = TableSchema(
     },
     unique_key=("provider", "ticker", "name", "position", "latest_transaction_date"),
     analysis_date_col="latest_transaction_date",
+    quality_rules=(NoFutureDates(["latest_transaction_date"]),),
 )
 
 # --------------------------------------------------------------------------

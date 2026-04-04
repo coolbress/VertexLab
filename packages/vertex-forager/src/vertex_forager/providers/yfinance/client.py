@@ -3,8 +3,6 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, Literal, cast
 
-import polars as pl
-
 from vertex_forager.clients.base import BaseClient
 from vertex_forager.constants import (
     DEFAULT_RATE_LIMIT,
@@ -72,6 +70,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         schedule: SchedulerConfig | dict[str, Any] | None = None,
         retry: RetryConfig | dict[str, Any] | None = None,
         throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
+        quality_check: Literal["warn", "error"] = "warn",
         concurrency: int | None = None,
         storage: StorageConfig | dict[str, Any] | None = None,
         limits: HTTPConfig | dict[str, Any] | None = None,
@@ -86,6 +85,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             throttle (
                 AdaptiveThrottleConfig | dict[str, Any] | None,
             ): Adaptive throttle settings. Default is None.
+            quality_check: Data quality violation handling mode.
             concurrency (int | None): Maximum concurrent fetch workers. Default is None.
             storage: Grouped data-lifecycle and write-path tuning settings.
             limits (HTTPConfig | dict[str, Any] | None): HTTP connection pool settings. Default is None.
@@ -108,6 +108,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             schedule=schedule,
             retry=retry,
             throttle=throttle,
+            quality_check=quality_check,
             concurrency=concurrency,
             storage=storage,
             limits=limits,
@@ -128,7 +129,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         """Fetch ticker metadata/info.
 
         Args:
@@ -139,7 +140,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs: Additional provider-specific options.
 
         Returns:
-            Polars DataFrame in memory or RunResult when persisting.
+            RunResult. In-memory payload is available via `result.data`.
 
         Raises:
             InputError: If tickers list is empty or invalid.
@@ -165,7 +166,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         return await self._dispatch_fetch(
             dataset="info",
             tickers=tickers,
@@ -188,7 +189,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         """Fetch historical price data (OHLCV).
 
         Args:
@@ -201,7 +202,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs: Additional provider-specific options forwarded to the pipeline/executor.
 
         Returns:
-            Polars DataFrame in memory or RunResult when persisting.
+            RunResult. In-memory payload is available via `result.data`.
 
         Notes:
             Date filters (start/end) apply to price only; other datasets ignore date filters.
@@ -234,7 +235,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         return await self._dispatch_fetch(
             dataset="price",
             tickers=tickers,
@@ -259,7 +260,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         """Fetch financial statements (Unified Method).
 
         Args:
@@ -271,7 +272,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             on_progress: Optional callback receiving ProgressSnapshot updates.
 
         Returns:
-            Polars DataFrame in memory or RunResult when persisting.
+            RunResult. In-memory payload is available via `result.data`.
 
         Notes:
             - yfinance provides only recent periods for financials (e.g., last few years/quarters).
@@ -307,7 +308,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         target_kind = "financials" if kind in ("income_stmt", "earnings") else kind
         if kind == "earnings":
             logger.warning(
@@ -340,7 +341,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         """Fetch corporate actions (Unified Method: dividends or splits).
 
         Args:
@@ -354,7 +355,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs: Additional provider-specific options.
 
         Returns:
-            Polars DataFrame in memory or RunResult when persisting.
+            RunResult. In-memory payload is available via `result.data`.
 
         Raises:
             InputError: If tickers list is empty or invalid.
@@ -386,7 +387,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         return await self._dispatch_fetch(
             dataset=cast("YFinanceDataset", kind),
             tickers=tickers,
@@ -410,7 +411,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         """Fetch holders information (Unified Method).
 
         Args:
@@ -422,7 +423,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs: Additional provider-specific options.
 
         Returns:
-            Polars DataFrame in memory or RunResult when persisting.
+            RunResult. In-memory payload is available via `result.data`.
 
         Raises:
             InputError: If tickers list is empty or invalid.
@@ -450,7 +451,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         dataset = f"{kind}_holders"
         return await self._dispatch_fetch(
             dataset=cast("YFinanceDataset", dataset),
@@ -470,7 +471,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         """Fetch major holders summary metrics.
 
         Args:
@@ -481,7 +482,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs: Additional provider-specific options.
 
         Returns:
-            Polars DataFrame in memory or RunResult when persisting.
+            RunResult. In-memory payload is available via `result.data`.
 
         Raises:
             InputError: If tickers list is empty or invalid.
@@ -507,7 +508,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         return await self._dispatch_fetch(
             dataset="major_holders",
             tickers=tickers,
@@ -528,7 +529,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         """Fetch insider roster holders.
 
         Args:
@@ -539,7 +540,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs: Additional provider-specific options.
 
         Returns:
-            Polars DataFrame in memory or RunResult when persisting.
+            RunResult. In-memory payload is available via `result.data`.
 
         Raises:
             InputError: If tickers list is empty or invalid.
@@ -565,7 +566,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         return await self._dispatch_fetch(
             dataset="insider_roster_holders",
             tickers=tickers,
@@ -584,7 +585,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         """Fetch insider purchases.
 
         Args:
@@ -595,7 +596,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs: Additional provider-specific options.
 
         Returns:
-            Polars DataFrame in memory or RunResult when persisting.
+            RunResult. In-memory payload is available via `result.data`.
 
         Raises:
             InputError: If tickers list is empty or invalid.
@@ -621,7 +622,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         return await self._dispatch_fetch(
             dataset="insider_purchases",
             tickers=tickers,
@@ -642,7 +643,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         """Fetch earnings calendar.
 
         Args:
@@ -653,7 +654,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs: Additional provider-specific options.
 
         Returns:
-            Polars DataFrame in memory or RunResult when persisting.
+            RunResult. In-memory payload is available via `result.data`.
 
         Raises:
             InputError: If tickers list is empty or invalid.
@@ -679,7 +680,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         return await self._dispatch_fetch(
             dataset="calendar",
             tickers=tickers,
@@ -700,7 +701,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         """Fetch analyst recommendations.
 
         Args:
@@ -711,7 +712,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs: Additional provider-specific options.
 
         Returns:
-            Polars DataFrame in memory or RunResult when persisting.
+            RunResult. In-memory payload is available via `result.data`.
 
         Raises:
             InputError: If tickers list is empty or invalid.
@@ -737,7 +738,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         return await self._dispatch_fetch(
             dataset="recommendations",
             tickers=tickers,
@@ -758,7 +759,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         """Fetch ticker news.
 
         Args:
@@ -769,7 +770,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs: Additional provider-specific options.
 
         Returns:
-            Polars DataFrame in memory or RunResult when persisting.
+            RunResult. In-memory payload is available via `result.data`.
 
         Raises:
             InputError: If tickers list is empty or invalid.
@@ -795,7 +796,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         return await self._dispatch_fetch(
             dataset="news",
             tickers=tickers,
@@ -822,7 +823,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         start_date: str | None = None,
         end_date: str | None = None,
         **kwargs: Any,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         """Fetch data for specific tickers using per-ticker batching.
 
         This method implements the per-ticker fetching pattern using BaseClient's
@@ -847,7 +848,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs: Additional provider-specific arguments
 
         Returns:
-            pl.DataFrame for in-memory mode, RunResult for database mode
+            RunResult for both in-memory and database modes
         """
         validate_tickers(symbols)
         bytes_per_item = YF_SIZE_MAP.get(dataset, DEFAULT_BYTES_PER_ITEM)
@@ -859,9 +860,6 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             threshold_absolute=MEM_THRESHOLD_ABS_MB * 1024 * 1024,
         )
 
-        result_obj: pl.DataFrame | RunResult = (
-            RunResult(provider="yfinance") if connect_db is not None else pl.DataFrame()
-        )
         async with self.managed_writer(connect_db, show_progress=progress) as writer:
             router = create_router(
                 "yfinance",
@@ -902,7 +900,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
-    ) -> pl.DataFrame | RunResult:
+    ) -> RunResult:
         return await self._fetch_per_ticker(
             dataset=dataset,
             symbols=tickers,
