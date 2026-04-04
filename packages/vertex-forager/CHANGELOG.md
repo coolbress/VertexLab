@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.26.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.25.0...vertex-forager-v0.26.0) (2026-04-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* **vertex-forager:** add provider-typed create_client overloads ([#439](https://github.com/coolbress/VertexLab/issues/439))
+
+### Features
+
+* **vertex-forager:** add provider-typed create_client overloads ([#439](https://github.com/coolbress/VertexLab/issues/439)) ([6169e94](https://github.com/coolbress/VertexLab/commit/6169e945005cd0b0b5dce051504986d15f5842cf))
+
 ## [0.25.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.24.0...vertex-forager-v0.25.0) (2026-04-04)
 
 
