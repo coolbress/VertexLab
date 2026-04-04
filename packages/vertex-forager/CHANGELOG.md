@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.25.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.24.0...vertex-forager-v0.25.0) (2026-04-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* **vertex-forager:** wire data quality into the SDK and unify RunResult ([#437](https://github.com/coolbress/VertexLab/issues/437))
+
+### Features
+
+* **vertex-forager:** wire data quality into the SDK and unify RunResult ([#437](https://github.com/coolbress/VertexLab/issues/437)) ([d038530](https://github.com/coolbress/VertexLab/commit/d038530bee126b5f7f194eec07ac3a1402fd9761))
+
 ## [0.24.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.23.0...vertex-forager-v0.24.0) (2026-04-03)
 
 
