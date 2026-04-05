@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
 from pathlib import Path
 import re
@@ -10,7 +9,7 @@ import duckdb
 import polars as pl
 
 from vertex_forager.clients.base import BaseClient
-from vertex_forager.constants import PAGES_UNIT, RESERVED_PIPELINE_KEYS, TICKERS_UNIT
+from vertex_forager.constants import RESERVED_PIPELINE_KEYS
 from vertex_forager.core.types import JSONValue, SharadarDataset
 from vertex_forager.exceptions import InputError
 from vertex_forager.providers.sharadar.constants import (
@@ -44,39 +43,6 @@ logger = logging.getLogger(__name__)
 
 TICKER_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
 META_REQUIRED_COLUMNS = ("ticker", "firstpricedate", "lastpricedate")
-
-
-@dataclass(slots=True)
-class FetchConfig:
-    """Sharadar data fetch configuration.
-
-    Attributes:
-        dataset (str): Target dataset name (e.g., "price", "sp500").
-        symbols (list[str] | None): List of tickers to request; None for paginated datasets.
-        connect_db (str | Path | None): DuckDB file path or connection string; None for in-memory.
-        desc (str): Description text for progress display.
-        table_name (str): Destination table name per schema mapper.
-        progress (bool): Whether to show built-in progress output for this request.
-        total_items (int | None): Expected item count (bars/pages/tickers); None if unknown.
-        unit (str): Unit label for progress (e.g., "tickers", "pages").
-        start_date (str | None): Start date (YYYY-MM-DD) for range datasets.
-        end_date (str | None): End date (YYYY-MM-DD) for range datasets.
-        on_progress (Callable[[ProgressSnapshot], None] | None): Optional external progress sink.
-        extra (dict[str, Any]): Extra options passed through to router/client.
-    """
-
-    dataset: SharadarDataset
-    symbols: list[str] | None
-    connect_db: str | Path | None
-    desc: str
-    table_name: str
-    progress: bool = False
-    total_items: int | None = None
-    unit: str = TICKERS_UNIT
-    start_date: str | None = None
-    end_date: str | None = None
-    on_progress: Callable[[ProgressSnapshot], None] | None = None
-    extra: dict[str, Any] = field(default_factory=dict)
 
 
 class SharadarClient(BaseClient[SharadarDataset]):
@@ -187,7 +153,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         connect_db: str | Path | None = None,
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
-        **kwargs: object,
+        **kwargs: Any,
     ) -> RunResult:
         """Fetch metadata for all or specific tickers (TICKERS).
 
@@ -207,39 +173,19 @@ class SharadarClient(BaseClient[SharadarDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        if tickers is None:
-            cfg = FetchConfig(
-                dataset="tickers",
-                symbols=None,
-                connect_db=connect_db,
-                desc="Fetching all tickers metadata",
-                table_name=DATASET_TABLE["tickers"],
-                progress=progress,
-                total_items=None,
-                unit=PAGES_UNIT,
-                start_date=None,
-                end_date=None,
-                on_progress=on_progress,
-                extra=dict(kwargs),
-            )
-            return await self._fetch_pagination(cfg)
-        if len(tickers) == 0:
+        if tickers is not None and len(tickers) == 0:
             raise InputError("tickers list cannot be empty for SharadarClient.get_ticker_info")
-        cfg = FetchConfig(
+        return await self._dispatch_fetch(
             dataset="tickers",
             symbols=tickers,
             connect_db=connect_db,
-            desc="Fetching tickers metadata",
             table_name=DATASET_TABLE["tickers"],
-            progress=progress,
-            total_items=len(tickers),
-            unit=TICKERS_UNIT,
             start_date=None,
             end_date=None,
-            on_progress=on_progress,
             extra=dict(kwargs),
+            progress=progress,
+            on_progress=on_progress,
         )
-        return await self._fetch_per_ticker(cfg)
 
     get_ticker_info = make_sync(_get_ticker_info_async)
 
@@ -249,7 +195,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         connect_db: str | Path | None = None,
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
-        **kwargs: object,
+        **kwargs: Any,
     ) -> RunResult:
         """Fetch S&P 500 component history.
 
@@ -267,21 +213,17 @@ class SharadarClient(BaseClient[SharadarDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        cfg = self._build_fetch_config(
+        return await self._dispatch_fetch(
             dataset="sp500",
             symbols=None,
             connect_db=connect_db,
-            desc="Fetching S&P 500 history",
             table_name=DATASET_TABLE["sp500"],
-            total_items=None,
-            unit=PAGES_UNIT,
             start_date=None,
             end_date=None,
             extra=dict(kwargs),
             progress=progress,
             on_progress=on_progress,
         )
-        return await self._fetch_pagination(cfg)
 
     get_sp500_history = make_sync(_get_sp500_history_async)
 
@@ -295,11 +237,9 @@ class SharadarClient(BaseClient[SharadarDataset]):
         end_date: str | None = None,
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
-        **kwargs: object,
+        **kwargs: Any,
     ) -> RunResult:
         """Get price data for specified tickers.
-
-        This method delegates to `fetch_per_ticker` to retrieve price data.
 
         Args:
             tickers: List of ticker symbols to fetch data for.
@@ -321,21 +261,18 @@ class SharadarClient(BaseClient[SharadarDataset]):
             WriterError: If persistence fails.
         """
         self._require_valid_tickers(tickers)
-        cfg = self._build_fetch_config(
+        return await self._dispatch_fetch(
             dataset="price",
             symbols=tickers,
             connect_db=connect_db,
-            desc="Fetching price data",
             table_name=DATASET_TABLE["price"],
-            total_items=None,
-            unit=TICKERS_UNIT,
             start_date=start_date,
             end_date=end_date,
             extra=dict(kwargs),
             progress=progress,
             on_progress=on_progress,
+            ticker_metadata=self._load_ticker_metadata_from_meta_db(meta, tickers),
         )
-        return await self._fetch_per_ticker(cfg, ticker_metadata=self._load_ticker_metadata_from_meta_db(meta, tickers))
 
     get_price_data = make_sync(_get_price_data_async)
 
@@ -350,7 +287,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         dimension: str = "MRT",
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
-        **kwargs: object,
+        **kwargs: Any,
     ) -> RunResult:
         """Fetch fundamental data (SF1).
 
@@ -376,21 +313,18 @@ class SharadarClient(BaseClient[SharadarDataset]):
         """
         self._require_valid_tickers(tickers)
         extras = {**dict(kwargs), "dimension": dimension}
-        cfg = self._build_fetch_config(
+        return await self._dispatch_fetch(
             dataset="fundamental",
             symbols=tickers,
             connect_db=connect_db,
-            desc="Fetching fundamental data",
             table_name=DATASET_TABLE["fundamental"],
-            total_items=None,
-            unit=TICKERS_UNIT,
             start_date=start_date,
             end_date=end_date,
             extra=extras,
             progress=progress,
             on_progress=on_progress,
+            ticker_metadata=self._load_ticker_metadata_from_meta_db(meta, tickers),
         )
-        return await self._fetch_per_ticker(cfg, ticker_metadata=self._load_ticker_metadata_from_meta_db(meta, tickers))
 
     get_fundamental_data = make_sync(_get_fundamental_data_async)
 
@@ -404,7 +338,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         end_date: str | None = None,
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
-        **kwargs: object,
+        **kwargs: Any,
     ) -> RunResult:
         """Fetch daily metrics (DAILY).
 
@@ -428,21 +362,18 @@ class SharadarClient(BaseClient[SharadarDataset]):
             WriterError: If persistence fails.
         """
         self._require_valid_tickers(tickers)
-        cfg = self._build_fetch_config(
+        return await self._dispatch_fetch(
             dataset="daily",
             symbols=tickers,
             connect_db=connect_db,
-            desc="Fetching daily metrics",
             table_name=DATASET_TABLE["daily"],
-            total_items=None,
-            unit=TICKERS_UNIT,
             start_date=start_date,
             end_date=end_date,
             extra=dict(kwargs),
             progress=progress,
             on_progress=on_progress,
+            ticker_metadata=self._load_ticker_metadata_from_meta_db(meta, tickers),
         )
-        return await self._fetch_per_ticker(cfg, ticker_metadata=self._load_ticker_metadata_from_meta_db(meta, tickers))
 
     get_daily_metrics = make_sync(_get_daily_metrics_async)
 
@@ -456,7 +387,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         end_date: str | None = None,
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
-        **kwargs: object,
+        **kwargs: Any,
     ) -> RunResult:
         """Fetch corporate actions (ACTIONS).
 
@@ -480,21 +411,18 @@ class SharadarClient(BaseClient[SharadarDataset]):
             WriterError: If persistence fails.
         """
         self._require_valid_tickers(tickers)
-        cfg = self._build_fetch_config(
+        return await self._dispatch_fetch(
             dataset="actions",
             symbols=tickers,
             connect_db=connect_db,
-            desc="Fetching corporate actions",
             table_name=DATASET_TABLE["actions"],
-            total_items=None,
-            unit=TICKERS_UNIT,
             start_date=start_date,
             end_date=end_date,
             extra=dict(kwargs),
             progress=progress,
             on_progress=on_progress,
+            ticker_metadata=self._load_ticker_metadata_from_meta_db(meta, tickers),
         )
-        return await self._fetch_per_ticker(cfg, ticker_metadata=self._load_ticker_metadata_from_meta_db(meta, tickers))
 
     get_corporate_actions = make_sync(_get_corporate_actions_async)
 
@@ -508,7 +436,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         end_date: str | None = None,
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
-        **kwargs: object,
+        **kwargs: Any,
     ) -> RunResult:
         """Fetch insider trading data (SF2).
 
@@ -532,21 +460,18 @@ class SharadarClient(BaseClient[SharadarDataset]):
             WriterError: If persistence fails.
         """
         self._require_valid_tickers(tickers)
-        cfg = self._build_fetch_config(
+        return await self._dispatch_fetch(
             dataset="insider",
             symbols=tickers,
             connect_db=connect_db,
-            desc="Fetching insider trading data",
             table_name=DATASET_TABLE["insider"],
-            total_items=None,
-            unit=TICKERS_UNIT,
             start_date=start_date,
             end_date=end_date,
             extra=dict(kwargs),
             progress=progress,
             on_progress=on_progress,
+            ticker_metadata=self._load_ticker_metadata_from_meta_db(meta, tickers),
         )
-        return await self._fetch_per_ticker(cfg, ticker_metadata=self._load_ticker_metadata_from_meta_db(meta, tickers))
 
     get_insider_transactions = make_sync(_get_insider_transactions_async)
 
@@ -560,7 +485,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         end_date: str | None = None,
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
-        **kwargs: object,
+        **kwargs: Any,
     ) -> RunResult:
         """Fetch institutional ownership data (SF3).
 
@@ -584,21 +509,18 @@ class SharadarClient(BaseClient[SharadarDataset]):
             WriterError: If persistence fails.
         """
         self._require_valid_tickers(tickers)
-        cfg = self._build_fetch_config(
+        return await self._dispatch_fetch(
             dataset="institutional",
             symbols=tickers,
             connect_db=connect_db,
-            desc="Fetching institutional ownership",
             table_name=DATASET_TABLE["institutional"],
-            total_items=None,
-            unit=TICKERS_UNIT,
             start_date=start_date,
             end_date=end_date,
             extra=dict(kwargs),
             progress=progress,
             on_progress=on_progress,
+            ticker_metadata=self._load_ticker_metadata_from_meta_db(meta, tickers),
         )
-        return await self._fetch_per_ticker(cfg, ticker_metadata=self._load_ticker_metadata_from_meta_db(meta, tickers))
 
     get_institutional_ownership = make_sync(_get_institutional_ownership_async)
 
@@ -606,141 +528,94 @@ class SharadarClient(BaseClient[SharadarDataset]):
     # Internal Data Fetchers
     # ----------------------------------------------------------------
 
-    async def _fetch_per_ticker(
-        self,
-        config: FetchConfig,
-        *,
-        ticker_metadata: pl.DataFrame | None = None,
-    ) -> RunResult:
-        """Fetch data for specific tickers using per-ticker batching.
-
-        This method implements the per-ticker fetching pattern using BaseClient's
-        common infrastructure while maintaining Sharadar-specific memory validation.
-
-        Args:
-            config: FetchConfig object containing all parameters
-            ticker_metadata: Optional preloaded metadata used by the router for smart batching.
-
-        Returns:
-            RunResult for both in-memory and database modes
-        """
-        symbols = config.symbols
-
-        if symbols is not None and len(symbols) == 0:
-            raise InputError("tickers list cannot be empty")
-        if symbols:
-            self._validate_tickers(symbols)
-
-        bytes_per_item = self.BYTES_PER_TICKER_METADATA if config.dataset == "tickers" else self.BYTES_PER_TICKER_FULL
-        self.validate_memory_usage(
-            symbols=config.symbols,
-            connect_db=config.connect_db,
-            bytes_per_item=bytes_per_item,
-        )
-
-        pipeline_kwargs: dict[str, JSONValue] = {
-            k: v for k, v in dict(config.extra).items() if k not in RESERVED_PIPELINE_KEYS
-        }
-
-        result_obj = await self._run_sharadar_pipeline(
-            config=config,
-            pipeline_kwargs=pipeline_kwargs,
-            ticker_metadata=ticker_metadata,
-        )
-        return result_obj
-
-    async def _fetch_pagination(self, config: FetchConfig) -> RunResult:
-        """Fetch full dataset via pagination (e.g., SP500, All Tickers).
-
-        This method implements pagination using BaseClient infrastructure with
-        Sharadar-specific handling for large datasets.
-
-        Args:
-            config: FetchConfig containing dataset, symbols, connect_db, desc,
-                table_name, progress, total_items, unit, start_date, end_date, and extra.
-
-        Returns:
-            RunResult for both in-memory and database modes.
-        """
-
-        pipeline_kwargs: dict[str, JSONValue] = {
-            k: v for k, v in dict(config.extra).items() if k not in RESERVED_PIPELINE_KEYS
-        }
-
-        result_obj = await self._run_sharadar_pipeline(
-            config=config,
-            pipeline_kwargs=pipeline_kwargs,
-        )
-        return result_obj
-
-    async def _run_sharadar_pipeline(
-        self,
-        *,
-        config: FetchConfig,
-        pipeline_kwargs: dict[str, JSONValue],
-        ticker_metadata: pl.DataFrame | None = None,
-    ) -> RunResult:
-        async with self.managed_writer(config.connect_db, show_progress=config.progress) as writer:
-            router = create_router(
-                "sharadar",
-                api_key=cast("str", self.api_key),
-                rate_limit=self._config.requests_per_minute,
-                start_date=config.start_date,
-                end_date=config.end_date,
-                ticker_metadata=ticker_metadata,
-            )
-
-            await self.run_pipeline(
-                router=router,
-                dataset=config.dataset,
-                symbols=config.symbols,
-                writer=writer,
-                mapper=self._mapper,
-                on_progress=config.on_progress,
-                progress=config.progress,
-                **pipeline_kwargs,
-            )
-
-            result_obj = await self.collect_results(
-                writer=writer,
-                table_name=config.table_name,
-                connect_db=config.connect_db,
-            )
-            return result_obj
-
-    def _build_fetch_config(
+    async def _dispatch_fetch(
         self,
         *,
         dataset: SharadarDataset,
         symbols: list[str] | None,
         connect_db: str | Path | None,
-        desc: str,
         table_name: str,
-        total_items: int | None = None,
-        unit: str = TICKERS_UNIT,
         start_date: str | None = None,
         end_date: str | None = None,
         extra: dict[str, Any] | None = None,
         progress: bool = False,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
-    ) -> FetchConfig:
-        computed_total = total_items
-        if computed_total is None and symbols is not None:
-            computed_total = len(symbols)
-        return FetchConfig(
-            dataset=dataset,
-            symbols=symbols,
-            connect_db=connect_db,
-            desc=desc,
-            table_name=table_name,
-            progress=progress,
-            total_items=computed_total,
-            unit=unit,
-            start_date=start_date,
-            end_date=end_date,
-            on_progress=on_progress,
-            extra=dict(extra or {}),
-        )
+        ticker_metadata: pl.DataFrame | None = None,
+    ) -> RunResult:
+        """Dispatch a fetch request to the Sharadar pipeline.
+
+        This is the single internal entry point for all Sharadar async fetch operations.
+        It validates inputs, checks memory safety, and delegates to the pipeline.
+
+        Args:
+            dataset: Sharadar dataset name (e.g., "price", "fundamental", "tickers").
+            symbols: List of ticker symbols to fetch, or None for paginated (all-tickers) fetch.
+            connect_db: DuckDB connection string/path, or None for in-memory.
+            table_name: Destination table name per schema mapper.
+            start_date: Start date (YYYY-MM-DD) for range datasets.
+            end_date: End date (YYYY-MM-DD) for range datasets.
+            extra: Additional provider-specific options forwarded to the pipeline.
+            progress: Whether to show built-in progress output.
+            on_progress: Optional callback receiving ProgressSnapshot updates.
+            ticker_metadata: Optional preloaded ticker metadata for smart batching.
+
+        Returns:
+            RunResult for both in-memory and database modes.
+
+        Raises:
+            InputError: If tickers list is empty or contains invalid symbols.
+        """
+        if symbols is not None and len(symbols) == 0:
+            raise InputError("tickers list cannot be empty")
+        symbols_provided = symbols is not None
+        if symbols_provided:
+            self._validate_tickers(symbols)  # type: ignore[arg-type]
+            bytes_per_item = self.BYTES_PER_TICKER_METADATA if dataset == "tickers" else self.BYTES_PER_TICKER_FULL
+            self.validate_memory_usage(symbols=symbols, connect_db=connect_db, bytes_per_item=bytes_per_item)
+        else:
+            bytes_per_item = self.BYTES_PER_TICKER_METADATA if dataset == "tickers" else self.BYTES_PER_TICKER_FULL
+            self.validate_memory_usage(
+                symbols=None,
+                connect_db=connect_db,
+                bytes_per_item=bytes_per_item,
+                estimated_count=self.ESTIMATED_TOTAL_TICKERS,
+            )
+
+        pipeline_kwargs: dict[str, JSONValue] = {
+            k: v for k, v in (extra or {}).items() if k not in RESERVED_PIPELINE_KEYS
+        }
+
+        async with self.managed_writer(connect_db, show_progress=progress) as writer:
+            router = create_router(
+                "sharadar",
+                api_key=cast("str", self.api_key),
+                rate_limit=self._config.requests_per_minute,
+                start_date=start_date,
+                end_date=end_date,
+                ticker_metadata=ticker_metadata,
+            )
+
+            await self.run_pipeline(
+                router=router,
+                dataset=dataset,
+                symbols=symbols,
+                writer=writer,
+                mapper=self._mapper,
+                on_progress=on_progress,
+                progress=progress,
+                **pipeline_kwargs,
+            )
+
+            result_obj = await self.collect_results(
+                writer=writer,
+                table_name=table_name,
+                connect_db=connect_db,
+            )
+            return result_obj
+
+    # ----------------------------------------------------------------
+    # Sharadar Exclusive Methods
+    # ----------------------------------------------------------------
 
     def _validate_tickers(self, tickers: list[str]) -> None:
         """

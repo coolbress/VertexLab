@@ -21,7 +21,7 @@ MAX_PAGES: Final[int] = 1000
 
 BYTES_PER_TICKER_METADATA: Final[int] = 1024
 BYTES_PER_TICKER_FULL: Final[int] = 1 * 1024 * 1024
-ESTIMATED_TOTAL_TICKERS: Final[int] = 15_000
+ESTIMATED_TOTAL_TICKERS: Final[int] = 50_000
 
 API_KEY_QUERY_PARAM: Final[str] = "api_key"
 QOPTS_PER_PAGE: Final[str] = "qopts.per_page"

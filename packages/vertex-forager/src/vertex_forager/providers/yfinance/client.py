@@ -626,49 +626,45 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
     # Internal Data Fetchers
     # ----------------------------------------------------------------
 
-    async def _fetch_per_ticker(
+    async def _dispatch_fetch(
         self,
         *,
         dataset: YFinanceDataset,
-        symbols: list[str],
+        tickers: list[str],
         connect_db: str | Path | None,
         table_name: str,
-        progress: bool = False,
-        on_progress: Callable[[ProgressSnapshot], None] | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
+        progress: bool = False,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
     ) -> RunResult:
-        """Fetch data for specific tickers using per-ticker batching.
+        """Dispatch a fetch request to the YFinance pipeline.
 
-        This method implements the per-ticker fetching pattern using BaseClient's
-        common infrastructure while maintaining YFinance-specific logic for
-        memory validation and rate limiting optimization.
-
-        YFinance-specific characteristics:
-        - Free API with no authentication required
-        - Conservative rate limiting to avoid IP bans (60 req/min default)
-        - Compact data format (smaller memory footprint than premium APIs)
-        - Limited ticker universe compared to institutional providers
+        This is the single internal entry point for all YFinance async fetch operations.
+        It validates inputs, checks memory safety, and delegates to the pipeline.
 
         Args:
-            dataset: Dataset name (e.g., "price", "financials", "info")
-            symbols: List of symbols to fetch (required; must be non-empty)
-            connect_db: Database connection string/path, or None for in-memory
-            table_name: Table name for result collection
+            dataset: YFinance dataset name (e.g., "price", "financials", "info").
+            tickers: List of ticker symbols to fetch (required; must be non-empty).
+            connect_db: Database connection string/path, or None for in-memory.
+            table_name: Table name for result collection.
+            start_date: Start date for data fetch.
+            end_date: End date for data fetch.
             progress: Whether to show built-in progress output.
             on_progress: Optional callback receiving ProgressSnapshot updates.
-            start_date: Start date for data fetch
-            end_date: End date for data fetch
-            **kwargs: Additional provider-specific arguments
+            **kwargs: Additional provider-specific arguments.
 
         Returns:
-            RunResult for both in-memory and database modes
+            RunResult for both in-memory and database modes.
+
+        Raises:
+            InputError: If tickers list is empty or contains invalid symbols.
         """
-        validate_tickers(symbols)
+        validate_tickers(tickers)
         bytes_per_item = YF_SIZE_MAP.get(dataset, DEFAULT_BYTES_PER_ITEM)
         validate_memory_usage(
-            symbols=symbols,
+            symbols=tickers,
             connect_db=connect_db,
             bytes_per_item=bytes_per_item,
             threshold_ratio=MEM_THRESHOLD_RATIO,
@@ -689,7 +685,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             await self.run_pipeline(
                 router=router,
                 dataset=dataset,
-                symbols=symbols,
+                symbols=tickers,
                 writer=writer,
                 mapper=self._mapper,
                 on_progress=on_progress,
@@ -703,28 +699,3 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
                 connect_db=connect_db,
             )
         return result_obj
-
-    async def _dispatch_fetch(
-        self,
-        *,
-        dataset: YFinanceDataset,
-        tickers: list[str],
-        connect_db: str | Path | None,
-        table_name: str,
-        start_date: str | None = None,
-        end_date: str | None = None,
-        progress: bool = False,
-        on_progress: Callable[[ProgressSnapshot], None] | None = None,
-        **kwargs: Any,
-    ) -> RunResult:
-        return await self._fetch_per_ticker(
-            dataset=dataset,
-            symbols=tickers,
-            connect_db=connect_db,
-            table_name=table_name,
-            progress=progress,
-            on_progress=on_progress,
-            start_date=start_date,
-            end_date=end_date,
-            **kwargs,
-        )

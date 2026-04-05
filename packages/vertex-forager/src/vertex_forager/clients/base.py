@@ -232,6 +232,7 @@ class BaseClient(ABC, Generic[T]):
         symbols: list[str] | None,
         connect_db: str | Path | None,
         bytes_per_item: int,
+        estimated_count: int | None = None,
     ) -> None:
         validate_memory_usage_impl(
             symbols=symbols,
@@ -239,6 +240,7 @@ class BaseClient(ABC, Generic[T]):
             bytes_per_item=bytes_per_item,
             threshold_ratio=MEM_THRESHOLD_RATIO,
             threshold_absolute=MEM_THRESHOLD_ABS_MB * 1024 * 1024,
+            estimated_count=estimated_count,
         )
 
     async def aclose(self) -> None:

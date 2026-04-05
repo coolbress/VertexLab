@@ -35,6 +35,7 @@ from vertex_forager.providers.yfinance.constants import (
     DATE_FILTER_COL,
 )
 from vertex_forager.schema.config import TableSchema
+from vertex_forager.utils import validate_provider_mappings
 
 # --------------------------------------------------------------------------
 # Schemas
@@ -406,27 +407,10 @@ TABLES: Final[dict[str, TableSchema]] = {
 }
 
 
-def _validate_mappings() -> None:
-    keys_table = set(DATASET_TABLE.keys())
-    keys_schema = set(DATASET_SCHEMA.keys())
-    keys_endpoint = set(DATASET_ENDPOINT.keys())
-    keys_date_filter = set(DATE_FILTER_COL.keys())
-    union = set().union(keys_table, keys_schema, keys_endpoint)
-    errors: list[str] = []
-    for name, keys in [
-        ("DATASET_TABLE", keys_table),
-        ("DATASET_SCHEMA", keys_schema),
-        ("DATASET_ENDPOINT", keys_endpoint),
-    ]:
-        if keys != union:
-            missing = sorted(union - keys)
-            extra = sorted(keys - union)
-            errors.append(f"{name}: missing={missing}, extra={extra}")
-    if not keys_date_filter.issubset(union):
-        missing = sorted(keys_date_filter - union)
-        errors.append(f"DATE_FILTER_COL must be subset of datasets; extra={missing}")
-    if errors:
-        raise RuntimeError("YFinance schema mapping keys inconsistent: " + "; ".join(errors))
-
-
-_validate_mappings()
+validate_provider_mappings(
+    provider="yfinance",
+    dataset_table=DATASET_TABLE,
+    dataset_schema=DATASET_SCHEMA,
+    dataset_endpoint=DATASET_ENDPOINT,
+    date_filter_col=DATE_FILTER_COL,
+)

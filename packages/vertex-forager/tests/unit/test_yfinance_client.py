@@ -212,7 +212,7 @@ async def test_get_financials_rejects_quarterly_earnings_async() -> None:
 
 
 @pytest.mark.asyncio
-async def test_fetch_per_ticker_filters_pipeline_kwargs(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_dispatch_fetch_filters_pipeline_kwargs(monkeypatch: pytest.MonkeyPatch) -> None:
     client = YFinanceClient(pickle_compat_datasets=["price"])
     captured: dict[str, Any] = {}
 
@@ -249,9 +249,9 @@ async def test_fetch_per_ticker_filters_pipeline_kwargs(monkeypatch: pytest.Monk
     monkeypatch.setattr(client, "collect_results", _fake_collect_results)
     monkeypatch.setattr("vertex_forager.providers.yfinance.client.create_router", _fake_create_router)
 
-    result = await client._fetch_per_ticker(
+    result = await client._dispatch_fetch(
         dataset="price",
-        symbols=["AAPL"],
+        tickers=["AAPL"],
         connect_db=None,
         table_name="yfinance_price",
         progress=True,
