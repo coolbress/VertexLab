@@ -272,23 +272,28 @@ def validate_memory_usage(
     bytes_per_item: int = 1 * 1024 * 1024,
     threshold_ratio: float = 0.7,
     threshold_absolute: int | None = 4 * 1024 * 1024 * 1024,
+    estimated_count: int | None = None,
 ) -> None:
     """Validate memory safety for per-ticker jobs.
 
     Args:
-        symbols: List of ticker symbols for the per-ticker job.
+        symbols: List of ticker symbols for the per-ticker job, or None for pagination.
         connect_db: Database connection path or None for in-memory.
         bytes_per_item: Estimated bytes per ticker for the dataset.
         threshold_ratio: Ratio of available memory to trigger warning.
         threshold_absolute: Absolute size in bytes to trigger warning.
+        estimated_count: Item count for pagination paths when symbols is None.
     """
     if connect_db is not None:
         return
     if symbols is None:
-        return
+        if estimated_count is None:
+            return
+        num_items = estimated_count
+    else:
+        num_items = len(symbols)
     if not isinstance(bytes_per_item, int) or bytes_per_item <= 0:
         raise ValueError("bytes_per_item must be a positive integer")
-    num_items = len(symbols)
     estimated_size = num_items * bytes_per_item
     available_memory = psutil.virtual_memory().available
     check_memory_safety(

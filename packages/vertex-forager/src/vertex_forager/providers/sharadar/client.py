@@ -572,15 +572,18 @@ class SharadarClient(BaseClient[SharadarDataset]):
             self._validate_tickers(symbols)  # type: ignore[arg-type]
             bytes_per_item = self.BYTES_PER_TICKER_METADATA if dataset == "tickers" else self.BYTES_PER_TICKER_FULL
             self.validate_memory_usage(symbols=symbols, connect_db=connect_db, bytes_per_item=bytes_per_item)
+        else:
+            bytes_per_item = self.BYTES_PER_TICKER_METADATA if dataset == "tickers" else self.BYTES_PER_TICKER_FULL
+            self.validate_memory_usage(
+                symbols=None,
+                connect_db=connect_db,
+                bytes_per_item=bytes_per_item,
+                estimated_count=self.ESTIMATED_TOTAL_TICKERS,
+            )
 
         pipeline_kwargs: dict[str, JSONValue] = {
             k: v for k, v in (extra or {}).items() if k not in RESERVED_PIPELINE_KEYS
         }
-        # symbols=None paths (get_ticker_info(None), get_sp500_history) are bounded:
-        # - get_ticker_info(None) fetches all ~30k ticker metadata (small)
-        # - get_sp500_history fetches fixed S&P 500 constituents
-        # Memory validation skipped for pagination paths since item count is unknown/unbounded
-        # but actual datasets are controlled and fit in memory.
 
         async with self.managed_writer(connect_db, show_progress=progress) as writer:
             router = create_router(
