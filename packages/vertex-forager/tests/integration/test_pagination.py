@@ -29,15 +29,11 @@ async def test_fetch_pagination_progress_true(mock_client):
         mock_writer.__aexit__ = AsyncMock(return_value=None)
         mock_create_writer.return_value = mock_writer
 
-        await mock_client._run_sharadar_pipeline(
+        await mock_client._dispatch_fetch(
             dataset="sp500",
             symbols=None,
             connect_db=":memory:",
             table_name="test",
-            pipeline_kwargs={},
-            ticker_metadata=None,
-            start_date=None,
-            end_date=None,
             progress=True,
             on_progress=None,
         )
@@ -55,15 +51,11 @@ async def test_fetch_pagination_progress_false(mock_client):
         mock_writer.__aexit__ = AsyncMock(return_value=None)
         mock_create_writer.return_value = mock_writer
 
-        await mock_client._run_sharadar_pipeline(
+        await mock_client._dispatch_fetch(
             dataset="sp500",
             symbols=None,
             connect_db=":memory:",
             table_name="test",
-            pipeline_kwargs={},
-            ticker_metadata=None,
-            start_date=None,
-            end_date=None,
             progress=False,
             on_progress=None,
         )

@@ -213,18 +213,14 @@ class SharadarClient(BaseClient[SharadarDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        pipeline_kwargs: dict[str, JSONValue] = {
-            k: v for k, v in dict(kwargs).items() if k not in RESERVED_PIPELINE_KEYS
-        }
-        return await self._run_sharadar_pipeline(
+        return await self._dispatch_fetch(
             dataset="sp500",
             symbols=None,
             connect_db=connect_db,
             table_name=DATASET_TABLE["sp500"],
-            pipeline_kwargs=pipeline_kwargs,
-            ticker_metadata=None,
             start_date=None,
             end_date=None,
+            extra=dict(kwargs),
             progress=progress,
             on_progress=on_progress,
         )
@@ -546,6 +542,29 @@ class SharadarClient(BaseClient[SharadarDataset]):
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         ticker_metadata: pl.DataFrame | None = None,
     ) -> RunResult:
+        """Dispatch a fetch request to the Sharadar pipeline.
+
+        This is the single internal entry point for all Sharadar async fetch operations.
+        It validates inputs, checks memory safety, and delegates to the pipeline.
+
+        Args:
+            dataset: Sharadar dataset name (e.g., "price", "fundamental", "tickers").
+            symbols: List of ticker symbols to fetch, or None for paginated (all-tickers) fetch.
+            connect_db: DuckDB connection string/path, or None for in-memory.
+            table_name: Destination table name per schema mapper.
+            start_date: Start date (YYYY-MM-DD) for range datasets.
+            end_date: End date (YYYY-MM-DD) for range datasets.
+            extra: Additional provider-specific options forwarded to the pipeline.
+            progress: Whether to show built-in progress output.
+            on_progress: Optional callback receiving ProgressSnapshot updates.
+            ticker_metadata: Optional preloaded ticker metadata for smart batching.
+
+        Returns:
+            RunResult for both in-memory and database modes.
+
+        Raises:
+            InputError: If tickers list is empty or contains invalid symbols.
+        """
         if symbols is not None and len(symbols) == 0:
             raise InputError("tickers list cannot be empty")
         symbols_provided = symbols is not None
@@ -558,33 +577,6 @@ class SharadarClient(BaseClient[SharadarDataset]):
             k: v for k, v in (extra or {}).items() if k not in RESERVED_PIPELINE_KEYS
         }
 
-        return await self._run_sharadar_pipeline(
-            dataset=dataset,
-            symbols=symbols,
-            connect_db=connect_db,
-            table_name=table_name,
-            pipeline_kwargs=pipeline_kwargs,
-            ticker_metadata=ticker_metadata,
-            start_date=start_date,
-            end_date=end_date,
-            progress=progress,
-            on_progress=on_progress,
-        )
-
-    async def _run_sharadar_pipeline(
-        self,
-        *,
-        dataset: SharadarDataset,
-        symbols: list[str] | None,
-        connect_db: str | Path | None,
-        table_name: str,
-        pipeline_kwargs: dict[str, JSONValue],
-        ticker_metadata: pl.DataFrame | None = None,
-        start_date: str | None = None,
-        end_date: str | None = None,
-        progress: bool = False,
-        on_progress: Callable[[ProgressSnapshot], None] | None = None,
-    ) -> RunResult:
         async with self.managed_writer(connect_db, show_progress=progress) as writer:
             router = create_router(
                 "sharadar",
@@ -612,6 +604,10 @@ class SharadarClient(BaseClient[SharadarDataset]):
                 connect_db=connect_db,
             )
             return result_obj
+
+    # ----------------------------------------------------------------
+    # Sharadar Exclusive Methods
+    # ----------------------------------------------------------------
 
     def _validate_tickers(self, tickers: list[str]) -> None:
         """
