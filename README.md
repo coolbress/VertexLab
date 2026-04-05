@@ -5,7 +5,7 @@
 | Name                                                                |    Stmts |     Miss |   Cover |   Missing |
 |-------------------------------------------------------------------- | -------: | -------: | ------: | --------: |
 | packages/vertex-forager/src/vertex\_forager/clients/\_\_init\_\_.py |       48 |        0 |    100% |           |
-| packages/vertex-forager/src/vertex\_forager/clients/base.py         |      166 |       28 |     83% |69, 246-248, 255-257, 269, 293-295, 302-304, 323-324, 329-331, 441-442, 518, 538-543, 556, 558-559 |
+| packages/vertex-forager/src/vertex\_forager/clients/base.py         |      166 |       28 |     83% |69, 248-250, 257-259, 271, 295-297, 304-306, 325-326, 331-333, 443-444, 520, 540-545, 558, 560-561 |
 | packages/vertex-forager/src/vertex\_forager/clients/dispatcher.py   |       21 |        0 |    100% |           |
 | packages/vertex-forager/src/vertex\_forager/clients/validation.py   |        5 |        0 |    100% |           |
 | packages/vertex-forager/src/vertex\_forager/core/\_\_init\_\_.py    |       11 |        0 |    100% |           |
