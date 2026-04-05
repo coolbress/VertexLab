@@ -166,12 +166,12 @@ class TestClientIntegration:
 
         captured: dict[str, object] = {}
 
-        async def _fake_fetch(cfg, *, ticker_metadata=None):  # type: ignore[no-untyped-def]
-            captured["dataset"] = cfg.dataset
-            captured["ticker_metadata"] = ticker_metadata
-            return pl.DataFrame()
+        async def _fake_dispatch(**kwargs: object) -> RunResult:
+            captured["dataset"] = kwargs.get("dataset")
+            captured["ticker_metadata"] = kwargs.get("ticker_metadata")
+            return RunResult(provider="sharadar", data=pl.DataFrame())
 
-        with patch.object(sharadar_client, "_fetch_per_ticker", _fake_fetch):
+        with patch.object(sharadar_client, "_dispatch_fetch", _fake_dispatch):
             await sharadar_client._get_price_data_async(
                 tickers=["AAPL"],
                 meta=meta_path,
@@ -189,12 +189,12 @@ class TestClientIntegration:
     async def test_get_price_data_passes_none_meta_to_fetcher(self, sharadar_client) -> None:
         captured: dict[str, object] = {}
 
-        async def _fake_fetch(cfg, *, ticker_metadata=None):  # type: ignore[no-untyped-def]
-            captured["dataset"] = cfg.dataset
-            captured["ticker_metadata"] = ticker_metadata
-            return pl.DataFrame()
+        async def _fake_dispatch(**kwargs: object) -> RunResult:
+            captured["dataset"] = kwargs.get("dataset")
+            captured["ticker_metadata"] = kwargs.get("ticker_metadata")
+            return RunResult(provider="sharadar", data=pl.DataFrame())
 
-        with patch.object(sharadar_client, "_fetch_per_ticker", _fake_fetch):
+        with patch.object(sharadar_client, "_dispatch_fetch", _fake_dispatch):
             await sharadar_client._get_price_data_async(
                 tickers=["AAPL"],
                 meta=None,
@@ -206,19 +206,13 @@ class TestClientIntegration:
         assert captured["ticker_metadata"] is None
 
     @pytest.mark.asyncio
-    async def test_get_ticker_info_none_calls_pagination_directly(self, sharadar_client) -> None:
-        async def _fake_pagination(cfg):  # type: ignore[no-untyped-def]
-            assert cfg.dataset == "tickers"
-            assert cfg.symbols is None
+    async def test_get_ticker_info_none_calls_dispatch(self, sharadar_client) -> None:
+        async def _fake_dispatch(**kwargs: object) -> RunResult:
+            assert kwargs.get("dataset") == "tickers"
+            assert kwargs.get("symbols") is None
             return RunResult(provider="sharadar", data=pl.DataFrame({"ticker": ["AAPL"]}))
 
-        async def _fail_fetch(*args: object, **kwargs: object) -> pl.DataFrame:
-            raise AssertionError("get_ticker_info(None) should not use per-ticker fetch")
-
-        with (
-            patch.object(sharadar_client, "_fetch_pagination", _fake_pagination),
-            patch.object(sharadar_client, "_fetch_per_ticker", _fail_fetch),
-        ):
+        with patch.object(sharadar_client, "_dispatch_fetch", _fake_dispatch):
             result = await sharadar_client._get_ticker_info_async(tickers=None)
 
         assert isinstance(result, RunResult)
