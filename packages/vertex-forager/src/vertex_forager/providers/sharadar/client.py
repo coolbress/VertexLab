@@ -546,6 +546,8 @@ class SharadarClient(BaseClient[SharadarDataset]):
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         ticker_metadata: pl.DataFrame | None = None,
     ) -> RunResult:
+        if symbols is not None and len(symbols) == 0:
+            raise InputError("tickers list cannot be empty")
         symbols_provided = symbols is not None and len(symbols) > 0
         if symbols_provided:
             self._validate_tickers(symbols)  # type: ignore[arg-type]
