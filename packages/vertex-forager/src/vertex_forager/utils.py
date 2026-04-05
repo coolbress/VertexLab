@@ -199,8 +199,8 @@ def validate_provider_mappings(
             extra = sorted(keys - union)
             errors.append(f"{name}: missing={missing}, extra={extra}")
     if not keys_date_filter.issubset(union):
-        missing = sorted(keys_date_filter - union)
-        errors.append(f"DATE_FILTER_COL must be subset of datasets; extra={missing}")
+        extra_keys = sorted(keys_date_filter - union)
+        errors.append(f"DATE_FILTER_COL must be subset of datasets; extra={extra_keys}")
     if errors:
         raise RuntimeError(f"{provider} schema mapping keys inconsistent: " + "; ".join(errors))
 
