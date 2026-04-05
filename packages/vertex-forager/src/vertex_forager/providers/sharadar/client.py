@@ -548,14 +548,14 @@ class SharadarClient(BaseClient[SharadarDataset]):
     ) -> RunResult:
         if symbols is not None and len(symbols) == 0:
             raise InputError("tickers list cannot be empty")
-        symbols_provided = symbols is not None and len(symbols) > 0
+        symbols_provided = symbols is not None
         if symbols_provided:
             self._validate_tickers(symbols)  # type: ignore[arg-type]
             bytes_per_item = self.BYTES_PER_TICKER_METADATA if dataset == "tickers" else self.BYTES_PER_TICKER_FULL
             self.validate_memory_usage(symbols=symbols, connect_db=connect_db, bytes_per_item=bytes_per_item)
 
         pipeline_kwargs: dict[str, JSONValue] = {
-            k: v for k, v in dict(extra or {}).items() if k not in RESERVED_PIPELINE_KEYS
+            k: v for k, v in (extra or {}).items() if k not in RESERVED_PIPELINE_KEYS
         }
 
         return await self._run_sharadar_pipeline(
