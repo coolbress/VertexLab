@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal
 
 from vertex_forager.clients.base import BaseClient
 from vertex_forager.constants import (
@@ -282,7 +282,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             )
         if kind == "earnings" and period == "quarterly":
             raise InputError("quarterly_earnings is deprecated in yfinance; use income_stmt with period='quarterly'.")
-        dataset = cast("YFinanceDataset", f"quarterly_{target_kind}" if period == "quarterly" else target_kind)
+        dataset: YFinanceDataset = f"quarterly_{target_kind}" if period == "quarterly" else target_kind  # type: ignore[assignment]
 
         return await self._dispatch_fetch(
             dataset=dataset,
@@ -331,7 +331,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        dataset = cast("YFinanceDataset", kind)
+        dataset: YFinanceDataset = kind  # type: ignore[assignment]
         return await self._dispatch_fetch(
             dataset=dataset,
             tickers=tickers,
@@ -377,7 +377,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        dataset = cast("YFinanceDataset", f"{kind}_holders")
+        dataset: YFinanceDataset = f"{kind}_holders"  # type: ignore[assignment]
         return await self._dispatch_fetch(
             dataset=dataset,
             tickers=tickers,
