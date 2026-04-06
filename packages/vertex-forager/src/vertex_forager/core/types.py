@@ -46,9 +46,9 @@ class PerSymbolJobContext(TypedDict, total=False):
 # Dataset Literals for typing clarity (runtime remains flexible via str fields)
 SharadarDataset: TypeAlias = Literal[
     "price",
+    "tickers",
     "fundamental",
     "daily",
-    "tickers",
     "actions",
     "insider",
     "institutional",
@@ -56,29 +56,29 @@ SharadarDataset: TypeAlias = Literal[
 ]
 
 YFinanceDataset: TypeAlias = Literal[
+    "info",
+    "fast_info",
     "price",
+    "dividends",
+    "splits",
+    "actions",
     "financials",
-    "quarterly_financials",
-    "balance_sheet",
-    "quarterly_balance_sheet",
-    "cashflow",
-    "quarterly_cashflow",
     "income_stmt",
+    "balance_sheet",
+    "cashflow",
     "earnings",
+    "quarterly_financials",
+    "quarterly_balance_sheet",
+    "quarterly_cashflow",
     "quarterly_earnings",
     "major_holders",
     "institutional_holders",
     "mutualfund_holders",
     "insider_roster_holders",
     "insider_purchases",
+    "recommendations",
     "calendar",
     "news",
-    "info",
-    "fast_info",
-    "dividends",
-    "splits",
-    "recommendations",
-    "actions",
 ]
 
 

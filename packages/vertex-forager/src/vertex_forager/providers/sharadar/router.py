@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
     from vertex_forager.core.config import FetchJob
     from vertex_forager.core.types import PerSymbolJobContext
+    from vertex_forager.schema.config import DatasetSpec
 
 from polars.exceptions import PolarsError
 
@@ -46,16 +47,11 @@ from vertex_forager.logging.constants import (
 )
 from vertex_forager.providers.sharadar.constants import (
     API_KEY_QUERY_PARAM,
-    DATASET_ENDPOINT,
-    DATE_FILTER_COL,
     INTERNAL_COLS,
     QOPTS_COLUMNS,
     QOPTS_PER_PAGE,
 )
-from vertex_forager.providers.sharadar.schema import (
-    DATASET_SCHEMA,
-    DATASET_TABLE,
-)
+from vertex_forager.providers.sharadar.schema import DATASET_NAMES
 from vertex_forager.routers.base import BaseRouter
 from vertex_forager.routers.errors import raise_quandl_error
 from vertex_forager.routers.jobs import (
@@ -64,6 +60,7 @@ from vertex_forager.routers.jobs import (
     pagination_job,
     single_symbol_job,
 )
+from vertex_forager.schema.registry import get_dataset_spec
 
 logger = logging.getLogger("vertex_forager.providers.sharadar.router")
 
@@ -93,16 +90,7 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
 
     _BASE_URL: Final[str] = "https://data.nasdaq.com/api/v3/datatables/SHARADAR"
 
-    _BULK_DATASETS: ClassVar[set[str]] = {
-        "price",
-        "fundamental",
-        "daily",
-        "tickers",
-        "actions",
-        "insider",
-        "institutional",
-        "sp500",
-    }
+    _BULK_DATASETS: ClassVar[set[str]] = set(DATASET_NAMES)
 
     _PAGINATION_CONTEXT: ClassVar[dict[str, object]] = {
         "pagination": {
@@ -164,8 +152,14 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
             # Normalize date types for reliable comparison
             normalized = df.with_columns(
                 [
-                    pl.col("firstpricedate").cast(pl.Utf8).str.strptime(pl.Date, strict=False).alias("firstpricedate"),
-                    pl.col("lastpricedate").cast(pl.Utf8).str.strptime(pl.Date, strict=False).alias("lastpricedate"),
+                    pl.col("firstpricedate")
+                    .cast(pl.String)
+                    .str.strptime(pl.Date, strict=False)
+                    .alias("firstpricedate"),
+                    pl.col("lastpricedate")
+                    .cast(pl.String)
+                    .str.strptime(pl.Date, strict=False)
+                    .alias("lastpricedate"),
                 ]
             )
 
@@ -274,9 +268,7 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         if empty_result:
             return empty_result
         observed_at = datetime.now(tz=timezone.utc)
-        table = DATASET_TABLE.get(job.dataset)
-        if table is None:
-            raise NotImplementedError(f"Unsupported dataset: {job.dataset}")
+        table = self._dataset_spec(job.dataset).schema.table
         frame = self._add_provider_metadata(frame=frame, observed_at=observed_at)
         pkt_ctx: dict[str, object] = {"dataset": job.dataset}
         if isinstance(job.context, dict):
@@ -535,9 +527,7 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         Raises:
             NotImplementedError: If the dataset is not supported.
         """
-        endpoint = DATASET_ENDPOINT.get(dataset)
-        if endpoint is None:
-            raise NotImplementedError(LOG_UNSUPPORTED_DATASET.format(prefix=ROUTER_LOG_PREFIX, dataset=dataset))
+        endpoint = self._dataset_spec(dataset).endpoint
         return f"{self._BASE_URL}/{endpoint}.json"
 
     # ------ Column selection: derive request columns from schema ------
@@ -552,11 +542,7 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         Returns:
             str: Comma-separated column names.
         """
-        schema = DATASET_SCHEMA.get(dataset)
-        if not schema:
-            return ""
-
-        cols = [col for col in schema.schema if col not in INTERNAL_COLS]
+        cols = [col for col in self._dataset_spec(dataset).schema.schema if col not in INTERNAL_COLS]
         return ",".join(cols)
 
     # ------ Build pagination job: apply per_page/columns/date filters ------
@@ -575,7 +561,7 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         elif dataset == "sp500":
             params[QOPTS_COLUMNS] = self._get_request_columns("sp500")
         # Apply dataset-specific date filters
-        date_col = DATE_FILTER_COL.get(dataset)
+        date_col = self._dataset_spec(dataset).date_filter_col
         if date_col:
             if self._start_date:
                 params[f"{date_col}.gte"] = self._start_date
@@ -636,7 +622,7 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
             params["qopts.columns"] = self._get_request_columns("insider")
 
         # Dataset-specific date filters (Datatables require actual column names)
-        date_col = DATE_FILTER_COL.get(dataset)
+        date_col = self._dataset_spec(dataset).date_filter_col
         if date_col:
             if self._start_date:
                 params[f"{date_col}.gte"] = self._start_date
@@ -877,9 +863,15 @@ class SharadarRouter(BaseRouter[SharadarDataset]):
         # 1. Load DataFrame
         # If target schema is known, load everything as Utf8 first to prevent inference errors
         # (e.g., empty strings in numeric columns). If unknown, rely on Polars inference.
-        target_schema = DATASET_SCHEMA.get(dataset)
-        schema_arg = dict.fromkeys(col_names, pl.Utf8) if target_schema else col_names
+        target_schema = self._dataset_spec(dataset).schema
+        schema_arg = dict.fromkeys(col_names, pl.String) if target_schema else col_names
 
         frame = pl.DataFrame(records, schema=schema_arg, orient="row")
 
         return frame
+
+    def _dataset_spec(self, dataset: str) -> DatasetSpec:
+        spec = get_dataset_spec(self.provider, dataset)
+        if spec is None:
+            raise NotImplementedError(LOG_UNSUPPORTED_DATASET.format(prefix=ROUTER_LOG_PREFIX, dataset=dataset))
+        return spec

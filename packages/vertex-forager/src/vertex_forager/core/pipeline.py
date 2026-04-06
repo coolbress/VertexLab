@@ -130,6 +130,7 @@ if TYPE_CHECKING:
     from vertex_forager.core.contracts import IMapper, IRouter, IWriter
     from vertex_forager.core.controller import FlowController
     from vertex_forager.core.http import HttpExecutor
+    from vertex_forager.schema.config import TableSchema
 
 InMemoryBufferWriterType: type | None
 try:
@@ -1930,7 +1931,7 @@ class VertexForager:
             *,
             frames: list[pl.DataFrame],
             table_name: str,
-            schema: object,
+            schema: TableSchema | None,
             rechunk: bool,
         ) -> pl.DataFrame:
             return concat_frames_with_flex(
@@ -1997,7 +1998,7 @@ class VertexForager:
             *,
             table: str,
             packets: list[FramePacket],
-            schema: object,
+            schema: TableSchema | None,
             chunk_size: int,
             buffers: dict[str, list[FramePacket]],
             buffer_rows: dict[str, int],

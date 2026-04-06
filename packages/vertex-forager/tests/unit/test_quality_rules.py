@@ -17,7 +17,7 @@ def test_no_negative_prices_all_valid() -> None:
             "close": [10.5, 1.5, 3.5],
         }
     )
-    rule = NoNegativePrices()
+    rule = NoNegativePrices(["open", "high", "low", "close"])
     violations = rule.validate(df)
     assert violations == []
 

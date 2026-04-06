@@ -21,9 +21,9 @@ from vertex_forager.providers.sharadar.constants import (
 from vertex_forager.providers.sharadar.constants import (
     ESTIMATED_TOTAL_TICKERS as SH_ESTIMATED_TOTAL_TICKERS,
 )
-from vertex_forager.providers.sharadar.schema import DATASET_TABLE
 from vertex_forager.routers import create_router
 from vertex_forager.schema.mapper import SchemaMapper
+from vertex_forager.schema.registry import get_dataset_spec
 from vertex_forager.utils import make_sync, validate_tickers
 
 if TYPE_CHECKING:
@@ -128,7 +128,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         try:
             with duckdb.connect(str(meta), read_only=True) as conn:
                 cols = ", ".join(META_REQUIRED_COLUMNS)
-                query = f'SELECT {cols} FROM "{DATASET_TABLE["tickers"]}"'  # noqa: S608
+                query = f'SELECT {cols} FROM "{self._table_name_for_dataset("tickers")}"'  # noqa: S608
                 if symbols:
                     placeholders = ", ".join(["?"] * len(symbols))
                     query = f"{query} WHERE ticker IN ({placeholders})"
@@ -142,6 +142,12 @@ class SharadarClient(BaseClient[SharadarDataset]):
         if df.is_empty():
             return None
         return df.unique(subset=["ticker"], keep="last", maintain_order=True)
+
+    def _table_name_for_dataset(self, dataset: SharadarDataset) -> str:
+        spec = get_dataset_spec("sharadar", dataset)
+        if spec is None:
+            raise InputError(f"Unsupported Sharadar dataset: {dataset}")
+        return spec.schema.table
 
     # ----------------------------------------------------------------
     # Public User Methods
@@ -175,11 +181,12 @@ class SharadarClient(BaseClient[SharadarDataset]):
         """
         if tickers is not None and len(tickers) == 0:
             raise InputError("tickers list cannot be empty for SharadarClient.get_ticker_info")
+        dataset: SharadarDataset = "tickers"
         return await self._dispatch_fetch(
-            dataset="tickers",
+            dataset=dataset,
             symbols=tickers,
             connect_db=connect_db,
-            table_name=DATASET_TABLE["tickers"],
+            table_name=self._table_name_for_dataset(dataset),
             start_date=None,
             end_date=None,
             extra=dict(kwargs),
@@ -213,11 +220,12 @@ class SharadarClient(BaseClient[SharadarDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
+        dataset: SharadarDataset = "sp500"
         return await self._dispatch_fetch(
-            dataset="sp500",
+            dataset=dataset,
             symbols=None,
             connect_db=connect_db,
-            table_name=DATASET_TABLE["sp500"],
+            table_name=self._table_name_for_dataset(dataset),
             start_date=None,
             end_date=None,
             extra=dict(kwargs),
@@ -261,11 +269,12 @@ class SharadarClient(BaseClient[SharadarDataset]):
             WriterError: If persistence fails.
         """
         self._require_valid_tickers(tickers)
+        dataset: SharadarDataset = "price"
         return await self._dispatch_fetch(
-            dataset="price",
+            dataset=dataset,
             symbols=tickers,
             connect_db=connect_db,
-            table_name=DATASET_TABLE["price"],
+            table_name=self._table_name_for_dataset(dataset),
             start_date=start_date,
             end_date=end_date,
             extra=dict(kwargs),
@@ -313,11 +322,12 @@ class SharadarClient(BaseClient[SharadarDataset]):
         """
         self._require_valid_tickers(tickers)
         extras = {**dict(kwargs), "dimension": dimension}
+        dataset: SharadarDataset = "fundamental"
         return await self._dispatch_fetch(
-            dataset="fundamental",
+            dataset=dataset,
             symbols=tickers,
             connect_db=connect_db,
-            table_name=DATASET_TABLE["fundamental"],
+            table_name=self._table_name_for_dataset(dataset),
             start_date=start_date,
             end_date=end_date,
             extra=extras,
@@ -362,11 +372,12 @@ class SharadarClient(BaseClient[SharadarDataset]):
             WriterError: If persistence fails.
         """
         self._require_valid_tickers(tickers)
+        dataset: SharadarDataset = "daily"
         return await self._dispatch_fetch(
-            dataset="daily",
+            dataset=dataset,
             symbols=tickers,
             connect_db=connect_db,
-            table_name=DATASET_TABLE["daily"],
+            table_name=self._table_name_for_dataset(dataset),
             start_date=start_date,
             end_date=end_date,
             extra=dict(kwargs),
@@ -411,11 +422,12 @@ class SharadarClient(BaseClient[SharadarDataset]):
             WriterError: If persistence fails.
         """
         self._require_valid_tickers(tickers)
+        dataset: SharadarDataset = "actions"
         return await self._dispatch_fetch(
-            dataset="actions",
+            dataset=dataset,
             symbols=tickers,
             connect_db=connect_db,
-            table_name=DATASET_TABLE["actions"],
+            table_name=self._table_name_for_dataset(dataset),
             start_date=start_date,
             end_date=end_date,
             extra=dict(kwargs),
@@ -460,11 +472,12 @@ class SharadarClient(BaseClient[SharadarDataset]):
             WriterError: If persistence fails.
         """
         self._require_valid_tickers(tickers)
+        dataset: SharadarDataset = "insider"
         return await self._dispatch_fetch(
-            dataset="insider",
+            dataset=dataset,
             symbols=tickers,
             connect_db=connect_db,
-            table_name=DATASET_TABLE["insider"],
+            table_name=self._table_name_for_dataset(dataset),
             start_date=start_date,
             end_date=end_date,
             extra=dict(kwargs),
@@ -509,11 +522,12 @@ class SharadarClient(BaseClient[SharadarDataset]):
             WriterError: If persistence fails.
         """
         self._require_valid_tickers(tickers)
+        dataset: SharadarDataset = "institutional"
         return await self._dispatch_fetch(
-            dataset="institutional",
+            dataset=dataset,
             symbols=tickers,
             connect_db=connect_db,
-            table_name=DATASET_TABLE["institutional"],
+            table_name=self._table_name_for_dataset(dataset),
             start_date=start_date,
             end_date=end_date,
             extra=dict(kwargs),

@@ -249,8 +249,8 @@ class DuckDBWriter(BaseWriter):
         try:
             return pl.concat(frames, how="vertical")
         except pl.exceptions.PolarsError as e:
-            schema = self._get_table_schema(table_name) if hasattr(self, "_get_table_schema") else None
-            is_flexible = bool(schema and getattr(schema, "flexible_schema", False))
+            schema = self._get_table_schema(table_name)
+            is_flexible = bool(schema and schema.flexible_schema)
             if not is_flexible:
                 raise
             self._logger.warning(LOG_SCHEMA_MISMATCH.format(prefix=WR_LOG_PREFIX, table=table_name, error=e))
@@ -398,7 +398,7 @@ class DuckDBWriter(BaseWriter):
         This replaces the hardcoded KNOWN_PRIMARY_KEYS dictionary.
         Now the schema definition controls the deduplication logic.
         """
-        schema = self._get_table_schema(table_name) if hasattr(self, "_get_table_schema") else None
+        schema = self._get_table_schema(table_name)
         if schema and schema.unique_key:
             return schema.unique_key
         return ()

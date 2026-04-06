@@ -33,6 +33,7 @@ from vertex_forager.providers.yfinance.constants import (
 from vertex_forager.providers.yfinance.constants import SIZE_MAP as YF_SIZE_MAP
 from vertex_forager.routers import create_router
 from vertex_forager.schema.mapper import SchemaMapper
+from vertex_forager.schema.registry import get_dataset_spec
 from vertex_forager.utils import make_sync, validate_memory_usage, validate_tickers
 
 if TYPE_CHECKING:
@@ -133,6 +134,12 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         )
         self._mapper = SchemaMapper()
 
+    def _table_name_for_dataset(self, dataset: YFinanceDataset) -> str:
+        spec = get_dataset_spec("yfinance", dataset)
+        if spec is None:
+            raise InputError(f"Unsupported YFinance dataset: {dataset}")
+        return spec.schema.table
+
     # ----------------------------------------------------------------
     # Public User Methods
     # ----------------------------------------------------------------
@@ -166,11 +173,12 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
+        dataset: YFinanceDataset = "info"
         return await self._dispatch_fetch(
-            dataset="info",
+            dataset=dataset,
             tickers=tickers,
             connect_db=connect_db,
-            table_name="yfinance_info",
+            table_name=self._table_name_for_dataset(dataset),
             progress=progress,
             on_progress=on_progress,
             **kwargs,
@@ -214,11 +222,12 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
+        dataset: YFinanceDataset = "price"
         return await self._dispatch_fetch(
-            dataset="price",
+            dataset=dataset,
             tickers=tickers,
             connect_db=connect_db,
-            table_name="yfinance_price",
+            table_name=self._table_name_for_dataset(dataset),
             start_date=start_date,
             end_date=end_date,
             progress=progress,
@@ -273,13 +282,13 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             )
         if kind == "earnings" and period == "quarterly":
             raise InputError("quarterly_earnings is deprecated in yfinance; use income_stmt with period='quarterly'.")
-        dataset = f"quarterly_{target_kind}" if period == "quarterly" else target_kind
+        dataset = cast("YFinanceDataset", f"quarterly_{target_kind}" if period == "quarterly" else target_kind)
 
         return await self._dispatch_fetch(
-            dataset=cast("YFinanceDataset", dataset),
+            dataset=dataset,
             tickers=tickers,
             connect_db=connect_db,
-            table_name="yfinance_financials",
+            table_name=self._table_name_for_dataset(dataset),
             progress=progress,
             on_progress=on_progress,
             **kwargs,
@@ -322,11 +331,12 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
+        dataset = cast("YFinanceDataset", kind)
         return await self._dispatch_fetch(
-            dataset=cast("YFinanceDataset", kind),
+            dataset=dataset,
             tickers=tickers,
             connect_db=connect_db,
-            table_name=f"yfinance_{kind}",
+            table_name=self._table_name_for_dataset(dataset),
             start_date=start_date,
             end_date=end_date,
             progress=progress,
@@ -367,12 +377,12 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        dataset = f"{kind}_holders"
+        dataset = cast("YFinanceDataset", f"{kind}_holders")
         return await self._dispatch_fetch(
-            dataset=cast("YFinanceDataset", dataset),
+            dataset=dataset,
             tickers=tickers,
             connect_db=connect_db,
-            table_name="yfinance_holders",
+            table_name=self._table_name_for_dataset(dataset),
             progress=progress,
             on_progress=on_progress,
             **kwargs,
@@ -407,11 +417,12 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
+        dataset: YFinanceDataset = "major_holders"
         return await self._dispatch_fetch(
-            dataset="major_holders",
+            dataset=dataset,
             tickers=tickers,
             connect_db=connect_db,
-            table_name="yfinance_major_holders",
+            table_name=self._table_name_for_dataset(dataset),
             progress=progress,
             on_progress=on_progress,
             **kwargs,
@@ -448,11 +459,12 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
+        dataset: YFinanceDataset = "insider_roster_holders"
         return await self._dispatch_fetch(
-            dataset="insider_roster_holders",
+            dataset=dataset,
             tickers=tickers,
             connect_db=connect_db,
-            table_name="yfinance_insider_roster_holders",
+            table_name=self._table_name_for_dataset(dataset),
             progress=progress,
             on_progress=on_progress,
             **kwargs,
@@ -487,11 +499,12 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
+        dataset: YFinanceDataset = "insider_purchases"
         return await self._dispatch_fetch(
-            dataset="insider_purchases",
+            dataset=dataset,
             tickers=tickers,
             connect_db=connect_db,
-            table_name="yfinance_insider_purchases",
+            table_name=self._table_name_for_dataset(dataset),
             progress=progress,
             on_progress=on_progress,
             **kwargs,
@@ -528,11 +541,12 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
+        dataset: YFinanceDataset = "calendar"
         return await self._dispatch_fetch(
-            dataset="calendar",
+            dataset=dataset,
             tickers=tickers,
             connect_db=connect_db,
-            table_name="yfinance_calendar",
+            table_name=self._table_name_for_dataset(dataset),
             progress=progress,
             on_progress=on_progress,
             **kwargs,
@@ -569,11 +583,12 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
+        dataset: YFinanceDataset = "recommendations"
         return await self._dispatch_fetch(
-            dataset="recommendations",
+            dataset=dataset,
             tickers=tickers,
             connect_db=connect_db,
-            table_name="yfinance_recommendations",
+            table_name=self._table_name_for_dataset(dataset),
             progress=progress,
             on_progress=on_progress,
             **kwargs,
@@ -610,11 +625,12 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
+        dataset: YFinanceDataset = "news"
         return await self._dispatch_fetch(
-            dataset="news",
+            dataset=dataset,
             tickers=tickers,
             connect_db=connect_db,
-            table_name="yfinance_news",
+            table_name=self._table_name_for_dataset(dataset),
             progress=progress,
             on_progress=on_progress,
             **kwargs,

@@ -30,7 +30,6 @@ from vertex_forager.logging.constants import (
 )
 from vertex_forager.providers.yfinance.constants import (
     AUTO_ADJUST_KEY,
-    DATASET_ENDPOINT,
     DEFAULT_AUTO_ADJUST,
     DEFAULT_INTERVAL,
     DEFAULT_PREPOST,
@@ -44,14 +43,16 @@ from vertex_forager.providers.yfinance.constants import (
     START_KEY,
     THREADS_THRESHOLD,
 )
-from vertex_forager.providers.yfinance.schema import DATASET_TABLE
 from vertex_forager.routers.base import BaseRouter
 from vertex_forager.routers.errors import raise_yfinance_parse_error
 from vertex_forager.routers.jobs import build_symbol_context, single_symbol_job
+from vertex_forager.schema.registry import get_dataset_spec
 from vertex_forager.utils import sanitize_field
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Sequence
+
+    from vertex_forager.schema.config import DatasetSpec
 
 logger = logging.getLogger("vertex_forager.providers.yfinance.router")
 
@@ -209,7 +210,7 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             raise ValueError(f"YFinance provider requires 'symbols' list for dataset '{dataset}'.")
 
         # -------- Validate Dataset --------
-        if dataset not in DATASET_ENDPOINT:
+        if get_dataset_spec(self.provider, dataset) is None:
             raise ValueError(f"Unsupported yfinance dataset: {dataset}")
         typed_dataset: YFinanceDataset = dataset
 
@@ -284,7 +285,7 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
                 return ParseResult(packets=[], next_jobs=[])
             packet: FramePacket = FramePacket(
                 provider=self.provider,
-                table=DATASET_TABLE.get(job.dataset, f"yfinance_{job.dataset}"),
+                table=self._dataset_spec(job.dataset).schema.table,
                 frame=df_pl,
                 observed_at=observed_at,
                 context=job.context,
@@ -463,7 +464,7 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         call the HttpExecutor should perform. This keeps HttpExecutor generic.
         """
         params: dict[str, JSONValue] = {"dataset": dataset}
-        mapped = DATASET_ENDPOINT.get(dataset, dataset)
+        mapped = self._dataset_spec(dataset).endpoint
         if dataset == "price":
             kwargs: dict[str, JSONValue] = {
                 INTERVAL_KEY: DEFAULT_INTERVAL,
@@ -521,6 +522,12 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             auth=None,
             context=ctx,
         )
+
+    def _dataset_spec(self, dataset: str) -> DatasetSpec:
+        spec = get_dataset_spec(self.provider, dataset)
+        if spec is None:
+            raise ValueError(f"Unsupported yfinance dataset: {dataset}")
+        return spec
 
     # --------------------------------------
     # Parse Helpers
@@ -608,7 +615,7 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             if "date" in frame.columns:
                 frame = frame.with_columns(
                     pl.col("date")
-                    .cast(pl.Utf8, strict=False)
+                    .cast(pl.String, strict=False)
                     .str.replace(r"[T\s_].*$", "", literal=False)
                     .alias("date_tmp")
                 )
@@ -691,7 +698,7 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         # Ensure PK fields exist and are non-null; if core field missing, drop rows
         if "insider_purchases_last_6m" in frame.columns:
             frame = frame.with_columns(
-                pl.col("insider_purchases_last_6m").cast(pl.Utf8, strict=False).alias("insider_purchases_last_6m")
+                pl.col("insider_purchases_last_6m").cast(pl.String, strict=False).alias("insider_purchases_last_6m")
             )
             frame = frame.filter(pl.col("insider_purchases_last_6m").is_not_null())
         else:
@@ -699,7 +706,7 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             return frame.filter(pl.lit(False))
         # Optional: make holder non-null even if not used in PK
         if "holder" in frame.columns:
-            frame = frame.with_columns(pl.col("holder").cast(pl.Utf8, strict=False).fill_null("").alias("holder"))
+            frame = frame.with_columns(pl.col("holder").cast(pl.String, strict=False).fill_null("").alias("holder"))
         else:
             frame = frame.with_columns(pl.lit("").alias("holder"))
         return frame
