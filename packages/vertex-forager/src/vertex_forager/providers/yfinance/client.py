@@ -331,7 +331,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             TransformError: If data normalization fails.
             WriterError: If persistence fails.
         """
-        dataset: YFinanceDataset = kind  # type: ignore[assignment]
+        dataset: YFinanceDataset = kind
         return await self._dispatch_fetch(
             dataset=dataset,
             tickers=tickers,
