@@ -283,76 +283,83 @@ def _migrate_run_history_table(conn: sqlite3.Connection) -> None:
             FROM run_history
             """
         ).fetchall()
-    conn.execute("ALTER TABLE run_history RENAME TO run_history_legacy")
-    conn.execute(
-        """
-        CREATE TABLE run_history (
-            row_id TEXT PRIMARY KEY,
-            run_id TEXT NOT NULL,
-            provider TEXT NOT NULL,
-            dataset TEXT,
-            table_name TEXT,
-            started_at REAL,
-            finished_at REAL,
-            duration_s REAL,
-            tables_json TEXT NOT NULL,
-            error_count INTEGER NOT NULL,
-            errors_json TEXT NOT NULL,
-            quality_violations_json TEXT NOT NULL,
-            coverage_pct REAL,
-            created_at REAL NOT NULL
-        )
-        """
-    )
-    for row in legacy_rows:
-        tables = _json_loads(str(row["tables_json"]), {})
-        table_items = (
-            [(str(name), int(value)) for name, value in dict(tables).items()] if isinstance(tables, dict) else []
-        )
-        if not table_items and row["table_name"] is not None:
-            table_items = [(str(row["table_name"]), 0)]
-        if not table_items and row["table_name"] is None:
-            table_items = [("", 0)]
-        for table_key, row_count in table_items:
-            stored_table_name = table_key if table_key else None
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO run_history (
-                    row_id,
-                    run_id,
-                    provider,
-                    dataset,
-                    table_name,
-                    started_at,
-                    finished_at,
-                    duration_s,
-                    tables_json,
-                    error_count,
-                    errors_json,
-                    quality_violations_json,
-                    coverage_pct,
-                    created_at
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    _build_run_history_row_id(str(row["run_id"]), table_key),
-                    str(row["run_id"]),
-                    str(row["provider"]),
-                    row["dataset"],
-                    stored_table_name,
-                    row["started_at"],
-                    row["finished_at"],
-                    row["duration_s"],
-                    _json_dumps({table_key: row_count} if table_key else {}),
-                    int(row["error_count"]),
-                    str(row["errors_json"]),
-                    str(row["quality_violations_json"]),
-                    row["coverage_pct"],
-                    float(row["created_at"]),
-                ),
+    conn.execute("SAVEPOINT migrate_run_history")
+    try:
+        conn.execute("ALTER TABLE run_history RENAME TO run_history_legacy")
+        conn.execute(
+            """
+            CREATE TABLE run_history (
+                row_id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                dataset TEXT,
+                table_name TEXT,
+                started_at REAL,
+                finished_at REAL,
+                duration_s REAL,
+                tables_json TEXT NOT NULL,
+                error_count INTEGER NOT NULL,
+                errors_json TEXT NOT NULL,
+                quality_violations_json TEXT NOT NULL,
+                coverage_pct REAL,
+                created_at REAL NOT NULL
             )
-    conn.execute("DROP TABLE run_history_legacy")
+            """
+        )
+        for row in legacy_rows:
+            tables = _json_loads(str(row["tables_json"]), {})
+            table_items = (
+                [(str(name), int(value)) for name, value in dict(tables).items()] if isinstance(tables, dict) else []
+            )
+            if not table_items and row["table_name"] is not None:
+                table_items = [(str(row["table_name"]), 0)]
+            if not table_items and row["table_name"] is None:
+                table_items = [("", 0)]
+            for table_key, row_count in table_items:
+                stored_table_name = table_key if table_key else None
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO run_history (
+                        row_id,
+                        run_id,
+                        provider,
+                        dataset,
+                        table_name,
+                        started_at,
+                        finished_at,
+                        duration_s,
+                        tables_json,
+                        error_count,
+                        errors_json,
+                        quality_violations_json,
+                        coverage_pct,
+                        created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        _build_run_history_row_id(str(row["run_id"]), table_key),
+                        str(row["run_id"]),
+                        str(row["provider"]),
+                        row["dataset"],
+                        stored_table_name,
+                        row["started_at"],
+                        row["finished_at"],
+                        row["duration_s"],
+                        _json_dumps({table_key: row_count} if table_key else {}),
+                        int(row["error_count"]),
+                        str(row["errors_json"]),
+                        str(row["quality_violations_json"]),
+                        row["coverage_pct"],
+                        float(row["created_at"]),
+                    ),
+                )
+        conn.execute("DROP TABLE run_history_legacy")
+    except Exception:
+        conn.execute("ROLLBACK TO SAVEPOINT migrate_run_history")
+        conn.execute("RELEASE SAVEPOINT migrate_run_history")
+        raise
+    conn.execute("RELEASE SAVEPOINT migrate_run_history")
 
 
 def save_checkpoint(checkpoint: Checkpoint) -> None:

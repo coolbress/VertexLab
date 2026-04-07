@@ -240,6 +240,68 @@ def test_migrate_run_history_preserves_empty_table_runs() -> None:
         assert history[0]["total_rows"] == 0
 
 
+def test_migrate_run_history_rolls_back_on_failure() -> None:
+    with (
+        tempfile.TemporaryDirectory() as tmpdir,
+        patch(
+            "vertex_forager.core.checkpoint.get_cache_dir",
+            return_value=Path(tmpdir),
+        ),
+    ):
+        db_path = get_state_db_path()
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(db_path) as conn:
+            conn.execute(
+                """
+                CREATE TABLE run_history (
+                    run_id TEXT PRIMARY KEY,
+                    provider TEXT NOT NULL,
+                    dataset TEXT,
+                    started_at REAL,
+                    finished_at REAL,
+                    duration_s REAL,
+                    tables_json TEXT NOT NULL,
+                    error_count INTEGER NOT NULL,
+                    errors_json TEXT NOT NULL,
+                    quality_violations_json TEXT NOT NULL,
+                    coverage_pct REAL,
+                    created_at REAL NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO run_history (
+                    run_id,
+                    provider,
+                    dataset,
+                    started_at,
+                    finished_at,
+                    duration_s,
+                    tables_json,
+                    error_count,
+                    errors_json,
+                    quality_violations_json,
+                    coverage_pct,
+                    created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                ("legacy-bad", "stub", "prices", 100.0, 110.0, 10.0, "{}", "bad", "[]", "{}", None, 120.0),
+            )
+            conn.commit()
+
+        with pytest.raises(ValueError, match="invalid literal for int"):
+            list_run_history(limit=10)
+
+        with sqlite3.connect(db_path) as conn:
+            table_names = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+            assert "run_history" in table_names
+            assert "run_history_legacy" not in table_names
+            row = conn.execute("SELECT run_id, error_count FROM run_history").fetchone()
+            assert row == ("legacy-bad", "bad")
+
+
 def test_save_run_history() -> None:
     with (
         tempfile.TemporaryDirectory() as tmpdir,
