@@ -181,7 +181,7 @@ Provider-specific constants moved to `vertex_forager.constants`.
 
 ### Environment-aware CLI
 
-The CLI now reads environment variables and supports `vertex-forager collect`, `vertex-forager status`, and `vertex-forager recover`.
+The CLI now reads environment variables and supports `vertex-forager collect`, `vertex-forager status`, and `vertex-forager dlq replay`.
 
 ### DLQ spool
 

@@ -83,7 +83,7 @@ class DLQNamespace:
         self,
         *,
         table: str | None = None,
-        status: str = "pending",
+        status: str | None = "pending",
     ) -> list[DLQEntry]:
         rows = list_dlq_entries(table=table, status=status)
         return [

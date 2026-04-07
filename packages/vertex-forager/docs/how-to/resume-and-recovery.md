@@ -28,7 +28,7 @@ When `VERTEXFORAGER_ROOT` is set, the cache moves under `$VERTEXFORAGER_ROOT/cac
 - `dlq_index`
   - One row per spooled DLQ IPC file
   - Spool path, table, provider, row count, created time, retry status
-  - Used by `vertex-forager dlq list`, `retry`, and `clear`
+  - Used by `vertex-forager dlq list`, `replay`, and `clear`
 
 ## How checkpoints are created
 
@@ -85,16 +85,16 @@ List pending DLQ entries:
 uv run vertex-forager dlq list
 ```
 
-Retry all pending entries for one table:
+Replay all pending entries for one table:
 
 ```bash
-uv run vertex-forager dlq retry --table sharadar_price --db ./forager.duckdb
+uv run vertex-forager dlq replay --table sharadar_price
 ```
 
-Delete old DLQ entries and their IPC files:
+Delete DLQ entries for one table:
 
 ```bash
-uv run vertex-forager dlq clear --before 1d
+uv run vertex-forager dlq clear --table sharadar_price
 ```
 
 ## Configure retention

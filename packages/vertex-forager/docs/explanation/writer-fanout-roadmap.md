@@ -42,4 +42,4 @@
 ## Observability & Operations
 
 - Emit per‑destination flush latency p95/p99 and rows written.
-- Maintain DLQ routing and recovery CLI compatibility.
+- Maintain DLQ routing and `dlq replay` CLI compatibility.

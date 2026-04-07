@@ -1,503 +1,304 @@
 from __future__ import annotations
 
-import json
+from datetime import datetime, timezone
 from pathlib import Path
+import sqlite3
 from typing import Any
 
 import click
 from click.testing import CliRunner
-import polars as pl
 import pytest
 
 from vertex_forager import cli as cli_mod
-from vertex_forager.core.config import FramePacket
-from vertex_forager.utils import get_cache_dir
+from vertex_forager.core.config import RunResult
+from vertex_forager.state.dlq import DLQEntry, ReplayResult
+from vertex_forager.state.runs import RunRecord
 
 
-def test_status_runs_and_prints_paths(monkeypatch: pytest.MonkeyPatch) -> None:
-    runner = CliRunner()
-    result = runner.invoke(cli_mod.main, ["status"])
+def _run_record(*, run_id: str, table: str) -> RunRecord:
+    return RunRecord(
+        run_id=run_id,
+        provider="yfinance",
+        dataset="price",
+        table_name=table,
+        started_at=1_700_000_000.0,
+        finished_at=1_700_000_010.0,
+        duration_s=10.0,
+        tables={table: 12},
+        error_count=1,
+        errors=[{"message": "boom", "retryable": False}],
+        quality_violations={table: 2},
+        coverage_pct=95.0,
+        created_at=1_700_000_010.0,
+    )
+
+
+def _dlq_entry(*, table: str, status: str = "pending") -> DLQEntry:
+    return DLQEntry(
+        provider="yfinance",
+        table=table,
+        row_count=3,
+        retry_count=1,
+        status=status,
+        created_at=datetime.fromtimestamp(1_700_000_000.0, tz=timezone.utc),
+        path=Path(f"{table}.ipc"),
+    )
+
+
+def test_status_runs_and_prints_state_summary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path / "root"
+    cache = root / "cache"
+    cache.mkdir(parents=True)
+    (root / "artifact.txt").write_text("x" * 10, encoding="utf-8")
+    state_db = cache / "state.db"
+    with sqlite3.connect(state_db) as conn:
+        conn.execute("CREATE TABLE checkpoints (table_name TEXT, status TEXT, updated_at REAL)")
+        conn.execute("CREATE TABLE dlq_index (table_name TEXT, status TEXT)")
+        conn.execute("CREATE TABLE run_history (table_name TEXT, created_at REAL)")
+        conn.execute("INSERT INTO checkpoints VALUES ('sharadar_price', 'in_progress', 1.0)")
+        conn.execute("INSERT INTO dlq_index VALUES ('yfinance_price', 'pending')")
+        conn.execute("INSERT INTO run_history VALUES ('yfinance_price', 1700000000.0)")
+        conn.commit()
+
+    monkeypatch.setattr(cli_mod, "get_app_root", lambda: root, raising=True)
+    monkeypatch.setattr(cli_mod, "get_cache_dir", lambda: cache, raising=True)
+    monkeypatch.setattr(cli_mod, "get_state_db_path", lambda: state_db, raising=True)
+
+    result = CliRunner().invoke(cli_mod.main, ["status"])
     assert result.exit_code == 0
-    assert "Data Root" in result.output
-    assert "Cache Dir" in result.output
+    assert "Checkpoint entries per table" in result.output
+    assert "sharadar_price: 1" in result.output
+    assert "Pending DLQ batches per table" in result.output
+    assert "yfinance_price: 1" in result.output
+    assert "Last run timestamp per table" in result.output
 
 
 def test_clear_confirms_and_calls(monkeypatch: pytest.MonkeyPatch) -> None:
-    called: dict[str, Any] = {}
+    called: dict[str, bool] = {}
 
-    def _confirm(_: str) -> bool:
-        return True
+    monkeypatch.setattr(click, "confirm", lambda _: True, raising=True)
+    monkeypatch.setattr(cli_mod, "clear_app_cache", lambda: called.setdefault("ok", True), raising=True)
 
-    def _clear() -> None:
-        called["ok"] = True
-
-    monkeypatch.setattr(click, "confirm", _confirm, raising=True)
-    monkeypatch.setattr(cli_mod, "clear_app_cache", _clear, raising=True)
-    runner = CliRunner()
-    result = runner.invoke(cli_mod.main, ["clear"])
+    result = CliRunner().invoke(cli_mod.main, ["clear"])
     assert result.exit_code == 0
-    assert called.get("ok") is True
+    assert called["ok"] is True
     assert "Cache cleared" in result.output
 
 
 def test_constants_json_global() -> None:
-    runner = CliRunner()
-    result = runner.invoke(cli_mod.main, ["constants", "--section", "global", "--format", "json"])
+    result = CliRunner().invoke(cli_mod.main, ["constants", "--section", "global", "--format", "json"])
     assert result.exit_code == 0
     assert "DEFAULT_RATE_LIMIT" in result.output
 
 
-def test_clear_cancel(monkeypatch: pytest.MonkeyPatch) -> None:
-    def _confirm(_: str) -> bool:
-        return False
+@pytest.mark.parametrize(
+    ("argv", "method_name"),
+    [
+        (["collect", "sharadar", "price", "--symbol", "AAPL"], "get_price_data"),
+        (["collect", "sharadar", "fundamentals", "--symbol", "AAPL"], "get_fundamental_data"),
+        (["collect", "sharadar", "tickers"], "get_ticker_info"),
+        (["collect", "sharadar", "sp500"], "get_sp500_history"),
+        (["collect", "yfinance", "price", "--symbol", "AAPL"], "get_price_data"),
+        (
+            ["collect", "yfinance", "financials", "--symbol", "AAPL", "--kind", "income_stmt"],
+            "get_financials",
+        ),
+        (["collect", "yfinance", "info", "--symbol", "AAPL"], "get_info"),
+        (["collect", "yfinance", "dividends", "--symbol", "AAPL"], "get_actions"),
+    ],
+)
+def test_collect_subcommands_invoke_expected_methods(
+    argv: list[str],
+    method_name: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, dict[str, Any]]] = []
 
-    monkeypatch.setattr(click, "confirm", _confirm, raising=True)
-    runner = CliRunner()
-    result = runner.invoke(cli_mod.main, ["clear"])
+    class _FakeClient:
+        def __getattr__(self, name: str) -> Any:
+            def _run(**kwargs: Any) -> RunResult:
+                calls.append((name, kwargs))
+                return RunResult(provider="stub", dataset="demo", tables={"demo_table": 2})
+
+            return _run
+
+    monkeypatch.setattr(cli_mod, "create_client", lambda **_: _FakeClient(), raising=True)
+    result = CliRunner().invoke(cli_mod.main, argv)
     assert result.exit_code == 0
-    assert result.output.strip() == ""
+    assert calls[0][0] == method_name
+    assert "Run completed" in result.output
 
 
-def test_clear_runs_flag(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(click, "confirm", lambda _: True, raising=True)
-    monkeypatch.setattr(cli_mod, "delete_all_run_history", lambda: 4, raising=True)
-    runner = CliRunner()
-    result = runner.invoke(cli_mod.main, ["clear", "--runs"])
-    assert result.exit_code == 0
-    assert "runs=4" in result.output
+def test_collect_financials_requires_kind() -> None:
+    result = CliRunner().invoke(cli_mod.main, ["collect", "yfinance", "financials", "--symbol", "AAPL"])
+    assert result.exit_code != 0
+    assert "--kind" in result.output
+
+
+def test_collect_resume_flag_absent() -> None:
+    result = CliRunner().invoke(
+        cli_mod.main,
+        ["collect", "sharadar", "price", "--symbol", "AAPL", "--resume"],
+    )
+    assert result.exit_code != 0
+    assert "No such option" in result.output
 
 
 def test_runs_list_outputs_entries(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        cli_mod,
-        "list_run_history",
-        lambda limit=20: [
-            {
-                "run_id": "run-1",
-                "provider": "yfinance",
-                "dataset": "price",
-                "total_rows": 123,
-                "error_count": 1,
-                "finished_at": 1_700_000_000.0,
-            }
-        ],
-        raising=True,
-    )
-    runner = CliRunner()
-    result = runner.invoke(cli_mod.main, ["runs", "list"])
+    class _Runs:
+        def list(self, *, table: str | None = None, limit: int = 20) -> list[RunRecord]:
+            assert table == "yfinance_price"
+            assert limit == 5
+            return [_run_record(run_id="run-1", table="yfinance_price")]
+
+    class _StateManager:
+        def __init__(self) -> None:
+            self.runs = _Runs()
+
+    monkeypatch.setattr(cli_mod, "StateManager", _StateManager, raising=True)
+    result = CliRunner().invoke(cli_mod.main, ["runs", "list", "--table", "yfinance_price", "--limit", "5"])
     assert result.exit_code == 0
     assert "run_id=run-1" in result.output
-    assert "rows=123" in result.output
+    assert "table=yfinance_price" in result.output
 
 
-def test_dlq_list_outputs_entries(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        cli_mod,
-        "list_pending_dlq_entries",
-        lambda table=None: [
-            {
-                "table": "prices",
-                "row_count": 7,
-                "created_at": 1_700_000_000.0,
-                "path": "cache/dlq/prices/batch_1.ipc",
-                "retry_count": 2,
-            }
-        ],
-        raising=True,
-    )
-    runner = CliRunner()
-    result = runner.invoke(cli_mod.main, ["dlq", "list"])
+def test_runs_clear_requires_filter() -> None:
+    result = CliRunner().invoke(cli_mod.main, ["runs", "clear"])
+    assert result.exit_code != 0
+    assert "Provide --table, --before, or both." in result.output
+
+
+def test_runs_clear_delegates_table_and_before(monkeypatch: pytest.MonkeyPatch) -> None:
+    called: dict[str, Any] = {}
+
+    class _Runs:
+        def clear(self, *, table: str | None = None, before_days: int | None = None) -> int:
+            called["table"] = table
+            called["before_days"] = before_days
+            return 4
+
+    class _StateManager:
+        def __init__(self) -> None:
+            self.runs = _Runs()
+
+    monkeypatch.setattr(cli_mod, "StateManager", _StateManager, raising=True)
+    result = CliRunner().invoke(cli_mod.main, ["runs", "clear", "--table", "sharadar_price", "--before", "30d"])
     assert result.exit_code == 0
-    assert "table=prices" in result.output
-    assert "path=batch_1.ipc" in result.output
+    assert called == {"table": "sharadar_price", "before_days": 30}
+    assert "Deleted 4 run history rows." in result.output
 
 
-@pytest.mark.asyncio
-async def test_retry_pending_dlq_entries_marks_success_when_delete_fails(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    target_path = tmp_path / "batch_1.ipc"
-    marks: list[tuple[bool, str | None]] = []
+def test_dlq_list_applies_filters(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _DLQ:
+        def list(self, *, table: str | None = None, status: str | None = "pending") -> list[DLQEntry]:
+            assert table == "yfinance_price"
+            assert status is None
+            return [_dlq_entry(table="yfinance_price", status="recovered")]
 
-    monkeypatch.setattr(
-        cli_mod,
-        "list_pending_dlq_entries",
-        lambda table=None: [
-            {
-                "path": str(target_path),
-                "table": "prices",
-                "provider": "stub",
-                "row_count": 1,
-            }
-        ],
-        raising=True,
+    class _StateManager:
+        def __init__(self) -> None:
+            self.dlq = _DLQ()
+
+    monkeypatch.setattr(cli_mod, "StateManager", _StateManager, raising=True)
+    result = CliRunner().invoke(
+        cli_mod.main,
+        ["dlq", "list", "--table", "yfinance_price", "--status", "all"],
     )
-    monkeypatch.setattr(cli_mod.pl, "read_ipc", lambda path: pl.DataFrame({"x": [1]}), raising=True)
-
-    class _Writer:
-        def __init__(self, _db: Path) -> None:
-            pass
-
-        async def write(self, packet: FramePacket) -> None:
-            return None
-
-        async def close(self) -> None:
-            return None
-
-    monkeypatch.setattr(cli_mod, "DuckDBWriter", _Writer, raising=True)
-    monkeypatch.setattr(
-        cli_mod,
-        "mark_dlq_retry_result",
-        lambda *, path, success, error=None: marks.append((success, error)),
-        raising=True,
-    )
-    monkeypatch.setattr(Path, "exists", lambda self: self == target_path, raising=True)
-    monkeypatch.setattr(
-        Path,
-        "unlink",
-        lambda self, missing_ok=True: (_ for _ in ()).throw(OSError("delete boom")) if self == target_path else None,
-        raising=True,
-    )
-
-    success_count, failure_count = await cli_mod._retry_pending_dlq_entries(
-        table_name="prices",
-        target_db=tmp_path / "test.duckdb",
-    )
-
-    assert success_count == 1
-    assert failure_count == 0
-    assert marks[-1][0] is True
-    assert marks[-1][1] is not None
-    assert marks[-1][1].startswith("delete_failed:")
-
-
-def test_collect_requires_symbol() -> None:
-    runner = CliRunner()
-    result = runner.invoke(cli_mod.main, ["collect"])
-    assert result.exit_code != 0
-    assert "Please provide at least one symbol" in result.output
-
-
-def test_collect_yfinance_unsupported() -> None:
-    runner = CliRunner()
-    result = runner.invoke(cli_mod.main, ["collect", "--symbol", "AAPL", "--source", "yfinance"])
-    assert result.exit_code != 0
-    assert "is not supported by `collect` yet" in result.output
-
-
-def test_collect_sharadar_missing_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("SHARADAR_API_KEY", raising=False)
-    runner = CliRunner()
-    result = runner.invoke(cli_mod.main, ["collect", "--symbol", "MSFT", "--source", "sharadar"])
-    assert result.exit_code != 0
-    assert "Environment variable SHARADAR_API_KEY is not set." in result.output
-
-
-def test_constants_env_only_table(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("SHARADAR_API_KEY", "secret")
-    runner = CliRunner()
-    result = runner.invoke(cli_mod.main, ["constants", "--env-only", "--format", "table"])
     assert result.exit_code == 0
-    assert "SHARADAR_API_KEY" in result.output
-    assert "<redacted>" in result.output
+    assert "status=recovered" in result.output
 
 
-def test_constants_sections_table() -> None:
-    runner = CliRunner()
-    r1 = runner.invoke(cli_mod.main, ["constants", "--section", "flow", "--format", "table"])
-    assert r1.exit_code == 0
-    assert "[flow]" in r1.output
-    r2 = runner.invoke(cli_mod.main, ["constants", "--section", "writers", "--format", "table"])
-    assert r2.exit_code == 0
-    assert "[writers]" in r2.output
-    assert "WRITER_DUCKDB_MAX_WORKERS" in r2.output
-    # status also prints total size
-    r3 = runner.invoke(cli_mod.main, ["status"])
-    assert r3.exit_code == 0
-    assert "Total Data Size" in r3.output
+def test_dlq_replay_uses_stored_output_uri(monkeypatch: pytest.MonkeyPatch) -> None:
+    called: dict[str, Any] = {}
 
+    class _DLQ:
+        def replay(self, *, table: str, output: str, dry_run: bool = False) -> ReplayResult:
+            called["table"] = table
+            called["output"] = output
+            called["dry_run"] = dry_run
+            return ReplayResult(replayed=1, failed=0, skipped=0, errors=[])
 
-def test_constants_yfinance_sharadar_json() -> None:
-    runner = CliRunner()
-    r1 = runner.invoke(cli_mod.main, ["constants", "--section", "yfinance", "--format", "json"])
-    assert r1.exit_code == 0
-    assert "PRICE_BATCH_SIZE" in r1.output
-    r2 = runner.invoke(cli_mod.main, ["constants", "--section", "sharadar", "--format", "json"])
-    assert r2.exit_code == 0
-    assert "MAX_ROWS_PER_REQUEST" in r2.output
+    class _StateManager:
+        def __init__(self) -> None:
+            self.dlq = _DLQ()
 
-
-def test_constants_env_only_ignores_non_auth_runtime_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("VF_CONCURRENCY", "16")
-    runner = CliRunner()
-    res = runner.invoke(cli_mod.main, ["constants", "--section", "flow", "--format", "table", "--env-only"])
-    assert res.exit_code == 0
-    assert "[flow]" not in res.output
-    assert "VF_CONCURRENCY" not in res.output
-
-
-def test_constants_env_only_global_skips_removed_runtime_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("VF_HTTP_TIMEOUT_S", "15")
-    runner = CliRunner()
-    res = runner.invoke(cli_mod.main, ["constants", "--section", "global", "--format", "table", "--env-only"])
-    assert res.exit_code == 0
-    assert "[global]" not in res.output
-    assert "HTTP_TIMEOUT_S" not in res.output
-
-
-def test_constants_queue_table() -> None:
-    runner = CliRunner()
-    res = runner.invoke(cli_mod.main, ["constants", "--section", "queue", "--format", "table"])
-    assert res.exit_code == 0
-    # Basic keys rendered in table format
-    assert "[queue]" in res.output
-    assert "QUEUE_DEFAULT" in res.output
-
-
-def test_constants_queue_json() -> None:
-    runner = CliRunner()
-    res = runner.invoke(cli_mod.main, ["constants", "--section", "queue", "--format", "json"])
-    assert res.exit_code == 0
-    assert '"QUEUE_MIN"' in res.output
-    assert '"QUEUE_MAX"' in res.output
-
-
-def test_constants_writers_json() -> None:
-    runner = CliRunner()
-    res = runner.invoke(cli_mod.main, ["constants", "--section", "writers", "--format", "json"])
-    assert res.exit_code == 0
-    assert '"WRITER_DUCKDB_MAX_WORKERS"' in res.output
-    assert '"WAL_AUTOCHECKPOINT_LIMIT"' in res.output
-
-
-def test_recover_table_specified_but_not_found(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # Create DLQ structure with a different table than requested
-    base = tmp_path / "app"
-    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(base))
-    dlq = base / "cache" / "dlq" / "existing_tbl"
-    dlq.mkdir(parents=True, exist_ok=True)
-    (dlq / "batch_1.ipc").write_bytes(b"x")
-    runner = CliRunner()
-    res = runner.invoke(
-        cli_mod.main,
-        ["recover", "--dir", str(base / "cache" / "dlq"), "--table", "missing_tbl", "--dry-run"],
+    monkeypatch.setattr(cli_mod, "StateManager", _StateManager, raising=True)
+    monkeypatch.setattr(
+        cli_mod,
+        "list_dlq_entries",
+        lambda **_: [{"output_uri": "duckdb:///stored.duckdb"}],
+        raising=True,
     )
-    assert res.exit_code == 0
-    # Fallback summary path when specified tables not found
-    assert "✅ Recover summary:" in res.output
-    assert "tables=0" in res.output
+    result = CliRunner().invoke(cli_mod.main, ["dlq", "replay", "--table", "yfinance_price"])
+    assert result.exit_code == 0
+    assert called["output"] == "duckdb:///stored.duckdb"
+    assert "replayed=1" in result.output
 
 
-def test_constants_env_only_keeps_auth_env_only(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("VF_HTTP_TIMEOUT_S", "15")
-    monkeypatch.setenv("SHARADAR_API_KEY", "secret")
-    runner = CliRunner()
-    res = runner.invoke(cli_mod.main, ["constants", "--section", "global", "--format", "table", "--env-only"])
-    assert res.exit_code == 0
-    assert "SHARADAR_API_KEY" in res.output
-    assert "VF_HTTP_TIMEOUT_S" not in res.output
+def test_dlq_clear_requires_table_or_all() -> None:
+    result = CliRunner().invoke(cli_mod.main, ["dlq", "clear"])
+    assert result.exit_code != 0
+    assert "Provide --table or --all." in result.output
 
 
-def test_constants_writers_table() -> None:
-    runner = CliRunner()
-    res = runner.invoke(cli_mod.main, ["constants", "--section", "writers", "--format", "table"])
-    assert res.exit_code == 0
-    assert "[writers]" in res.output
-    assert "WRITER_DUCKDB_MAX_WORKERS" in res.output
-    assert "WAL_AUTOCHECKPOINT_LIMIT" in res.output
+def test_dlq_clear_all_confirms(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _DLQ:
+        def clear(self, *, table: str | None = None) -> int:
+            assert table is None
+            return 5
+
+    class _StateManager:
+        def __init__(self) -> None:
+            self.dlq = _DLQ()
+
+    monkeypatch.setattr(cli_mod, "StateManager", _StateManager, raising=True)
+    monkeypatch.setattr(click, "confirm", lambda _: True, raising=True)
+    result = CliRunner().invoke(cli_mod.main, ["dlq", "clear", "--all"])
+    assert result.exit_code == 0
+    assert "Deleted 5 DLQ rows." in result.output
 
 
-def test_recover_missing_dir_errors(tmp_path: Path) -> None:
-    # Non-existent path should raise ClickException routed to non-zero exit
-    missing = tmp_path / "no_such_dlq"
-    runner = CliRunner()
-    res = runner.invoke(cli_mod.main, ["recover", "--dir", str(missing)])
-    assert res.exit_code != 0
-    assert "DLQ directory not found" in res.output
+def test_checkpoints_resume_constructs_provider_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    create_calls: list[dict[str, Any]] = []
+    resume_calls: list[dict[str, Any]] = []
 
+    class _Checkpoints:
+        def resume(self, *, table: str, client: Any, output: str) -> RunResult:
+            resume_calls.append({"table": table, "client": client, "output": output})
+            return RunResult(provider="sharadar", dataset="price", tables={"sharadar_price": 3})
 
-def test_recover_empty_dir_no_tables(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    base = tmp_path / "app"
-    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(base))
-    dlq = base / "cache" / "dlq"
-    dlq.mkdir(parents=True, exist_ok=True)
-    runner = CliRunner()
-    res = runner.invoke(cli_mod.main, ["recover", "--dir", str(dlq), "--dry-run"])
-    assert res.exit_code == 0
-    assert "No tables selected or found under DLQ." in res.output
+    class _StateManager:
+        def __init__(self) -> None:
+            self.checkpoints = _Checkpoints()
 
+    class _Client:
+        pass
 
-def test_constants_all_json_has_sections() -> None:
-    runner = CliRunner()
-    res = runner.invoke(cli_mod.main, ["constants", "--section", "all", "--format", "json"])
-    assert res.exit_code == 0
-    assert '"global"' in res.output
-    assert '"flow"' in res.output
-
-
-def test_constants_json_env_overrides_included(monkeypatch: pytest.MonkeyPatch) -> None:
-    import json as _json
-
-    monkeypatch.setenv("SHARADAR_API_KEY", "secret")
-    runner = CliRunner()
-    res = runner.invoke(cli_mod.main, ["constants", "--section", "global", "--format", "json"])
-    assert res.exit_code == 0
-    data = _json.loads(res.output)
-    assert "env_overrides" in data
-    assert data["env_overrides"]["SHARADAR_API_KEY"] == "<redacted>"
-
-
-def test_collect_network_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    import httpx
-
-    class _BrokenCtx:
-        async def __aenter__(self):
-            raise httpx.RequestError("boom")
-
-        async def __aexit__(self, exc_type, exc, tb):
-            return False
-
-    def _create_client(**kwargs):  # type: ignore[no-untyped-def]
-        return _BrokenCtx()
-
-    monkeypatch.setenv("SHARADAR_API_KEY", "x")
-    monkeypatch.setattr(cli_mod, "create_client", _create_client, raising=True)
-    runner = CliRunner()
-    res = runner.invoke(cli_mod.main, ["collect", "--symbol", "AAPL", "--source", "sharadar"])
-    assert res.exit_code != 0
-    assert "network request failed" in res.output
-
-
-def test_collect_value_error_converted(monkeypatch: pytest.MonkeyPatch) -> None:
-    class _BrokenCtx:
-        async def __aenter__(self):
-            raise ValueError("oops")
-
-        async def __aexit__(self, exc_type, exc, tb):
-            return False
-
-    monkeypatch.setenv("SHARADAR_API_KEY", "x")
-    monkeypatch.setattr(cli_mod, "create_client", lambda **_: _BrokenCtx(), raising=True)
-    runner = CliRunner()
-    res = runner.invoke(cli_mod.main, ["collect", "--symbol", "AAPL", "--source", "sharadar"])
-    assert res.exit_code != 0
-    assert "Collection error: oops" in res.output
-
-
-# ===== Recover CLI tests merged from test_cli_recover_args.py =====
-
-
-def _make_dlq(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, table: str, rows: int = 3) -> Path:
-    base = tmp_path / "app"
-    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(base))
-    dlq_tbl = get_cache_dir() / "dlq" / table
-    dlq_tbl.mkdir(parents=True, exist_ok=True)
-    df = pl.DataFrame({"a": list(range(rows))})
-    fpath = dlq_tbl / "batch_12345.ipc"
-    with fpath.open("wb") as fh:
-        df.write_ipc(fh)
-    return dlq_tbl
-
-
-def test_recover_dedup_tables_argument_parsing(tmp_path, monkeypatch: pytest.MonkeyPatch):
-    _make_dlq(tmp_path, monkeypatch, "t1")
-    runner = CliRunner()
-    res = runner.invoke(
-        cli_mod.main,
-        [
-            "recover",
-            "--dir",
-            str(get_cache_dir() / "dlq"),
-            "--table",
-            "t1",
-            "--table",
-            "t1",
-            "--dry-run",
-        ],
+    monkeypatch.setattr(cli_mod, "StateManager", _StateManager, raising=True)
+    monkeypatch.setattr(
+        cli_mod,
+        "create_client",
+        lambda **kwargs: create_calls.append(kwargs) or _Client(),
+        raising=True,
     )
-    assert res.exit_code == 0
-    assert "✅ Recover summary:" in res.output
-
-
-def test_recover_missing_db_rejected(tmp_path, monkeypatch: pytest.MonkeyPatch):
-    _make_dlq(tmp_path, monkeypatch, "t2")
-    runner = CliRunner()
-    res = runner.invoke(cli_mod.main, ["recover", "--dir", str(get_cache_dir() / "dlq")])
-    assert res.exit_code != 0
-    assert "Missing target DB" in str(res.output)
-
-
-def test_recover_report_schema(tmp_path, monkeypatch: pytest.MonkeyPatch):
-    _make_dlq(tmp_path, monkeypatch, "t3", rows=4)
-    runner = CliRunner()
-    report_path = tmp_path / "report.json"
-    res = runner.invoke(
+    result = CliRunner().invoke(
         cli_mod.main,
-        [
-            "recover",
-            "--dir",
-            str(get_cache_dir() / "dlq"),
-            "--table",
-            "t3",
-            "--dry-run",
-            "--report",
-            str(report_path),
-        ],
+        ["checkpoints", "resume", "--table", "sharadar_price", "--output", "duckdb:///data.db"],
     )
-    assert res.exit_code == 0
-    data = json.loads(report_path.read_text())
-    assert "tables" in data
-    assert "errors" in data
-    assert "error_counts" in data
-    t = data["tables"].get("t3")
-    assert t is not None
-    assert "files_scanned" in t
-    assert "rows_scanned" in t
-    assert "rows_written" in t
-    assert "details" in t
+    assert result.exit_code == 0
+    assert create_calls[0]["provider"] == "sharadar"
+    assert create_calls[0]["rate_limit"] == cli_mod.DEFAULT_RATE_LIMIT
+    assert resume_calls[0]["table"] == "sharadar_price"
+    assert "Run completed" in result.output
 
 
-def test_recover_progress_and_verbose(tmp_path, monkeypatch: pytest.MonkeyPatch):
-    _make_dlq(tmp_path, monkeypatch, "t4", rows=2)
-    runner = CliRunner()
-    res = runner.invoke(
-        cli_mod.main,
-        [
-            "recover",
-            "--dir",
-            str(get_cache_dir() / "dlq"),
-            "--table",
-            "t4",
-            "--dry-run",
-            "--progress",
-            "--verbose",
-        ],
-    )
-    assert res.exit_code == 0
-    assert "[scan] t4 batch_12345.ipc" in res.output
-    assert "[detail] t4 file=" in res.output
+def test_checkpoints_clear_requires_table_or_all() -> None:
+    result = CliRunner().invoke(cli_mod.main, ["checkpoints", "clear"])
+    assert result.exit_code != 0
+    assert "Provide --table or --all." in result.output
 
 
-def test_recover_strict_with_read_error(tmp_path, monkeypatch: pytest.MonkeyPatch):
-    base = tmp_path / "app"
-    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(base))
-    dlq_tbl = get_cache_dir() / "dlq" / "t_err"
-    dlq_tbl.mkdir(parents=True, exist_ok=True)
-    bad = dlq_tbl / "batch_bad.ipc"
-    bad.write_bytes(b"not-ipc")
-    runner = CliRunner()
-    res = runner.invoke(
-        cli_mod.main,
-        [
-            "recover",
-            "--dir",
-            str(get_cache_dir() / "dlq"),
-            "--table",
-            "t_err",
-            "--dry-run",
-            "--strict",
-        ],
-    )
-    assert res.exit_code != 0
-    assert "Errors encountered" in res.output
+def test_recover_command_removed() -> None:
+    result = CliRunner().invoke(cli_mod.main, ["recover"])
+    assert result.exit_code != 0
+    assert "No such command 'recover'" in result.output

@@ -30,7 +30,7 @@
   - Inspect `RunResult.dlq_counts` and `RunResult.errors` for `DLQ=spooled` or `DLQ=spool_failed`.
 - Actions
   - Ensure the app root is writable.
-  - Use recovery CLI to reinject DLQ artifacts.
+  - Use `vertex-forager dlq replay --table <table>` to reinject DLQ artifacts.
 
 ## Writer validation failures (PK missing/null)
 
@@ -40,7 +40,7 @@
   - Confirm provider schema’s `unique_key` and mapper normalization.
 - Actions
   - Fix source or normalization to populate PKs.
-  - Use DLQ recovery flow to reinject corrected frames.
+  - Use `vertex-forager dlq replay --table <table>` to reinject corrected frames.
 
 ## Connectivity
 
