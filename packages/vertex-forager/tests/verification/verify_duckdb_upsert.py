@@ -23,16 +23,16 @@ async def main() -> None:
             try:
                 df = conn.execute(
                     "SELECT provider, ticker, date, close "
-                    "FROM sharadar_sep "
+                    "FROM sharadar_price "
                     "ORDER BY date"
                 ).pl()
-                print(f"\n[{msg}] Table 'sharadar_sep':")
+                print(f"\n[{msg}] Table 'sharadar_price':")
                 if df.is_empty():
                     print("(Empty)")
                 else:
                     print(df)
             except duckdb.CatalogException:
-                print(f"\n[{msg}] Table 'sharadar_sep' does not exist yet.")
+                print(f"\n[{msg}] Table 'sharadar_price' does not exist yet.")
             finally:
                 conn.close()
 
@@ -59,7 +59,7 @@ async def main() -> None:
 
         packet1 = FramePacket(
             provider="sharadar",
-            table="sharadar_sep",
+            table="sharadar_price",
             frame=df1,
             observed_at=datetime.now(),
         )
@@ -88,7 +88,7 @@ async def main() -> None:
 
         packet2 = FramePacket(
             provider="sharadar",
-            table="sharadar_sep",
+            table="sharadar_price",
             frame=df2,
             observed_at=datetime.now(),
         )
@@ -100,7 +100,7 @@ async def main() -> None:
     print("\n--- 4. Verification ---")
     conn = duckdb.connect(str(db_path))
     result = conn.execute(
-        "SELECT close FROM sharadar_sep WHERE ticker='AAPL' AND date='2024-01-01'"
+        "SELECT close FROM sharadar_price WHERE ticker='AAPL' AND date='2024-01-01'"
     ).fetchone()
     conn.close()
 

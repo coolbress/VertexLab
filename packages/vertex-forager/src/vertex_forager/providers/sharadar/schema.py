@@ -9,7 +9,7 @@ from vertex_forager.core.quality import NoDuplicateRows, NoFutureDates, NoNegati
 from vertex_forager.schema.config import DatasetSpec, TableSchema
 
 SHARADAR_SEP: Final[TableSchema] = TableSchema(
-    table="sharadar_sep",
+    table="sharadar_price",
     schema={
         "provider": pl.String,
         "ticker": pl.String,
@@ -68,17 +68,17 @@ SHARADAR_TICKERS: Final[TableSchema] = TableSchema(
         "lastquarter": pl.Date,
         "fetched_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
     },
-    unique_key=("provider", "ticker"),
+    unique_key=("provider", "table", "ticker"),
     analysis_date_col=None,
     quality_rules=(
         NoFutureDates(["lastupdated"]),
-        NoDuplicateRows(["ticker"]),
+        NoDuplicateRows(["table", "ticker"]),
     ),
 )
 
 
 SHARADAR_SF1: Final[TableSchema] = TableSchema(
-    table="sharadar_sf1",
+    table="sharadar_fundamental",
     schema={
         "provider": pl.String,
         "ticker": pl.String,
@@ -205,7 +205,7 @@ SHARADAR_SF1: Final[TableSchema] = TableSchema(
 
 
 SHARADAR_SF2: Final[TableSchema] = TableSchema(
-    table="sharadar_sf2",
+    table="sharadar_insider",
     schema={
         "provider": pl.String,
         "ticker": pl.String,
@@ -244,7 +244,7 @@ SHARADAR_SF2: Final[TableSchema] = TableSchema(
 
 
 SHARADAR_SF3: Final[TableSchema] = TableSchema(
-    table="sharadar_sf3",
+    table="sharadar_institutional",
     schema={
         "provider": pl.String,
         "ticker": pl.String,

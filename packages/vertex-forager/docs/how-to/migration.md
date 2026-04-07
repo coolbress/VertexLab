@@ -4,6 +4,42 @@ Use this guide when upgrading between `vertex-forager` releases and checking for
 
 ## Upcoming release
 
+### Canonical Sharadar table names and shared-table discriminators
+
+Persisted DuckDB contracts change in this release.
+
+Sharadar canonical table names now align with collect-method vocabulary:
+
+- `sharadar_sep` → `sharadar_price`
+- `sharadar_sf1` → `sharadar_fundamental`
+- `sharadar_sf2` → `sharadar_insider`
+- `sharadar_sf3` → `sharadar_institutional`
+
+YFinance shared tables now persist explicit discriminators:
+
+- `yfinance_financials` adds `statement_kind`
+- `yfinance_holders` adds `holder_type`
+
+YFinance schema cleanup also removes ghost columns:
+
+- `yfinance_price.adj_close`
+- `yfinance_holders.percentage_out`
+- `yfinance_insider_purchases.holder`
+
+**Action required**:
+
+- Rename existing Sharadar DuckDB tables before writing new runs:
+
+```sql
+ALTER TABLE sharadar_sep RENAME TO sharadar_price;
+ALTER TABLE sharadar_sf1 RENAME TO sharadar_fundamental;
+ALTER TABLE sharadar_sf2 RENAME TO sharadar_insider;
+ALTER TABLE sharadar_sf3 RENAME TO sharadar_institutional;
+```
+
+- If you keep historical YFinance DuckDB files, rebuild or migrate shared tables so new discriminator columns are populated correctly.
+- Update any CLI/DLQ/recovery commands or downstream SQL that still reference old Sharadar feed-alias table names.
+
 ### `RetryConfig.enable_http_status_retry` removed
 
 `RetryConfig.enable_http_status_retry` has been removed from the public retry API.

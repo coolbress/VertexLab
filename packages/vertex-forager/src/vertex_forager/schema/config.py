@@ -15,7 +15,7 @@ class TableSchema:
     Internal storage contract for a normalized table.
 
     Attributes:
-        table: Canonical table name (e.g., "sharadar_sep").
+        table: Canonical table name (e.g., "sharadar_price").
         schema: Mapping of normalized column names to Polars dtypes.
         unique_key: Tuple of columns that must exist and act as the logical
             primary key for deduplication and upsert validation.

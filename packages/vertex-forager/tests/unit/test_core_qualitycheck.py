@@ -108,11 +108,11 @@ def test_run_result_serialization_hides_internal_metrics_fields() -> None:
 
 def test_sharadar_quality_rules_are_assigned() -> None:
     expected = {
-        "sharadar_sep": (NoFutureDates, NoNegativePrices, NoDuplicateRows),
+        "sharadar_price": (NoFutureDates, NoNegativePrices, NoDuplicateRows),
         "sharadar_tickers": (NoFutureDates, NoDuplicateRows),
-        "sharadar_sf1": (NoFutureDates, NoDuplicateRows),
-        "sharadar_sf2": (NoFutureDates, NoDuplicateRows),
-        "sharadar_sf3": (NoFutureDates, NoDuplicateRows),
+        "sharadar_fundamental": (NoFutureDates, NoDuplicateRows),
+        "sharadar_insider": (NoFutureDates, NoDuplicateRows),
+        "sharadar_institutional": (NoFutureDates, NoDuplicateRows),
         "sharadar_actions": (NoFutureDates, NoDuplicateRows),
         "sharadar_daily": (NoFutureDates, NoDuplicateRows),
         "sharadar_sp500": (NoFutureDates, NoDuplicateRows),
@@ -130,7 +130,7 @@ def test_yfinance_quality_rules_are_assigned() -> None:
         "yfinance_splits": (NoFutureDates, NoDuplicateRows),
         "yfinance_actions": (NoFutureDates, NoDuplicateRows),
         "yfinance_financials": (NoFutureDates, NoDuplicateRows),
-        "yfinance_holders": (NoFutureDates,),
+        "yfinance_holders": (NoFutureDates, NoDuplicateRows),
         "yfinance_insider_roster_holders": (NoFutureDates,),
     }
 
@@ -157,7 +157,21 @@ def test_yfinance_financials_duplicate_rule_matches_full_unique_key() -> None:
     duplicate_rule = YFINANCE_TABLES["yfinance_financials"].quality_rules[1]
 
     assert isinstance(duplicate_rule, NoDuplicateRows)
-    assert duplicate_rule.subset == ["date", "ticker", "provider", "period", "metric"]
+    assert duplicate_rule.subset == ["date", "ticker", "provider", "period", "statement_kind", "metric"]
+
+
+def test_sharadar_tickers_duplicate_rule_matches_table_scoped_key() -> None:
+    duplicate_rule = SHARADAR_TABLES["sharadar_tickers"].quality_rules[1]
+
+    assert isinstance(duplicate_rule, NoDuplicateRows)
+    assert duplicate_rule.subset == ["table", "ticker"]
+
+
+def test_yfinance_holders_duplicate_rule_matches_discriminator_key() -> None:
+    duplicate_rule = YFINANCE_TABLES["yfinance_holders"].quality_rules[1]
+
+    assert isinstance(duplicate_rule, NoDuplicateRows)
+    assert duplicate_rule.subset == ["provider", "ticker", "holder_type", "holder", "date_reported"]
 
 
 def test_registry_returns_provider_dataset_specs() -> None:
@@ -165,7 +179,7 @@ def test_registry_returns_provider_dataset_specs() -> None:
     yfinance_news = get_dataset_spec("yfinance", "news")
 
     assert sharadar_price is not None
-    assert sharadar_price.schema.table == "sharadar_sep"
+    assert sharadar_price.schema.table == "sharadar_price"
     assert sharadar_price.endpoint == "SEP"
     assert sharadar_price.date_filter_col == "date"
 
@@ -178,3 +192,7 @@ def test_registry_returns_provider_dataset_specs() -> None:
 def test_dataset_literal_aliases_match_registered_dataset_names() -> None:
     assert get_args(SharadarDataset) == SHARADAR_DATASET_NAMES
     assert get_args(YFinanceDataset) == YFINANCE_DATASET_NAMES
+
+
+def test_yfinance_news_unique_key_uses_stable_id_only() -> None:
+    assert YFINANCE_TABLES["yfinance_news"].unique_key == ("provider", "ticker", "id")

@@ -114,14 +114,16 @@ class TestYFinanceRouterUnit:
         frame = result.packets[0].frame
         assert "date" in frame.columns
         assert "metric" in frame.columns
+        assert "statement_kind" in frame.columns
+        assert frame.get_column("statement_kind").unique().to_list() == ["income_stmt"]
         dates = frame.get_column("date").cast(pl.Utf8, strict=False).to_list()
         assert all((" " not in (d or "")) and ("T" not in (d or "")) for d in dates)
 
     def test_transform_news_defensive_paths(self, yfinance_router_allow_pickle: YFinanceRouter) -> None:
         good = [
             {
-                "id": 1,
                 "content": {
+                    "id": "1",
                     "title": "T",
                     "provider": {"displayName": "P"},
                     "contentType": "story",
@@ -136,17 +138,27 @@ class TestYFinanceRouterUnit:
         result = yfinance_router_allow_pickle.parse(job=job, payload=payload)
         assert isinstance(result, ParseResult)
         frame = result.packets[0].frame
-        assert {"title", "publisher", "type", "link", "published_at"}.issubset(set(frame.columns))
-        assert frame.height == 2
+        assert {"id", "title", "publisher", "type", "link", "published_at"}.issubset(set(frame.columns))
+        assert frame.height == 1
+        assert frame.get_column("id").to_list() == ["1"]
 
     def test_transform_calendar_list_to_first(self, yfinance_router_allow_pickle: YFinanceRouter) -> None:
-        payload = pickle.dumps([{"earnings_date": ["2024-01-01", "2024-01-02"]}])
+        payload = pickle.dumps(
+            [
+                {
+                    "earnings_date": ["2024-01-01", "2024-01-02"],
+                    "dividend_date": "2024-03-15",
+                    "ex_dividend_date": "2024-03-01",
+                }
+            ]
+        )
         job = self.make_fetch_job(dataset="calendar", symbol="AAPL")
         result = yfinance_router_allow_pickle.parse(job=job, payload=payload)
         assert isinstance(result, ParseResult)
         frame = result.packets[0].frame
         assert "earnings_date" in frame.columns
         assert frame.get_column("earnings_date").to_list()[0] == "2024-01-01"
+        assert {"dividend_date", "ex_dividend_date"}.issubset(frame.columns)
 
     def test_parse_invalid_payload_raises(self, yfinance_router_allow_pickle: YFinanceRouter) -> None:
         job = self.make_fetch_job(dataset="price", symbol="AAPL")
@@ -196,6 +208,40 @@ class TestYFinanceRouterUnit:
             "Sales",
         ]
         assert frame.get_column("other_col").to_list() == [1, 3]
+        assert "holder" not in frame.columns
+
+    def test_transform_holders_adds_holder_type(self, yfinance_router_allow_pickle: YFinanceRouter) -> None:
+        df = pd.DataFrame(
+            {
+                "Holder": ["Fund A"],
+                "Date Reported": ["2024-01-01"],
+                "pctHeld": [0.1],
+                "Shares": [100],
+            }
+        )
+        payload = pickle.dumps(df)
+        job = self.make_fetch_job(dataset="institutional_holders", symbol="AAPL")
+        result = yfinance_router_allow_pickle.parse(job=job, payload=payload)
+        frame = result.packets[0].frame
+        assert "holder_type" in frame.columns
+        assert frame.get_column("holder_type").to_list() == ["institutional"]
+
+    def test_transform_insider_roster_localizes_naive_datetimes(
+        self,
+        yfinance_router_allow_pickle: YFinanceRouter,
+    ) -> None:
+        df = pd.DataFrame(
+            {
+                "Latest Transaction Date": pd.to_datetime(["2024-01-01"]),
+                "Position Direct Date": pd.to_datetime(["2024-01-02"]),
+            }
+        )
+        payload = pickle.dumps(df)
+        job = self.make_fetch_job(dataset="insider_roster_holders", symbol="AAPL")
+        result = yfinance_router_allow_pickle.parse(job=job, payload=payload)
+        frame = result.packets[0].frame
+        assert "time_zone='UTC'" in str(frame.schema["latest_transaction_date"])
+        assert "time_zone='UTC'" in str(frame.schema["position_direct_date"])
 
     def test_transform_recommendations_includes_period(self, yfinance_router_allow_pickle: YFinanceRouter) -> None:
         """Verify recommendations transform includes period column."""
@@ -239,8 +285,8 @@ class TestYFinanceRouterUnit:
         """Decodes JSON-prefixed payload for news dataset."""
         good = [
             {
-                "id": 1,
                 "content": {
+                    "id": "1",
                     "title": "T",
                     "provider": {"displayName": "P"},
                     "contentType": "story",
@@ -255,5 +301,5 @@ class TestYFinanceRouterUnit:
         result = yfinance_router.parse(job=job, payload=payload)
         assert isinstance(result, ParseResult)
         frame = result.packets[0].frame
-        assert {"title", "publisher", "type", "link", "published_at"}.issubset(set(frame.columns))
-        assert frame.height == 2
+        assert {"id", "title", "publisher", "type", "link", "published_at"}.issubset(set(frame.columns))
+        assert frame.height == 1

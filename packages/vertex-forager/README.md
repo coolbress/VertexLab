@@ -14,6 +14,7 @@ Status: Alpha • Python 3.10+ • License: Apache-2.0
 - Unified `create_client(...)` API for YFinance and Sharadar
 - Polars-first data handling with optional DuckDB persistence
 - Built-in retry, flow control, and DLQ-backed write recovery
+- Canonical persisted table names and discriminator-safe shared-table storage
 
 ## Installation
 
@@ -74,6 +75,14 @@ print(df)
   - state retention knobs: `checkpoint_retention_days`, `run_history_retention_days`
   - grouped config: `retry=RetryConfig(...)`, `throttle=AdaptiveThrottleConfig(...)`, `limits=HTTPConfig(...)`, `advanced=AdvancedConfig(...)`
 - persistence path: `connect_db="duckdb://./forager.duckdb"`
+
+## Storage contract
+
+- Sharadar persisted table names follow collect-method vocabulary: `sharadar_price`, `sharadar_fundamental`, `sharadar_insider`, `sharadar_institutional`
+- Shared-table YFinance flows persist explicit discriminators:
+  - `yfinance_financials.statement_kind`
+  - `yfinance_holders.holder_type`
+- See [Migration Guide](docs/how-to/migration.md) before upgrading existing DuckDB files
 
 ## Documentation
 

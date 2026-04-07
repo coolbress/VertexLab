@@ -97,7 +97,7 @@ class TestDuckDBWriter:
         """Test that data is UPSERTED (deduplicated) when PK is known."""
         db_path = tmp_path / "upsert.duckdb"
         async with DuckDBWriter(db_path) as writer:
-            # "sharadar_sep" has known PK: [provider, ticker, date]
+            # "sharadar_price" has known PK: [provider, ticker, date]
             # Note: provider column required for PK
             df1 = pl.DataFrame(
                 {
@@ -110,7 +110,7 @@ class TestDuckDBWriter:
             await writer.write(
                 FramePacket(
                     provider="sharadar",
-                    table="sharadar_sep",
+                    table="sharadar_price",
                     frame=df1,
                     observed_at=datetime.now(),
                 )
@@ -128,7 +128,7 @@ class TestDuckDBWriter:
             await writer.write(
                 FramePacket(
                     provider="sharadar",
-                    table="sharadar_sep",
+                    table="sharadar_price",
                     frame=df2,
                     observed_at=datetime.now(),
                 )
@@ -136,14 +136,91 @@ class TestDuckDBWriter:
 
         conn = duckdb.connect(str(db_path))
         # Should be 1 row with updated price
-        rows = conn.execute("SELECT * FROM sharadar_sep").fetchall()
+        rows = conn.execute("SELECT * FROM sharadar_price").fetchall()
         assert rows is not None
         assert len(rows) == 1
         # Check close price
-        res = conn.execute("SELECT close FROM sharadar_sep").fetchone()
+        res = conn.execute("SELECT close FROM sharadar_price").fetchone()
         assert res is not None
         assert res[0] == 200.0
         conn.close()
+
+    @pytest.mark.asyncio
+    async def test_shared_table_discriminators_prevent_overwrite(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "discriminators.duckdb"
+        async with DuckDBWriter(db_path) as writer:
+            financials = pl.DataFrame(
+                {
+                    "provider": ["yfinance"],
+                    "ticker": ["AAPL"],
+                    "date": [datetime(2024, 1, 1).date()],
+                    "period": ["annual"],
+                    "statement_kind": ["income_stmt"],
+                    "metric": ["EBITDA"],
+                    "value": [100.0],
+                }
+            )
+            balance_sheet = financials.with_columns(
+                pl.lit("balance_sheet").alias("statement_kind"),
+                pl.lit(200.0).alias("value"),
+            )
+            holders = pl.DataFrame(
+                {
+                    "provider": ["yfinance"],
+                    "ticker": ["AAPL"],
+                    "holder_type": ["institutional"],
+                    "holder": ["Fund A"],
+                    "date_reported": [datetime(2024, 1, 1).date()],
+                    "shares": [100.0],
+                    "pctheld": [0.1],
+                    "pctchange": [0.0],
+                    "value": [1000.0],
+                }
+            )
+            mutualfund = holders.with_columns(
+                pl.lit("mutualfund").alias("holder_type"),
+                pl.lit(200.0).alias("shares"),
+            )
+            await writer.write(
+                FramePacket(
+                    provider="yfinance",
+                    table="yfinance_financials",
+                    frame=financials,
+                    observed_at=datetime.now(),
+                )
+            )
+            await writer.write(
+                FramePacket(
+                    provider="yfinance",
+                    table="yfinance_financials",
+                    frame=balance_sheet,
+                    observed_at=datetime.now(),
+                )
+            )
+            await writer.write(
+                FramePacket(
+                    provider="yfinance",
+                    table="yfinance_holders",
+                    frame=holders,
+                    observed_at=datetime.now(),
+                )
+            )
+            await writer.write(
+                FramePacket(
+                    provider="yfinance",
+                    table="yfinance_holders",
+                    frame=mutualfund,
+                    observed_at=datetime.now(),
+                )
+            )
+
+        with duckdb.connect(str(db_path)) as conn:
+            financial_count = conn.execute("SELECT count(*) FROM yfinance_financials").fetchone()
+            holders_count = conn.execute("SELECT count(*) FROM yfinance_holders").fetchone()
+            assert financial_count is not None
+            assert holders_count is not None
+            assert financial_count[0] == 2
+            assert holders_count[0] == 2
 
     @pytest.mark.asyncio
     async def test_write_bulk_small_data(self, tmp_path: Path) -> None:

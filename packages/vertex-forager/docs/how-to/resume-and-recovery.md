@@ -86,7 +86,7 @@ uv run vertex-forager dlq list
 Retry all pending entries for one table:
 
 ```bash
-uv run vertex-forager dlq retry --table sharadar_sep --db ./forager.duckdb
+uv run vertex-forager dlq retry --table sharadar_price --db ./forager.duckdb
 ```
 
 Delete old DLQ entries and their IPC files:
