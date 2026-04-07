@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sqlite3
 import tempfile
 from unittest.mock import patch
 
@@ -125,6 +126,59 @@ def test_find_latest_checkpoint_uses_sqlite_ordering() -> None:
         latest = find_latest_checkpoint(table_name="stub_prices")
         assert latest is not None
         assert latest.run_id == "run_new"
+
+
+def test_initialize_schema_marks_legacy_in_progress_checkpoints_completed() -> None:
+    with (
+        tempfile.TemporaryDirectory() as tmpdir,
+        patch(
+            "vertex_forager.core.checkpoint.get_cache_dir",
+            return_value=Path(tmpdir),
+        ),
+    ):
+        db_path = get_state_db_path()
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(db_path) as conn:
+            conn.execute(
+                """
+                CREATE TABLE checkpoints (
+                    run_id TEXT PRIMARY KEY,
+                    provider TEXT NOT NULL,
+                    dataset TEXT NOT NULL,
+                    completed_json TEXT NOT NULL,
+                    failed_json TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    updated_at REAL NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO checkpoints (
+                    run_id,
+                    provider,
+                    dataset,
+                    completed_json,
+                    failed_json,
+                    status,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                ("legacy-run", "stub", "prices", "[]", "[]", "in_progress", 100.0),
+            )
+            conn.commit()
+
+        latest = find_latest_checkpoint(table_name="stub_prices")
+        assert latest is None
+
+        with sqlite3.connect(db_path) as conn:
+            row = conn.execute(
+                "SELECT table_name, status FROM checkpoints WHERE run_id = ?", ("legacy-run",)
+            ).fetchone()
+            assert row is not None
+            assert row[0] is None
+            assert row[1] == "completed"
 
 
 def test_save_run_history() -> None:

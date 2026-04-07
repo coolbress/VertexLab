@@ -129,6 +129,13 @@ def _initialize_schema(conn: sqlite3.Connection) -> None:
     checkpoint_columns = {str(row["name"]) for row in conn.execute("PRAGMA table_info(checkpoints)").fetchall()}
     if "table_name" not in checkpoint_columns:
         conn.execute("ALTER TABLE checkpoints ADD COLUMN table_name TEXT")
+        conn.execute(
+            """
+            UPDATE checkpoints
+            SET status = 'completed'
+            WHERE table_name IS NULL AND status = 'in_progress'
+            """
+        )
     if "pending_jobs_json" not in checkpoint_columns:
         conn.execute("ALTER TABLE checkpoints ADD COLUMN pending_jobs_json TEXT NOT NULL DEFAULT '[]'")
     if "meta_json" not in checkpoint_columns:

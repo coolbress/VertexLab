@@ -90,7 +90,9 @@ class RunsNamespace:
     ) -> int:
         before_ts = None
         if before_days is not None:
-            days = int(before_days)
+            if not isinstance(before_days, int) or isinstance(before_days, bool):
+                raise TypeError("before_days must be an integer")
+            days = before_days
             if days < 0:
                 raise ValueError("before_days must be non-negative")
             before_ts = time.time() - (days * 86_400)

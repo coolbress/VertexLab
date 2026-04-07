@@ -57,6 +57,10 @@ def test_state_manager_exports_and_runs_filters(tmp_path: Path, monkeypatch: pyt
     assert [record.run_id for record in state.runs.list(limit=10)] == ["run-2"]
     with pytest.raises(ValueError, match="non-negative"):
         state.runs.clear(before_days=-1)
+    with pytest.raises(TypeError, match="integer"):
+        state.runs.clear(before_days=False)
+    with pytest.raises(TypeError, match="integer"):
+        state.runs.clear(before_days=0.5)  # type: ignore[arg-type]
 
 
 def test_state_manager_runs_preserve_boolean_error_fields(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
