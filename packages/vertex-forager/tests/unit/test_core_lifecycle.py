@@ -15,12 +15,11 @@ from vertex_forager.core.lifecycle import (
 )
 
 
-def test_initialize_run_state_without_resume() -> None:
+def test_initialize_run_state_without_checkpoint() -> None:
     run_id, completed, failed = initialize_run_state(
         provider="sharadar",
         dataset="price",
-        resume=False,
-        find_latest_checkpoint=lambda _p, _d: None,
+        checkpoint=None,
         logger=type("L", (), {"info": lambda *args, **kwargs: None})(),
     )
     assert run_id.startswith("sharadar_price_")
@@ -33,8 +32,7 @@ def test_initialize_run_state_with_checkpoint() -> None:
     run_id, completed, failed = initialize_run_state(
         provider="sharadar",
         dataset="price",
-        resume=True,
-        find_latest_checkpoint=lambda _p, _d: cp,
+        checkpoint=cp,
         logger=type("L", (), {"info": lambda *args, **kwargs: None})(),
     )
     assert run_id == "run-123"

@@ -115,6 +115,7 @@ def _spool_failed_packets(
             table=table,
             provider=failed_packets[0].provider if failed_packets else None,
             row_count=int(merged.height),
+            output_uri=None,
         )
     except Exception:
         fpath.unlink(missing_ok=True)

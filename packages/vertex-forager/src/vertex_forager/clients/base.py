@@ -28,7 +28,7 @@ from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor as _HttpExecutor
 from vertex_forager.core.http import build_async_client
 from vertex_forager.core.pipeline import VertexForager as _VertexForager
-from vertex_forager.core.types import JSONValue, SharadarDataset, YFinanceDataset
+from vertex_forager.core.types import SharadarDataset, YFinanceDataset
 from vertex_forager.schema.registry import get_table_schema
 from vertex_forager.utils import (
     Spinner,
@@ -342,7 +342,7 @@ class BaseClient(ABC, Generic[T]):
         mapper: IMapper,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         progress: bool = False,
-        **kwargs: JSONValue,
+        **kwargs: Any,
     ) -> RunResult:
         """
         Run the VertexForager pipeline for the given router, dataset, and symbols.

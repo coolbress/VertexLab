@@ -24,7 +24,6 @@ RESERVED_PIPELINE_KEYS: Final[set[str]] = {
     "mapper",
     "on_progress",
     "progress",
-    "resume",
 }
 
 DATE_FMT: Final[str] = "%Y-%m-%d"

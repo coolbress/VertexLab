@@ -405,3 +405,11 @@ class FlowController:
     @property
     def retry_events(self) -> int:
         return self._retry_events
+
+    @property
+    def effective_rpm(self) -> int:
+        return self._effective_rpm
+
+    @property
+    def rpm_ceiling(self) -> int:
+        return self._rpm_ceiling

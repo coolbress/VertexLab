@@ -99,6 +99,13 @@ def _make_engine(
         config=config,
         controller=controller,
     )
+    original_run = engine.run
+
+    async def _run_with_table_name(*args: Any, **kwargs: Any) -> RunResult:
+        kwargs.setdefault("table_name", "stub_table")
+        return await original_run(*args, **kwargs)
+
+    engine.run = _run_with_table_name  # type: ignore[method-assign]
     return engine, w
 
 
@@ -125,6 +132,23 @@ def test_log_structured_emits_debug_record_with_extra_fields(caplog: pytest.LogC
     assert record.vf_stage == "fetch_done"
     assert record.vf_attempt == 2
     assert record.vf_duration_s == 1.234
+
+
+@pytest.mark.asyncio
+async def test_run_requires_table_name_or_checkpoint_table_name() -> None:
+    router = _PaginatingRouter(pages=0)
+    writer = _RecordingWriter()
+    engine = VertexForager(
+        router=router,
+        http=HttpExecutor(client=_StubClient()),
+        writer=writer,
+        mapper=None,
+        config=ResolvedClientConfig(requests_per_minute=60),
+        controller=FlowController(requests_per_minute=60, concurrency_limit=1),
+    )
+
+    with pytest.raises(ValueError, match="table_name"):
+        await engine.run(dataset="d", symbols=["AAPL"])
 
 
 # ─── Test 1: always-on DRR behavior ─────────────────────────────────────
@@ -232,7 +256,7 @@ async def test_progress_snapshot_emits_finished_true_on_early_init_failure() -> 
     engine, _ = _make_engine(router)
     snapshots: list[ProgressSnapshot] = []
 
-    def _boom(dataset: str, resume: bool) -> tuple[str, set[str]]:
+    def _boom(dataset: str, checkpoint: Checkpoint | None) -> tuple[str, set[str]]:
         raise RuntimeError("init boom")
 
     engine._initialize_run_state = _boom  # type: ignore[method-assign]
@@ -262,7 +286,7 @@ async def test_progress_snapshot_early_init_failure_does_not_reuse_prior_run_sta
     engine._progress_history.append((122.0, 5))
     engine._progress_window_events = 5
 
-    def _boom(dataset: str, resume: bool) -> tuple[str, set[str]]:
+    def _boom(dataset: str, checkpoint: Checkpoint | None) -> tuple[str, set[str]]:
         raise RuntimeError("init boom")
 
     engine._initialize_run_state = _boom  # type: ignore[method-assign]
@@ -286,7 +310,7 @@ async def test_progress_snapshot_preserves_completed_logical_units_on_early_init
     engine, _ = _make_engine(router)
     snapshots: list[ProgressSnapshot] = []
 
-    def _init_then_fail(dataset: str, resume: bool) -> tuple[str, set[str]]:
+    def _init_then_fail(dataset: str, checkpoint: Checkpoint | None) -> tuple[str, set[str]]:
         return "run-id", {"AAPL,MSFT"}
 
     def _fail_queues() -> tuple[
@@ -302,7 +326,7 @@ async def test_progress_snapshot_preserves_completed_logical_units_on_early_init
         await engine.run(
             dataset="d",
             symbols=["AAPL", "MSFT"],
-            resume=True,
+            checkpoint=Checkpoint(run_id="rid", provider="stub", dataset="d"),
             on_progress=lambda snapshot: snapshots.append(snapshot),
         )
 
@@ -405,18 +429,18 @@ async def test_progress_snapshot_prints_summary_when_progress_enabled_without_ba
 
 
 @pytest.mark.asyncio
-async def test_progress_snapshot_counts_completed_symbols_on_resume() -> None:
+async def test_progress_snapshot_counts_completed_symbols_on_checkpoint_resume() -> None:
     router = _PaginatingRouter(pages=0)
     engine, _ = _make_engine(router)
     snapshots: list[ProgressSnapshot] = []
 
-    engine._initialize_run_state = lambda dataset, resume: ("run-id", {"AAPL"})  # type: ignore[method-assign]
+    engine._initialize_run_state = lambda dataset, checkpoint: ("run-id", {"AAPL"})  # type: ignore[method-assign]
     engine._record_worker_symbol_state = lambda **kwargs: asyncio.sleep(0)  # type: ignore[method-assign]
 
     await engine.run(
         dataset="d",
         symbols=["AAPL", "MSFT"],
-        resume=True,
+        checkpoint=Checkpoint(run_id="rid", provider="stub", dataset="d"),
         on_progress=lambda snapshot: snapshots.append(snapshot),
     )
 
@@ -427,18 +451,18 @@ async def test_progress_snapshot_counts_completed_symbols_on_resume() -> None:
 
 
 @pytest.mark.asyncio
-async def test_progress_snapshot_counts_batched_completed_symbols_on_resume() -> None:
+async def test_progress_snapshot_counts_batched_completed_symbols_on_checkpoint_resume() -> None:
     router = _PaginatingRouter(pages=0)
     engine, _ = _make_engine(router)
     snapshots: list[ProgressSnapshot] = []
 
-    engine._initialize_run_state = lambda dataset, resume: ("run-id", {"AAPL,MSFT"})  # type: ignore[method-assign]
+    engine._initialize_run_state = lambda dataset, checkpoint: ("run-id", {"AAPL,MSFT"})  # type: ignore[method-assign]
     engine._record_worker_symbol_state = lambda **kwargs: asyncio.sleep(0)  # type: ignore[method-assign]
 
     await engine.run(
         dataset="d",
         symbols=["AAPL", "MSFT"],
-        resume=True,
+        checkpoint=Checkpoint(run_id="rid", provider="stub", dataset="d"),
         on_progress=lambda snapshot: snapshots.append(snapshot),
     )
 
@@ -449,18 +473,18 @@ async def test_progress_snapshot_counts_batched_completed_symbols_on_resume() ->
 
 
 @pytest.mark.asyncio
-async def test_progress_snapshot_intersects_completed_symbols_with_requested_resume_set() -> None:
+async def test_progress_snapshot_intersects_completed_symbols_with_requested_checkpoint_set() -> None:
     router = _PaginatingRouter(pages=0)
     engine, _ = _make_engine(router)
     snapshots: list[ProgressSnapshot] = []
 
-    engine._initialize_run_state = lambda dataset, resume: ("run-id", {"AAPL,MSFT"})  # type: ignore[method-assign]
+    engine._initialize_run_state = lambda dataset, checkpoint: ("run-id", {"AAPL,MSFT"})  # type: ignore[method-assign]
     engine._record_worker_symbol_state = lambda **kwargs: asyncio.sleep(0)  # type: ignore[method-assign]
 
     await engine.run(
         dataset="d",
         symbols=["MSFT"],
-        resume=True,
+        checkpoint=Checkpoint(run_id="rid", provider="stub", dataset="d"),
         on_progress=lambda snapshot: snapshots.append(snapshot),
     )
 
@@ -1196,17 +1220,16 @@ async def test_initialize_run_state_preserves_flat_pending_jobs_on_resume(
         symbol="AAPL",
         spec=RequestSpec(url="https://x", params={"page": 2}),
     )
-    save_checkpoint(
-        Checkpoint(
-            run_id="rid",
-            provider="stub",
-            dataset="d",
-            pending_jobs=[dataset_job, symbol_job],
-            status="in_progress",
-        )
+    checkpoint = Checkpoint(
+        run_id="rid",
+        provider="stub",
+        dataset="d",
+        pending_jobs=[dataset_job, symbol_job],
+        status="in_progress",
     )
+    save_checkpoint(checkpoint)
 
-    run_id, completed_symbols = engine._initialize_run_state(dataset="d", resume=True)
+    run_id, completed_symbols = engine._initialize_run_state(dataset="d", checkpoint=checkpoint)
 
     assert run_id == "rid"
     assert completed_symbols == set()

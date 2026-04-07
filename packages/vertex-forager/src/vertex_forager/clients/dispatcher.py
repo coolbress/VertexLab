@@ -5,7 +5,8 @@ import warnings
 
 from vertex_forager.core.http import HttpExecutor as DefaultHttpExecutor
 from vertex_forager.core.pipeline import VertexForager as DefaultVertexForager
-from vertex_forager.core.types import JSONValue, SharadarDataset, YFinanceDataset
+from vertex_forager.core.types import SharadarDataset, YFinanceDataset
+from vertex_forager.exceptions import InputError
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -28,7 +29,7 @@ async def run_pipeline_for(
     progress: bool = False,
     http_executor_cls: type[Any] | None = None,
     vertex_forager_cls: type[Any] | None = None,
-    **kwargs: JSONValue,
+    **kwargs: Any,
 ) -> RunResult:
     """Execute the VertexForager pipeline using the provided client context.
 
@@ -70,9 +71,8 @@ async def run_pipeline_for(
         )
         from vertex_forager.clients.validation import filter_reserved_kwargs
 
-        # Extract resume parameter explicitly since it's now a specific parameter
-        resume_val = kwargs.get("resume", False)
-        resume = bool(resume_val) if isinstance(resume_val, (bool, int, float)) else False
+        if "resume" in kwargs:
+            raise InputError("The `resume` parameter was removed. Use StateManager().checkpoints.resume(...) instead.")
         run_kwargs = filter_reserved_kwargs(kwargs, RESERVED_PIPELINE_KEYS)
 
         with warnings.catch_warnings():
@@ -91,7 +91,6 @@ async def run_pipeline_for(
                 symbols=symbols,
                 on_progress=on_progress,
                 progress=progress,
-                resume=resume,
                 **run_kwargs,
             )
         return cast("RunResult", client.last_run)

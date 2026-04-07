@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sqlite3
 import tempfile
 from unittest.mock import patch
 
@@ -39,12 +40,14 @@ def test_checkpoint_model() -> None:
         run_id="test_run_123",
         provider="test_provider",
         dataset="test_dataset",
+        table_name="test_provider_test_dataset",
         completed=["AAPL", "MSFT"],
         failed=["GOOG"],
     )
     assert checkpoint.run_id == "test_run_123"
     assert checkpoint.provider == "test_provider"
     assert checkpoint.dataset == "test_dataset"
+    assert checkpoint.table_name == "test_provider_test_dataset"
     assert checkpoint.completed == ["AAPL", "MSFT"]
     assert checkpoint.failed == ["GOOG"]
     data = checkpoint.model_dump()
@@ -64,6 +67,7 @@ def test_save_and_load_checkpoint() -> None:
             run_id="test_run_123",
             provider="test_provider",
             dataset="test_dataset",
+            table_name="test_provider_test_dataset",
             completed=["AAPL", "MSFT"],
             failed=["GOOG"],
         )
@@ -72,6 +76,7 @@ def test_save_and_load_checkpoint() -> None:
         loaded = load_checkpoint("test_run_123")
         assert loaded is not None
         assert loaded.run_id == "test_run_123"
+        assert loaded.table_name == "test_provider_test_dataset"
         assert loaded.completed == ["AAPL", "MSFT"]
         assert loaded.failed == ["GOOG"]
         assert loaded.pending_jobs == []
@@ -96,6 +101,7 @@ def test_save_and_load_checkpoint_with_pending_jobs() -> None:
             run_id="test_run_456",
             provider="test_provider",
             dataset="test_dataset",
+            table_name="test_provider_test_dataset",
             pending_jobs=[pending_job],
         )
         save_checkpoint(checkpoint)
@@ -115,11 +121,185 @@ def test_find_latest_checkpoint_uses_sqlite_ordering() -> None:
         ),
         patch("vertex_forager.core.checkpoint.time.time", side_effect=[100.0, 100.0, 200.0, 200.0]),
     ):
-        save_checkpoint(Checkpoint(run_id="run_old", provider="stub", dataset="prices"))
-        save_checkpoint(Checkpoint(run_id="run_new", provider="stub", dataset="prices"))
-        latest = find_latest_checkpoint("stub", "prices")
+        save_checkpoint(Checkpoint(run_id="run_old", provider="stub", dataset="prices", table_name="stub_prices"))
+        save_checkpoint(Checkpoint(run_id="run_new", provider="stub", dataset="prices", table_name="stub_prices"))
+        latest = find_latest_checkpoint(table_name="stub_prices")
         assert latest is not None
         assert latest.run_id == "run_new"
+
+
+def test_initialize_schema_marks_legacy_in_progress_checkpoints_completed() -> None:
+    with (
+        tempfile.TemporaryDirectory() as tmpdir,
+        patch(
+            "vertex_forager.core.checkpoint.get_cache_dir",
+            return_value=Path(tmpdir),
+        ),
+    ):
+        db_path = get_state_db_path()
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(db_path) as conn:
+            conn.execute(
+                """
+                CREATE TABLE checkpoints (
+                    run_id TEXT PRIMARY KEY,
+                    provider TEXT NOT NULL,
+                    dataset TEXT NOT NULL,
+                    completed_json TEXT NOT NULL,
+                    failed_json TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    updated_at REAL NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO checkpoints (
+                    run_id,
+                    provider,
+                    dataset,
+                    completed_json,
+                    failed_json,
+                    status,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                ("legacy-run", "stub", "prices", "[]", "[]", "in_progress", 100.0),
+            )
+            conn.commit()
+
+        latest = find_latest_checkpoint(table_name="stub_prices")
+        assert latest is None
+
+        with sqlite3.connect(db_path) as conn:
+            row = conn.execute(
+                "SELECT table_name, status FROM checkpoints WHERE run_id = ?", ("legacy-run",)
+            ).fetchone()
+            assert row is not None
+            assert row[0] is None
+            assert row[1] == "completed"
+
+
+def test_migrate_run_history_preserves_empty_table_runs() -> None:
+    with (
+        tempfile.TemporaryDirectory() as tmpdir,
+        patch(
+            "vertex_forager.core.checkpoint.get_cache_dir",
+            return_value=Path(tmpdir),
+        ),
+    ):
+        db_path = get_state_db_path()
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(db_path) as conn:
+            conn.execute(
+                """
+                CREATE TABLE run_history (
+                    run_id TEXT PRIMARY KEY,
+                    provider TEXT NOT NULL,
+                    dataset TEXT,
+                    started_at REAL,
+                    finished_at REAL,
+                    duration_s REAL,
+                    tables_json TEXT NOT NULL,
+                    error_count INTEGER NOT NULL,
+                    errors_json TEXT NOT NULL,
+                    quality_violations_json TEXT NOT NULL,
+                    coverage_pct REAL,
+                    created_at REAL NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO run_history (
+                    run_id,
+                    provider,
+                    dataset,
+                    started_at,
+                    finished_at,
+                    duration_s,
+                    tables_json,
+                    error_count,
+                    errors_json,
+                    quality_violations_json,
+                    coverage_pct,
+                    created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                ("legacy-empty", "stub", "prices", 100.0, 110.0, 10.0, "{}", 1, "[]", "{}", None, 120.0),
+            )
+            conn.commit()
+
+        history = list_run_history(limit=10)
+        assert len(history) == 1
+        assert history[0]["run_id"] == "legacy-empty"
+        assert history[0]["table_name"] is None
+        assert history[0]["tables"] == {}
+        assert history[0]["total_rows"] == 0
+
+
+def test_migrate_run_history_rolls_back_on_failure() -> None:
+    with (
+        tempfile.TemporaryDirectory() as tmpdir,
+        patch(
+            "vertex_forager.core.checkpoint.get_cache_dir",
+            return_value=Path(tmpdir),
+        ),
+    ):
+        db_path = get_state_db_path()
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(db_path) as conn:
+            conn.execute(
+                """
+                CREATE TABLE run_history (
+                    run_id TEXT PRIMARY KEY,
+                    provider TEXT NOT NULL,
+                    dataset TEXT,
+                    started_at REAL,
+                    finished_at REAL,
+                    duration_s REAL,
+                    tables_json TEXT NOT NULL,
+                    error_count INTEGER NOT NULL,
+                    errors_json TEXT NOT NULL,
+                    quality_violations_json TEXT NOT NULL,
+                    coverage_pct REAL,
+                    created_at REAL NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO run_history (
+                    run_id,
+                    provider,
+                    dataset,
+                    started_at,
+                    finished_at,
+                    duration_s,
+                    tables_json,
+                    error_count,
+                    errors_json,
+                    quality_violations_json,
+                    coverage_pct,
+                    created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                ("legacy-bad", "stub", "prices", 100.0, 110.0, 10.0, "{}", "bad", "[]", "{}", None, 120.0),
+            )
+            conn.commit()
+
+        with pytest.raises(ValueError, match="invalid literal for int"):
+            list_run_history(limit=10)
+
+        with sqlite3.connect(db_path) as conn:
+            table_names = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+            assert "run_history" in table_names
+            assert "run_history_legacy" not in table_names
+            row = conn.execute("SELECT run_id, error_count FROM run_history").fetchone()
+            assert row == ("legacy-bad", "bad")
 
 
 def test_save_run_history() -> None:
@@ -161,15 +341,57 @@ def test_save_run_history() -> None:
         )
         save_run_history(run_result, "test_run_123")
         history = list_run_history(limit=10)
-        assert len(history) == 1
-        entry = history[0]
+        assert len(history) == 2
+        table1_history = list_run_history(limit=10, table_name="table1")
+        table2_history = list_run_history(limit=10, table_name="table2")
+        assert len(table1_history) == 1
+        assert len(table2_history) == 1
+        entry = table1_history[0]
         assert entry["run_id"] == "test_run_123"
         assert entry["provider"] == "test_provider"
         assert entry["dataset"] == "test_dataset"
+        assert entry["table_name"] == "table1"
         assert entry["duration_s"] == 100.0
         assert entry["error_count"] == 2
-        assert entry["total_rows"] == 300
+        assert entry["total_rows"] == 100
         assert entry["coverage_pct"] == 95.5
+        assert table2_history[0]["total_rows"] == 200
+
+
+def test_save_run_history_preserves_empty_table_runs() -> None:
+    with (
+        tempfile.TemporaryDirectory() as tmpdir,
+        patch(
+            "vertex_forager.core.checkpoint.get_cache_dir",
+            return_value=Path(tmpdir),
+        ),
+    ):
+        run_result = RunResult(
+            provider="test_provider",
+            run_id="empty_run",
+            dataset="test_dataset",
+            started_at=1000.0,
+            finished_at=1100.0,
+            duration_s=100.0,
+            tables={},
+            errors=[
+                RunError(
+                    provider="test_provider",
+                    dataset="test_dataset",
+                    symbol="",
+                    exc_type="ValueError",
+                    message="failed before write",
+                    retryable=False,
+                )
+            ],
+        )
+        save_run_history(run_result, "empty_run")
+        history = list_run_history(limit=10)
+        assert len(history) == 1
+        assert history[0]["run_id"] == "empty_run"
+        assert history[0]["table_name"] is None
+        assert history[0]["tables"] == {}
+        assert history[0]["total_rows"] == 0
 
 
 def test_dlq_index_registration_roundtrip() -> None:
@@ -187,7 +409,9 @@ def test_dlq_index_registration_roundtrip() -> None:
         path = Path(tmpdir) / "dlq" / "prices" / "batch_1.ipc"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"ipc")
-        register_dlq_entry(path=path, table="prices", provider="stub", row_count=12)
+        register_dlq_entry(
+            path=path, table="prices", provider="stub", row_count=12, output_uri="duckdb:///tmp/test.duckdb"
+        )
         entries = list_pending_dlq_entries("prices")
         assert len(entries) == 1
         assert entries[0]["table"] == "prices"
@@ -210,7 +434,9 @@ def test_delete_dlq_entry_validates_root_and_deletes_db_row() -> None:
         path = Path(tmpdir) / "dlq" / "prices" / "batch_1.ipc"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"ipc")
-        register_dlq_entry(path=path, table="prices", provider="stub", row_count=12)
+        register_dlq_entry(
+            path=path, table="prices", provider="stub", row_count=12, output_uri="duckdb:///tmp/test.duckdb"
+        )
 
         assert delete_dlq_entry(path) is True
         assert not path.exists()

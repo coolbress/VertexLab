@@ -6,7 +6,7 @@ Overview of the `vertex_forager` package structure. See [API Reference](api.md) 
 
 ```text
 vertex_forager/
-├── api.py              # Public API helpers (client/router/writer factories)
+├── api.py              # Public API helpers and top-level re-exports
 ├── cli.py              # CLI entrypoint
 ├── constants.py        # Provider datasets, rate limits, default values
 ├── exceptions.py       # Exception hierarchy (VertexForagerError → leaf errors)
@@ -30,6 +30,11 @@ vertex_forager/
 │   ├── base.py         # Base client contract/helpers
 │   ├── dispatcher.py   # Provider client dispatch
 │   └── validation.py   # Client argument/config validation
+├── state/
+│   ├── manager.py      # StateManager (credential-free state entrypoint)
+│   ├── dlq.py          # DLQNamespace, DLQEntry, ReplayResult
+│   ├── runs.py         # RunsNamespace, RunRecord
+│   └── checkpoints.py  # CheckpointsNamespace
 ├── providers/
 │   ├── sharadar/       # Sharadar provider implementation (client/router/schema)
 │   └── yfinance/       # YFinance provider implementation (client/router/schema)
@@ -53,6 +58,7 @@ vertex_forager/
 | Use case | Import | Details |
 |----------|--------|---------|
 | Create a client | `from vertex_forager import create_client` | [API Reference → Factories](api.md#factories) |
+| Inspect local state | `from vertex_forager import StateManager` | [API Reference → State](api.md#state) |
 | Pipeline engine | `from vertex_forager.core import VertexForager` | [API Reference → Pipeline Engine](api.md#pipeline-engine) |
 | Configuration | `from vertex_forager import RetryConfig, AdaptiveThrottleConfig, HTTPConfig, StorageConfig` | [API Reference → Configuration](api.md#configuration) |
 | Flow control | `from vertex_forager.core.controller import FlowController` | [API Reference → Flow Control](api.md#flow-control) |

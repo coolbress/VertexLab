@@ -95,7 +95,12 @@ async def test_pagination_fairness_serves_new_symbol_before_long_tail(monkeypatc
     async def on_progress(snapshot: ProgressSnapshot) -> None:
         snapshots.append(snapshot)
 
-    res: RunResult = await engine.run(dataset="d", symbols=["AAPL", "MSFT"], on_progress=on_progress)
+    res: RunResult = await engine.run(
+        dataset="d",
+        symbols=["AAPL", "MSFT"],
+        on_progress=on_progress,
+        table_name="stub_table",
+    )
     assert isinstance(res, RunResult)
     assert snapshots
     assert snapshots[-1].finished is True

@@ -53,7 +53,7 @@ from vertex_forager.core.checkpoint import (
     save_checkpoint,
     save_run_history,
 )
-from vertex_forager.core.config import ProgressSnapshot, RunResult
+from vertex_forager.core.config import FetchJob, ProgressSnapshot, RunResult
 from vertex_forager.core.dlq import (
     build_writer_error_summary,
     spool_to_dlq_and_rescue,
@@ -122,6 +122,7 @@ from vertex_forager.core.errors import (
 )
 from vertex_forager.schema.registry import get_table_schema
 from vertex_forager.utils import sanitize_field
+from vertex_forager.writers.memory import InMemoryBufferWriter
 
 if TYPE_CHECKING:
     import polars as pl
@@ -522,12 +523,15 @@ class VertexForager:
         run_id: str,
         provider: str,
         dataset: str,
+        table_name: str | None,
         completed_symbols: set[str],
         failed_symbols: set[str],
         pending_jobs: Sequence[FetchJob],
         status: Literal["in_progress", "completed"] = "in_progress",
     ) -> None:
         """Update checkpoint with completed and failed symbols."""
+        if isinstance(self._writer, InMemoryBufferWriter):
+            return
         if not completed_symbols and not failed_symbols and not pending_jobs:
             return
 
@@ -535,9 +539,11 @@ class VertexForager:
             run_id=run_id,
             provider=provider,
             dataset=dataset,
+            table_name=table_name,
             completed=list(completed_symbols),
             failed=list(failed_symbols),
             pending_jobs=list(pending_jobs),
+            meta={"requested_symbols": list(getattr(self, "_requested_symbols", []))},
             status=status,
         )
 
@@ -559,6 +565,57 @@ class VertexForager:
         """
         return find_latest_checkpoint(provider, dataset)
 
+    def _snapshot_pending_jobs(self) -> list[FetchJob]:
+        req_q = cast("asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] | None", getattr(self, "_req_q", None))
+        jobs: list[FetchJob] = []
+        seen: set[str] = set()
+        for job in self._pending_jobs:
+            signature = self._job_signature(job)
+            if signature in seen:
+                continue
+            seen.add(signature)
+            jobs.append(job)
+        if req_q is None:
+            return jobs
+        for _, _, queued_job in list(getattr(req_q, "_queue", [])):
+            if not isinstance(queued_job, FetchJob):
+                continue
+            signature = self._job_signature(queued_job)
+            if signature in seen:
+                continue
+            seen.add(signature)
+            jobs.append(queued_job)
+        return jobs
+
+    def _writer_output_uri(self) -> str | None:
+        db_path = getattr(self._writer, "db_path", None)
+        if isinstance(db_path, str) and db_path:
+            return f"duckdb://{db_path}"
+        return None
+
+    def _resolve_checkpoint_table_name(
+        self,
+        *,
+        table_name: str | None,
+        checkpoint: Checkpoint | None,
+    ) -> str:
+        resolved_table_name = table_name or (checkpoint.table_name if checkpoint is not None else None)
+        if resolved_table_name is None:
+            raise ValueError("Pipeline run requires table_name or checkpoint.table_name")
+        return resolved_table_name
+
+    def _prepare_run_inputs(
+        self,
+        *,
+        symbols: Symbols | None,
+        table_name: str | None,
+        checkpoint: Checkpoint | None,
+    ) -> str:
+        self._requested_symbols = list(symbols or [])
+        resolved_table_name = self._resolve_checkpoint_table_name(table_name=table_name, checkpoint=checkpoint)
+        self._checkpoint_table_name = resolved_table_name
+        return resolved_table_name
+
     async def run(
         self,
         *,
@@ -566,7 +623,8 @@ class VertexForager:
         symbols: Symbols | None,
         on_progress: Callable[[ProgressSnapshot], Any] | None = None,
         progress: bool = False,
-        resume: bool = False,
+        checkpoint: Checkpoint | None = None,
+        table_name: str | None = None,
         **kwargs: object,
     ) -> RunResult:
         """Execute the pipeline.
@@ -590,7 +648,8 @@ class VertexForager:
             symbols: List of symbols to fetch, or None for all.
             on_progress: Optional callback receiving ProgressSnapshot on each job completion.
             progress: Whether to show the built-in progress bar and final summary.
-            resume: Whether to resume from existing checkpoint (default: False).
+            checkpoint: Optional checkpoint state to resume from.
+            table_name: Destination table name used for checkpoint persistence.
             **kwargs: Additional arguments passed to the router's generate_jobs method.
 
         Returns:
@@ -607,11 +666,14 @@ class VertexForager:
               and are not re-raised by default.
             - Callers should inspect `RunResult.errors` for per-task failures and
               only expect orchestration-level issues to raise.
-            - When `resume=True`, symbols already completed in previous runs will be skipped
-              based on checkpoint rows stored in ~/.cache/vertex-forager/state.db.
         """
         if self._running:
             raise RuntimeError("Pipeline is already running; concurrent run() calls are not supported")
+        self._prepare_run_inputs(
+            symbols=symbols,
+            table_name=table_name,
+            checkpoint=checkpoint,
+        )
         self._running = True
         self._progress_started_at = 0.0
         req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] | None = None
@@ -624,7 +686,7 @@ class VertexForager:
         completed_symbols: set[str] = set()
 
         try:
-            run_id, completed_symbols = self._initialize_run_state(dataset=dataset, resume=resume)
+            run_id, completed_symbols = self._initialize_run_state(dataset=dataset, checkpoint=checkpoint)
             req_q, pkt_q = self._create_run_queues()
             self._init_metrics_for_run()
             t_run0 = time.monotonic()
@@ -634,7 +696,7 @@ class VertexForager:
             jobs_total = _count_requested_symbol_units(symbols)
             jobs_done_initial = (
                 _count_completed_symbol_units(requested_symbols=symbols, completed_symbols=completed_symbols)
-                if resume
+                if checkpoint is not None
                 else 0
             )
             self._reset_progress_runtime(jobs_total=jobs_total, jobs_done_initial=jobs_done_initial)
@@ -706,7 +768,7 @@ class VertexForager:
                                     requested_symbols=symbols,
                                     completed_symbols=completed_symbols,
                                 )
-                                if resume
+                                if checkpoint is not None
                                 else 0,
                             )
                         await self._emit_progress_snapshot(
@@ -888,22 +950,19 @@ class VertexForager:
         await writer_monitor
         await fetch_monitor
 
-    def _initialize_run_state(self, *, dataset: str, resume: bool) -> tuple[str, set[str]]:
+    def _initialize_run_state(self, *, dataset: str, checkpoint: Checkpoint | None) -> tuple[str, set[str]]:
         run_id, completed_symbols, failed_symbols = initialize_run_state_impl(
             provider=self._router.provider,
             dataset=dataset,
-            resume=resume,
-            find_latest_checkpoint=self._find_latest_checkpoint,
+            checkpoint=checkpoint,
             logger=logger,
         )
         self._run_id = run_id
         self._completed_symbols = set(completed_symbols)
         self._failed_symbols = set(failed_symbols)
         self._pending_jobs = []
-        if resume:
-            latest_checkpoint = self._find_latest_checkpoint(self._router.provider, dataset)
-            if latest_checkpoint is not None:
-                self._merge_pending_jobs(latest_checkpoint.pending_jobs)
+        if checkpoint is not None:
+            self._merge_pending_jobs(checkpoint.pending_jobs)
         return run_id, completed_symbols
 
     def _create_run_queues(
@@ -1001,13 +1060,14 @@ class VertexForager:
                 run_id,
                 self._router.provider,
                 dataset,
+                getattr(self, "_checkpoint_table_name", None),
                 self._completed_symbols,
                 self._failed_symbols,
-                self._pending_jobs,
+                self._snapshot_pending_jobs(),
                 "completed" if not self._failed_symbols and not self._pending_jobs else "in_progress",
             )
         try:
-            save_run_history(result, run_id)
+            save_run_history(result, run_id, table_name=self._checkpoint_table_name)
             logger.debug("PIPELINE: Run history saved for run %s", run_id)
         except Exception as e:
             logger.warning("PIPELINE: Failed to save run history: %s", e)
@@ -1304,7 +1364,13 @@ class VertexForager:
                     os.replace(tmp_path, fpath)
                     _fsync_dir(str(dlq_dir))
                     try:
-                        register_dlq_entry(path=fpath, table=pkt.table, provider=pkt.provider, row_count=len(pkt.frame))
+                        register_dlq_entry(
+                            path=fpath,
+                            table=pkt.table,
+                            provider=pkt.provider,
+                            row_count=len(pkt.frame),
+                            output_uri=self._writer_output_uri(),
+                        )
                     except Exception as reg_err:
                         with suppress(OSError):
                             fpath.unlink()
@@ -1815,9 +1881,10 @@ class VertexForager:
                     self._run_id,
                     self._router.provider,
                     job.dataset,
+                    getattr(self, "_checkpoint_table_name", None),
                     self._completed_symbols,
                     self._failed_symbols,
-                    self._pending_jobs,
+                    self._snapshot_pending_jobs(),
                 )
 
     async def _validate_data_quality(
