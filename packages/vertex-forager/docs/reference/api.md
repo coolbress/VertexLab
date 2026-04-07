@@ -16,6 +16,18 @@ These abstractions define the public provider-facing contract that concrete clie
 
 ::: vertex_forager.api.BaseRouter
 
+## State
+
+These APIs expose credential-free access to persisted local runtime state.
+
+::: vertex_forager.api.StateManager
+
+::: vertex_forager.api.DLQEntry
+
+::: vertex_forager.api.ReplayResult
+
+::: vertex_forager.api.RunRecord
+
 ## Pipeline Engine
 
 The pipeline engine coordinates fetch, parse, normalize, and write stages for a run.
@@ -113,6 +125,8 @@ These are the main public exception types you should catch around client usage a
 ::: vertex_forager.exceptions.InputError
 
 ::: vertex_forager.exceptions.FetchError
+
+::: vertex_forager.exceptions.CheckpointNotFoundError
 
 ::: vertex_forager.exceptions.TransformError
 

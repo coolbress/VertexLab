@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from collections import deque
-    from collections.abc import Callable
     from pathlib import Path
 
 from vertex_forager.core.checkpoint import Checkpoint, cleanup_state_retention
@@ -19,26 +18,17 @@ def initialize_run_state(
     *,
     provider: str,
     dataset: str,
-    resume: bool,
-    find_latest_checkpoint: Callable[[str, str], Checkpoint | None],
+    checkpoint: Checkpoint | None,
     logger: Any,
 ) -> tuple[str, set[str], set[str]]:
     run_id = f"{provider}_{dataset}_{int(time.time())}"
     completed_symbols: set[str] = set()
     failed_symbols: set[str] = set()
-    if not resume:
+    if checkpoint is None:
         return run_id, completed_symbols, failed_symbols
-    latest_checkpoint = find_latest_checkpoint(provider, dataset)
-    if latest_checkpoint is None:
-        logger.info(
-            "PIPELINE: No checkpoint found for provider %s and dataset %s, starting fresh",
-            provider,
-            dataset,
-        )
-        return run_id, completed_symbols, failed_symbols
-    run_id = latest_checkpoint.run_id
-    completed_symbols = set(latest_checkpoint.completed)
-    failed_symbols = set(latest_checkpoint.failed)
+    run_id = checkpoint.run_id
+    completed_symbols = set(checkpoint.completed)
+    failed_symbols = set(checkpoint.failed)
     logger.info(
         "PIPELINE: Resuming from checkpoint %s, skipping %d completed symbols",
         run_id,

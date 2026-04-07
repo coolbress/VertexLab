@@ -26,11 +26,16 @@ from vertex_forager.providers.sharadar.client import SharadarClient
 from vertex_forager.providers.yfinance.client import YFinanceClient
 from vertex_forager.routers import create_router
 from vertex_forager.routers.base import BaseRouter
+from vertex_forager.state import DLQEntry, ReplayResult, RunRecord, StateManager
 
 __all__ = [
     "BaseClient",
     "BaseRouter",
+    "DLQEntry",
+    "ReplayResult",
+    "RunRecord",
     "SharadarClient",
+    "StateManager",
     "YFinanceClient",
     "create_client",
     "create_router",

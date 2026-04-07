@@ -18,6 +18,7 @@ from vertex_forager.core.config import (
     RunResult,
 )
 from vertex_forager.core.contracts import IMapper, IRouter, IWriter
+from vertex_forager.exceptions import InputError
 from vertex_forager.writers.base import WriteResult
 
 
@@ -95,3 +96,22 @@ async def test_dispatcher_runs_with_empty_symbols() -> None:
     )
     assert isinstance(res, RunResult)
     assert res.provider == "stub"
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_rejects_removed_resume_kwarg() -> None:
+    client = StubClient()
+    router = StubRouter()
+    writer = StubWriter()
+    mapper = StubMapper()
+
+    with pytest.raises(InputError, match="StateManager"):
+        await run_pipeline_for(
+            client=client,
+            router=router,
+            dataset="test",
+            symbols=["AAPL"],
+            writer=writer,
+            mapper=mapper,
+            resume=True,
+        )

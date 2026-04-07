@@ -19,8 +19,8 @@ When `VERTEXFORAGER_ROOT` is set, the cache moves under `$VERTEXFORAGER_ROOT/cac
 
 - `checkpoints`
   - One row per run ID
-  - Provider, dataset, completed symbols, failed symbols
-  - Used by `resume=True` to skip symbols already completed in a prior run
+  - Provider, dataset, completed symbols, failed symbols, pending jobs
+  - Used by `StateManager().checkpoints.resume(...)` to re-enter an interrupted run
 - `run_history`
   - One row per completed run
   - Run timing, per-table row counts, error count, serialized errors, quality violations, coverage
@@ -32,34 +32,36 @@ When `VERTEXFORAGER_ROOT` is set, the cache moves under `$VERTEXFORAGER_ROOT/cac
 
 ## How checkpoints are created
 
-Checkpoints are written automatically at the end of a pipeline run. A completed run persists:
+Checkpoints are written automatically during persisted pipeline runs. Each checkpoint captures:
 
 - the run ID
 - the provider and dataset
 - the completed symbol set
 - the failed symbol set
+- any still-pending jobs needed for resume
 
 ## Resume a run
 
-Use the same provider and dataset with `resume=True`:
+Use `StateManager` to resume an interrupted run explicitly:
 
 ```python
-from vertex_forager import create_client
+from vertex_forager import StateManager, create_client
 
 client = create_client(
     provider="sharadar",
     api_key="...",
     rate_limit=300,
 )
+state = StateManager()
 
-result = client.get_price_data(
-    tickers=["AAPL", "MSFT", "NVDA"],
-    connect_db="forager.duckdb",
-    resume=True,
+result = state.checkpoints.resume(
+    table="sharadar_price",
+    client=client,
+    output="duckdb:///forager.duckdb",
 )
 ```
 
-When a matching checkpoint exists, completed symbols are skipped automatically.
+When a matching checkpoint exists, completed symbols are skipped and pending jobs are replayed from stored state.
 
 ## Inspect run history
 

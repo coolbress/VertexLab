@@ -45,6 +45,10 @@ class ValidationError(VertexForagerError):
     """Schema or data validation failures."""
 
 
+class CheckpointNotFoundError(VertexForagerError):
+    """Requested checkpoint state is not available."""
+
+
 class SchemaMapError(TransformError):
     """Raised when an unsupported schema type mapping is encountered in strict mode."""
 

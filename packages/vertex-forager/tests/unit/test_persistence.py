@@ -39,12 +39,14 @@ def test_checkpoint_model() -> None:
         run_id="test_run_123",
         provider="test_provider",
         dataset="test_dataset",
+        table_name="test_provider_test_dataset",
         completed=["AAPL", "MSFT"],
         failed=["GOOG"],
     )
     assert checkpoint.run_id == "test_run_123"
     assert checkpoint.provider == "test_provider"
     assert checkpoint.dataset == "test_dataset"
+    assert checkpoint.table_name == "test_provider_test_dataset"
     assert checkpoint.completed == ["AAPL", "MSFT"]
     assert checkpoint.failed == ["GOOG"]
     data = checkpoint.model_dump()
@@ -64,6 +66,7 @@ def test_save_and_load_checkpoint() -> None:
             run_id="test_run_123",
             provider="test_provider",
             dataset="test_dataset",
+            table_name="test_provider_test_dataset",
             completed=["AAPL", "MSFT"],
             failed=["GOOG"],
         )
@@ -72,6 +75,7 @@ def test_save_and_load_checkpoint() -> None:
         loaded = load_checkpoint("test_run_123")
         assert loaded is not None
         assert loaded.run_id == "test_run_123"
+        assert loaded.table_name == "test_provider_test_dataset"
         assert loaded.completed == ["AAPL", "MSFT"]
         assert loaded.failed == ["GOOG"]
         assert loaded.pending_jobs == []
@@ -96,6 +100,7 @@ def test_save_and_load_checkpoint_with_pending_jobs() -> None:
             run_id="test_run_456",
             provider="test_provider",
             dataset="test_dataset",
+            table_name="test_provider_test_dataset",
             pending_jobs=[pending_job],
         )
         save_checkpoint(checkpoint)
@@ -115,9 +120,9 @@ def test_find_latest_checkpoint_uses_sqlite_ordering() -> None:
         ),
         patch("vertex_forager.core.checkpoint.time.time", side_effect=[100.0, 100.0, 200.0, 200.0]),
     ):
-        save_checkpoint(Checkpoint(run_id="run_old", provider="stub", dataset="prices"))
-        save_checkpoint(Checkpoint(run_id="run_new", provider="stub", dataset="prices"))
-        latest = find_latest_checkpoint("stub", "prices")
+        save_checkpoint(Checkpoint(run_id="run_old", provider="stub", dataset="prices", table_name="stub_prices"))
+        save_checkpoint(Checkpoint(run_id="run_new", provider="stub", dataset="prices", table_name="stub_prices"))
+        latest = find_latest_checkpoint(table_name="stub_prices")
         assert latest is not None
         assert latest.run_id == "run_new"
 
@@ -166,6 +171,7 @@ def test_save_run_history() -> None:
         assert entry["run_id"] == "test_run_123"
         assert entry["provider"] == "test_provider"
         assert entry["dataset"] == "test_dataset"
+        assert entry["table_name"] == "table1"
         assert entry["duration_s"] == 100.0
         assert entry["error_count"] == 2
         assert entry["total_rows"] == 300
@@ -187,7 +193,7 @@ def test_dlq_index_registration_roundtrip() -> None:
         path = Path(tmpdir) / "dlq" / "prices" / "batch_1.ipc"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"ipc")
-        register_dlq_entry(path=path, table="prices", provider="stub", row_count=12)
+        register_dlq_entry(path=path, table="prices", provider="stub", row_count=12, output_uri="duckdb:///tmp/test.duckdb")
         entries = list_pending_dlq_entries("prices")
         assert len(entries) == 1
         assert entries[0]["table"] == "prices"
@@ -210,7 +216,7 @@ def test_delete_dlq_entry_validates_root_and_deletes_db_row() -> None:
         path = Path(tmpdir) / "dlq" / "prices" / "batch_1.ipc"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"ipc")
-        register_dlq_entry(path=path, table="prices", provider="stub", row_count=12)
+        register_dlq_entry(path=path, table="prices", provider="stub", row_count=12, output_uri="duckdb:///tmp/test.duckdb")
 
         assert delete_dlq_entry(path) is True
         assert not path.exists()

@@ -29,6 +29,7 @@ from vertex_forager.utils import make_sync, validate_tickers
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from vertex_forager.core.checkpoint import Checkpoint
     from vertex_forager.core.config import (
         AdaptiveThrottleConfig,
         HTTPConfig,
@@ -549,6 +550,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
         symbols: list[str] | None,
         connect_db: str | Path | None,
         table_name: str,
+        checkpoint: Checkpoint | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
         extra: dict[str, Any] | None = None,
@@ -617,6 +619,8 @@ class SharadarClient(BaseClient[SharadarDataset]):
                 mapper=self._mapper,
                 on_progress=on_progress,
                 progress=progress,
+                checkpoint=checkpoint,
+                table_name=table_name,
                 **pipeline_kwargs,
             )
 
@@ -626,6 +630,30 @@ class SharadarClient(BaseClient[SharadarDataset]):
                 connect_db=connect_db,
             )
             return result_obj
+
+    async def _resume_dataset_async(
+        self,
+        *,
+        dataset: str,
+        checkpoint: Checkpoint,
+        output: str,
+        progress: bool = False,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
+        **kwargs: Any,
+    ) -> RunResult:
+        symbols_raw = checkpoint.meta.get("requested_symbols", [])
+        symbols = [str(symbol) for symbol in symbols_raw] if isinstance(symbols_raw, list) else None
+        dataset_name: SharadarDataset = dataset  # type: ignore[assignment]
+        return await self._dispatch_fetch(
+            dataset=dataset_name,
+            symbols=symbols if symbols else None,
+            connect_db=output,
+            table_name=self._table_name_for_dataset(dataset_name),
+            checkpoint=checkpoint,
+            progress=progress,
+            on_progress=on_progress,
+            extra=dict(kwargs),
+        )
 
     # ----------------------------------------------------------------
     # Sharadar Exclusive Methods

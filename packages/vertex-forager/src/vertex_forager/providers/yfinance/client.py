@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
+    from vertex_forager.core.checkpoint import Checkpoint
     from vertex_forager.core.config import ProgressSnapshot
 
 logger = logging.getLogger(__name__)
@@ -688,6 +689,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         tickers: list[str],
         connect_db: str | Path | None,
         table_name: str,
+        checkpoint: Checkpoint | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
         progress: bool = False,
@@ -745,6 +747,8 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
                 mapper=self._mapper,
                 on_progress=on_progress,
                 progress=progress,
+                checkpoint=checkpoint,
+                table_name=table_name,
                 **{k: v for k, v in kwargs.items() if k not in (RESERVED_PIPELINE_KEYS | {PRICE_BATCH_SIZE_KEY})},
             )
 
@@ -754,3 +758,29 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
                 connect_db=connect_db,
             )
         return result_obj
+
+    async def _resume_dataset_async(
+        self,
+        *,
+        dataset: str,
+        checkpoint: Checkpoint,
+        output: str,
+        progress: bool = False,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
+        **kwargs: Any,
+    ) -> RunResult:
+        symbols_raw = checkpoint.meta.get("requested_symbols", [])
+        tickers = [str(symbol) for symbol in symbols_raw] if isinstance(symbols_raw, list) else []
+        if not tickers:
+            raise InputError("Checkpoint resume requires stored requested_symbols metadata")
+        dataset_name: YFinanceDataset = dataset  # type: ignore[assignment]
+        return await self._dispatch_fetch(
+            dataset=dataset_name,
+            tickers=tickers,
+            connect_db=output,
+            table_name=self._table_name_for_dataset(dataset_name),
+            checkpoint=checkpoint,
+            progress=progress,
+            on_progress=on_progress,
+            **kwargs,
+        )
