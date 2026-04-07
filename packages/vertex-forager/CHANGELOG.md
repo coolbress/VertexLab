@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.28.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.27.0...vertex-forager-v0.28.0) (2026-04-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* **vertex-forager:** add table-based state manager APIs ([#466](https://github.com/coolbress/VertexLab/issues/466))
+
+### Features
+
+* **vertex-forager:** add table-based state manager APIs ([#466](https://github.com/coolbress/VertexLab/issues/466)) ([4ee8222](https://github.com/coolbress/VertexLab/commit/4ee8222124d6138f49d6064784132ca13d23ba7d))
+
 ## [0.27.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.26.0...vertex-forager-v0.27.0) (2026-04-07)
 
 
