@@ -93,6 +93,7 @@ async def test_dispatcher_runs_with_empty_symbols() -> None:
         symbols=None,
         writer=writer,
         mapper=mapper,
+        table_name="stub_table",
     )
     assert isinstance(res, RunResult)
     assert res.provider == "stub"

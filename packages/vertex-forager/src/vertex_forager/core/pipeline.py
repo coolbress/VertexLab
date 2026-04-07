@@ -593,6 +593,29 @@ class VertexForager:
             return f"duckdb://{db_path}"
         return None
 
+    def _resolve_checkpoint_table_name(
+        self,
+        *,
+        table_name: str | None,
+        checkpoint: Checkpoint | None,
+    ) -> str:
+        resolved_table_name = table_name or (checkpoint.table_name if checkpoint is not None else None)
+        if resolved_table_name is None:
+            raise ValueError("Pipeline run requires table_name or checkpoint.table_name")
+        return resolved_table_name
+
+    def _prepare_run_inputs(
+        self,
+        *,
+        symbols: Symbols | None,
+        table_name: str | None,
+        checkpoint: Checkpoint | None,
+    ) -> str:
+        self._requested_symbols = list(symbols or [])
+        resolved_table_name = self._resolve_checkpoint_table_name(table_name=table_name, checkpoint=checkpoint)
+        self._checkpoint_table_name = resolved_table_name
+        return resolved_table_name
+
     async def run(
         self,
         *,
@@ -646,6 +669,11 @@ class VertexForager:
         """
         if self._running:
             raise RuntimeError("Pipeline is already running; concurrent run() calls are not supported")
+        self._prepare_run_inputs(
+            symbols=symbols,
+            table_name=table_name,
+            checkpoint=checkpoint,
+        )
         self._running = True
         self._progress_started_at = 0.0
         req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] | None = None
@@ -656,8 +684,6 @@ class VertexForager:
         final_progress_emitted = False
         progress_runtime_initialized = False
         completed_symbols: set[str] = set()
-        self._requested_symbols = list(symbols or [])
-        self._checkpoint_table_name = table_name
 
         try:
             run_id, completed_symbols = self._initialize_run_state(dataset=dataset, checkpoint=checkpoint)
@@ -1041,7 +1067,7 @@ class VertexForager:
                 "completed" if not self._failed_symbols and not self._pending_jobs else "in_progress",
             )
         try:
-            save_run_history(result, run_id)
+            save_run_history(result, run_id, table_name=self._checkpoint_table_name)
             logger.debug("PIPELINE: Run history saved for run %s", run_id)
         except Exception as e:
             logger.warning("PIPELINE: Failed to save run history: %s", e)

@@ -54,6 +54,8 @@ def test_state_manager_exports_and_runs_filters(tmp_path: Path, monkeypatch: pyt
     cleared = state.runs.clear(table="sharadar_price", before_days=30)
     assert cleared == 1
     assert [record.run_id for record in state.runs.list(limit=10)] == ["run-2"]
+    with pytest.raises(ValueError, match="non-negative"):
+        state.runs.clear(before_days=-1)
 
 
 def test_state_manager_dlq_list_clear_and_replay(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -111,6 +113,41 @@ def test_state_manager_dlq_list_clear_and_replay(tmp_path: Path, monkeypatch: py
     cleared = state.dlq.clear(table="yfinance_price")
     assert cleared == 3
     assert list_dlq_entries(table="yfinance_price", status=None) == []
+
+
+def test_state_manager_dlq_replay_does_not_fail_when_success_mark_update_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "vf-root"))
+    state = StateManager()
+    dlq_dir = get_cache_dir() / "dlq" / "yfinance_price"
+    dlq_dir.mkdir(parents=True, exist_ok=True)
+    good_path = dlq_dir / "batch_good.ipc"
+    pl.DataFrame(
+        {
+            "provider": ["yfinance"],
+            "ticker": ["AAPL"],
+            "date": [date(2024, 1, 1)],
+            "open": [1.0],
+            "high": [2.0],
+            "low": [0.5],
+            "close": [1.5],
+        }
+    ).write_ipc(good_path)
+    out_db = tmp_path / "replay.duckdb"
+    register_dlq_entry(path=good_path, table="yfinance_price", provider="yfinance", row_count=1, output_uri=None)
+
+    def _mark_dlq_retry_result(*, path: Path, success: bool, error: str | None = None) -> None:
+        if success:
+            raise RuntimeError("state update failed")
+
+    monkeypatch.setattr("vertex_forager.state.dlq.mark_dlq_retry_result", _mark_dlq_retry_result, raising=True)
+
+    result = state.dlq.replay(table="yfinance_price", output=f"duckdb://{out_db}")
+    assert result.replayed == 1
+    assert result.failed == 0
+    assert result.skipped == 0
+    assert result.errors == []
 
 
 def test_state_manager_checkpoints_resume_and_clear(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -109,7 +109,7 @@ async def test_pipeline_records_writer_validation_errors(
         controller=client.controller,
     )
     try:
-        res = await pipeline.run(dataset="price", symbols=None)
+        res = await pipeline.run(dataset="price", symbols=None, table_name="yfinance_price")
         assert isinstance(res, RunResult)
         assert any("Missing PK column" in err.message for err in res.errors)
         # DLQ may not be triggered for PK missing errors, so remove this assertion

@@ -85,5 +85,8 @@ class RunsNamespace:
     ) -> int:
         before_ts = None
         if before_days is not None:
-            before_ts = time.time() - (max(0, int(before_days)) * 86_400)
+            days = int(before_days)
+            if days < 0:
+                raise ValueError("before_days must be non-negative")
+            before_ts = time.time() - (days * 86_400)
         return delete_run_history(table_name=table, before_ts=before_ts)

@@ -196,7 +196,7 @@ async def test_stop_triggers_writer_flush() -> None:
     engine = VertexForager(router=router, http=http, writer=writer, mapper=None, config=config, controller=controller)
 
     async def run_and_cancel():
-        task = asyncio.create_task(engine.run(dataset="d", symbols=["AAPL"]))
+        task = asyncio.create_task(engine.run(dataset="d", symbols=["AAPL"], table_name="stub_table"))
         await asyncio.sleep(0.05)
         await engine.stop()
         if not task.done():

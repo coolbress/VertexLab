@@ -4,6 +4,7 @@ from collections.abc import Mapping, Sequence
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import logging
 from pathlib import Path
 from typing import cast
 
@@ -15,6 +16,8 @@ from vertex_forager.utils import run_sync_compat
 from vertex_forager.writers import create_writer
 from vertex_forager.writers.base import BaseWriter
 from vertex_forager.writers.memory import InMemoryBufferWriter
+
+logger = logging.getLogger(__name__)
 
 
 def _resolve_replay_entry(row: Mapping[str, object]) -> tuple[Path, str]:
@@ -152,7 +155,10 @@ class DLQNamespace:
                         errors.append(error)
                         mark_dlq_retry_result(path=path, success=False, error=error)
                         continue
-                    mark_dlq_retry_result(path=path, success=True)
+                    try:
+                        mark_dlq_retry_result(path=path, success=True)
+                    except Exception as exc:
+                        logger.warning("Failed to mark DLQ replay success for %s: %s", path, exc)
                     replayed += 1
                 except Exception as exc:
                     failed += 1

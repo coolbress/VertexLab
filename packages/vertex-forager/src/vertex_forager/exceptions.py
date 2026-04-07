@@ -134,6 +134,7 @@ class DataQualityError(VertexForagerError):
 
 
 __all__ = [
+    "CheckpointNotFoundError",
     "ComputeError",
     "DLQSpoolError",
     "DataQualityError",

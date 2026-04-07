@@ -166,16 +166,21 @@ def test_save_run_history() -> None:
         )
         save_run_history(run_result, "test_run_123")
         history = list_run_history(limit=10)
-        assert len(history) == 1
-        entry = history[0]
+        assert len(history) == 2
+        table1_history = list_run_history(limit=10, table_name="table1")
+        table2_history = list_run_history(limit=10, table_name="table2")
+        assert len(table1_history) == 1
+        assert len(table2_history) == 1
+        entry = table1_history[0]
         assert entry["run_id"] == "test_run_123"
         assert entry["provider"] == "test_provider"
         assert entry["dataset"] == "test_dataset"
         assert entry["table_name"] == "table1"
         assert entry["duration_s"] == 100.0
         assert entry["error_count"] == 2
-        assert entry["total_rows"] == 300
+        assert entry["total_rows"] == 100
         assert entry["coverage_pct"] == 95.5
+        assert table2_history[0]["total_rows"] == 200
 
 
 def test_dlq_index_registration_roundtrip() -> None:
@@ -193,7 +198,9 @@ def test_dlq_index_registration_roundtrip() -> None:
         path = Path(tmpdir) / "dlq" / "prices" / "batch_1.ipc"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"ipc")
-        register_dlq_entry(path=path, table="prices", provider="stub", row_count=12, output_uri="duckdb:///tmp/test.duckdb")
+        register_dlq_entry(
+            path=path, table="prices", provider="stub", row_count=12, output_uri="duckdb:///tmp/test.duckdb"
+        )
         entries = list_pending_dlq_entries("prices")
         assert len(entries) == 1
         assert entries[0]["table"] == "prices"
@@ -216,7 +223,9 @@ def test_delete_dlq_entry_validates_root_and_deletes_db_row() -> None:
         path = Path(tmpdir) / "dlq" / "prices" / "batch_1.ipc"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"ipc")
-        register_dlq_entry(path=path, table="prices", provider="stub", row_count=12, output_uri="duckdb:///tmp/test.duckdb")
+        register_dlq_entry(
+            path=path, table="prices", provider="stub", row_count=12, output_uri="duckdb:///tmp/test.duckdb"
+        )
 
         assert delete_dlq_entry(path) is True
         assert not path.exists()

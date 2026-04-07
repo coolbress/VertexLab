@@ -90,7 +90,8 @@ def _initialize_schema(conn: sqlite3.Connection) -> None:
             ON checkpoints(provider, dataset, updated_at DESC);
 
         CREATE TABLE IF NOT EXISTS run_history (
-            run_id TEXT PRIMARY KEY,
+            row_id TEXT PRIMARY KEY,
+            run_id TEXT NOT NULL,
             provider TEXT NOT NULL,
             dataset TEXT,
             table_name TEXT,
@@ -133,11 +134,12 @@ def _initialize_schema(conn: sqlite3.Connection) -> None:
     if "meta_json" not in checkpoint_columns:
         conn.execute("ALTER TABLE checkpoints ADD COLUMN meta_json TEXT NOT NULL DEFAULT '{}'")
     run_history_columns = {str(row["name"]) for row in conn.execute("PRAGMA table_info(run_history)").fetchall()}
-    if "table_name" not in run_history_columns:
-        conn.execute("ALTER TABLE run_history ADD COLUMN table_name TEXT")
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_checkpoints_table_updated ON checkpoints(table_name, updated_at DESC)"
-    )
+    if "row_id" not in run_history_columns:
+        _migrate_run_history_table(conn)
+    else:
+        if "table_name" not in run_history_columns:
+            conn.execute("ALTER TABLE run_history ADD COLUMN table_name TEXT")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_checkpoints_table_updated ON checkpoints(table_name, updated_at DESC)")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_run_history_table_created_at ON run_history(table_name, created_at DESC)"
     )
@@ -162,6 +164,10 @@ def _json_loads(value: str | None, default: JSONValue) -> JSONValue:
         return default
 
 
+def _build_run_history_row_id(run_id: str, table_name: str) -> str:
+    return f"{run_id}:{table_name}"
+
+
 def _serialize_run_error(error: object) -> dict[str, JSONValue]:
     """Convert a run error object to a JSON-serializable dictionary."""
     if isinstance(error, RunError):
@@ -183,24 +189,159 @@ def _serialize_run_error(error: object) -> dict[str, JSONValue]:
     }
 
 
-def _build_run_history_payload(run_result: RunResult, run_id: str) -> dict[str, JSONValue]:
-    """Build a serializable run-history payload."""
-    table_names = [str(name) for name in run_result.tables]
-    table_name = table_names[0] if table_names else None
-    return {
+def _build_run_history_payloads(
+    run_result: RunResult,
+    run_id: str,
+    *,
+    table_name: str | None = None,
+) -> list[dict[str, JSONValue]]:
+    """Build serializable run-history payloads at run/table granularity."""
+    errors = [_serialize_run_error(error) for error in run_result.errors]
+    quality_violations = {str(table): int(count) for table, count in run_result.quality_violations.items()}
+    base_payload: dict[str, JSONValue] = {
         "run_id": run_id,
         "provider": run_result.provider,
         "dataset": run_result.dataset,
-        "table_name": table_name,
         "started_at": run_result.started_at,
         "finished_at": run_result.finished_at,
         "duration_s": run_result.duration_s,
-        "tables": dict(run_result.tables),
         "error_count": len(run_result.errors),
-        "errors": [_serialize_run_error(error) for error in run_result.errors],
-        "quality_violations": {str(table): int(count) for table, count in run_result.quality_violations.items()},
+        "errors": errors,
+        "quality_violations": quality_violations,
         "coverage_pct": run_result.coverage_pct,
     }
+    payloads: list[dict[str, JSONValue]] = []
+    for current_table_name, row_count in run_result.tables.items():
+        table_key = str(current_table_name)
+        payloads.append(
+            {
+                **base_payload,
+                "row_id": _build_run_history_row_id(run_id, table_key),
+                "table_name": table_key,
+                "tables": {table_key: int(row_count)},
+            }
+        )
+    if payloads or table_name is None:
+        return payloads
+    return [
+        {
+            **base_payload,
+            "row_id": _build_run_history_row_id(run_id, table_name),
+            "table_name": table_name,
+            "tables": {},
+        }
+    ]
+
+
+def _migrate_run_history_table(conn: sqlite3.Connection) -> None:
+    legacy_columns = {str(row["name"]) for row in conn.execute("PRAGMA table_info(run_history)").fetchall()}
+    if "table_name" in legacy_columns:
+        legacy_rows = conn.execute(
+            """
+            SELECT
+                run_id,
+                provider,
+                dataset,
+                table_name,
+                started_at,
+                finished_at,
+                duration_s,
+                tables_json,
+                error_count,
+                errors_json,
+                quality_violations_json,
+                coverage_pct,
+                created_at
+            FROM run_history
+            """
+        ).fetchall()
+    else:
+        legacy_rows = conn.execute(
+            """
+            SELECT
+                run_id,
+                provider,
+                dataset,
+                NULL AS table_name,
+                started_at,
+                finished_at,
+                duration_s,
+                tables_json,
+                error_count,
+                errors_json,
+                quality_violations_json,
+                coverage_pct,
+                created_at
+            FROM run_history
+            """
+        ).fetchall()
+    conn.execute("ALTER TABLE run_history RENAME TO run_history_legacy")
+    conn.execute(
+        """
+        CREATE TABLE run_history (
+            row_id TEXT PRIMARY KEY,
+            run_id TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            dataset TEXT,
+            table_name TEXT,
+            started_at REAL,
+            finished_at REAL,
+            duration_s REAL,
+            tables_json TEXT NOT NULL,
+            error_count INTEGER NOT NULL,
+            errors_json TEXT NOT NULL,
+            quality_violations_json TEXT NOT NULL,
+            coverage_pct REAL,
+            created_at REAL NOT NULL
+        )
+        """
+    )
+    for row in legacy_rows:
+        tables = _json_loads(str(row["tables_json"]), {})
+        table_items = (
+            [(str(name), int(value)) for name, value in dict(tables).items()] if isinstance(tables, dict) else []
+        )
+        if not table_items and row["table_name"] is not None:
+            table_items = [(str(row["table_name"]), 0)]
+        for table_key, row_count in table_items:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO run_history (
+                    row_id,
+                    run_id,
+                    provider,
+                    dataset,
+                    table_name,
+                    started_at,
+                    finished_at,
+                    duration_s,
+                    tables_json,
+                    error_count,
+                    errors_json,
+                    quality_violations_json,
+                    coverage_pct,
+                    created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    _build_run_history_row_id(str(row["run_id"]), table_key),
+                    str(row["run_id"]),
+                    str(row["provider"]),
+                    row["dataset"],
+                    table_key,
+                    row["started_at"],
+                    row["finished_at"],
+                    row["duration_s"],
+                    _json_dumps({table_key: row_count}),
+                    int(row["error_count"]),
+                    str(row["errors_json"]),
+                    str(row["quality_violations_json"]),
+                    row["coverage_pct"],
+                    float(row["created_at"]),
+                ),
+            )
+    conn.execute("DROP TABLE run_history_legacy")
 
 
 def save_checkpoint(checkpoint: Checkpoint) -> None:
@@ -350,51 +491,56 @@ def find_latest_checkpoint(
         return None
 
 
-def save_run_history(run_result: RunResult, run_id: str) -> None:
+def save_run_history(run_result: RunResult, run_id: str, *, table_name: str | None = None) -> None:
     """Save run history to SQLite.
 
     Args:
         run_result: Run result to persist.
         run_id: Run identifier.
     """
-    payload = _build_run_history_payload(run_result, run_id)
+    payloads = _build_run_history_payloads(run_result, run_id, table_name=table_name)
+    if not payloads:
+        return
     created_at = float(run_result.finished_at or run_result.started_at or time.time())
     with closing(_connect_state_db()) as conn:
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO run_history (
-                run_id,
-                provider,
-                dataset,
-                table_name,
-                started_at,
-                finished_at,
-                duration_s,
-                tables_json,
-                error_count,
-                errors_json,
-                quality_violations_json,
-                coverage_pct,
-                created_at
+        for payload in payloads:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO run_history (
+                    row_id,
+                    run_id,
+                    provider,
+                    dataset,
+                    table_name,
+                    started_at,
+                    finished_at,
+                    duration_s,
+                    tables_json,
+                    error_count,
+                    errors_json,
+                    quality_violations_json,
+                    coverage_pct,
+                    created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    str(payload["row_id"]),
+                    str(payload["run_id"]),
+                    str(payload["provider"]),
+                    payload["dataset"],
+                    payload["table_name"],
+                    payload["started_at"],
+                    payload["finished_at"],
+                    payload["duration_s"],
+                    _json_dumps(payload["tables"]),
+                    int(cast("int", payload["error_count"])),
+                    _json_dumps(payload["errors"]),
+                    _json_dumps(payload["quality_violations"]),
+                    payload["coverage_pct"],
+                    created_at,
+                ),
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                str(payload["run_id"]),
-                str(payload["provider"]),
-                payload["dataset"],
-                payload["table_name"],
-                payload["started_at"],
-                payload["finished_at"],
-                payload["duration_s"],
-                _json_dumps(payload["tables"]),
-                int(cast("int", payload["error_count"])),
-                _json_dumps(payload["errors"]),
-                _json_dumps(payload["quality_violations"]),
-                payload["coverage_pct"],
-                created_at,
-            ),
-        )
         conn.commit()
 
 
@@ -525,10 +671,7 @@ def delete_checkpoints(*, table_name: str | None = None) -> int:
 
 def delete_all_checkpoints() -> int:
     """Delete all checkpoint rows."""
-    with closing(_connect_state_db()) as conn:
-        cursor = conn.execute("DELETE FROM checkpoints")
-        conn.commit()
-        return int(cursor.rowcount)
+    return delete_checkpoints()
 
 
 def register_dlq_entry(
@@ -605,7 +748,7 @@ def list_dlq_entries(
     if provider is not None:
         query += " AND provider = ?"
         params.append(provider)
-    if table:
+    if table is not None:
         query += " AND table_name = ?"
         params.append(table)
     query += " ORDER BY created_at DESC"

@@ -103,7 +103,7 @@ def test_e2e_pipeline_with_duckdb(tmp_path) -> None:
             config=ResolvedClientConfig(requests_per_minute=60),
             controller=FlowController(requests_per_minute=60, concurrency_limit=4),
         )
-        res = asyncio.run(engine.run(dataset="any", symbols=None))
+        res = asyncio.run(engine.run(dataset="any", symbols=None, table_name="e2e_table"))
         assert res.tables.get("e2e_table", 0) == 1
     finally:
         # Ensure DuckDB connection is closed even on failure

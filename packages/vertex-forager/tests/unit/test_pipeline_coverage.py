@@ -99,6 +99,13 @@ def _make_engine(
         config=config,
         controller=controller,
     )
+    original_run = engine.run
+
+    async def _run_with_table_name(*args: Any, **kwargs: Any) -> RunResult:
+        kwargs.setdefault("table_name", "stub_table")
+        return await original_run(*args, **kwargs)
+
+    engine.run = _run_with_table_name  # type: ignore[method-assign]
     return engine, w
 
 
@@ -125,6 +132,23 @@ def test_log_structured_emits_debug_record_with_extra_fields(caplog: pytest.LogC
     assert record.vf_stage == "fetch_done"
     assert record.vf_attempt == 2
     assert record.vf_duration_s == 1.234
+
+
+@pytest.mark.asyncio
+async def test_run_requires_table_name_or_checkpoint_table_name() -> None:
+    router = _PaginatingRouter(pages=0)
+    writer = _RecordingWriter()
+    engine = VertexForager(
+        router=router,
+        http=HttpExecutor(client=_StubClient()),
+        writer=writer,
+        mapper=None,
+        config=ResolvedClientConfig(requests_per_minute=60),
+        controller=FlowController(requests_per_minute=60, concurrency_limit=1),
+    )
+
+    with pytest.raises(ValueError, match="table_name"):
+        await engine.run(dataset="d", symbols=["AAPL"])
 
 
 # ─── Test 1: always-on DRR behavior ─────────────────────────────────────
