@@ -5,6 +5,7 @@ import time
 from typing import cast
 
 from vertex_forager.core.checkpoint import delete_run_history, list_run_history
+from vertex_forager.core.types import JSONValue
 
 
 @dataclass(frozen=True, slots=True)
@@ -18,7 +19,7 @@ class RunRecord:
     duration_s: float | None
     tables: dict[str, int]
     error_count: int
-    errors: list[dict[str, str]]
+    errors: list[dict[str, JSONValue]]
     quality_violations: dict[str, int]
     coverage_pct: float | None
     created_at: float
@@ -39,7 +40,11 @@ class RunsNamespace:
             violations_raw = row.get("quality_violations")
             tables = {str(key): int(value) for key, value in tables_raw.items()} if isinstance(tables_raw, dict) else {}
             errors = (
-                [{str(k): str(v) for k, v in item.items()} for item in errors_raw if isinstance(item, dict)]
+                [
+                    {str(k): cast("JSONValue", v) for k, v in item.items()}
+                    for item in errors_raw
+                    if isinstance(item, dict)
+                ]
                 if isinstance(errors_raw, list)
                 else []
             )

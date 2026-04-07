@@ -21,6 +21,7 @@ from vertex_forager.core.checkpoint import (
 )
 from vertex_forager.core.config import ResolvedClientConfig, RunResult, StorageConfig
 from vertex_forager.core.controller import FlowController
+from vertex_forager.core.errors import RunError
 from vertex_forager.core.pipeline import VertexForager
 from vertex_forager.exceptions import CheckpointNotFoundError
 from vertex_forager.writers.memory import InMemoryBufferWriter
@@ -56,6 +57,35 @@ def test_state_manager_exports_and_runs_filters(tmp_path: Path, monkeypatch: pyt
     assert [record.run_id for record in state.runs.list(limit=10)] == ["run-2"]
     with pytest.raises(ValueError, match="non-negative"):
         state.runs.clear(before_days=-1)
+
+
+def test_state_manager_runs_preserve_boolean_error_fields(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "vf-root"))
+    state = StateManager()
+
+    save_run_history(
+        RunResult(
+            provider="yfinance",
+            run_id="run-bool",
+            dataset="price",
+            tables={"yfinance_price": 1},
+            errors=[
+                RunError(
+                    provider="yfinance",
+                    dataset="price",
+                    symbol="AAPL",
+                    exc_type="ValueError",
+                    message="boom",
+                    retryable=False,
+                )
+            ],
+        ),
+        "run-bool",
+    )
+
+    records = state.runs.list(table="yfinance_price", limit=5)
+    assert len(records) == 1
+    assert records[0].errors[0]["retryable"] is False
 
 
 def test_state_manager_dlq_list_clear_and_replay(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
