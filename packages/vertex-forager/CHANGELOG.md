@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.27.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.26.0...vertex-forager-v0.27.0) (2026-04-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* **vertex-forager:** align persisted schema contracts  ([#452](https://github.com/coolbress/VertexLab/issues/452))
+
+### Bug Fixes
+
+* **vertex-forager:** align persisted schema contracts  ([#452](https://github.com/coolbress/VertexLab/issues/452)) ([168a095](https://github.com/coolbress/VertexLab/commit/168a095c090701533d19335db0a13efb183f3038))
+
 ## [0.26.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.25.0...vertex-forager-v0.26.0) (2026-04-04)
 
 
