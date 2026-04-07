@@ -139,8 +139,8 @@ class TestYFinanceRouterUnit:
         assert isinstance(result, ParseResult)
         frame = result.packets[0].frame
         assert {"id", "title", "publisher", "type", "link", "published_at"}.issubset(set(frame.columns))
-        assert frame.height == 2
-        assert frame.get_column("id").to_list() == ["1", None]
+        assert frame.height == 1
+        assert frame.get_column("id").to_list() == ["1"]
 
     def test_transform_calendar_list_to_first(self, yfinance_router_allow_pickle: YFinanceRouter) -> None:
         payload = pickle.dumps(
@@ -302,4 +302,4 @@ class TestYFinanceRouterUnit:
         assert isinstance(result, ParseResult)
         frame = result.packets[0].frame
         assert {"id", "title", "publisher", "type", "link", "published_at"}.issubset(set(frame.columns))
-        assert frame.height == 2
+        assert frame.height == 1

@@ -798,6 +798,8 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         ]
 
         frame = frame.with_columns(cols)
+        if "id" in frame.columns:
+            frame = frame.filter(pl.col("id").is_not_null())
 
         keep = [c for c in ["id", "title", "publisher", "type", "link", "published_at"] if c in frame.columns]
         others = [c for c in frame.columns if c not in [*keep, "content"]]

@@ -195,6 +195,23 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         **kwargs: Any,
     ) -> RunResult:
+        """Fetch lightweight metadata from the yfinance ``fast_info`` dataset.
+
+        Args:
+            tickers: Ticker symbols to collect.
+            connect_db: Optional DuckDB destination. If omitted, results stay in memory.
+            progress: Whether to emit progress updates during collection.
+            on_progress: Optional callback receiving progress snapshots.
+            **kwargs: Additional pipeline/router options forwarded unchanged.
+
+        Returns:
+            RunResult for the `fast_info` collection run.
+
+        Notes:
+            The `fast_info` dataset is intentionally lightweight and may expose
+            a flexible per-ticker field set compared with the fuller `info`
+            dataset.
+        """
         dataset: YFinanceDataset = "fast_info"
         return await self._dispatch_fetch(
             dataset=dataset,
