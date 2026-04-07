@@ -65,7 +65,7 @@
             <a id="nextFileLink" class="nav" href="z_4d3ab8cf306a0d08_dispatcher_py.html">&#xbb; next</a>
             &nbsp; &nbsp; &nbsp;
             <a class="nav" href="https://coverage.readthedocs.io/en/7.13.5">coverage.py v7.13.5</a>,
-            created at 2026-04-07 06:55 +0000
+            created at 2026-04-07 14:17 +0000
         </p>
         <aside class="hidden">
             <button type="button" class="button_next_chunk" data-shortcut="j"></button>
@@ -110,7 +110,7 @@
     <p class="run"><span class="n"><a id="t28" href="#t28">28</a></span><span class="t"><span class="key">from</span> <span class="nam">vertex_forager</span><span class="op">.</span><span class="nam">core</span><span class="op">.</span><span class="nam">http</span> <span class="key">import</span> <span class="nam">HttpExecutor</span> <span class="key">as</span> <span class="nam">_HttpExecutor</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t29" href="#t29">29</a></span><span class="t"><span class="key">from</span> <span class="nam">vertex_forager</span><span class="op">.</span><span class="nam">core</span><span class="op">.</span><span class="nam">http</span> <span class="key">import</span> <span class="nam">build_async_client</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t30" href="#t30">30</a></span><span class="t"><span class="key">from</span> <span class="nam">vertex_forager</span><span class="op">.</span><span class="nam">core</span><span class="op">.</span><span class="nam">pipeline</span> <span class="key">import</span> <span class="nam">VertexForager</span> <span class="key">as</span> <span class="nam">_VertexForager</span>&nbsp;</span><span class="r"></span></p>
-    <p class="run"><span class="n"><a id="t31" href="#t31">31</a></span><span class="t"><span class="key">from</span> <span class="nam">vertex_forager</span><span class="op">.</span><span class="nam">core</span><span class="op">.</span><span class="nam">types</span> <span class="key">import</span> <span class="nam">JSONValue</span><span class="op">,</span> <span class="nam">SharadarDataset</span><span class="op">,</span> <span class="nam">YFinanceDataset</span>&nbsp;</span><span class="r"></span></p>
+    <p class="run"><span class="n"><a id="t31" href="#t31">31</a></span><span class="t"><span class="key">from</span> <span class="nam">vertex_forager</span><span class="op">.</span><span class="nam">core</span><span class="op">.</span><span class="nam">types</span> <span class="key">import</span> <span class="nam">SharadarDataset</span><span class="op">,</span> <span class="nam">YFinanceDataset</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t32" href="#t32">32</a></span><span class="t"><span class="key">from</span> <span class="nam">vertex_forager</span><span class="op">.</span><span class="nam">schema</span><span class="op">.</span><span class="nam">registry</span> <span class="key">import</span> <span class="nam">get_table_schema</span>&nbsp;</span><span class="r"></span></p>
     <p class="run"><span class="n"><a id="t33" href="#t33">33</a></span><span class="t"><span class="key">from</span> <span class="nam">vertex_forager</span><span class="op">.</span><span class="nam">utils</span> <span class="key">import</span> <span class="op">(</span>&nbsp;</span><span class="r"></span></p>
     <p class="run run2"><span class="n"><a id="t34" href="#t34">34</a></span><span class="t">    <span class="nam">Spinner</span><span class="op">,</span>&nbsp;</span><span class="r"></span></p>
@@ -424,7 +424,7 @@
     <p class="run run2"><span class="n"><a id="t342" href="#t342">342</a></span><span class="t">        <span class="nam">mapper</span><span class="op">:</span> <span class="nam">IMapper</span><span class="op">,</span>&nbsp;</span><span class="r"></span></p>
     <p class="run run2"><span class="n"><a id="t343" href="#t343">343</a></span><span class="t">        <span class="nam">on_progress</span><span class="op">:</span> <span class="nam">Callable</span><span class="op">[</span><span class="op">[</span><span class="nam">ProgressSnapshot</span><span class="op">]</span><span class="op">,</span> <span class="key">None</span><span class="op">]</span> <span class="op">|</span> <span class="key">None</span> <span class="op">=</span> <span class="key">None</span><span class="op">,</span>&nbsp;</span><span class="r"></span></p>
     <p class="run run2"><span class="n"><a id="t344" href="#t344">344</a></span><span class="t">        <span class="nam">progress</span><span class="op">:</span> <span class="nam">bool</span> <span class="op">=</span> <span class="key">False</span><span class="op">,</span>&nbsp;</span><span class="r"></span></p>
-    <p class="run run2"><span class="n"><a id="t345" href="#t345">345</a></span><span class="t">        <span class="op">**</span><span class="nam">kwargs</span><span class="op">:</span> <span class="nam">JSONValue</span><span class="op">,</span>&nbsp;</span><span class="r"></span></p>
+    <p class="run run2"><span class="n"><a id="t345" href="#t345">345</a></span><span class="t">        <span class="op">**</span><span class="nam">kwargs</span><span class="op">:</span> <span class="nam">Any</span><span class="op">,</span>&nbsp;</span><span class="r"></span></p>
     <p class="run run2"><span class="n"><a id="t346" href="#t346">346</a></span><span class="t">    <span class="op">)</span> <span class="op">-></span> <span class="nam">RunResult</span><span class="op">:</span>&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t347" href="#t347">347</a></span><span class="t">        <span class="str">"""</span>&nbsp;</span><span class="r"></span></p>
     <p class="pln"><span class="n"><a id="t348" href="#t348">348</a></span><span class="t"><span class="str">        Run the VertexForager pipeline for the given router, dataset, and symbols.</span>&nbsp;</span><span class="r"></span></p>
@@ -653,7 +653,7 @@
             <a class="nav" href="z_4d3ab8cf306a0d08_dispatcher_py.html">&#xbb; next</a>
             &nbsp; &nbsp; &nbsp;
             <a class="nav" href="https://coverage.readthedocs.io/en/7.13.5">coverage.py v7.13.5</a>,
-            created at 2026-04-07 06:55 +0000
+            created at 2026-04-07 14:17 +0000
         </p>
     </div>
 </footer>
