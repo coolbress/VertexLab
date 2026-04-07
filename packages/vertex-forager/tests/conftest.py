@@ -244,6 +244,9 @@ def yfinance_router_allow_pickle() -> YFinanceRouter:
             "news",
             "calendar",
             "insider_purchases",
+            "institutional_holders",
+            "mutualfund_holders",
+            "insider_roster_holders",
             "recommendations",
         ],
     )
@@ -283,7 +286,7 @@ def create_test_frame_packet() -> FramePacket:
 
     return FramePacket(
         provider="sharadar",
-        table="sharadar_sep",
+        table="sharadar_price",
         frame=frame,
         observed_at=datetime(2024, 1, 2, tzinfo=timezone.utc),
     )

@@ -186,6 +186,28 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
 
     get_info = make_sync(_get_info_async)
 
+    async def _get_fast_info_async(
+        self,
+        *,
+        tickers: list[str],
+        connect_db: str | Path | None = None,
+        progress: bool = False,
+        on_progress: Callable[[ProgressSnapshot], None] | None = None,
+        **kwargs: Any,
+    ) -> RunResult:
+        dataset: YFinanceDataset = "fast_info"
+        return await self._dispatch_fetch(
+            dataset=dataset,
+            tickers=tickers,
+            connect_db=connect_db,
+            table_name=self._table_name_for_dataset(dataset),
+            progress=progress,
+            on_progress=on_progress,
+            **kwargs,
+        )
+
+    get_fast_info = make_sync(_get_fast_info_async)
+
     # --- Market Data ---
 
     async def _get_price_data_async(
@@ -301,7 +323,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
     async def _get_actions_async(
         self,
         *,
-        kind: Literal["dividends", "splits"] = "dividends",
+        kind: Literal["actions", "dividends", "splits"] = "dividends",
         tickers: list[str],
         connect_db: str | Path | None = None,
         start_date: str | None = None,
@@ -313,7 +335,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         """Fetch corporate actions (Unified Method: dividends or splits).
 
         Args:
-            kind: Type of action ('dividends' or 'splits').
+            kind: Type of action ('actions', 'dividends', or 'splits').
             tickers: List of ticker symbols.
             connect_db: Optional DuckDB connection string.
             start_date: Optional start date (YYYY-MM-DD).

@@ -91,8 +91,10 @@ class TestYFinanceRouterDateParams:
     ("method_name", "kwargs", "expected_dataset", "expected_table"),
     [
         ("get_info", {"tickers": ["AAPL"]}, "info", "yfinance_info"),
+        ("get_fast_info", {"tickers": ["AAPL"]}, "fast_info", "yfinance_fast_info"),
         ("get_price_data", {"tickers": ["AAPL"]}, "price", "yfinance_price"),
         ("get_actions", {"kind": "dividends", "tickers": ["AAPL"]}, "dividends", "yfinance_dividends"),
+        ("get_actions", {"kind": "actions", "tickers": ["AAPL"]}, "actions", "yfinance_actions"),
         (
             "get_holders",
             {"kind": "institutional", "tickers": ["AAPL"]},

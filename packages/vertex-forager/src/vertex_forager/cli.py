@@ -859,7 +859,7 @@ def recover(
     Usage:
         vertex-forager recover --dir "$VERTEXFORAGER_ROOT/cache/dlq" \\
             --dry-run --report /tmp/dlq_report.json
-        vertex-forager recover --table sharadar_sf1 \\
+        vertex-forager recover --table sharadar_fundamental \\
             --dir "$VERTEXFORAGER_ROOT/cache/dlq" --db /path/to/target.duckdb \\
             --delete-on-success
         vertex-forager recover --dir "$VERTEXFORAGER_ROOT/cache/dlq" \\

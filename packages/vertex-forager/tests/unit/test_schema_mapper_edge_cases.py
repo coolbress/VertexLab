@@ -8,7 +8,7 @@ from vertex_forager.schema.mapper import SchemaMapper
 
 def test_schema_mapper_casts_and_preserves_extra_columns() -> None:
     mapper = SchemaMapper()
-    # Use sharadar_sep schema which has a Date column
+    # Use sharadar_price schema which has a Date column
     df = pl.DataFrame(
         {
             "provider": ["sharadar"],
@@ -21,7 +21,7 @@ def test_schema_mapper_casts_and_preserves_extra_columns() -> None:
     )
     pkt = FramePacket(
         provider="sharadar",
-        table="sharadar_sep",
+        table="sharadar_price",
         frame=df,
         observed_at=datetime.now(timezone.utc),
     )

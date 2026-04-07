@@ -39,6 +39,7 @@ def test_schema_mapper_strict_raises_on_type_mismatch(pkt_factory) -> None:
             "ticker": ["AAPL"],
             "provider": ["yfinance"],
             "period": ["annual"],
+            "statement_kind": ["income_stmt"],
             "metric": ["net_income"],
             "value": ["not_a_number"],  # type mismatch for Float64
             "fetched_at": [datetime.now(tz=timezone.utc)],
@@ -57,6 +58,7 @@ def test_schema_mapper_strict_ok_when_columns_and_types_valid(pkt_factory) -> No
             "ticker": ["AAPL"],
             "provider": ["yfinance"],
             "period": ["annual"],
+            "statement_kind": ["income_stmt"],
             "metric": ["net_income"],
             "value": [123.45],
             "fetched_at": [datetime.now(tz=timezone.utc)],

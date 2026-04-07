@@ -354,7 +354,7 @@ class TestSharadarRouterUnit:
 
         packet = result.packets[0]
         assert packet.provider == "sharadar"
-        assert packet.table == "sharadar_sep"
+        assert packet.table == "sharadar_price"
         assert isinstance(packet.frame, pl.DataFrame)
         assert packet.frame.height == 1
         assert "ticker" in packet.frame.columns

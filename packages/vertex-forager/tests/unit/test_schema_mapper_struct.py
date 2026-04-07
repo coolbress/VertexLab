@@ -28,6 +28,7 @@ def test_schema_mapper_nested_struct_cast_and_mismatch(
 
     # Monkeypatch mapper module's imported get_table_schema so normalize() uses the stub
     import vertex_forager.schema.mapper as mapper_mod
+
     monkeypatch.setattr(
         mapper_mod,
         "get_table_schema",
@@ -36,9 +37,9 @@ def test_schema_mapper_nested_struct_cast_and_mismatch(
 
     # Input includes mixed/partial types to exercise non-strict casting
     data = [
-        {"provider": "test", "meta": {"a": 1, "b": "x"}},           # already matches
+        {"provider": "test", "meta": {"a": 1, "b": "x"}},  # already matches
         {"provider": "test", "meta": {"a": "2", "b": 3}},  # needs casting
-        {"provider": "test", "meta": {"a": None, "b": None}},       # nulls
+        {"provider": "test", "meta": {"a": None, "b": None}},  # nulls
     ]
     df = pl.DataFrame(data)
 
@@ -112,4 +113,4 @@ def test_registry_returns_dataset_spec() -> None:
 
     assert spec is not None
     assert spec.name == "price"
-    assert spec.schema.table == "sharadar_sep"
+    assert spec.schema.table == "sharadar_price"

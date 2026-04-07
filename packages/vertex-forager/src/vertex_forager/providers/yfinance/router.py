@@ -405,15 +405,13 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             "quarterly_balance_sheet",
             "cashflow",
             "quarterly_cashflow",
-            "income_stmt",
             "earnings",
-            "quarterly_earnings",
         }:
             return self._transform_financials(df_pl, dataset)
         if dataset == "major_holders":
             return self._transform_major_holders(df_pl)
         if dataset in {"institutional_holders", "mutualfund_holders"}:
-            return self._transform_holders_detailed(df_pl)
+            return self._transform_holders_detailed(df_pl, dataset)
         if dataset == "insider_roster_holders":
             return self._transform_insider_roster(df_pl)
         if dataset == "insider_purchases":
@@ -631,6 +629,17 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         period = "quarterly" if dataset.startswith("quarterly") else "annual"
         if "period" not in frame.columns:
             frame = frame.with_columns(pl.lit(period).alias("period"))
+        statement_kind = {
+            "financials": "income_stmt",
+            "quarterly_financials": "income_stmt",
+            "earnings": "income_stmt",
+            "balance_sheet": "balance_sheet",
+            "quarterly_balance_sheet": "balance_sheet",
+            "cashflow": "cashflow",
+            "quarterly_cashflow": "cashflow",
+        }[dataset]
+        if "statement_kind" not in frame.columns:
+            frame = frame.with_columns(pl.lit(statement_kind).alias("statement_kind"))
         return frame
 
     def _transform_major_holders(self, frame: pl.DataFrame) -> pl.DataFrame:
@@ -659,16 +668,28 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
                 return df
         return frame
 
-    def _transform_holders_detailed(self, frame: pl.DataFrame) -> pl.DataFrame:
-        if "percentage_of_shares_out" in frame.columns and "percentage_out" not in frame.columns:
-            frame = frame.rename({"percentage_of_shares_out": "percentage_out"})
+    def _transform_holders_detailed(self, frame: pl.DataFrame, dataset: str) -> pl.DataFrame:
         if "index" in frame.columns:
             frame = frame.drop(["index"])
+        if "percentage_of_shares_out" in frame.columns:
+            frame = frame.drop("percentage_of_shares_out")
+        holder_type = "institutional" if dataset == "institutional_holders" else "mutualfund"
+        if "holder_type" not in frame.columns:
+            frame = frame.with_columns(pl.lit(holder_type).alias("holder_type"))
         return frame
 
     def _transform_insider_roster(self, frame: pl.DataFrame) -> pl.DataFrame:
         if "index" in frame.columns:
             frame = frame.drop(["index"])
+        exprs: list[pl.Expr] = []
+        for column in ("latest_transaction_date", "position_direct_date"):
+            if column not in frame.columns:
+                continue
+            dtype = frame.schema.get(column)
+            if isinstance(dtype, pl.Datetime) and dtype.time_zone is None:
+                exprs.append(pl.col(column).dt.replace_time_zone(DEFAULT_TIME_ZONE).alias(column))
+        if exprs:
+            frame = frame.with_columns(exprs)
         return frame
 
     def _transform_insider_purchases(self, frame: pl.DataFrame) -> pl.DataFrame:
@@ -681,13 +702,9 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             frame = frame.drop(drops)
         # Normalize column names to schema
         rename_map = {
-            # original labels (pre-normalization)
-            "Holder": "holder",
             "Shares": "shares",
             "Trans": "trans",
             "Insider Purchases (Last 6 months)": "insider_purchases_last_6m",
-            # normalized labels (post _normalize_columns)
-            "holder": "holder",
             "shares": "shares",
             "trans": "trans",
             "insider_purchases_last_6_months": "insider_purchases_last_6m",
@@ -704,11 +721,6 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
         else:
             # No meaningful data -> empty
             return frame.filter(pl.lit(False))
-        # Optional: make holder non-null even if not used in PK
-        if "holder" in frame.columns:
-            frame = frame.with_columns(pl.col("holder").cast(pl.String, strict=False).fill_null("").alias("holder"))
-        else:
-            frame = frame.with_columns(pl.lit("").alias("holder"))
         return frame
 
     def _transform_calendar(self, frame: pl.DataFrame) -> pl.DataFrame:
@@ -777,6 +789,7 @@ class YFinanceRouter(BaseRouter[YFinanceDataset]):
             return expr.str.replace("Z", ISO8601_Z_SUFFIX).str.to_datetime(strict=False, time_zone=DEFAULT_TIME_ZONE)
 
         cols = [
+            get_expr([["id"]]).alias("id"),
             get_expr([["title"]]).alias("title"),
             get_expr([["provider", "displayName"], ["publisher"]]).alias("publisher"),
             get_expr([["contentType"]]).alias("type"),

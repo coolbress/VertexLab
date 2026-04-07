@@ -133,8 +133,8 @@ class TestClientIntegration:
         assert result.provider == "sharadar"
         # RunResult counts might vary depending on writer implementation details,
         # but we expect 2 rows processed.
-        assert "sharadar_sep" in result.tables
-        assert result.tables["sharadar_sep"] == 2
+        assert "sharadar_price" in result.tables
+        assert result.tables["sharadar_price"] == 2
         assert result.data is None
         assert len(result.errors) == 0
 
