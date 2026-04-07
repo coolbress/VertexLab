@@ -38,7 +38,7 @@ async def _update_dlq_counts(
 
 def _pk_invalid_reason(pkt: FramePacket) -> str | None:
     schema = get_table_schema(pkt.table)
-    if not schema or not getattr(schema, "unique_key", None):
+    if not schema or not schema.unique_key:
         return None
     for col in schema.unique_key:
         if col not in pkt.frame.columns:

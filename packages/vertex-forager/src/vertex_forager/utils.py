@@ -163,48 +163,6 @@ def validate_tickers(symbols: list[str] | tuple[str, ...]) -> None:
             raise InputError("tickers must be non-empty and must not include leading/trailing whitespace")
 
 
-def validate_provider_mappings(
-    *,
-    provider: str,
-    dataset_table: dict[str, str],
-    dataset_schema: dict[str, Any],
-    dataset_endpoint: dict[str, str],
-    date_filter_col: dict[str, str],
-) -> None:
-    """Validate that provider dataset mapping dictionaries have consistent keys.
-
-    Args:
-        provider: Provider name for error messages (e.g., "sharadar", "yfinance").
-        dataset_table: Mapping of dataset name to table name.
-        dataset_schema: Mapping of dataset name to schema name.
-        dataset_endpoint: Mapping of dataset name to endpoint.
-        date_filter_col: Mapping of dataset name to date filter column.
-
-    Raises:
-        RuntimeError: If any mapping has inconsistent keys.
-    """
-    keys_table = set(dataset_table.keys())
-    keys_schema = set(dataset_schema.keys())
-    keys_endpoint = set(dataset_endpoint.keys())
-    keys_date_filter = set(date_filter_col.keys())
-    union = set().union(keys_table, keys_schema, keys_endpoint)
-    errors: list[str] = []
-    for name, keys in [
-        ("DATASET_TABLE", keys_table),
-        ("DATASET_SCHEMA", keys_schema),
-        ("DATASET_ENDPOINT", keys_endpoint),
-    ]:
-        if keys != union:
-            missing = sorted(union - keys)
-            extra = sorted(keys - union)
-            errors.append(f"{name}: missing={missing}, extra={extra}")
-    if not keys_date_filter.issubset(union):
-        extra_keys = sorted(keys_date_filter - union)
-        errors.append(f"DATE_FILTER_COL must be subset of datasets; extra={extra_keys}")
-    if errors:
-        raise RuntimeError(f"{provider} schema mapping keys inconsistent: " + "; ".join(errors))
-
-
 def env_bool(name: str, default: bool = False) -> bool:
     """Read a boolean environment variable.
 

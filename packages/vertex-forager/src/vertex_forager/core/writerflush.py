@@ -20,6 +20,7 @@ from vertex_forager.core.errors import (
 if TYPE_CHECKING:
     from contextlib import AbstractContextManager
 
+    from vertex_forager.schema.config import TableSchema
     from vertex_forager.writers.base import WriteResult
 
 LogStructuredFunc = Callable[..., None]
@@ -56,7 +57,7 @@ class WriterContext:
     log_structured: LogStructuredFunc
     span: Callable[..., AbstractContextManager[object]]
     validate_data_quality: Callable[..., Awaitable[None]]
-    get_table_schema: Callable[[str], object | None]
+    get_table_schema: Callable[[str], TableSchema | None]
     spool_to_dlq_and_rescue: Callable[..., Awaitable[object]]
     build_writer_error_summary: Callable[..., RunError]
     compute_error_cls: type[Exception]
@@ -309,7 +310,7 @@ def concat_frames_with_flex(
     *,
     frames: list[pl.DataFrame],
     table_name: str,
-    schema: object,
+    schema: TableSchema | None,
     rechunk: bool,
     router_flexible_schema: bool,
     logger: LoggerLike,
@@ -317,7 +318,7 @@ def concat_frames_with_flex(
     try:
         return pl.concat(frames, how="vertical", rechunk=rechunk)
     except pl.exceptions.PolarsError as exc:
-        is_flexible = router_flexible_schema or (schema is not None and getattr(schema, "flexible_schema", False))
+        is_flexible = router_flexible_schema or (schema is not None and schema.flexible_schema)
         if not is_flexible:
             raise
         logger.warning(
@@ -328,11 +329,10 @@ def concat_frames_with_flex(
         return pl.concat(frames, how="diagonal")
 
 
-def validate_unique_key(*, schema: object, table: str, frame: pl.DataFrame) -> None:
-    unique_key = getattr(schema, "unique_key", None)
-    if not unique_key:
+def validate_unique_key(*, schema: TableSchema | None, table: str, frame: pl.DataFrame) -> None:
+    if schema is None or not schema.unique_key:
         return
-    for col in unique_key:
+    for col in schema.unique_key:
         if col not in frame.columns:
             raise PrimaryKeyMissingError(table=table, column=col)
         nulls = frame.get_column(col).null_count()
@@ -378,7 +378,7 @@ async def flush_chunked_table(
     *,
     table: str,
     packets: list[FramePacket],
-    schema: object,
+    schema: TableSchema | None,
     chunk_size: int,
     buffers: dict[str, list[FramePacket]],
     buffer_rows: dict[str, int],
@@ -504,7 +504,7 @@ async def flush_writer_table(
     buffer_rows: dict[str, int],
     result: RunResult,
     result_lock: asyncio.Lock,
-    get_table_schema: Callable[[str], object | None],
+    get_table_schema: Callable[[str], TableSchema | None],
     flush_chunked_table: AsyncFunc,
 ) -> None:
     packets = buffers.get(table, [])

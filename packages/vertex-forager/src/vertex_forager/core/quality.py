@@ -23,22 +23,19 @@ def get_table_schema(table: str) -> TableSchema | None:
 
 
 class DataQualityRule(Protocol):
+    @property
+    def required_columns(self) -> list[str]: ...
+
     def validate(self, df: pl.DataFrame) -> list[str]: ...
 
 
 class NoNegativePrices:
-    def __init__(self, price_columns: list[str] | None = None):
-        self.price_columns = price_columns or [
-            "open",
-            "high",
-            "low",
-            "close",
-            "price",
-            "adj_open",
-            "adj_high",
-            "adj_low",
-            "adj_close",
-        ]
+    def __init__(self, price_columns: list[str]):
+        self.price_columns = price_columns
+
+    @property
+    def required_columns(self) -> list[str]:
+        return list(self.price_columns)
 
     def validate(self, df: pl.DataFrame) -> list[str]:
         violations: list[str] = []
@@ -51,17 +48,13 @@ class NoNegativePrices:
 
 
 class NoFutureDates:
-    def __init__(self, date_columns: list[str] | None = None, timezone: str | None = None):
-        self.date_columns = date_columns or [
-            "date",
-            "timestamp",
-            "time",
-            "datetime",
-            "fetched_at",
-            "observed_at",
-            "created_at",
-        ]
+    def __init__(self, date_columns: list[str], timezone: str | None = None):
+        self.date_columns = date_columns
         self.timezone = timezone
+
+    @property
+    def required_columns(self) -> list[str]:
+        return list(self.date_columns)
 
     def _current_time(self) -> Any:
         import datetime
@@ -105,6 +98,10 @@ class NoFutureDates:
 class NoDuplicateRows:
     def __init__(self, subset: list[str] | None = None):
         self.subset = subset
+
+    @property
+    def required_columns(self) -> list[str]:
+        return list(self.subset or [])
 
     def validate(self, df: pl.DataFrame) -> list[str]:
         violations: list[str] = []

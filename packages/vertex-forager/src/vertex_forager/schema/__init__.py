@@ -1,3 +1,3 @@
-from vertex_forager.schema.config import TableSchema
+from vertex_forager.schema.config import DatasetSpec, TableSchema
 
-__all__ = ["TableSchema"]
+__all__ = ["DatasetSpec", "TableSchema"]

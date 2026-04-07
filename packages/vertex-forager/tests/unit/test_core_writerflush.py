@@ -17,6 +17,7 @@ from vertex_forager.core.writerflush import (
     writer_worker,
 )
 from vertex_forager.exceptions import PrimaryKeyMissingError
+from vertex_forager.schema.config import TableSchema
 
 
 def _packet(table: str, rows: int = 1) -> FramePacket:
@@ -94,12 +95,14 @@ def test_writer_table_context_prefers_symbol_then_ticker() -> None:
 
 
 def test_validate_unique_key_raises_missing_column() -> None:
-    class _Schema:
-        def __init__(self) -> None:
-            self.unique_key = ["ticker"]
+    schema = TableSchema(
+        table="t",
+        schema={"ticker": pl.String},
+        unique_key=("ticker",),
+    )
 
     with pytest.raises(PrimaryKeyMissingError):
-        validate_unique_key(schema=_Schema(), table="t", frame=pl.DataFrame({"x": [1]}))
+        validate_unique_key(schema=schema, table="t", frame=pl.DataFrame({"x": [1]}))
 
 
 @pytest.mark.asyncio
@@ -118,7 +121,7 @@ async def test_flush_writer_table_uses_chunked() -> None:
         buffer_rows=buffer_rows,
         result=RunResult(provider="sharadar"),
         result_lock=asyncio.Lock(),
-        get_table_schema=lambda _table: object(),
+        get_table_schema=lambda _table: TableSchema(table="t", schema={"x": pl.Int64}),
         flush_chunked_table=_flush_chunked_table,
     )
     assert called["chunked"] == 1

@@ -1,9 +1,4 @@
-"""Sharadar provider constants.
-
-Purpose:
-- Centralize dataset endpoints, date filters, batching limits, and request keys
-- Improve maintainability and reduce duplication across router/schema/client
-"""
+"""Sharadar provider constants."""
 
 from __future__ import annotations
 
@@ -26,25 +21,4 @@ ESTIMATED_TOTAL_TICKERS: Final[int] = 50_000
 API_KEY_QUERY_PARAM: Final[str] = "api_key"
 QOPTS_PER_PAGE: Final[str] = "qopts.per_page"
 QOPTS_COLUMNS: Final[str] = "qopts.columns"
-DATASET_ENDPOINT: Final[dict[str, str]] = {
-    "price": "SEP",
-    "fundamental": "SF1",
-    "daily": "DAILY",
-    "tickers": "TICKERS",
-    "actions": "ACTIONS",
-    "insider": "SF2",
-    "institutional": "SF3",
-    "sp500": "SP500",
-}
-
-DATE_FILTER_COL: Final[dict[str, str]] = {
-    "price": "date",
-    "fundamental": "calendardate",
-    "daily": "date",
-    "actions": "date",
-    "insider": "filingdate",
-    "institutional": "calendardate",
-    "sp500": "date",
-}
-
 INTERNAL_COLS: Final[set[str]] = {"provider", "fetched_at"}

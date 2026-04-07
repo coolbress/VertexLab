@@ -6,18 +6,13 @@ import polars as pl
 
 from vertex_forager.constants import DEFAULT_TIME_ZONE
 from vertex_forager.core.quality import NoDuplicateRows, NoFutureDates, NoNegativePrices
-from vertex_forager.providers.sharadar.constants import (
-    DATASET_ENDPOINT,
-    DATE_FILTER_COL,
-)
-from vertex_forager.schema.config import TableSchema
-from vertex_forager.utils import validate_provider_mappings
+from vertex_forager.schema.config import DatasetSpec, TableSchema
 
 SHARADAR_SEP: Final[TableSchema] = TableSchema(
     table="sharadar_sep",
     schema={
-        "provider": pl.Utf8,
-        "ticker": pl.Utf8,
+        "provider": pl.String,
+        "ticker": pl.String,
         "date": pl.Date,
         "open": pl.Float64,
         "high": pl.Float64,
@@ -42,29 +37,29 @@ SHARADAR_SEP: Final[TableSchema] = TableSchema(
 SHARADAR_TICKERS: Final[TableSchema] = TableSchema(
     table="sharadar_tickers",
     schema={
-        "provider": pl.Utf8,
-        "table": pl.Utf8,
-        "permaticker": pl.Utf8,
-        "ticker": pl.Utf8,
-        "name": pl.Utf8,
-        "exchange": pl.Utf8,
-        "isdelisted": pl.Utf8,
-        "category": pl.Utf8,
-        "cusips": pl.Utf8,
-        "siccode": pl.Utf8,
-        "sicsector": pl.Utf8,
-        "sicindustry": pl.Utf8,
-        "famasector": pl.Utf8,
-        "famaindustry": pl.Utf8,
-        "sector": pl.Utf8,
-        "industry": pl.Utf8,
-        "scalemarketcap": pl.Utf8,
-        "scalerevenue": pl.Utf8,
-        "relatedtickers": pl.Utf8,
-        "currency": pl.Utf8,
-        "location": pl.Utf8,
-        "companysite": pl.Utf8,
-        "secfilings": pl.Utf8,
+        "provider": pl.String,
+        "table": pl.String,
+        "permaticker": pl.String,
+        "ticker": pl.String,
+        "name": pl.String,
+        "exchange": pl.String,
+        "isdelisted": pl.String,
+        "category": pl.String,
+        "cusips": pl.String,
+        "siccode": pl.String,
+        "sicsector": pl.String,
+        "sicindustry": pl.String,
+        "famasector": pl.String,
+        "famaindustry": pl.String,
+        "sector": pl.String,
+        "industry": pl.String,
+        "scalemarketcap": pl.String,
+        "scalerevenue": pl.String,
+        "relatedtickers": pl.String,
+        "currency": pl.String,
+        "location": pl.String,
+        "companysite": pl.String,
+        "secfilings": pl.String,
         "lastupdated": pl.Date,
         "firstadded": pl.Date,
         "firstpricedate": pl.Date,
@@ -85,13 +80,13 @@ SHARADAR_TICKERS: Final[TableSchema] = TableSchema(
 SHARADAR_SF1: Final[TableSchema] = TableSchema(
     table="sharadar_sf1",
     schema={
-        "provider": pl.Utf8,
-        "ticker": pl.Utf8,
-        "dimension": pl.Utf8,
+        "provider": pl.String,
+        "ticker": pl.String,
+        "dimension": pl.String,
         "calendardate": pl.Date,
         "datekey": pl.Date,
         "reportperiod": pl.Date,
-        "fiscalperiod": pl.Utf8,
+        "fiscalperiod": pl.String,
         "lastupdated": pl.Date,
         "accoci": pl.Int64,
         "assets": pl.Int64,
@@ -212,31 +207,31 @@ SHARADAR_SF1: Final[TableSchema] = TableSchema(
 SHARADAR_SF2: Final[TableSchema] = TableSchema(
     table="sharadar_sf2",
     schema={
-        "provider": pl.Utf8,
-        "ticker": pl.Utf8,
+        "provider": pl.String,
+        "ticker": pl.String,
         "filingdate": pl.Date,
-        "formtype": pl.Utf8,
-        "issuername": pl.Utf8,
-        "ownername": pl.Utf8,
-        "officertitle": pl.Utf8,
-        "isdirector": pl.Utf8,
-        "isofficer": pl.Utf8,
-        "istenpercentowner": pl.Utf8,
+        "formtype": pl.String,
+        "issuername": pl.String,
+        "ownername": pl.String,
+        "officertitle": pl.String,
+        "isdirector": pl.String,
+        "isofficer": pl.String,
+        "istenpercentowner": pl.String,
         "transactiondate": pl.Date,
-        "securityadcode": pl.Utf8,
-        "transactioncode": pl.Utf8,
+        "securityadcode": pl.String,
+        "transactioncode": pl.String,
         "transactionshares": pl.Int64,
         "transactionpricepershare": pl.Float64,
         "transactionvalue": pl.Float64,
         "sharesownedbeforetransaction": pl.Int64,
         "sharesownedfollowingtransaction": pl.Int64,
-        "directorindirect": pl.Utf8,
-        "natureofownership": pl.Utf8,
+        "directorindirect": pl.String,
+        "natureofownership": pl.String,
         "dateexercisable": pl.Date,
         "priceexercisable": pl.Float64,
         "expirationdate": pl.Date,
         "rownum": pl.Int64,
-        "securitytitle": pl.Utf8,
+        "securitytitle": pl.String,
         "fetched_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
     },
     unique_key=("provider", "ticker", "filingdate", "rownum"),
@@ -251,11 +246,11 @@ SHARADAR_SF2: Final[TableSchema] = TableSchema(
 SHARADAR_SF3: Final[TableSchema] = TableSchema(
     table="sharadar_sf3",
     schema={
-        "provider": pl.Utf8,
-        "ticker": pl.Utf8,
+        "provider": pl.String,
+        "ticker": pl.String,
         "calendardate": pl.Date,
-        "investorname": pl.Utf8,
-        "securitytype": pl.Utf8,
+        "investorname": pl.String,
+        "securitytype": pl.String,
         "units": pl.Int64,
         "price": pl.Float64,
         "value": pl.Float64,
@@ -273,14 +268,14 @@ SHARADAR_SF3: Final[TableSchema] = TableSchema(
 SHARADAR_ACTIONS: Final[TableSchema] = TableSchema(
     table="sharadar_actions",
     schema={
-        "provider": pl.Utf8,
+        "provider": pl.String,
         "date": pl.Date,
-        "action": pl.Utf8,
-        "ticker": pl.Utf8,
-        "name": pl.Utf8,
+        "action": pl.String,
+        "ticker": pl.String,
+        "name": pl.String,
         "value": pl.Float64,
-        "contraticker": pl.Utf8,
-        "contraname": pl.Utf8,
+        "contraticker": pl.String,
+        "contraname": pl.String,
         "fetched_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
     },
     unique_key=("provider", "ticker", "date", "action"),
@@ -295,9 +290,9 @@ SHARADAR_ACTIONS: Final[TableSchema] = TableSchema(
 SHARADAR_DAILY: Final[TableSchema] = TableSchema(
     table="sharadar_daily",
     schema={
-        "provider": pl.Utf8,
+        "provider": pl.String,
         "date": pl.Date,
-        "ticker": pl.Utf8,
+        "ticker": pl.String,
         "marketcap": pl.Float64,
         "ev": pl.Float64,
         "pe": pl.Float64,
@@ -320,14 +315,14 @@ SHARADAR_DAILY: Final[TableSchema] = TableSchema(
 SHARADAR_SP500: Final[TableSchema] = TableSchema(
     table="sharadar_sp500",
     schema={
-        "provider": pl.Utf8,
+        "provider": pl.String,
         "date": pl.Date,
-        "action": pl.Utf8,
-        "ticker": pl.Utf8,
-        "name": pl.Utf8,
-        "contraticker": pl.Utf8,
-        "contraname": pl.Utf8,
-        "note": pl.Utf8,
+        "action": pl.String,
+        "ticker": pl.String,
+        "name": pl.String,
+        "contraticker": pl.String,
+        "contraname": pl.String,
+        "note": pl.String,
         "fetched_at": pl.Datetime(time_zone=DEFAULT_TIME_ZONE),
     },
     unique_key=("provider", "ticker", "date", "action"),
@@ -353,37 +348,16 @@ TABLES: Final[dict[str, TableSchema]] = {
     ]
 }
 
-# Dataset→Table name mapping (used by Router/Client)
-DATASET_TABLE: Final[dict[str, str]] = {
-    "price": "sharadar_sep",
-    "tickers": "sharadar_tickers",
-    "fundamental": "sharadar_sf1",
-    "daily": "sharadar_daily",
-    "actions": "sharadar_actions",
-    "insider": "sharadar_sf2",
-    "institutional": "sharadar_sf3",
-    "sp500": "sharadar_sp500",
-}
-
-# Dataset→Schema mapping
-DATASET_SCHEMA: Final[dict[str, TableSchema]] = {
-    "price": SHARADAR_SEP,
-    "tickers": SHARADAR_TICKERS,
-    "fundamental": SHARADAR_SF1,
-    "insider": SHARADAR_SF2,
-    "institutional": SHARADAR_SF3,
-    "actions": SHARADAR_ACTIONS,
-    "daily": SHARADAR_DAILY,
-    "sp500": SHARADAR_SP500,
-}
-
-# Endpoint mapping for provider API
-
-
-validate_provider_mappings(
-    provider="sharadar",
-    dataset_table=DATASET_TABLE,
-    dataset_schema=DATASET_SCHEMA,
-    dataset_endpoint=DATASET_ENDPOINT,
-    date_filter_col=DATE_FILTER_COL,
+DATASETS: Final[tuple[DatasetSpec, ...]] = (
+    DatasetSpec(name="price", schema=SHARADAR_SEP, endpoint="SEP", date_filter_col="date"),
+    DatasetSpec(name="tickers", schema=SHARADAR_TICKERS, endpoint="TICKERS"),
+    DatasetSpec(name="fundamental", schema=SHARADAR_SF1, endpoint="SF1", date_filter_col="calendardate"),
+    DatasetSpec(name="daily", schema=SHARADAR_DAILY, endpoint="DAILY", date_filter_col="date"),
+    DatasetSpec(name="actions", schema=SHARADAR_ACTIONS, endpoint="ACTIONS", date_filter_col="date"),
+    DatasetSpec(name="insider", schema=SHARADAR_SF2, endpoint="SF2", date_filter_col="filingdate"),
+    DatasetSpec(name="institutional", schema=SHARADAR_SF3, endpoint="SF3", date_filter_col="calendardate"),
+    DatasetSpec(name="sp500", schema=SHARADAR_SP500, endpoint="SP500", date_filter_col="date"),
 )
+
+DATASET_SPECS: Final[dict[str, DatasetSpec]] = {spec.name: spec for spec in DATASETS}
+DATASET_NAMES: Final[tuple[str, ...]] = tuple(spec.name for spec in DATASETS)

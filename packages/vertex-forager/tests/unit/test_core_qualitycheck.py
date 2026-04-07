@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import get_args
 
 import polars as pl
 import pytest
@@ -14,9 +15,13 @@ from vertex_forager.core.quality import (
     parse_violation_count,
     validate_data_quality,
 )
+from vertex_forager.core.types import SharadarDataset, YFinanceDataset
 from vertex_forager.exceptions import DataQualityError
+from vertex_forager.providers.sharadar.schema import DATASET_NAMES as SHARADAR_DATASET_NAMES
 from vertex_forager.providers.sharadar.schema import TABLES as SHARADAR_TABLES
+from vertex_forager.providers.yfinance.schema import DATASET_NAMES as YFINANCE_DATASET_NAMES
 from vertex_forager.providers.yfinance.schema import TABLES as YFINANCE_TABLES
+from vertex_forager.schema.registry import get_dataset_spec
 
 
 def test_parse_violation_count_patterns() -> None:
@@ -142,8 +147,34 @@ def test_quality_module_exports_get_table_schema() -> None:
     assert callable(get_table_schema)
 
 
+def test_quality_rules_expose_required_columns() -> None:
+    assert NoNegativePrices(["close"]).required_columns == ["close"]
+    assert NoFutureDates(["date"]).required_columns == ["date"]
+    assert NoDuplicateRows(["ticker", "date"]).required_columns == ["ticker", "date"]
+
+
 def test_yfinance_financials_duplicate_rule_matches_full_unique_key() -> None:
     duplicate_rule = YFINANCE_TABLES["yfinance_financials"].quality_rules[1]
 
     assert isinstance(duplicate_rule, NoDuplicateRows)
     assert duplicate_rule.subset == ["date", "ticker", "provider", "period", "metric"]
+
+
+def test_registry_returns_provider_dataset_specs() -> None:
+    sharadar_price = get_dataset_spec("sharadar", "price")
+    yfinance_news = get_dataset_spec("yfinance", "news")
+
+    assert sharadar_price is not None
+    assert sharadar_price.schema.table == "sharadar_sep"
+    assert sharadar_price.endpoint == "SEP"
+    assert sharadar_price.date_filter_col == "date"
+
+    assert yfinance_news is not None
+    assert yfinance_news.schema.table == "yfinance_news"
+    assert yfinance_news.endpoint == "news"
+    assert yfinance_news.date_filter_col == "published_at"
+
+
+def test_dataset_literal_aliases_match_registered_dataset_names() -> None:
+    assert get_args(SharadarDataset) == SHARADAR_DATASET_NAMES
+    assert get_args(YFinanceDataset) == YFINANCE_DATASET_NAMES

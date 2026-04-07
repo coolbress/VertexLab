@@ -57,9 +57,7 @@ class SchemaMapper:
         This method transforms a raw DataFrame into a schema-compliant DataFrame.
         If a schema is registered, the frame is cast to declared types and columns
         are reordered. When `analysis_date_col` is set on the schema and present
-        in `frame.columns`, that column is cast to the schema type (strict=False)
-        and the frame is sorted by it. No new column is created if the target
-        `analysis_date_col` is absent.
+        in `frame.columns`, the frame is sorted by that column.
 
         If no schema is registered for the table, the packet is returned strictly as-is.
 
@@ -77,16 +75,8 @@ class SchemaMapper:
 
         if table_schema.analysis_date_col is not None:
             target_col = table_schema.analysis_date_col
-            target_dtype = table_schema.schema.get(target_col, pl.Date)
             if target_col in frame.columns:
-                frame = frame.with_columns(pl.col(target_col).cast(target_dtype, strict=False).alias(target_col))
                 frame = frame.sort(target_col)
-
-        # If original had date, _cast_to_schema preserved it (or cast it).
-        # We don't overwrite it.
-
-        # Reorder columns to put unique key (PK) first for better readability
-        frame = self._reorder_columns(frame, table_schema.unique_key)
 
         # Track extra columns preserved for observability
         extra_cols = [c for c in frame.columns if c not in table_schema.schema]
@@ -132,7 +122,7 @@ class SchemaMapper:
         # This allows the schema to define the "required core" while allowing extensibility.
         try:
             out = frame.with_columns(exprs)
-        except Exception as e:
+        except pl.exceptions.PolarsError as e:
             if self.strict_validation:
                 raise ValueError(f"Schema validation failed: type casting error: {e}") from e
             raise
@@ -141,17 +131,3 @@ class SchemaMapper:
         # Schema columns come first in defined order, followed by any extra columns found in input
         ordered_cols = list(schema.keys()) + [c for c in out.columns if c not in schema]
         return out.select(ordered_cols)
-
-    def _reorder_columns(self, frame: pl.DataFrame, unique_key: tuple[str, ...]) -> pl.DataFrame:
-        """
-        Reorder columns to prioritize unique keys (PK) at the beginning.
-
-        Order: [Unique Key Columns] + [Remaining Columns]
-        """
-        if not unique_key:
-            return frame
-
-        pk_cols = [col for col in unique_key if col in frame.columns]
-        other_cols = [col for col in frame.columns if col not in pk_cols]
-
-        return frame.select(pk_cols + other_cols)

@@ -51,6 +51,11 @@ class IRouter(Protocol, Generic[T_contra]):
         """Provider identifier (e.g., 'sharadar', 'yfinance')."""
         ...
 
+    @property
+    def flexible_schema(self) -> bool:
+        """When True, downstream normalization may allow diagonal concat on schema mismatch."""
+        ...
+
     def generate_jobs(
         self, *, dataset: T_contra, symbols: Sequence[str] | None, **kwargs: object
     ) -> AsyncIterator[FetchJob]:
