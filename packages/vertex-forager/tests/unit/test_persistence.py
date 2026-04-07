@@ -181,6 +181,65 @@ def test_initialize_schema_marks_legacy_in_progress_checkpoints_completed() -> N
             assert row[1] == "completed"
 
 
+def test_migrate_run_history_preserves_empty_table_runs() -> None:
+    with (
+        tempfile.TemporaryDirectory() as tmpdir,
+        patch(
+            "vertex_forager.core.checkpoint.get_cache_dir",
+            return_value=Path(tmpdir),
+        ),
+    ):
+        db_path = get_state_db_path()
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(db_path) as conn:
+            conn.execute(
+                """
+                CREATE TABLE run_history (
+                    run_id TEXT PRIMARY KEY,
+                    provider TEXT NOT NULL,
+                    dataset TEXT,
+                    started_at REAL,
+                    finished_at REAL,
+                    duration_s REAL,
+                    tables_json TEXT NOT NULL,
+                    error_count INTEGER NOT NULL,
+                    errors_json TEXT NOT NULL,
+                    quality_violations_json TEXT NOT NULL,
+                    coverage_pct REAL,
+                    created_at REAL NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO run_history (
+                    run_id,
+                    provider,
+                    dataset,
+                    started_at,
+                    finished_at,
+                    duration_s,
+                    tables_json,
+                    error_count,
+                    errors_json,
+                    quality_violations_json,
+                    coverage_pct,
+                    created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                ("legacy-empty", "stub", "prices", 100.0, 110.0, 10.0, "{}", 1, "[]", "{}", None, 120.0),
+            )
+            conn.commit()
+
+        history = list_run_history(limit=10)
+        assert len(history) == 1
+        assert history[0]["run_id"] == "legacy-empty"
+        assert history[0]["table_name"] is None
+        assert history[0]["tables"] == {}
+        assert history[0]["total_rows"] == 0
+
+
 def test_save_run_history() -> None:
     with (
         tempfile.TemporaryDirectory() as tmpdir,
@@ -235,6 +294,42 @@ def test_save_run_history() -> None:
         assert entry["total_rows"] == 100
         assert entry["coverage_pct"] == 95.5
         assert table2_history[0]["total_rows"] == 200
+
+
+def test_save_run_history_preserves_empty_table_runs() -> None:
+    with (
+        tempfile.TemporaryDirectory() as tmpdir,
+        patch(
+            "vertex_forager.core.checkpoint.get_cache_dir",
+            return_value=Path(tmpdir),
+        ),
+    ):
+        run_result = RunResult(
+            provider="test_provider",
+            run_id="empty_run",
+            dataset="test_dataset",
+            started_at=1000.0,
+            finished_at=1100.0,
+            duration_s=100.0,
+            tables={},
+            errors=[
+                RunError(
+                    provider="test_provider",
+                    dataset="test_dataset",
+                    symbol="",
+                    exc_type="ValueError",
+                    message="failed before write",
+                    retryable=False,
+                )
+            ],
+        )
+        save_run_history(run_result, "empty_run")
+        history = list_run_history(limit=10)
+        assert len(history) == 1
+        assert history[0]["run_id"] == "empty_run"
+        assert history[0]["table_name"] is None
+        assert history[0]["tables"] == {}
+        assert history[0]["total_rows"] == 0
 
 
 def test_dlq_index_registration_roundtrip() -> None:

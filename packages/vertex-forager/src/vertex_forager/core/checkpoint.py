@@ -228,12 +228,13 @@ def _build_run_history_payloads(
                 "tables": {table_key: int(row_count)},
             }
         )
-    if payloads or table_name is None:
+    if payloads:
         return payloads
+    fallback_table_name = table_name if table_name is not None else ""
     return [
         {
             **base_payload,
-            "row_id": _build_run_history_row_id(run_id, table_name),
+            "row_id": _build_run_history_row_id(run_id, fallback_table_name),
             "table_name": table_name,
             "tables": {},
         }
@@ -310,7 +311,10 @@ def _migrate_run_history_table(conn: sqlite3.Connection) -> None:
         )
         if not table_items and row["table_name"] is not None:
             table_items = [(str(row["table_name"]), 0)]
+        if not table_items and row["table_name"] is None:
+            table_items = [("", 0)]
         for table_key, row_count in table_items:
+            stored_table_name = table_key if table_key else None
             conn.execute(
                 """
                 INSERT OR REPLACE INTO run_history (
@@ -336,11 +340,11 @@ def _migrate_run_history_table(conn: sqlite3.Connection) -> None:
                     str(row["run_id"]),
                     str(row["provider"]),
                     row["dataset"],
-                    table_key,
+                    stored_table_name,
                     row["started_at"],
                     row["finished_at"],
                     row["duration_s"],
-                    _json_dumps({table_key: row_count}),
+                    _json_dumps({table_key: row_count} if table_key else {}),
                     int(row["error_count"]),
                     str(row["errors_json"]),
                     str(row["quality_violations_json"]),
