@@ -19,8 +19,10 @@ Status: Alpha • Python 3.10+ • License: Apache-2.0
 ## Installation
 
 ```bash
-pip install "vertex-forager[yfinance] @ git+https://github.com/coolbress/VertexLab.git@vertex-forager-v0.28.0#subdirectory=packages/vertex-forager"
+pip install "vertex-forager[yfinance] @ git+https://github.com/coolbress/VertexLab.git#subdirectory=packages/vertex-forager"
 ```
+
+This README tracks the current branch documentation, so the install example intentionally targets the repository package path without pinning an older tag.
 
 ## Quick Start
 
