@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.30.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.29.0...vertex-forager-v0.30.0) (2026-04-08)
+
+
+### ⚠ BREAKING CHANGES
+
+* **vertex-forager:** align docs and SDK public surface ([#470](https://github.com/coolbress/VertexLab/issues/470))
+
+### Features
+
+* **vertex-forager:** align docs and SDK public surface ([#470](https://github.com/coolbress/VertexLab/issues/470)) ([d82a70a](https://github.com/coolbress/VertexLab/commit/d82a70a567e3ab9917985a46864d0b040a521e3c))
+
 ## [0.29.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.28.0...vertex-forager-v0.29.0) (2026-04-08)
 
 
