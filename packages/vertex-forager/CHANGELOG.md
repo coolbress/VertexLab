@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.29.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.28.0...vertex-forager-v0.29.0) (2026-04-08)
+
+
+### ⚠ BREAKING CHANGES
+
+* **vertex-forager:** align CLI with stable SDK surface ([#468](https://github.com/coolbress/VertexLab/issues/468))
+
+### Features
+
+* **vertex-forager:** align CLI with stable SDK surface ([#468](https://github.com/coolbress/VertexLab/issues/468)) ([27b949c](https://github.com/coolbress/VertexLab/commit/27b949c513c21725b54d89cfb01eeb69746f0bab))
+
 ## [0.28.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.27.0...vertex-forager-v0.28.0) (2026-04-07)
 
 
