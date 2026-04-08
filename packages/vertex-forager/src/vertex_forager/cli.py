@@ -32,6 +32,7 @@ from vertex_forager.core.sweep import (
     run_sweep_measurements,
     score_and_rank_results,
 )
+from vertex_forager.exceptions import VertexForagerError
 from vertex_forager.state import StateManager
 
 from .utils import cleanup_dlq_tmp, clear_app_cache, get_app_root, get_cache_dir
@@ -155,6 +156,7 @@ def _before_to_timestamp(value: str) -> float:
     """Convert a before-window string to a cutoff timestamp."""
     days = _parse_before_days(value)
     return datetime.now(tz=timezone.utc).timestamp() - (days * 86_400)
+
 
 def _create_cli_client(
     *,
@@ -714,10 +716,13 @@ def dlq_replay(table: str, output: str | None, dry_run: bool) -> None:
     if resolved_output is None:
         resolved_output = _resolve_dlq_replay_output(table=table, output=None)
     result = state.dlq.replay(table=table, output=resolved_output, dry_run=dry_run)
+    banner = "✅ DLQ replay finished"
+    if result.failed > 0:
+        banner = "❌ DLQ replay finished with failures"
     click.echo(
         " ".join(
             [
-                "✅ DLQ replay finished",
+                banner,
                 f"table={table}",
                 f"replayed={result.replayed}",
                 f"failed={result.failed}",
@@ -727,6 +732,8 @@ def dlq_replay(table: str, output: str | None, dry_run: bool) -> None:
     )
     for error in result.errors:
         click.echo(f"error={error}")
+    if result.failed > 0:
+        raise SystemExit(1)
 
 
 @dlq.command("clear")
@@ -734,6 +741,8 @@ def dlq_replay(table: str, output: str | None, dry_run: bool) -> None:
 @click.option("--all", "clear_all", is_flag=True, default=False, help="Clear all DLQ entries")
 def dlq_clear(table: str | None, clear_all: bool) -> None:
     """Delete DLQ entries by table or clear everything with confirmation."""
+    if clear_all and table is not None:
+        raise click.UsageError("Provide only one of --table or --all.")
     if not clear_all and table is None:
         raise click.UsageError("Provide --table or --all.")
     if clear_all and not click.confirm("⚠️ Delete all DLQ state?"):
@@ -753,10 +762,18 @@ def checkpoints() -> None:
 @click.option("--output", required=True, type=str, help="DuckDB output URI")
 def checkpoints_resume(table: str, output: str) -> None:
     """Resume the latest checkpoint for the requested table."""
-    provider = _provider_from_table(table)
-    state = StateManager()
-    client = _create_cli_client(provider=provider)
-    result = state.checkpoints.resume(table=table, client=client, output=output)
+    try:
+        provider = _provider_from_table(table)
+        state = StateManager()
+        client = _create_cli_client(provider=provider)
+        result = state.checkpoints.resume(table=table, client=client, output=output)
+    except click.ClickException:
+        raise
+    except (VertexForagerError, ValueError, OSError) as exc:
+        raise click.ClickException(str(exc)) from None
+    except Exception as exc:
+        logger.exception("Unexpected checkpoints resume error for table %s", table)
+        raise click.ClickException(f"Checkpoint resume failed unexpectedly: {exc}") from None
     _print_run_result_summary(result)
 
 
@@ -765,6 +782,8 @@ def checkpoints_resume(table: str, output: str) -> None:
 @click.option("--all", "clear_all", is_flag=True, default=False, help="Clear all checkpoints")
 def checkpoints_clear(table: str | None, clear_all: bool) -> None:
     """Clear checkpoints by table or all at once."""
+    if clear_all and table is not None:
+        raise click.UsageError("Provide only one of --table or --all.")
     if not clear_all and table is None:
         raise click.UsageError("Provide --table or --all.")
     if clear_all and not click.confirm("⚠️ Delete all checkpoints?"):

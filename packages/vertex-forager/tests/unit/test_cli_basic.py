@@ -300,10 +300,35 @@ def test_dlq_replay_uses_stored_output_uri(monkeypatch: pytest.MonkeyPatch) -> N
     assert "replayed=1" in result.output
 
 
+def test_dlq_replay_exits_non_zero_on_partial_failures(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _DLQ:
+        def replay(self, *, table: str, output: str, dry_run: bool = False) -> ReplayResult:
+            return ReplayResult(replayed=1, failed=1, skipped=0, errors=["write failed"])
+
+    class _StateManager:
+        def __init__(self) -> None:
+            self.dlq = _DLQ()
+
+    monkeypatch.setattr(cli_mod, "StateManager", _StateManager, raising=True)
+    result = CliRunner().invoke(
+        cli_mod.main,
+        ["dlq", "replay", "--table", "yfinance_price", "--output", "duckdb:///override.duckdb"],
+    )
+    assert result.exit_code == 1
+    assert "DLQ replay finished with failures" in result.output
+    assert "error=write failed" in result.output
+
+
 def test_dlq_clear_requires_table_or_all() -> None:
     result = CliRunner().invoke(cli_mod.main, ["dlq", "clear"])
     assert result.exit_code != 0
     assert "Provide --table or --all." in result.output
+
+
+def test_dlq_clear_rejects_table_and_all_together() -> None:
+    result = CliRunner().invoke(cli_mod.main, ["dlq", "clear", "--table", "yfinance_price", "--all"])
+    assert result.exit_code != 0
+    assert "Provide only one of --table or --all." in result.output
 
 
 def test_dlq_clear_all_confirms(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -357,10 +382,38 @@ def test_checkpoints_resume_constructs_provider_client(monkeypatch: pytest.Monke
     assert "Run completed" in result.output
 
 
+def test_checkpoints_resume_translates_domain_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Checkpoints:
+        def resume(self, *, table: str, client: Any, output: str) -> RunResult:
+            raise cli_mod.VertexForagerError("resume failed")
+
+    class _StateManager:
+        def __init__(self) -> None:
+            self.checkpoints = _Checkpoints()
+
+    monkeypatch.setattr(cli_mod, "StateManager", _StateManager, raising=True)
+    monkeypatch.setattr(cli_mod, "create_client", lambda **_: object(), raising=True)
+    result = CliRunner().invoke(
+        cli_mod.main,
+        ["checkpoints", "resume", "--table", "sharadar_price", "--output", "duckdb:///data.db"],
+    )
+    assert result.exit_code != 0
+    assert "resume failed" in result.output
+
+
 def test_checkpoints_clear_requires_table_or_all() -> None:
     result = CliRunner().invoke(cli_mod.main, ["checkpoints", "clear"])
     assert result.exit_code != 0
     assert "Provide --table or --all." in result.output
+
+
+def test_checkpoints_clear_rejects_table_and_all_together() -> None:
+    result = CliRunner().invoke(
+        cli_mod.main,
+        ["checkpoints", "clear", "--table", "sharadar_price", "--all"],
+    )
+    assert result.exit_code != 0
+    assert "Provide only one of --table or --all." in result.output
 
 
 def test_recover_command_removed() -> None:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from click.testing import CliRunner
@@ -24,6 +24,8 @@ def _write_price_ipc(path: Path) -> None:
             "high": [2.0],
             "low": [0.5],
             "close": [1.5],
+            "volume": [1000.0],
+            "fetched_at": [datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)],
         }
     ).write_ipc(path)
 
