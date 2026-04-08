@@ -148,7 +148,7 @@ Use this to tell the difference between:
 ```bash
 vertex-forager collect sharadar price --symbol AAPL --connect-db duckdb:///forager.duckdb
 vertex-forager collect sharadar fundamentals --symbol AAPL --dimension MRT --connect-db duckdb:///forager.duckdb
-vertex-forager collect yfinance financials --symbol AAPL --kind income_stmt --period annual
+vertex-forager collect yfinance financials --symbol AAPL --kind income_stmt --period annual --connect-db duckdb:///forager.duckdb
 ```
 
 ## Decide what to do after a run
