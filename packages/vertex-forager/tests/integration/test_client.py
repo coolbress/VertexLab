@@ -31,7 +31,7 @@ class TestClientVisualization:
         with patch("vertex_forager.clients.base.VertexForager") as MockPipeline:
             mock_pipeline_instance = MockPipeline.return_value
             mock_pipeline_instance.run = AsyncMock(return_value=MagicMock())
-            await sharadar_client._get_ticker_info_async()
+            await sharadar_client.get_ticker_info_async()
 
             assert mock_pipeline_instance.run.await_args.kwargs["progress"] is False
 
@@ -47,7 +47,7 @@ class TestClientVisualization:
 
             # Act
             tickers = ["AAPL", "GOOGL"]
-            await sharadar_client._get_price_data_async(
+            await sharadar_client.get_price_data_async(
                 tickers=tickers,
                 start_date="2024-01-01",
                 end_date="2024-01-10",
@@ -95,7 +95,7 @@ class TestClientIntegration:
         mock_http_executor.fetch.return_value = mock_response
 
         # Act
-        result = await sharadar_client._get_price_data_async(
+        result = await sharadar_client.get_price_data_async(
             tickers=["AAPL"],
             start_date="2024-01-01",
             end_date="2024-01-31",
@@ -121,7 +121,7 @@ class TestClientIntegration:
         mock_http_executor.fetch.return_value = mock_response
 
         # Act
-        result = await sharadar_client._get_price_data_async(
+        result = await sharadar_client.get_price_data_async(
             tickers=["AAPL"],
             start_date="2024-01-01",
             end_date="2024-01-31",
@@ -172,7 +172,7 @@ class TestClientIntegration:
             return RunResult(provider="sharadar", data=pl.DataFrame())
 
         with patch.object(sharadar_client, "_dispatch_fetch", _fake_dispatch):
-            await sharadar_client._get_price_data_async(
+            await sharadar_client.get_price_data_async(
                 tickers=["AAPL"],
                 meta=meta_path,
                 start_date="2024-01-01",
@@ -195,7 +195,7 @@ class TestClientIntegration:
             return RunResult(provider="sharadar", data=pl.DataFrame())
 
         with patch.object(sharadar_client, "_dispatch_fetch", _fake_dispatch):
-            await sharadar_client._get_price_data_async(
+            await sharadar_client.get_price_data_async(
                 tickers=["AAPL"],
                 meta=None,
                 start_date="2024-01-01",
@@ -213,7 +213,7 @@ class TestClientIntegration:
             return RunResult(provider="sharadar", data=pl.DataFrame({"ticker": ["AAPL"]}))
 
         with patch.object(sharadar_client, "_dispatch_fetch", _fake_dispatch):
-            result = await sharadar_client._get_ticker_info_async(tickers=None)
+            result = await sharadar_client.get_ticker_info_async(tickers=None)
 
         assert isinstance(result, RunResult)
         assert result.data is not None
@@ -241,7 +241,7 @@ class TestClientIntegration:
         mock_http_executor.fetch.return_value = json.dumps(mock_response).encode()
 
         # Act
-        result = await sharadar_client._get_daily_metrics_async(
+        result = await sharadar_client.get_daily_metrics_async(
             tickers=["AAPL"],
             start_date="2024-01-01",
             end_date="2024-01-31",
@@ -279,7 +279,7 @@ class TestClientIntegration:
         mock_http_executor.fetch.return_value = json.dumps(mock_response).encode()
 
         # Act
-        result = await sharadar_client._get_corporate_actions_async(
+        result = await sharadar_client.get_corporate_actions_async(
             tickers=["AAPL"],
             start_date="2024-01-01",
             end_date="2024-01-31",
@@ -309,7 +309,7 @@ class TestClientErrorHandling:
         mock_http_executor.fetch.return_value = json.dumps(mock_response_obj).encode()
 
         # Act
-        result = await sharadar_client._get_price_data_async(
+        result = await sharadar_client.get_price_data_async(
             tickers=["AAPL"],
             start_date="2024-01-01",
             end_date="2024-01-31",
@@ -333,7 +333,7 @@ class TestClientErrorHandling:
         mock_http_executor.fetch.side_effect = httpx.RequestError("API Error")
 
         # Act
-        result = await sharadar_client._get_price_data_async(
+        result = await sharadar_client.get_price_data_async(
             tickers=["AAPL"],
             start_date="2024-01-01",
             end_date="2024-01-31",
@@ -359,13 +359,13 @@ class TestClientErrorHandling:
         mock_http_executor.fetch.return_value = mock_response
 
         # Act
-        result1 = await sharadar_client._get_price_data_async(
+        result1 = await sharadar_client.get_price_data_async(
             tickers=["AAPL"],
             start_date="2024-01-01",
             end_date="2024-01-31",
             connect_db=None,
         )
-        result2 = await sharadar_client._get_price_data_async(
+        result2 = await sharadar_client.get_price_data_async(
             tickers=["MSFT"],
             start_date="2024-01-01",
             end_date="2024-01-31",

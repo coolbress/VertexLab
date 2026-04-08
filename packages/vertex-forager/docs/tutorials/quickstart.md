@@ -91,13 +91,13 @@ The CLI mirrors the stable dataset-specific collection surface:
 vertex-forager collect yfinance price \
   --symbol AAPL \
   --symbol MSFT \
-  --output duckdb:///forager.duckdb
+  --connect-db duckdb:///forager.duckdb
 ```
 
 Other common CLI entry points:
 
 ```bash
-vertex-forager collect sharadar fundamentals --symbol AAPL --dimension MRT --output duckdb:///forager.duckdb
+vertex-forager collect sharadar fundamentals --symbol AAPL --dimension MRT --connect-db duckdb:///forager.duckdb
 vertex-forager dlq list --status pending
 vertex-forager runs list --table yfinance_price --limit 10
 vertex-forager checkpoints resume --table sharadar_price --output duckdb:///forager.duckdb
@@ -105,8 +105,9 @@ vertex-forager checkpoints resume --table sharadar_price --output duckdb:///fora
 
 ## Next Steps
 
+- Learn task-oriented collection flows: [Collect data](../how-to/collect-data.md)
+- Manage run history, DLQ, and checkpoints with `StateManager`: [Manage local state](../how-to/manage-local-state.md)
 - Configure concurrency, retries, and grouped runtime settings: see [Configuration](../reference/config.md)
 - Tune local collection behavior: see [Performance tuning](../how-to/performance-tuning.md)
-- Tune write flush thresholds: see [Chunked flush tuning](../how-to/chunked-flush.md)
-- See the CLI mapping for more command examples: [CLI equivalents](../how-to/cli-equivalents.md)
-- Resume runs and operate on local state: see [Resume and recovery](../how-to/resume-and-recovery.md)
+- See the full command inventory: [CLI reference](../reference/cli.md)
+- Resume interrupted persisted runs: [Resume interrupted run](../how-to/resume-interrupted-run.md)

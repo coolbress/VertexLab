@@ -5,7 +5,7 @@ Provider-agnostic data collection for financial markets. Centralized transport, 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 [![CI](https://github.com/coolbress/vertex-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/coolbress/vertex-lab/actions)
-[![Docs](https://img.shields.io/badge/docs-MkDocs%20Material-blueviolet)](https://coolbress.github.io/vertex-lab/)
+[![Docs](https://img.shields.io/badge/docs-MkDocs%20Material-blueviolet)](https://coolbress.github.io/VertexLab/vertex-forager/)
 
 Status: Alpha • Python 3.10+ • License: Apache-2.0
 
@@ -18,20 +18,8 @@ Status: Alpha • Python 3.10+ • License: Apache-2.0
 
 ## Installation
 
-
 ```bash
-# Using pip
-pip install vertex-forager
-
-# Using uv
-uv pip install vertex-forager
-
-# Optional extras
-pip install "vertex-forager[notebook]"
-pip install "vertex-forager[yfinance]"
-
-# Install from GitHub release asset (specific tag)
-pip install https://github.com/coolbress/VertexLab/releases/download/vertex-forager-v0.2.0/vertex_forager-0.2.0-py3-none-any.whl
+pip install "vertex-forager[yfinance] @ git+https://github.com/coolbress/VertexLab.git@vertex-forager-v0.28.0#subdirectory=packages/vertex-forager"
 ```
 
 ## Quick Start
@@ -70,10 +58,10 @@ print(df)
 ## Configuration
 
 - `create_client(...)`
-  - required: `provider`, `api_key` (Sharadar), `rate_limit`
-  - common runtime knobs: `concurrency`, `flush_threshold_rows`
-  - state retention knobs: `checkpoint_retention_days`, `run_history_retention_days`
-  - grouped config: `retry=RetryConfig(...)`, `throttle=AdaptiveThrottleConfig(...)`, `limits=HTTPConfig(...)`, `advanced=AdvancedConfig(...)`
+  - required: `provider`
+  - Sharadar also requires `api_key` and `rate_limit`
+  - common public knobs: `quality_check`, `concurrency`, `schedule`
+  - grouped config: `retry=RetryConfig(...)`, `throttle=AdaptiveThrottleConfig(...)`, `limits=HTTPConfig(...)`, `storage=StorageConfig(...)`
 - persistence path: `connect_db="duckdb://./forager.duckdb"`
 
 ## Storage contract
@@ -89,12 +77,16 @@ print(df)
 - Tutorials
   - [Quickstart](docs/tutorials/quickstart.md)
 - How‑to Guides
-  - [Resume and recovery](docs/how-to/resume-and-recovery.md)
+  - [Configure a client](docs/how-to/configure-a-client.md)
+  - [Collect data](docs/how-to/collect-data.md)
+  - [Manage local state](docs/how-to/manage-local-state.md)
+  - [Resume interrupted run](docs/how-to/resume-interrupted-run.md)
   - [Performance tuning](docs/how-to/performance-tuning.md)
-  - [Data integrity controls](docs/how-to/data-integrity.md)
   - [Troubleshooting](docs/how-to/troubleshooting.md)
-  - [CLI equivalents](docs/how-to/cli-equivalents.md)
 - Reference
+  - [CLI Reference](docs/reference/cli.md)
+  - [Providers](docs/reference/providers.md)
+  - [StateManager](docs/reference/statemanager.md)
   - [Configuration](docs/reference/config.md)
   - [API Reference](docs/reference/api.md)
 
@@ -115,6 +107,8 @@ print(df)
   - Sharadar requires `SHARADAR_API_KEY`; YFinance does not.
 - How do I change concurrency?
   - Pass `concurrency=...` to `create_client(...)`; it must be positive when specified.
+- How do I inspect or replay local state?
+  - Use `StateManager()` or the CLI `runs`, `dlq`, and `checkpoints` commands.
 - Where are schemas defined?
   - See `vertex_forager/schema/registry.py` and provider-specific `schema.py`.
 
@@ -123,8 +117,7 @@ print(df)
 
 ```python
 from vertex_forager import (
-  SharadarClient, YFinanceClient,
-  create_client, create_router,
+  create_client, StateManager,
   FetchError, ValidationError, WriterError,
 )
 ```

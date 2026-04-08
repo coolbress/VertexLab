@@ -41,6 +41,18 @@ Thank you for contributing to VertexLab.
    uv run pytest packages/ -m smoke
    ```
 
+## vertex-forager package testing
+
+For `packages/vertex-forager`, the most common local workflows are:
+
+```bash
+uv run pytest packages/vertex-forager/tests/ -m "not manual"
+uv run pytest packages/vertex-forager/tests/ -m integration
+uv run pytest packages/vertex-forager/tests/unit/test_cli_basic.py -v
+```
+
+Use integration tests for end-to-end writer, pipeline, and CLI paths. Use unit tests for isolated behavior with mocked dependencies.
+
 ## Issue Guidelines
 
 - Bug report: use for defects, regressions, and broken workflows.

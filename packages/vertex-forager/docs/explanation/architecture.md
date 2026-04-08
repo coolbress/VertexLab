@@ -2,19 +2,19 @@
 
 ```mermaid
 flowchart TD
-  A[Router Jobs] --> B[Throttle (GCRA) + Concurrency (Gradient)]
-  B --> C[HTTP / Library Fetch with Retry]
-  C --> D[Parse -> FramePackets]
-  D --> E[Normalize (Schemas, PK)]
-  E --> F{Flush threshold reached?}
+  A["Router Jobs"] --> B["Throttle (GCRA) + Concurrency (Gradient)"]
+  B --> C["HTTP / Library Fetch with Retry"]
+  C --> D["Parse to FramePackets"]
+  D --> E["Normalize (Schemas, PK)"]
+  E --> F{"Flush threshold reached?"}
   F -- No --> E
-  F -- Yes --> G[Merge Frames, PK Checks]
-  G --> H{Write Chunk}
-  H -- Success --> I[Update RunResult & Metrics]
-  H -- Failure --> J[Per-packet Rescue]
-  J -- Partial Success --> K[DLQ Spool Failed Packets]
+  F -- Yes --> G["Merge Frames, PK Checks"]
+  G --> H{"Write Chunk"}
+  H -- Success --> I["Update RunResult & Metrics"]
+  H -- Failure --> J["Per-packet Rescue"]
+  J -- Partial Success --> K["DLQ Spool Failed Packets"]
   J -- All Fail --> K
-  K --> L[Operator Recovery CLI]
+  K --> L["StateManager Replay or Checkpoint Resume"]
   L --> H
 ```
 
@@ -32,6 +32,7 @@ flowchart TD
    - Attempt per‑packet rescue writes.
    - On remaining failures:
      - Spool to DLQ with atomic replace and fsync.
+   - Operators recover persisted state through `StateManager` APIs and the CLI `dlq replay` / `checkpoints resume` commands rather than a separate recovery command.
 
 ## Design Notes
 

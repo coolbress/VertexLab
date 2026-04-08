@@ -43,10 +43,10 @@ print(result)
 
 ## Start Here
 
-- Install the package: [Installation](installation.md)
 - Run your first workflow: [Quickstart](tutorials/quickstart.md)
-- Learn the test workflow: [Testing Guide](how-to/testing.md)
-- Review common operational tasks: [How-to Guides](how-to/troubleshooting.md)
+- Learn the collection workflow: [Collect data](how-to/collect-data.md)
+- Understand how the pipeline works: [How pipeline orchestrates](explanation/how-pipeline-orchestrates.md)
+- Scan the public surface: [API Reference](reference/api.md)
 
 ## Examples And Project Links
 
