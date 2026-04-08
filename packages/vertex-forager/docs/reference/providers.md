@@ -46,13 +46,20 @@ This page is the catalog of built-in provider datasets, their target DuckDB tabl
 Every public sync collection method has a matching `*_async` coroutine on the same client.
 
 ```python
+import asyncio
+
 from vertex_forager import create_client
 
-client = create_client(provider="yfinance")
-result = await client.get_price_data_async(
-    tickers=["AAPL", "MSFT"],
-    connect_db="duckdb:///forager.duckdb",
-)
+async def main() -> None:
+    client = create_client(provider="yfinance")
+    result = await client.get_price_data_async(
+        tickers=["AAPL", "MSFT"],
+        connect_db="duckdb:///forager.duckdb",
+    )
+    print(result.tables)
+
+
+asyncio.run(main())
 ```
 
 Examples:

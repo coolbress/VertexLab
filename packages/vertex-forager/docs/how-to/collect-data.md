@@ -13,7 +13,10 @@ from vertex_forager import create_client
 
 client = create_client(provider="yfinance")
 result = client.get_price_data(tickers=["AAPL", "MSFT"])
-print(result.data.head())
+if result.data is not None:
+    print(result.data.head())
+else:
+    print("No in-memory DataFrame was returned.")
 ```
 
 Use this when:
@@ -85,14 +88,20 @@ This is still one run at a time, but the scheduler changes how work is interleav
 Public async methods follow the same naming as the sync methods with an `_async` suffix.
 
 ```python
+import asyncio
+
 from vertex_forager import create_client
 
-client = create_client(provider="yfinance")
-result = await client.get_price_data_async(
-    tickers=["AAPL", "MSFT"],
-    connect_db="duckdb:///forager.duckdb",
-)
-print(result.tables)
+async def main() -> None:
+    client = create_client(provider="yfinance")
+    result = await client.get_price_data_async(
+        tickers=["AAPL", "MSFT"],
+        connect_db="duckdb:///forager.duckdb",
+    )
+    print(result.tables)
+
+
+asyncio.run(main())
 ```
 
 ## Read RunResult after a persisted run

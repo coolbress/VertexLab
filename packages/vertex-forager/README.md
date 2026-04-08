@@ -120,6 +120,8 @@ print(result.data)
 ```python
 from vertex_forager import (
   create_client, StateManager,
+  SharadarClient, YFinanceClient,
+  VertexForagerError, InputError,
   FetchError, ValidationError, WriterError,
 )
 ```
