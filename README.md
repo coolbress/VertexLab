@@ -21,7 +21,6 @@
 | packages/vertex-forager/src/vertex\_forager/core/orchestration.py   |       74 |       10 |     86% |43-44, 92-93, 95-97, 125, 188-189 |
 | packages/vertex-forager/src/vertex\_forager/core/pipeline.py        |      916 |      105 |     89% |112-113, 141-142, 149-150, 172, 174, 179-180, 187-190, 209-216, 337-339, 426-427, 437-438, 490, 553-554, 575, 582, 591-594, 787-788, 1006-1007, 1011, 1025-1027, 1029-1032, 1099-1100, 1105-1111, 1153-1154, 1157-1158, 1161-1164, 1219, 1222-1227, 1293-1294, 1360-1380, 1475, 1488, 1546-1547, 1609-1610, 1621, 1624, 1686-1688, 1697-1698, 1757-1758, 1935-1936 |
 | packages/vertex-forager/src/vertex\_forager/core/quality.py         |      115 |        5 |     96% |64, 88-89, 178-179 |
-| packages/vertex-forager/src/vertex\_forager/core/recover.py         |      114 |       18 |     84% |42-45, 89, 94, 144-146, 156-158, 178, 199, 221-224 |
 | packages/vertex-forager/src/vertex\_forager/core/registries.py      |       44 |        5 |     89% |85, 90, 113, 117, 121 |
 | packages/vertex-forager/src/vertex\_forager/core/retry.py           |       94 |        6 |     94% |73, 188-191, 202 |
 | packages/vertex-forager/src/vertex\_forager/core/scheduler.py       |      155 |       17 |     89% |40, 42, 44, 136-142, 144, 146-147, 159, 175, 200-201 |
@@ -39,7 +38,7 @@
 | packages/vertex-forager/src/vertex\_forager/writers/constants.py    |       24 |        0 |    100% |           |
 | packages/vertex-forager/src/vertex\_forager/writers/duckdb.py       |      308 |       41 |     87% |141-142, 163, 242-243, 251-257, 313, 325-326, 348-350, 355-356, 386-387, 461-462, 486-493, 503-507, 513, 544-554, 636-637 |
 | packages/vertex-forager/src/vertex\_forager/writers/memory.py       |       60 |        8 |     87% |56, 111-118 |
-| **TOTAL**                                                           | **4002** |  **592** | **85%** |           |
+| **TOTAL**                                                           | **3888** |  **574** | **85%** |           |
 
 
 ## Setup coverage badge
