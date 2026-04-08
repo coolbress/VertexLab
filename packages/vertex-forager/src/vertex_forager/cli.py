@@ -270,7 +270,6 @@ def _load_status_rows(state_db: Path) -> tuple[list[tuple[str, str]], list[tuple
                 """
                 SELECT table_name, COUNT(*)
                 FROM checkpoints
-                WHERE status != 'completed'
                 GROUP BY table_name
                 ORDER BY table_name
                 """
@@ -379,7 +378,7 @@ def collect_sharadar_price(
 @click.option(
     "--dimension",
     type=click.Choice(["MRY", "MRQ", "MRT", "ARY", "ARQ", "ART"]),
-    default="MRY",
+    default="MRT",
     show_default=True,
 )
 @click.option("--start-date", type=str, default=None)

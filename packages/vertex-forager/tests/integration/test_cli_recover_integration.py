@@ -74,6 +74,7 @@ def test_dlq_replay_integration_dry_run_and_override(tmp_path: Path, monkeypatch
     dry_run = CliRunner().invoke(main, ["dlq", "replay", "--table", "yfinance_price", "--dry-run"])
     assert dry_run.exit_code == 0
     assert "replayed=1" in dry_run.output
+    assert not stored_db.exists()
     assert not override_db.exists()
 
     replay = CliRunner().invoke(
@@ -81,6 +82,7 @@ def test_dlq_replay_integration_dry_run_and_override(tmp_path: Path, monkeypatch
         ["dlq", "replay", "--table", "yfinance_price", "--output", f"duckdb://{override_db}"],
     )
     assert replay.exit_code == 0
+    assert not stored_db.exists()
     with duckdb.connect(str(override_db)) as conn:
         rows = conn.execute("SELECT COUNT(*) FROM yfinance_price").fetchone()
         assert rows == (1,)

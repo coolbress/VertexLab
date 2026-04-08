@@ -40,7 +40,8 @@
   - Confirm provider schema’s `unique_key` and mapper normalization.
 - Actions
   - Fix source or normalization to populate PKs.
-  - Use `vertex-forager dlq replay --table <table>` to reinject corrected frames.
+  - Re-ingest corrected source data or fix normalization first; `vertex-forager dlq replay --table <table>` only replays the stored IPC payloads as-is.
+  - Use `vertex-forager dlq replay --table <table>` only after you have replaced or edited the spooled IPC batch itself.
 
 ## Connectivity
 

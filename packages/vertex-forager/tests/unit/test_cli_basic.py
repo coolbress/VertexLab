@@ -56,6 +56,7 @@ def test_status_runs_and_prints_state_summary(tmp_path: Path, monkeypatch: pytes
         conn.execute("CREATE TABLE dlq_index (table_name TEXT, status TEXT)")
         conn.execute("CREATE TABLE run_history (table_name TEXT, created_at REAL)")
         conn.execute("INSERT INTO checkpoints VALUES ('sharadar_price', 'in_progress', 1.0)")
+        conn.execute("INSERT INTO checkpoints VALUES ('sharadar_price', 'completed', 2.0)")
         conn.execute("INSERT INTO dlq_index VALUES ('yfinance_price', 'pending')")
         conn.execute("INSERT INTO run_history VALUES ('yfinance_price', 1700000000.0)")
         conn.commit()
@@ -67,7 +68,7 @@ def test_status_runs_and_prints_state_summary(tmp_path: Path, monkeypatch: pytes
     result = CliRunner().invoke(cli_mod.main, ["status"])
     assert result.exit_code == 0
     assert "Checkpoint entries per table" in result.output
-    assert "sharadar_price: 1" in result.output
+    assert "sharadar_price: 2" in result.output
     assert "Pending DLQ batches per table" in result.output
     assert "yfinance_price: 1" in result.output
     assert "Last run timestamp per table" in result.output
@@ -92,24 +93,87 @@ def test_constants_json_global() -> None:
 
 
 @pytest.mark.parametrize(
-    ("argv", "method_name"),
+    ("argv", "method_name", "expected_kwargs"),
     [
-        (["collect", "sharadar", "price", "--symbol", "AAPL"], "get_price_data"),
-        (["collect", "sharadar", "fundamentals", "--symbol", "AAPL"], "get_fundamental_data"),
-        (["collect", "sharadar", "tickers"], "get_ticker_info"),
-        (["collect", "sharadar", "sp500"], "get_sp500_history"),
-        (["collect", "yfinance", "price", "--symbol", "AAPL"], "get_price_data"),
+        (
+            ["collect", "sharadar", "price", "--symbol", "AAPL"],
+            "get_price_data",
+            {
+                "tickers": ["AAPL"],
+                "connect_db": None,
+                "start_date": None,
+                "end_date": None,
+                "progress": True,
+            },
+        ),
+        (
+            ["collect", "sharadar", "fundamentals", "--symbol", "AAPL"],
+            "get_fundamental_data",
+            {
+                "tickers": ["AAPL"],
+                "dimension": "MRT",
+                "connect_db": None,
+                "start_date": None,
+                "end_date": None,
+                "progress": True,
+            },
+        ),
+        (["collect", "sharadar", "tickers"], "get_ticker_info", {"connect_db": None, "progress": True}),
+        (
+            ["collect", "sharadar", "sp500"],
+            "get_sp500_history",
+            {
+                "connect_db": None,
+                "start_date": None,
+                "end_date": None,
+                "progress": True,
+            },
+        ),
+        (
+            ["collect", "yfinance", "price", "--symbol", "AAPL"],
+            "get_price_data",
+            {
+                "tickers": ["AAPL"],
+                "connect_db": None,
+                "start_date": None,
+                "end_date": None,
+                "progress": True,
+            },
+        ),
         (
             ["collect", "yfinance", "financials", "--symbol", "AAPL", "--kind", "income_stmt"],
             "get_financials",
+            {
+                "tickers": ["AAPL"],
+                "kind": "income_stmt",
+                "period": "annual",
+                "connect_db": None,
+                "progress": True,
+            },
         ),
-        (["collect", "yfinance", "info", "--symbol", "AAPL"], "get_info"),
-        (["collect", "yfinance", "dividends", "--symbol", "AAPL"], "get_actions"),
+        (
+            ["collect", "yfinance", "info", "--symbol", "AAPL"],
+            "get_info",
+            {"tickers": ["AAPL"], "connect_db": None, "progress": True},
+        ),
+        (
+            ["collect", "yfinance", "dividends", "--symbol", "AAPL"],
+            "get_actions",
+            {
+                "tickers": ["AAPL"],
+                "kind": "dividends",
+                "connect_db": None,
+                "start_date": None,
+                "end_date": None,
+                "progress": True,
+            },
+        ),
     ],
 )
 def test_collect_subcommands_invoke_expected_methods(
     argv: list[str],
     method_name: str,
+    expected_kwargs: dict[str, Any],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[tuple[str, dict[str, Any]]] = []
@@ -126,6 +190,7 @@ def test_collect_subcommands_invoke_expected_methods(
     result = CliRunner().invoke(cli_mod.main, argv)
     assert result.exit_code == 0
     assert calls[0][0] == method_name
+    assert calls[0][1] == expected_kwargs
     assert "Run completed" in result.output
 
 
