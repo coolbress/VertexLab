@@ -153,7 +153,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
     # ----------------------------------------------------------------
     # Public User Methods
     # ----------------------------------------------------------------
-    async def _get_ticker_info_async(
+    async def get_ticker_info_async(
         self,
         *,
         tickers: list[str] | None = None,
@@ -195,9 +195,9 @@ class SharadarClient(BaseClient[SharadarDataset]):
             on_progress=on_progress,
         )
 
-    get_ticker_info = make_sync(_get_ticker_info_async)
+    get_ticker_info = make_sync(get_ticker_info_async)
 
-    async def _get_sp500_history_async(
+    async def get_sp500_history_async(
         self,
         *,
         connect_db: str | Path | None = None,
@@ -236,9 +236,9 @@ class SharadarClient(BaseClient[SharadarDataset]):
             on_progress=on_progress,
         )
 
-    get_sp500_history = make_sync(_get_sp500_history_async)
+    get_sp500_history = make_sync(get_sp500_history_async)
 
-    async def _get_price_data_async(
+    async def get_price_data_async(
         self,
         *,
         tickers: list[str],
@@ -286,9 +286,9 @@ class SharadarClient(BaseClient[SharadarDataset]):
             ticker_metadata=self._load_ticker_metadata_from_meta_db(meta, tickers),
         )
 
-    get_price_data = make_sync(_get_price_data_async)
+    get_price_data = make_sync(get_price_data_async)
 
-    async def _get_fundamental_data_async(
+    async def get_fundamental_data_async(
         self,
         *,
         tickers: list[str],
@@ -339,9 +339,9 @@ class SharadarClient(BaseClient[SharadarDataset]):
             ticker_metadata=self._load_ticker_metadata_from_meta_db(meta, tickers),
         )
 
-    get_fundamental_data = make_sync(_get_fundamental_data_async)
+    get_fundamental_data = make_sync(get_fundamental_data_async)
 
-    async def _get_daily_metrics_async(
+    async def get_daily_metrics_async(
         self,
         *,
         tickers: list[str],
@@ -389,9 +389,9 @@ class SharadarClient(BaseClient[SharadarDataset]):
             ticker_metadata=self._load_ticker_metadata_from_meta_db(meta, tickers),
         )
 
-    get_daily_metrics = make_sync(_get_daily_metrics_async)
+    get_daily_metrics = make_sync(get_daily_metrics_async)
 
-    async def _get_corporate_actions_async(
+    async def get_corporate_actions_async(
         self,
         *,
         tickers: list[str],
@@ -439,9 +439,9 @@ class SharadarClient(BaseClient[SharadarDataset]):
             ticker_metadata=self._load_ticker_metadata_from_meta_db(meta, tickers),
         )
 
-    get_corporate_actions = make_sync(_get_corporate_actions_async)
+    get_corporate_actions = make_sync(get_corporate_actions_async)
 
-    async def _get_insider_transactions_async(
+    async def get_insider_transactions_async(
         self,
         *,
         tickers: list[str],
@@ -489,9 +489,9 @@ class SharadarClient(BaseClient[SharadarDataset]):
             ticker_metadata=self._load_ticker_metadata_from_meta_db(meta, tickers),
         )
 
-    get_insider_transactions = make_sync(_get_insider_transactions_async)
+    get_insider_transactions = make_sync(get_insider_transactions_async)
 
-    async def _get_institutional_ownership_async(
+    async def get_institutional_ownership_async(
         self,
         *,
         tickers: list[str],
@@ -539,7 +539,7 @@ class SharadarClient(BaseClient[SharadarDataset]):
             ticker_metadata=self._load_ticker_metadata_from_meta_db(meta, tickers),
         )
 
-    get_institutional_ownership = make_sync(_get_institutional_ownership_async)
+    get_institutional_ownership = make_sync(get_institutional_ownership_async)
 
     # ----------------------------------------------------------------
     # Internal Data Fetchers

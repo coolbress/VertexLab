@@ -226,7 +226,7 @@ def _collect_common_options(func: Any) -> Any:
         show_default=True,
         help="Quality violation handling mode",
     )(func)
-    func = click.option("--output", type=str, default=None, help="DuckDB output URI, e.g. duckdb:///data.db")(func)
+    func = click.option("--connect-db", type=str, default=None, help="DuckDB output URI, e.g. duckdb:///data.db")(func)
     return func
 
 
@@ -357,7 +357,7 @@ def collect_sharadar_price(
     symbols: tuple[str, ...],
     start_date: str | None,
     end_date: str | None,
-    output: str | None,
+    connect_db: str | None,
     quality_check: str,
     no_progress: bool,
 ) -> None:
@@ -367,7 +367,7 @@ def collect_sharadar_price(
         quality_check=quality_check,
         kwargs={
             "tickers": list(symbols),
-            "connect_db": output,
+            "connect_db": connect_db,
             "start_date": start_date,
             "end_date": end_date,
             "progress": not no_progress,
@@ -391,7 +391,7 @@ def collect_sharadar_fundamentals(
     dimension: str,
     start_date: str | None,
     end_date: str | None,
-    output: str | None,
+    connect_db: str | None,
     quality_check: str,
     no_progress: bool,
 ) -> None:
@@ -402,7 +402,7 @@ def collect_sharadar_fundamentals(
         kwargs={
             "tickers": list(symbols),
             "dimension": dimension,
-            "connect_db": output,
+            "connect_db": connect_db,
             "start_date": start_date,
             "end_date": end_date,
             "progress": not no_progress,
@@ -413,7 +413,7 @@ def collect_sharadar_fundamentals(
 @sharadar.command("tickers")
 @_collect_common_options
 def collect_sharadar_tickers(
-    output: str | None,
+    connect_db: str | None,
     quality_check: str,
     no_progress: bool,
 ) -> None:
@@ -422,7 +422,7 @@ def collect_sharadar_tickers(
         method_name="get_ticker_info",
         quality_check=quality_check,
         kwargs={
-            "connect_db": output,
+            "connect_db": connect_db,
             "progress": not no_progress,
         },
     )
@@ -435,7 +435,7 @@ def collect_sharadar_tickers(
 def collect_sharadar_sp500(
     start_date: str | None,
     end_date: str | None,
-    output: str | None,
+    connect_db: str | None,
     quality_check: str,
     no_progress: bool,
 ) -> None:
@@ -444,7 +444,7 @@ def collect_sharadar_sp500(
         method_name="get_sp500_history",
         quality_check=quality_check,
         kwargs={
-            "connect_db": output,
+            "connect_db": connect_db,
             "start_date": start_date,
             "end_date": end_date,
             "progress": not no_progress,
@@ -461,7 +461,7 @@ def collect_yfinance_price(
     symbols: tuple[str, ...],
     start_date: str | None,
     end_date: str | None,
-    output: str | None,
+    connect_db: str | None,
     quality_check: str,
     no_progress: bool,
 ) -> None:
@@ -471,7 +471,7 @@ def collect_yfinance_price(
         quality_check=quality_check,
         kwargs={
             "tickers": list(symbols),
-            "connect_db": output,
+            "connect_db": connect_db,
             "start_date": start_date,
             "end_date": end_date,
             "progress": not no_progress,
@@ -497,7 +497,7 @@ def collect_yfinance_financials(
     symbols: tuple[str, ...],
     kind: str,
     period: str,
-    output: str | None,
+    connect_db: str | None,
     quality_check: str,
     no_progress: bool,
 ) -> None:
@@ -509,7 +509,7 @@ def collect_yfinance_financials(
             "tickers": list(symbols),
             "kind": kind,
             "period": period,
-            "connect_db": output,
+            "connect_db": connect_db,
             "progress": not no_progress,
         },
     )
@@ -520,7 +520,7 @@ def collect_yfinance_financials(
 @_collect_common_options
 def collect_yfinance_info(
     symbols: tuple[str, ...],
-    output: str | None,
+    connect_db: str | None,
     quality_check: str,
     no_progress: bool,
 ) -> None:
@@ -530,7 +530,7 @@ def collect_yfinance_info(
         quality_check=quality_check,
         kwargs={
             "tickers": list(symbols),
-            "connect_db": output,
+            "connect_db": connect_db,
             "progress": not no_progress,
         },
     )
@@ -545,7 +545,7 @@ def collect_yfinance_dividends(
     symbols: tuple[str, ...],
     start_date: str | None,
     end_date: str | None,
-    output: str | None,
+    connect_db: str | None,
     quality_check: str,
     no_progress: bool,
 ) -> None:
@@ -556,7 +556,7 @@ def collect_yfinance_dividends(
         kwargs={
             "tickers": list(symbols),
             "kind": "dividends",
-            "connect_db": output,
+            "connect_db": connect_db,
             "start_date": start_date,
             "end_date": end_date,
             "progress": not no_progress,

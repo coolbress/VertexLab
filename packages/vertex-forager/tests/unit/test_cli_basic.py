@@ -200,6 +200,36 @@ def test_collect_financials_requires_kind() -> None:
     assert "--kind" in result.output
 
 
+def test_collect_uses_connect_db_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, dict[str, Any]]] = []
+
+    class _FakeClient:
+        def __getattr__(self, name: str) -> Any:
+            def _run(**kwargs: Any) -> RunResult:
+                calls.append((name, kwargs))
+                return RunResult(provider="stub", dataset="demo", tables={"demo_table": 1})
+
+            return _run
+
+    monkeypatch.setattr(cli_mod, "create_client", lambda **_: _FakeClient(), raising=True)
+    result = CliRunner().invoke(
+        cli_mod.main,
+        ["collect", "yfinance", "price", "--symbol", "AAPL", "--connect-db", "duckdb:///test.duckdb"],
+    )
+    assert result.exit_code == 0
+    assert calls[0][0] == "get_price_data"
+    assert calls[0][1]["connect_db"] == "duckdb:///test.duckdb"
+
+
+def test_collect_output_flag_absent() -> None:
+    result = CliRunner().invoke(
+        cli_mod.main,
+        ["collect", "yfinance", "price", "--symbol", "AAPL", "--output", "duckdb:///test.duckdb"],
+    )
+    assert result.exit_code != 0
+    assert "No such option" in result.output
+
+
 def test_collect_resume_flag_absent() -> None:
     result = CliRunner().invoke(
         cli_mod.main,

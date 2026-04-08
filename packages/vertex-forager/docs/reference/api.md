@@ -2,19 +2,27 @@
 
 ## Factories
 
-Start here when you want the default entry points for creating clients and routers without importing provider-specific classes directly.
+Start here when you want the stable default entry points without importing lower-level implementation classes directly.
 
 ::: vertex_forager.api.create_client
 
-::: vertex_forager.api.create_router
+## Typed clients
 
-## Client & Router
+These concrete client classes are the typed return values of `create_client(...)` overloads and are useful for type annotations in user code.
 
-These abstractions define the public provider-facing contract that concrete clients and routers implement.
+```python
+from vertex_forager import SharadarClient
 
-::: vertex_forager.api.BaseClient
+def process(client: SharadarClient) -> None:
+    ...
+```
 
-::: vertex_forager.api.BaseRouter
+- `SharadarClient`
+  - returned by `create_client(provider="sharadar", ...)`
+- `YFinanceClient`
+  - returned by `create_client(provider="yfinance", ...)`
+
+Use these names from the package root for annotations and editor assistance, while still preferring `create_client(...)` to construct clients.
 
 ## State
 
@@ -28,138 +36,94 @@ These APIs expose credential-free access to persisted local runtime state.
 
 ::: vertex_forager.api.RunRecord
 
-## Pipeline Engine
-
-The pipeline engine coordinates fetch, parse, normalize, and write stages for a run.
-
-::: vertex_forager.core.VertexForager
-
 ## Pipeline Results
 
-These result models summarize parsed packets, table counts, and run-level outcomes.
+These result models summarize user-visible run outcomes.
 
-::: vertex_forager.core.config.RunResult
+::: vertex_forager.api.RunResult
 
-::: vertex_forager.core.config.ProgressSnapshot
-
-::: vertex_forager.core.config.ParseResult
-
-## Flow Control
-
-Use these components when tuning throughput, concurrency, and request pacing.
-
-::: vertex_forager.core.controller.FlowController
-
-::: vertex_forager.core.controller.GradientConcurrencyLimiter
-
-::: vertex_forager.core.controller.GCRARateLimiter
+::: vertex_forager.api.ProgressSnapshot
 
 ## Configuration
 
-These types describe the request, retry, writer, and execution settings used throughout the pipeline.
-
-::: vertex_forager.core.config.RetryConfig
-
-::: vertex_forager.core.config.AdaptiveThrottleConfig
-
-::: vertex_forager.core.config.HTTPConfig
-
-::: vertex_forager.core.config.SchedulerConfig
-
-::: vertex_forager.core.config.RequestSpec
-
-::: vertex_forager.core.config.FetchJob
-
-::: vertex_forager.core.config.FramePacket
-
-::: vertex_forager.core.config.HttpMethod
-
-::: vertex_forager.core.config.RequestAuth
-
-## HTTP
-
-The HTTP executor handles transport concerns for provider requests and library fetch dispatch.
-
-::: vertex_forager.core.http.HttpExecutor
-
-## Retry
-
-Retry helpers centralize backoff policy and retry execution behavior.
-
-::: vertex_forager.core.retry.create_retry_controller
-
-::: vertex_forager.core.retry.RetryExecutor
-
-## Writers
-
-Writer APIs control how normalized frames are persisted or collected in memory.
-
-::: vertex_forager.writers.create_writer
-
-::: vertex_forager.writers.base.BaseWriter
-
-::: vertex_forager.writers.duckdb.DuckDBWriter
-
-::: vertex_forager.writers.memory.InMemoryBufferWriter
-
-::: vertex_forager.writers.base.WriteResult
-
-## Lifecycle
-
-Lifecycle helpers create and finalize the shared state for a pipeline run.
-
-::: vertex_forager.core.lifecycle.initialize_run_state
-
-::: vertex_forager.core.lifecycle.create_run_queues
-
-::: vertex_forager.core.lifecycle.create_run_result
-
-::: vertex_forager.core.lifecycle.RunFinalizer
+Configuration models are documented in the dedicated [Configuration reference](config.md).
 
 ## Exceptions
 
-These are the main public exception types you should catch around client usage and integration code.
+These are the main public exception types you are most likely to catch around client usage and local-state operations.
 
-::: vertex_forager.exceptions.VertexForagerError
+Hierarchy:
 
-::: vertex_forager.exceptions.InputError
+- `VertexForagerError`
+  - `FetchError`
+  - `WriterError`
+  - `DataQualityError`
+  - `ValidationError`
+  - `CheckpointNotFoundError`
+  - `InputError`
 
-::: vertex_forager.exceptions.FetchError
+Catch `VertexForagerError` when you want one broad package-level failure boundary. Catch the more specific subclasses below when you want different recovery behavior.
 
-::: vertex_forager.exceptions.CheckpointNotFoundError
+### `VertexForagerError`
 
-::: vertex_forager.exceptions.TransformError
+Base exception for public vertex-forager failures.
 
-::: vertex_forager.exceptions.WriterError
+::: vertex_forager.api.VertexForagerError
 
-::: vertex_forager.exceptions.ComputeError
+### `InputError`
 
-::: vertex_forager.exceptions.ValidationError
+Raised when caller-provided parameters are invalid before the run can proceed.
 
-::: vertex_forager.exceptions.PrimaryKeyMissingError
+::: vertex_forager.api.InputError
 
-::: vertex_forager.exceptions.PrimaryKeyNullError
+### `FetchError`
 
-::: vertex_forager.exceptions.DLQSpoolError
+Raised when provider fetch or transport work fails in a user-visible way.
 
-## Core Errors
+::: vertex_forager.api.FetchError
 
-Core errors cover pipeline-level failures that sit below the top-level public exceptions.
+### `WriterError`
 
-::: vertex_forager.core.errors.RunError
+Raised when persistence fails at the write boundary.
 
-## Utilities
+::: vertex_forager.api.WriterError
 
-Utility helpers provide small convenience functions for env parsing, ticker validation, and progress updates.
+### `ValidationError`
 
-::: vertex_forager.utils.as_dict
+Raised when normalized data does not satisfy required validation rules.
 
-::: vertex_forager.utils.validate_tickers
+::: vertex_forager.api.ValidationError
 
-::: vertex_forager.utils.env_bool
+### `DataQualityError`
 
-::: vertex_forager.utils.env_int
+Raised when `quality_check="error"` converts a quality violation into a hard failure.
 
-::: vertex_forager.utils.env_float
+::: vertex_forager.api.DataQualityError
 
-::: vertex_forager.utils.create_pbar_updater
+### `CheckpointNotFoundError`
+
+Raised when checkpoint resume is requested for a table that has no resumable checkpoint.
+
+::: vertex_forager.api.CheckpointNotFoundError
+
+Lower-level exception subclasses still exist in `vertex_forager.exceptions`, but they are not part of the primary end-user surface documented here.
+
+## Lower-level implementation modules
+
+Pipeline engine internals, flow-control helpers, HTTP/retry executors, writer implementations, lifecycle helpers, and convenience utilities still exist in implementation modules, but they are no longer part of the primary user-facing import surface documented here.
+
+`BaseRouter` and `create_router` are unstable extension points and are not part of the public, semver-guaranteed API. Prefer the documented public entrypoints such as `create_client(...)` and `StateManager()`.
+
+## Thread Safety
+
+### `create_client()` and client instances
+
+- `create_client()` itself is safe to call from any ordinary single-threaded setup path.
+- The resulting client instance should be treated as a single-owner runtime object.
+- Recommended usage is one client instance per thread, task boundary, or process rather than sharing one client across multiple threads concurrently.
+
+### `StateManager()`
+
+- `StateManager()` is safe for normal concurrent use when each thread or process creates its own instance.
+- Its operations use short-lived SQLite connections, so concurrent readers and independent writers can coordinate through SQLite locking.
+- Recommended usage is separate `StateManager()` instances per thread or process, not one shared object used as a synchronization primitive.

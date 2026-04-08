@@ -13,21 +13,21 @@ Public runtime configuration is now centered on `create_client(...)` plus groupe
 - `schedule: SchedulerConfig = SchedulerConfig()`
 - `quality_check: Literal["warn", "error"] = "warn"`
 - `concurrency: int | None = None`
+- `retry: RetryConfig = RetryConfig()`
+- `throttle: AdaptiveThrottleConfig = AdaptiveThrottleConfig()`
+- `limits: HTTPConfig = HTTPConfig()`
+- `storage: StorageConfig = StorageConfig()`
 
 Stage logs are always emitted at DEBUG level; the host application controls visibility and formatting via standard `logging` configuration.
 
+Use the `vertex_forager` logger name in your host application if you want to filter package logs explicitly.
+
 `quality_check="warn"` records quality-rule violations in `RunResult.quality_violations` and continues. `quality_check="error"` raises `DataQualityError` on the first violating flush.
-
-## Provider-Specific Direct Clients
-
-Some provider-specific configuration only exists on the concrete client, not on `create_client(...)`.
-
-### YFinanceClient
 
 - `pickle_compat_datasets: list[str] | None = None`
   - `None` or `[]` disables pickle compatibility
   - a non-empty list enables pickle fallback only for the named datasets
-  - available on `YFinanceClient(...)` and on `create_client(provider="yfinance", ...)`
+  - available on `create_client(provider="yfinance", ...)`
 - `create_client(provider="yfinance", ...)` uses an internal default rate limit and does not accept `api_key` or `rate_limit`
 
 ## Grouped Public Config
@@ -42,7 +42,6 @@ Some provider-specific configuration only exists on the concrete client, not on 
 
 ### AdaptiveThrottleConfig
 
-- `enabled: bool`
 - `window_s: int`
 - `error_rate_threshold: float` — in `[0, 1]`
 - `rpm_floor_ratio: float` — in `[0, 1]`

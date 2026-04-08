@@ -129,7 +129,7 @@ async def test_public_methods_dispatch_to_expected_dataset_async(
         return {"ok": True}
 
     monkeypatch.setattr(client, "_dispatch_fetch", _fake_dispatch_fetch)
-    raw_method = getattr(client, f"_{method_name}_async")
+    raw_method = getattr(client, f"{method_name}_async")
     result = await raw_method(connect_db=None, progress=False, **kwargs)
     assert result == {"ok": True}
     assert captured["dataset"] == expected_dataset
@@ -165,7 +165,7 @@ async def test_get_financials_maps_earnings_to_financials_async(
         return {"ok": True}
 
     monkeypatch.setattr(client, "_dispatch_fetch", _fake_dispatch_fetch)
-    result = await client._get_financials_async(
+    result = await client.get_financials_async(
         kind="earnings",
         period="annual",
         tickers=["AAPL"],
@@ -189,7 +189,7 @@ async def test_get_financials_quarterly_income_stmt_dataset_async(
         return {"ok": True}
 
     monkeypatch.setattr(client, "_dispatch_fetch", _fake_dispatch_fetch)
-    result = await client._get_financials_async(
+    result = await client.get_financials_async(
         kind="income_stmt",
         period="quarterly",
         tickers=["AAPL"],
@@ -204,7 +204,7 @@ async def test_get_financials_quarterly_income_stmt_dataset_async(
 async def test_get_financials_rejects_quarterly_earnings_async() -> None:
     client = YFinanceClient()
     with pytest.raises(InputError, match="quarterly_earnings"):
-        await client._get_financials_async(
+        await client.get_financials_async(
             kind="earnings",
             period="quarterly",
             tickers=["AAPL"],

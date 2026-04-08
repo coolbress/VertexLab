@@ -8,26 +8,32 @@ nav:
   - Installation: installation.md
   - Quickstart: tutorials/quickstart.md
   - How-to Guides:
+      - Configure a client: how-to/configure-a-client.md
+      - Collect data: how-to/collect-data.md
+      - Manage local state: how-to/manage-local-state.md
+      - Resume interrupted run: how-to/resume-interrupted-run.md
+      - Configure retry: how-to/configure-retry.md
+      - Configure logging: how-to/configure-logging.md
+      - Interpret run results: how-to/interpret-run-results.md
       - Troubleshooting: how-to/troubleshooting.md
-      - CLI equivalents: how-to/cli-equivalents.md
-      - Resume and recovery: how-to/resume-and-recovery.md
-      - Data integrity controls: how-to/data-integrity.md
-      - Tune chunked flush thresholds: how-to/chunked-flush.md
       - Performance tuning: how-to/performance-tuning.md
-      - Testing Guide: how-to/testing.md
       - Migration Guide: how-to/migration.md
   - Reference:
+      - Providers: reference/providers.md
+      - StateManager: reference/statemanager.md
+      - CLI: reference/cli.md
+      - API: reference/api.md
       - Configuration: reference/config.md
       - Metrics: reference/metrics.md
-      - Constants: reference/constants.md
       - Schema: reference/schema.md
-      - API: reference/api.md
-      - Module Index: reference/modules.md
   - Explanation:
       - Pipeline architecture: explanation/architecture.md
+      - How pipeline orchestrates: explanation/how-pipeline-orchestrates.md
       - How built-in providers work: explanation/how-built-in-providers-work.md
-      - Data storage flow & DLQ: explanation/data-storage-flow.md
-      - Core error policy: explanation/error-policy.md
-      - Writer security: explanation/writer-security.md
-      - Writer fan-out roadmap: explanation/writer-fanout-roadmap.md
-      - Writer upsert behavior: explanation/writer-upsert-behavior.md
+      - How flow controller works: explanation/how-flow-controller-works.md
+      - How retry and backoff work: explanation/how-retry-and-backoff-work.md
+      - How data quality rules work: explanation/how-data-quality-rules-work.md
+      - How schema normalization works: explanation/how-schema-normalization-works.md
+      - How the writer works: explanation/how-the-writer-works.md
+      - How DLQ works: explanation/how-dlq-works.md
+      - How checkpoints work: explanation/how-checkpoints-work.md

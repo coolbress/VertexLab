@@ -35,5 +35,5 @@ Use the repository workflow when you are developing the package, running the exa
 ## Next Steps
 
 - Run the tutorial: [Quickstart](tutorials/quickstart.md)
-- Learn the test workflow: [Testing Guide](how-to/testing.md)
+- Configure your first runtime: [Configure a client](how-to/configure-a-client.md)
 - Review configuration details: [Configuration](reference/config.md)

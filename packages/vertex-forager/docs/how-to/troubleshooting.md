@@ -5,11 +5,11 @@
 - Symptoms
   - Frequent 429 responses, long waits between requests.
 - Checks
-  - Verify `requests_per_minute` and FlowController adaptive throttle settings.
-  - Inspect structured logs for `http_retry_reason:*` and `record_feedback`.
+  - Verify the configured `rate_limit` and any `AdaptiveThrottleConfig(...)` settings.
+  - Inspect structured logs for `http_retry_reason:*`, `http_start`, `http_end`, and flow-control downshift or recovery events.
 - Actions
   - Lower `rate_limit` or enable adaptive throttle:
-    - `throttle=AdaptiveThrottleConfig(enabled=True, error_rate_threshold=..., rpm_floor_ratio=...)`
+    - `throttle=AdaptiveThrottleConfig(error_rate_threshold=..., rpm_floor_ratio=..., recovery_factor=...)`
   - Increase retry backoff within safe bounds (`base_backoff_s`, `max_backoff_s`).
 
 ## Memory peaks during flush
@@ -18,6 +18,7 @@
   - High RSS or OOM during large-table writes.
 - Checks
   - Review `writer_rows.{table}` and `writer_flush_duration_s.{table}` histograms.
+  - Inspect `RunResult.metrics_summary` to see whether large flushes correlate with slow writes or long tails.
 - Actions
   - Adjust `storage.flush_threshold_rows` to control when buffered rows flush into chunked writes.
   - Consider splitting workloads by dataset or symbols if necessary.
@@ -29,7 +30,7 @@
 - Checks
   - Inspect `RunResult.dlq_counts` and `RunResult.errors` for `DLQ=spooled` or `DLQ=spool_failed`.
 - Actions
-  - Ensure the app root is writable.
+  - Ensure the cache directory, `state.db`, and `cache/dlq` path are writable.
   - Use `vertex-forager dlq replay --table <table>` to reinject DLQ artifacts.
 
 ## Writer validation failures (PK missing/null)
@@ -47,6 +48,8 @@
 
 - Symptoms
   - Timeouts or connection pool exhaustion.
+- Checks
+  - Inspect `http_duration_s` summaries and retry logs to distinguish slow providers from pool saturation.
 - Actions
   - Tune HTTP: `limits.timeout_s`, `limits.max_connections`, `limits.max_keepalive_connections`.
-  - Reduce concurrency or increase keepalive where appropriate.
+  - Tune `concurrency` together with the HTTP pool so request parallelism and connection capacity stay aligned.

@@ -147,7 +147,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
 
     # --- Reference Data ---
 
-    async def _get_info_async(
+    async def get_info_async(
         self,
         *,
         tickers: list[str],
@@ -185,9 +185,9 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs,
         )
 
-    get_info = make_sync(_get_info_async)
+    get_info = make_sync(get_info_async)
 
-    async def _get_fast_info_async(
+    async def get_fast_info_async(
         self,
         *,
         tickers: list[str],
@@ -224,11 +224,11 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs,
         )
 
-    get_fast_info = make_sync(_get_fast_info_async)
+    get_fast_info = make_sync(get_fast_info_async)
 
     # --- Market Data ---
 
-    async def _get_price_data_async(
+    async def get_price_data_async(
         self,
         *,
         tickers: list[str],
@@ -275,11 +275,11 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs,
         )
 
-    get_price_data = make_sync(_get_price_data_async)
+    get_price_data = make_sync(get_price_data_async)
 
     # --- Financials ---
 
-    async def _get_financials_async(
+    async def get_financials_async(
         self,
         *,
         kind: Literal["balance_sheet", "income_stmt", "cashflow", "earnings"] = "income_stmt",
@@ -334,11 +334,11 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs,
         )
 
-    get_financials = make_sync(_get_financials_async)
+    get_financials = make_sync(get_financials_async)
 
     # --- Corporate Actions ---
 
-    async def _get_actions_async(
+    async def get_actions_async(
         self,
         *,
         kind: Literal["actions", "dividends", "splits"] = "dividends",
@@ -384,11 +384,11 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs,
         )
 
-    get_actions = make_sync(_get_actions_async)
+    get_actions = make_sync(get_actions_async)
 
     # --- Holders ---
 
-    async def _get_holders_async(
+    async def get_holders_async(
         self,
         *,
         kind: Literal["institutional", "mutualfund"] = "institutional",
@@ -428,9 +428,9 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs,
         )
 
-    get_holders = make_sync(_get_holders_async)
+    get_holders = make_sync(get_holders_async)
 
-    async def _get_major_holders_async(
+    async def get_major_holders_async(
         self,
         *,
         tickers: list[str],
@@ -468,11 +468,11 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs,
         )
 
-    get_major_holders = make_sync(_get_major_holders_async)
+    get_major_holders = make_sync(get_major_holders_async)
 
     # --- Insider ---
 
-    async def _get_insider_roster_holders_async(
+    async def get_insider_roster_holders_async(
         self,
         *,
         tickers: list[str],
@@ -510,9 +510,9 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs,
         )
 
-    get_insider_roster_holders = make_sync(_get_insider_roster_holders_async)
+    get_insider_roster_holders = make_sync(get_insider_roster_holders_async)
 
-    async def _get_insider_purchases_async(
+    async def get_insider_purchases_async(
         self,
         *,
         tickers: list[str],
@@ -550,11 +550,11 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs,
         )
 
-    get_insider_purchases = make_sync(_get_insider_purchases_async)
+    get_insider_purchases = make_sync(get_insider_purchases_async)
 
     # --- Calendar ---
 
-    async def _get_calendar_async(
+    async def get_calendar_async(
         self,
         *,
         tickers: list[str],
@@ -592,11 +592,11 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs,
         )
 
-    get_calendar = make_sync(_get_calendar_async)
+    get_calendar = make_sync(get_calendar_async)
 
     # --- Analyst Recommendations ---
 
-    async def _get_recommendations_async(
+    async def get_recommendations_async(
         self,
         *,
         tickers: list[str],
@@ -634,11 +634,11 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs,
         )
 
-    get_recommendations = make_sync(_get_recommendations_async)
+    get_recommendations = make_sync(get_recommendations_async)
 
     # --- news ---
 
-    async def _get_news_async(
+    async def get_news_async(
         self,
         *,
         tickers: list[str],
@@ -676,7 +676,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
             **kwargs,
         )
 
-    get_news = make_sync(_get_news_async)
+    get_news = make_sync(get_news_async)
 
     # ----------------------------------------------------------------
     # Internal Data Fetchers

@@ -95,24 +95,28 @@ Removed env vars:
 - `VF_ALLOW_PICKLE_COMPAT`
 - `VF_PICKLE_ALLOWED_DATASETS`
 
-Use `YFinanceClient(...)` directly instead:
+Use `create_client(...)` instead:
 
 ```python
 from vertex_forager import create_client
-from vertex_forager.providers.yfinance.client import YFinanceClient
 
-client = YFinanceClient(
-    rate_limit=60,
-    pickle_compat_datasets=["price"],
-)
-
-client2 = create_client(
+client = create_client(
     provider="yfinance",
     pickle_compat_datasets=["price"],
 )
 ```
 
 `create_client(...)` exposes `pickle_compat_datasets` only for `provider="yfinance"` overloads, and the yfinance overload no longer accepts `api_key` or `rate_limit`.
+
+### CLI collect `--output` renamed to `--connect-db`
+
+`collect` subcommands now use `--connect-db` for the DuckDB destination so the CLI matches the SDK parameter name `connect_db=`.
+
+**Action required**:
+
+- Replace `vertex-forager collect ... --output duckdb:///file.db` with `vertex-forager collect ... --connect-db duckdb:///file.db`
+- `vertex-forager dlq replay --output ...` remains unchanged
+- `vertex-forager checkpoints resume --output ...` remains unchanged
 
 ## 0.3.x → 0.4.x
 
@@ -164,15 +168,14 @@ mapper = SchemaMapper(strict_validation=True)
 
 ### Public API moved to package root
 
-All primary classes and factories are now importable directly from `vertex_forager`:
+The stable end-user entry points are importable directly from `vertex_forager`:
 
 ```python
 # Before (0.1.x)
-from vertex_forager.clients.base import BaseClient
 from vertex_forager.core.config import RetryConfig
 
-# After (0.2.x)
-from vertex_forager import BaseClient, RetryConfig, create_client
+# After
+from vertex_forager import RetryConfig, StateManager, create_client
 ```
 
 ### Centralized constants
