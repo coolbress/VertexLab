@@ -83,9 +83,30 @@ print(con.execute("select * from yfinance_price limit 5").fetchdf())
 con.close()
 ```
 
+## 4. Run the same workflow from the CLI
+
+The CLI mirrors the stable dataset-specific collection surface:
+
+```bash
+vertex-forager collect yfinance price \
+  --symbol AAPL \
+  --symbol MSFT \
+  --output duckdb:///forager.duckdb
+```
+
+Other common CLI entry points:
+
+```bash
+vertex-forager collect sharadar fundamentals --symbol AAPL --dimension MRT --output duckdb:///forager.duckdb
+vertex-forager dlq list --status pending
+vertex-forager runs list --table yfinance_price --limit 10
+vertex-forager checkpoints resume --table sharadar_price --output duckdb:///forager.duckdb
+```
+
 ## Next Steps
 
 - Configure concurrency, retries, and grouped runtime settings: see [Configuration](../reference/config.md)
 - Tune local collection behavior: see [Performance tuning](../how-to/performance-tuning.md)
 - Tune write flush thresholds: see [Chunked flush tuning](../how-to/chunked-flush.md)
+- See the CLI mapping for more command examples: [CLI equivalents](../how-to/cli-equivalents.md)
 - Resume runs and operate on local state: see [Resume and recovery](../how-to/resume-and-recovery.md)

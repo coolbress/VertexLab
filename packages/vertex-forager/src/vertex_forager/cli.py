@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Mapping
 import contextlib
 from datetime import datetime, timezone
@@ -8,12 +7,12 @@ import json
 import logging
 import os
 from pathlib import Path
+import sqlite3
 import tempfile
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import click
 import httpx
-import polars as pl
 
 from vertex_forager.clients import create_client
 from vertex_forager.constants import DEFAULT_RATE_LIMIT
@@ -25,27 +24,22 @@ from vertex_forager.core.checkpoint import (
     delete_all_checkpoints,
     delete_all_dlq_entries,
     delete_all_run_history,
-    delete_dlq_entries_before,
-    delete_run_history_before,
     get_state_db_path,
-    list_pending_dlq_entries,
-    list_run_history,
-    mark_dlq_retry_result,
+    list_dlq_entries,
 )
-from vertex_forager.core.config import FramePacket
-from vertex_forager.core.recover import build_summary_message, execute_recovery
 from vertex_forager.core.sweep import (
     build_sweep_combinations,
     run_sweep_measurements,
     score_and_rank_results,
 )
-from vertex_forager.writers.duckdb import DuckDBWriter
+from vertex_forager.exceptions import VertexForagerError
+from vertex_forager.state import StateManager
 
 from .utils import cleanup_dlq_tmp, clear_app_cache, get_app_root, get_cache_dir
 
 if TYPE_CHECKING:
+    from vertex_forager.clients.base import BaseClient
     from vertex_forager.core.config import RunResult
-    from vertex_forager.providers.sharadar.client import SharadarClient
 
 logger = logging.getLogger(__name__)
 YF_PROFILE_DEFAULT_TICKERS = "AAPL,MSFT,NVDA,GOOGL,AMZN,META,TSLA,NFLX,ADBE,CSCO"
@@ -98,100 +92,6 @@ def main() -> None:
     """
     # Executed via `uv run`; no additional runtime checks required here.
     pass
-
-
-@main.command()
-@click.option("--symbol", "-s", multiple=True, help="Symbols to collect (e.g., AAPL)")
-@click.option("--source", type=click.Choice(["yfinance", "sharadar"]), default="sharadar")
-def collect(symbol: tuple[str, ...], source: str) -> None:
-    """Collect market data from the selected provider.
-
-    Args:
-        symbol: Tuple of ticker symbols to collect (e.g., ('AAPL', 'MSFT')).
-        source: Data source ('yfinance' or 'sharadar').
-
-    Returns:
-        None: Results are printed to stdout or written to storage.
-
-    Raises:
-        ValueError: Missing API key or invalid inputs.
-        httpx.RequestError: Network request fails.
-    """
-    if not symbol:
-        raise click.UsageError("Please provide at least one symbol via --symbol.")
-
-    click.echo(f"🚀 Starting collection for {symbol} using {source}...")
-
-    try:
-        # imports moved to module level to satisfy import ordering rules
-
-        if source != "sharadar":
-            raise click.ClickException(f"`{source}` is not supported by `collect` yet.")
-
-        api_key_env = "SHARADAR_API_KEY"  # pragma: allowlist secret (env var name only)
-        api_key = os.getenv(api_key_env)
-        if not api_key:
-            raise click.ClickException(f"Environment variable {api_key_env} is not set.")
-
-        async def _run_collect() -> RunResult | None:
-            async with create_client(provider="sharadar", api_key=api_key, rate_limit=DEFAULT_RATE_LIMIT) as client:
-                sc = cast("SharadarClient", client)
-                result = cast("RunResult | None", await sc._get_price_data_async(tickers=list(symbol)))
-                return result
-
-        result = asyncio.run(_run_collect())
-
-        if result is not None:
-            if hasattr(result, "tables") and isinstance(result.tables, Mapping):
-                total_rows = sum(result.tables.values())
-                click.echo(f"✅ Completed: processed {total_rows} rows.")
-                for table, count in result.tables.items():
-                    click.echo(f"  - {table}: {count} rows")
-            elif result.data is not None:
-                click.echo(f"✅ Completed: processed {len(result.data)} rows.")
-            else:
-                click.echo(f"✅ Completed: {result}")
-
-    except click.ClickException:
-        raise
-    except (ValueError, KeyError) as e:
-        logger.error("Collection failed: %s", e)
-        raise click.ClickException(f"Collection error: {e}") from None
-    except httpx.RequestError as e:
-        logger.warning("Collection request failed: %s", type(e).__name__)
-        raise click.ClickException("Collection error: network request failed.") from None
-    except Exception:
-        click.echo("❌ Unexpected error during collection.")
-        logger.exception("Unexpected error during collection")
-        raise
-
-
-@main.command()
-def status() -> None:
-    """Check current data storage and system status.
-
-    Args:
-        None
-
-    Returns:
-        None: Status information is printed to stdout.
-    """
-    root: Path = get_app_root()
-    state_db = get_state_db_path()
-    click.echo(f"📂 Data Root: {root}")
-    click.echo(f"📦 Cache Dir: {get_cache_dir()}")
-    click.echo(f"🗄️ State DB: {state_db}")
-
-    size = 0
-    for f in root.glob("**/*"):
-        try:
-            if f.is_file():
-                size += f.stat().st_size
-        except (PermissionError, OSError) as exc:
-            logger.warning("Failed to stat file during size calculation: %s", exc)
-            continue
-
-    click.echo(f"📊 Total Data Size: {size / (1024 * 1024):.2f} MB")
 
 
 @main.command()
@@ -258,53 +158,432 @@ def _before_to_timestamp(value: str) -> float:
     return datetime.now(tz=timezone.utc).timestamp() - (days * 86_400)
 
 
-async def _retry_pending_dlq_entries(*, table_name: str, target_db: Path) -> tuple[int, int]:
-    """Retry pending DLQ entries for a table against the target DuckDB."""
-    entries = list_pending_dlq_entries(table_name)
-    if not entries:
-        return 0, 0
-    writer = DuckDBWriter(target_db)
-    succeeded_paths: list[Path] = []
-    success_count = 0
-    failure_count = 0
-    close_error: Exception | None = None
+def _create_cli_client(
+    *,
+    provider: str,
+    quality_check: Literal["warn", "error"] = "warn",
+) -> BaseClient:
+    if provider == "sharadar":
+        return cast(
+            "BaseClient",
+            create_client(provider="sharadar", rate_limit=DEFAULT_RATE_LIMIT, quality_check=quality_check),
+        )
+    if provider == "yfinance":
+        return cast("BaseClient", create_client(provider="yfinance", quality_check=quality_check))
+    raise click.ClickException(f"Unsupported provider: {provider}")
+
+
+def _print_run_result_summary(result: RunResult) -> None:
+    total_rows = sum(result.tables.values()) if isinstance(result.tables, Mapping) else 0
+    click.echo(
+        " ".join(
+            [
+                "✅ Run completed",
+                f"provider={result.provider}",
+                f"dataset={result.dataset or '-'}",
+                f"rows={total_rows}",
+                f"errors={len(result.errors)}",
+                f"duration_s={result.duration_s or 0:.3f}",
+            ]
+        )
+    )
+    for table_name, row_count in result.tables.items():
+        quality_count = result.quality_violations.get(table_name, 0)
+        dlq_counts = result.dlq_counts.get(table_name, {})
+        rescued = int(dlq_counts.get("rescued", 0))
+        remaining = int(dlq_counts.get("remaining", 0))
+        click.echo(
+            " ".join(
+                [
+                    f"table={table_name}",
+                    f"rows={row_count}",
+                    f"quality_violations={quality_count}",
+                    f"dlq_rescued={rescued}",
+                    f"dlq_remaining={remaining}",
+                ]
+            )
+        )
+    for error in result.errors:
+        click.echo(
+            " ".join(
+                [
+                    "error",
+                    f"symbol={error.symbol or '-'}",
+                    f"type={error.exc_type}",
+                    f"retryable={error.retryable}",
+                    f"message={error.message}",
+                ]
+            )
+        )
+
+
+def _collect_common_options(func: Any) -> Any:
+    func = click.option("--no-progress", is_flag=True, default=False, help="Suppress progress output")(func)
+    func = click.option(
+        "--quality-check",
+        type=click.Choice(["warn", "error"]),
+        default="warn",
+        show_default=True,
+        help="Quality violation handling mode",
+    )(func)
+    func = click.option("--output", type=str, default=None, help="DuckDB output URI, e.g. duckdb:///data.db")(func)
+    return func
+
+
+def _run_collection(
+    *,
+    provider: str,
+    method_name: str,
+    quality_check: str,
+    kwargs: dict[str, Any],
+) -> None:
     try:
-        for entry in entries:
-            path = Path(str(entry["path"]))
-            try:
-                if not path.exists():
-                    raise FileNotFoundError(f"DLQ file not found: {path}")
-                frame = pl.read_ipc(path)
-                packet = FramePacket(
-                    provider=str(entry.get("provider") or "dlq"),
-                    table=str(entry["table"]),
-                    frame=frame,
-                    observed_at=datetime.now(timezone.utc),
-                )
-                await writer.write(packet)
-                succeeded_paths.append(path)
-            except Exception as exc:
-                mark_dlq_retry_result(path=path, success=False, error=str(exc))
-                failure_count += 1
-    finally:
+        client = _create_cli_client(
+            provider=provider,
+            quality_check=cast("Literal['warn', 'error']", quality_check),
+        )
+        method = getattr(client, method_name)
+        result = cast("RunResult", method(**kwargs))
+        _print_run_result_summary(result)
+    except click.ClickException:
+        raise
+    except (ValueError, KeyError, TypeError) as exc:
+        raise click.ClickException(str(exc)) from None
+    except httpx.RequestError:
+        raise click.ClickException("Collection error: network request failed.") from None
+
+
+def _emit_table_counts(title: str, rows: list[tuple[str, str]]) -> None:
+    click.echo(title)
+    if not rows:
+        click.echo("  - none")
+        return
+    for table_name, value in rows:
+        click.echo(f"  - {table_name}: {value}")
+
+
+def _load_status_rows(state_db: Path) -> tuple[list[tuple[str, str]], list[tuple[str, str]], list[tuple[str, str]]]:
+    if not state_db.exists():
+        return [], [], []
+    with sqlite3.connect(state_db) as conn:
+        checkpoint_rows = [
+            (str(row[0] or "-"), str(int(row[1])))
+            for row in conn.execute(
+                """
+                SELECT table_name, COUNT(*)
+                FROM checkpoints
+                GROUP BY table_name
+                ORDER BY table_name
+                """
+            ).fetchall()
+        ]
+        dlq_rows = [
+            (str(row[0] or "-"), str(int(row[1])))
+            for row in conn.execute(
+                """
+                SELECT table_name, COUNT(*)
+                FROM dlq_index
+                WHERE status = 'pending'
+                GROUP BY table_name
+                ORDER BY table_name
+                """
+            ).fetchall()
+        ]
+        last_run_rows = [
+            (str(row[0] or "-"), _format_timestamp(row[1]))
+            for row in conn.execute(
+                """
+                SELECT table_name, MAX(created_at)
+                FROM run_history
+                GROUP BY table_name
+                ORDER BY table_name
+                """
+            ).fetchall()
+        ]
+    return checkpoint_rows, dlq_rows, last_run_rows
+
+
+def _resolve_dlq_replay_output(*, table: str, output: str | None) -> str:
+    if output is not None:
+        return output
+    entries = list_dlq_entries(table=table, status="pending")
+    if not entries:
+        raise click.ClickException(f"No pending DLQ entries for table '{table}'.")
+    output_uris = sorted(
+        {
+            str(entry["output_uri"])
+            for entry in entries
+            if isinstance(entry.get("output_uri"), str) and str(entry["output_uri"]).strip()
+        }
+    )
+    if not output_uris:
+        raise click.ClickException(f"No stored output destination for table '{table}'. Provide --output.")
+    if len(output_uris) > 1:
+        raise click.ClickException(f"Multiple stored output destinations found for table '{table}'. Provide --output.")
+    return output_uris[0]
+
+
+def _provider_from_table(table: str) -> str:
+    provider = table.split("_", 1)[0]
+    if provider not in {"sharadar", "yfinance"}:
+        raise click.ClickException(f"Unable to infer provider from table '{table}'.")
+    return provider
+
+
+@main.group()
+def collect() -> None:
+    """Collect provider datasets using task-oriented subcommands."""
+    pass
+
+
+@collect.group()
+def sharadar() -> None:
+    """Sharadar dataset collection commands."""
+    pass
+
+
+@collect.group()
+def yfinance() -> None:
+    """YFinance dataset collection commands."""
+    pass
+
+
+@sharadar.command("price")
+@click.option("--symbol", "-s", "symbols", multiple=True, required=True)
+@click.option("--start-date", type=str, default=None)
+@click.option("--end-date", type=str, default=None)
+@_collect_common_options
+def collect_sharadar_price(
+    symbols: tuple[str, ...],
+    start_date: str | None,
+    end_date: str | None,
+    output: str | None,
+    quality_check: str,
+    no_progress: bool,
+) -> None:
+    _run_collection(
+        provider="sharadar",
+        method_name="get_price_data",
+        quality_check=quality_check,
+        kwargs={
+            "tickers": list(symbols),
+            "connect_db": output,
+            "start_date": start_date,
+            "end_date": end_date,
+            "progress": not no_progress,
+        },
+    )
+
+
+@sharadar.command("fundamentals")
+@click.option("--symbol", "-s", "symbols", multiple=True, required=True)
+@click.option(
+    "--dimension",
+    type=click.Choice(["MRY", "MRQ", "MRT", "ARY", "ARQ", "ART"]),
+    default="MRT",
+    show_default=True,
+)
+@click.option("--start-date", type=str, default=None)
+@click.option("--end-date", type=str, default=None)
+@_collect_common_options
+def collect_sharadar_fundamentals(
+    symbols: tuple[str, ...],
+    dimension: str,
+    start_date: str | None,
+    end_date: str | None,
+    output: str | None,
+    quality_check: str,
+    no_progress: bool,
+) -> None:
+    _run_collection(
+        provider="sharadar",
+        method_name="get_fundamental_data",
+        quality_check=quality_check,
+        kwargs={
+            "tickers": list(symbols),
+            "dimension": dimension,
+            "connect_db": output,
+            "start_date": start_date,
+            "end_date": end_date,
+            "progress": not no_progress,
+        },
+    )
+
+
+@sharadar.command("tickers")
+@_collect_common_options
+def collect_sharadar_tickers(
+    output: str | None,
+    quality_check: str,
+    no_progress: bool,
+) -> None:
+    _run_collection(
+        provider="sharadar",
+        method_name="get_ticker_info",
+        quality_check=quality_check,
+        kwargs={
+            "connect_db": output,
+            "progress": not no_progress,
+        },
+    )
+
+
+@sharadar.command("sp500")
+@click.option("--start-date", type=str, default=None)
+@click.option("--end-date", type=str, default=None)
+@_collect_common_options
+def collect_sharadar_sp500(
+    start_date: str | None,
+    end_date: str | None,
+    output: str | None,
+    quality_check: str,
+    no_progress: bool,
+) -> None:
+    _run_collection(
+        provider="sharadar",
+        method_name="get_sp500_history",
+        quality_check=quality_check,
+        kwargs={
+            "connect_db": output,
+            "start_date": start_date,
+            "end_date": end_date,
+            "progress": not no_progress,
+        },
+    )
+
+
+@yfinance.command("price")
+@click.option("--symbol", "-s", "symbols", multiple=True, required=True)
+@click.option("--start-date", type=str, default=None)
+@click.option("--end-date", type=str, default=None)
+@_collect_common_options
+def collect_yfinance_price(
+    symbols: tuple[str, ...],
+    start_date: str | None,
+    end_date: str | None,
+    output: str | None,
+    quality_check: str,
+    no_progress: bool,
+) -> None:
+    _run_collection(
+        provider="yfinance",
+        method_name="get_price_data",
+        quality_check=quality_check,
+        kwargs={
+            "tickers": list(symbols),
+            "connect_db": output,
+            "start_date": start_date,
+            "end_date": end_date,
+            "progress": not no_progress,
+        },
+    )
+
+
+@yfinance.command("financials")
+@click.option("--symbol", "-s", "symbols", multiple=True, required=True)
+@click.option(
+    "--kind",
+    type=click.Choice(["income_stmt", "balance_sheet", "cashflow"]),
+    required=True,
+)
+@click.option(
+    "--period",
+    type=click.Choice(["annual", "quarterly"]),
+    default="annual",
+    show_default=True,
+)
+@_collect_common_options
+def collect_yfinance_financials(
+    symbols: tuple[str, ...],
+    kind: str,
+    period: str,
+    output: str | None,
+    quality_check: str,
+    no_progress: bool,
+) -> None:
+    _run_collection(
+        provider="yfinance",
+        method_name="get_financials",
+        quality_check=quality_check,
+        kwargs={
+            "tickers": list(symbols),
+            "kind": kind,
+            "period": period,
+            "connect_db": output,
+            "progress": not no_progress,
+        },
+    )
+
+
+@yfinance.command("info")
+@click.option("--symbol", "-s", "symbols", multiple=True, required=True)
+@_collect_common_options
+def collect_yfinance_info(
+    symbols: tuple[str, ...],
+    output: str | None,
+    quality_check: str,
+    no_progress: bool,
+) -> None:
+    _run_collection(
+        provider="yfinance",
+        method_name="get_info",
+        quality_check=quality_check,
+        kwargs={
+            "tickers": list(symbols),
+            "connect_db": output,
+            "progress": not no_progress,
+        },
+    )
+
+
+@yfinance.command("dividends")
+@click.option("--symbol", "-s", "symbols", multiple=True, required=True)
+@click.option("--start-date", type=str, default=None)
+@click.option("--end-date", type=str, default=None)
+@_collect_common_options
+def collect_yfinance_dividends(
+    symbols: tuple[str, ...],
+    start_date: str | None,
+    end_date: str | None,
+    output: str | None,
+    quality_check: str,
+    no_progress: bool,
+) -> None:
+    _run_collection(
+        provider="yfinance",
+        method_name="get_actions",
+        quality_check=quality_check,
+        kwargs={
+            "tickers": list(symbols),
+            "kind": "dividends",
+            "connect_db": output,
+            "start_date": start_date,
+            "end_date": end_date,
+            "progress": not no_progress,
+        },
+    )
+
+
+@main.command()
+def status() -> None:
+    """Check current data storage and persisted state summaries."""
+    root = get_app_root()
+    state_db = get_state_db_path()
+    click.echo(f"📂 Data Root: {root}")
+    click.echo(f"📦 Cache Dir: {get_cache_dir()}")
+    click.echo(f"🗄️ State DB: {state_db}")
+    size = 0
+    for path in root.glob("**/*"):
         try:
-            await writer.close()
-        except Exception as exc:
-            close_error = exc
-    if close_error is not None:
-        for path in succeeded_paths:
-            mark_dlq_retry_result(path=path, success=True, error=f"writer_close:{close_error}")
-        raise click.ClickException(f"DLQ retry failed while closing writer: {close_error}") from None
-    for path in succeeded_paths:
-        try:
-            path.unlink(missing_ok=True)
-            mark_dlq_retry_result(path=path, success=True, error=None)
-            success_count += 1
-        except Exception as exc:
-            logger.warning("DLQ retry payload cleanup failed for %s: %s", path, exc)
-            mark_dlq_retry_result(path=path, success=True, error=f"delete_failed:{exc}")
-            success_count += 1
-    return success_count, failure_count
+            if path.is_file():
+                size += path.stat().st_size
+        except (PermissionError, OSError) as exc:
+            logger.warning("Failed to stat file during size calculation: %s", exc)
+    click.echo(f"📊 Total Data Size: {size / (1024 * 1024):.2f} MB")
+    checkpoint_rows, dlq_rows, last_run_rows = _load_status_rows(state_db)
+    _emit_table_counts("Checkpoint entries per table", checkpoint_rows)
+    _emit_table_counts("Pending DLQ batches per table", dlq_rows)
+    _emit_table_counts("Last run timestamp per table", last_run_rows)
 
 
 @main.command()
@@ -354,34 +633,39 @@ def runs() -> None:
 
 @runs.command("list")
 @click.option("--limit", type=int, default=20, show_default=True, help="Maximum number of runs to show")
-def runs_list(limit: int) -> None:
+@click.option("--table", type=str, default=None, help="Filter by table name")
+def runs_list(limit: int, table: str | None) -> None:
     """List recent run-history rows from SQLite."""
-    entries = list_run_history(limit=limit)
-    if not entries:
+    records = StateManager().runs.list(table=table, limit=limit)
+    if not records:
         click.echo("No run history found.")
         return
-    for entry in entries:
+    for record in records:
         click.echo(
             " ".join(
                 [
-                    f"run_id={entry['run_id']}",
-                    f"provider={entry['provider']}",
-                    f"dataset={entry['dataset'] or '-'}",
-                    f"rows={entry['total_rows']}",
-                    f"errors={entry['error_count']}",
-                    f"finished_at={_format_timestamp(entry['finished_at'])}",
+                    f"run_id={record.run_id}",
+                    f"provider={record.provider}",
+                    f"dataset={record.dataset or '-'}",
+                    f"table={record.table_name or '-'}",
+                    f"rows={sum(record.tables.values())}",
+                    f"errors={record.error_count}",
+                    f"finished_at={_format_timestamp(record.finished_at)}",
                 ]
             )
         )
 
 
 @runs.command("clear")
-@click.option("--before", required=True, help="Delete run history older than this window, e.g. 30d")
-def runs_clear(before: str) -> None:
+@click.option("--table", type=str, default=None, help="Filter by table name")
+@click.option("--before", required=False, help="Delete run history older than this window, e.g. 30d")
+def runs_clear(table: str | None, before: str | None) -> None:
     """Delete run history older than the provided window."""
-    cutoff = _before_to_timestamp(before)
-    deleted = delete_run_history_before(cutoff)
-    click.echo(f"🧹 Deleted {deleted} run history rows older than {before}.")
+    if table is None and before is None:
+        raise click.UsageError("Provide --table, --before, or both.")
+    before_days = _parse_before_days(before) if before is not None else None
+    deleted = StateManager().runs.clear(table=table, before_days=before_days)
+    click.echo(f"🧹 Deleted {deleted} run history rows.")
 
 
 @main.group()
@@ -391,57 +675,121 @@ def dlq() -> None:
 
 
 @dlq.command("list")
-def dlq_list() -> None:
+@click.option("--table", type=str, default=None, help="Filter by table name")
+@click.option(
+    "--status",
+    type=click.Choice(["pending", "recovered", "all"]),
+    default="pending",
+    show_default=True,
+    help="Filter by DLQ status",
+)
+def dlq_list(table: str | None, status: str) -> None:
     """List pending DLQ entries from the SQLite index."""
-    entries = list_pending_dlq_entries()
+    state = StateManager()
+    entries = state.dlq.list(table=table, status=None if status == "all" else status)
     if not entries:
-        click.echo("No pending DLQ entries.")
+        click.echo("No DLQ entries found.")
         return
     for entry in entries:
         click.echo(
             " ".join(
                 [
-                    f"table={entry['table']}",
-                    f"rows={entry['row_count']}",
-                    f"created_at={_format_timestamp(entry['created_at'])}",
-                    f"path={Path(str(entry['path'])).name}",
-                    f"retries={entry['retry_count']}",
+                    f"table={entry.table}",
+                    f"status={entry.status}",
+                    f"rows={entry.row_count}",
+                    f"created_at={_format_timestamp(entry.created_at.timestamp())}",
+                    f"path={entry.path.name}",
+                    f"retries={entry.retry_count}",
                 ]
             )
         )
 
 
-@dlq.command("retry")
-@click.option("--table", "table_name", required=True, help="Retry pending DLQ entries for this table")
-@click.option(
-    "--db",
-    "db_path",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Target DuckDB file path",
-)
-def dlq_retry(table_name: str, db_path: Path | None) -> None:
-    """Retry pending DLQ entries for a table."""
-    target_db = _resolve_target_db(db_path, False)
-    if target_db is None:
-        raise click.ClickException("Missing target DB. Provide --db")
-    success_count, failure_count = asyncio.run(_retry_pending_dlq_entries(table_name=table_name, target_db=target_db))
-    if success_count == 0 and failure_count == 0:
-        click.echo(f"No pending DLQ entries for table {table_name}.")
-        return
-    click.echo(f"✅ DLQ retry finished: table={table_name} recovered={success_count} failed={failure_count}")
+@dlq.command("replay")
+@click.option("--table", required=True, help="Replay pending DLQ entries for this table")
+@click.option("--output", type=str, default=None, help="Override the replay output URI")
+@click.option("--dry-run", is_flag=True, default=False, help="Enumerate entries without writing")
+def dlq_replay(table: str, output: str | None, dry_run: bool) -> None:
+    """Replay pending DLQ entries using the persisted DLQ index."""
+    state = StateManager()
+    resolved_output = output or ("duckdb:///__dry_run__.duckdb" if dry_run else None)
+    if resolved_output is None:
+        resolved_output = _resolve_dlq_replay_output(table=table, output=None)
+    result = state.dlq.replay(table=table, output=resolved_output, dry_run=dry_run)
+    banner = "✅ DLQ replay finished"
+    if result.failed > 0:
+        banner = "❌ DLQ replay finished with failures"
+    click.echo(
+        " ".join(
+            [
+                banner,
+                f"table={table}",
+                f"replayed={result.replayed}",
+                f"failed={result.failed}",
+                f"skipped={result.skipped}",
+            ]
+        )
+    )
+    for error in result.errors:
+        click.echo(f"error={error}")
+    if result.failed > 0:
+        raise SystemExit(1)
 
 
 @dlq.command("clear")
-@click.option("--before", required=True, help="Delete DLQ entries older than this window, e.g. 1d")
-def dlq_clear(before: str) -> None:
-    """Delete old DLQ index rows and their IPC files."""
-    cutoff = _before_to_timestamp(before)
-    deleted = delete_dlq_entries_before(cutoff)
-    cleaned_tmp = cleanup_dlq_tmp(get_cache_dir() / "dlq", 0)
-    click.echo(
-        f"🧹 Deleted DLQ state older than {before}: rows={deleted['rows']} files={deleted['files']} tmp={cleaned_tmp}"
-    )
+@click.option("--table", type=str, default=None, help="Clear DLQ entries for this table")
+@click.option("--all", "clear_all", is_flag=True, default=False, help="Clear all DLQ entries")
+def dlq_clear(table: str | None, clear_all: bool) -> None:
+    """Delete DLQ entries by table or clear everything with confirmation."""
+    if clear_all and table is not None:
+        raise click.UsageError("Provide only one of --table or --all.")
+    if not clear_all and table is None:
+        raise click.UsageError("Provide --table or --all.")
+    if clear_all and not click.confirm("⚠️ Delete all DLQ state?"):
+        return
+    deleted = StateManager().dlq.clear(table=None if clear_all else table)
+    click.echo(f"🧹 Deleted {deleted} DLQ rows.")
+
+
+@main.group()
+def checkpoints() -> None:
+    """Resume or clear persisted checkpoints."""
+    pass
+
+
+@checkpoints.command("resume")
+@click.option("--table", required=True, help="Resume the latest checkpoint for this table")
+@click.option("--output", required=True, type=str, help="DuckDB output URI")
+def checkpoints_resume(table: str, output: str) -> None:
+    """Resume the latest checkpoint for the requested table."""
+    try:
+        provider = _provider_from_table(table)
+        state = StateManager()
+        client = _create_cli_client(provider=provider)
+        result = state.checkpoints.resume(table=table, client=client, output=output)
+    except click.ClickException:
+        raise
+    except (VertexForagerError, ValueError, OSError) as exc:
+        raise click.ClickException(str(exc)) from None
+    except Exception as exc:
+        logger.exception("Unexpected checkpoints resume error for table %s", table)
+        raise click.ClickException(f"Checkpoint resume failed unexpectedly: {exc}") from None
+    _print_run_result_summary(result)
+
+
+@checkpoints.command("clear")
+@click.option("--table", type=str, default=None, help="Clear checkpoints for this table")
+@click.option("--all", "clear_all", is_flag=True, default=False, help="Clear all checkpoints")
+def checkpoints_clear(table: str | None, clear_all: bool) -> None:
+    """Clear checkpoints by table or all at once."""
+    if clear_all and table is not None:
+        raise click.UsageError("Provide only one of --table or --all.")
+    if not clear_all and table is None:
+        raise click.UsageError("Provide --table or --all.")
+    if clear_all and not click.confirm("⚠️ Delete all checkpoints?"):
+        return
+    deleted = StateManager().checkpoints.clear(table=None if clear_all else table)
+    click.echo(f"🧹 Deleted {deleted} checkpoint rows.")
 
 
 @main.group()
@@ -745,183 +1093,6 @@ def tune_export_best(output_dir: Path | None, write_file: Path | None) -> None:
         click.echo(str(write_file))
     else:
         click.echo(content)
-
-
-def _resolve_recover_base(dlq_dir: Path | None) -> Path:
-    base = dlq_dir or (get_cache_dir() / "dlq")
-    if not base.exists():
-        raise click.ClickException(f"DLQ directory not found: {base}")
-    return base
-
-
-def _resolve_target_db(db_path: Path | None, dry_run: bool) -> Path | None:
-    target_db = db_path
-    if not dry_run and target_db is None:
-        raise click.ClickException("Missing target DB. Provide --db")
-    return target_db
-
-
-def _select_recover_tables(base: Path, tables: tuple[str, ...]) -> list[str]:
-    if tables:
-        raw_tables = [t.strip() for t in tables if t and t.strip()]
-        seen: set[str] = set()
-        selected_tables: list[str] = []
-        for table_name in raw_tables:
-            if table_name not in seen:
-                seen.add(table_name)
-                selected_tables.append(table_name)
-        return selected_tables
-    return sorted([p.name for p in base.iterdir() if p.is_dir()])
-
-
-def _build_recover_summary(*, base: Path, target_db: Path | None, dry_run: bool) -> dict[str, Any]:
-    return {
-        "base": str(base),
-        "db": str(target_db) if target_db else None,
-        "dry_run": dry_run,
-        "tables": {},
-        "errors": [],
-        "error_counts": {},
-    }
-
-
-def _write_recover_report(*, report: Path | None, summary: dict[str, Any]) -> None:
-    if report is None:
-        return
-    try:
-        report.parent.mkdir(parents=True, exist_ok=True)
-        _atomic_write_json(report, summary)
-        click.echo(str(report))
-    except Exception as exc:
-        raise click.ClickException(f"Failed to write report: {exc}") from None
-
-
-def _print_recover_details(summary: dict[str, Any]) -> None:
-    for table_name, info in summary["tables"].items():
-        details = info.get("details", [])
-        for detail in details:
-            click.echo(
-                f"[detail] {table_name} file={detail.get('file')} "
-                f"rows={detail.get('rows')} status={detail.get('status')}"
-            )
-
-
-@main.command("recover")
-@click.option(
-    "--dir",
-    "dlq_dir",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="DLQ root directory (default: $ROOT/cache/dlq)",
-)
-@click.option("--table", "tables", multiple=True, help="Limit recovery to specific table(s)")
-@click.option(
-    "--db",
-    "db_path",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Target DuckDB file path",
-)
-@click.option("--dry-run", is_flag=True, default=False, help="Scan and report without writing")
-@click.option("--delete-on-success", is_flag=True, default=False, help="Delete IPC files after successful reinjection")
-@click.option("--clean-tmp", is_flag=True, default=False, help="Remove stale .ipc.tmp files before recovery")
-@click.option(
-    "--retention-s",
-    type=int,
-    default=86_400,
-    show_default=True,
-    help="Retention window for .ipc.tmp cleanup (seconds)",
-)
-@click.option("--report", type=click.Path(path_type=Path), default=None, help="Write JSON report to this path")
-@click.option("--progress", is_flag=True, default=False, help="Show per-file progress during recovery")
-@click.option("--verbose", is_flag=True, default=False, help="Print per-file details without requiring --report")
-@click.option(
-    "--strict",
-    is_flag=True,
-    default=False,
-    help="Exit non-zero if any failures occur (RecoverFail/CloseFail/DeleteFail)",
-)
-def recover(
-    dlq_dir: Path | None,
-    tables: tuple[str, ...],
-    db_path: Path | None,
-    dry_run: bool,
-    delete_on_success: bool,
-    clean_tmp: bool,
-    retention_s: int,
-    report: Path | None,
-    progress: bool,
-    verbose: bool,
-    strict: bool,
-) -> None:
-    """Recover failed DLQ batches into the target DuckDB database.
-
-    Usage:
-        vertex-forager recover --dir "$VERTEXFORAGER_ROOT/cache/dlq" \\
-            --dry-run --report /tmp/dlq_report.json
-        vertex-forager recover --table sharadar_fundamental \\
-            --dir "$VERTEXFORAGER_ROOT/cache/dlq" --db /path/to/target.duckdb \\
-            --delete-on-success
-        vertex-forager recover --dir "$VERTEXFORAGER_ROOT/cache/dlq" \\
-            --dry-run --strict --progress
-
-    Caution:
-        Deletion occurs only after a successful writer close.
-        Prefer --dry-run first to preview counts and affected files.
-
-    Args:
-        dlq_dir: Base DLQ directory containing per-table subdirectories.
-        tables: Specific table(s) to recover; if empty, recover all.
-        db_path: Target DuckDB database file path.
-        dry_run: When True, do not write — only report counts.
-        delete_on_success: Remove IPC files after successful reinjection.
-        clean_tmp: Remove stale .ipc.tmp files before recovery.
-        retention_s: Age threshold for cleaning .ipc.tmp files.
-        report: Optional path to write a JSON summary.
-        progress: Show per-file progress output.
-        verbose: Print per-file details without requiring --report.
-        strict: Exit non-zero if any failures occur.
-    """
-    try:
-        base = _resolve_recover_base(dlq_dir)
-        if clean_tmp:
-            try:
-                deleted = cleanup_dlq_tmp(base, retention_s)
-                click.echo(f"🧹 Cleaned {deleted} stale .ipc.tmp files")
-            except ValueError as e:
-                raise click.ClickException(str(e)) from None
-        target_db = _resolve_target_db(db_path, dry_run)
-        selected_tables = _select_recover_tables(base, tables)
-        if not selected_tables:
-            click.echo("No tables selected or found under DLQ.")
-            return
-        summary = _build_recover_summary(base=base, target_db=target_db, dry_run=dry_run)
-        explicit_set = {t.strip() for t in tables if t and t.strip()}
-        asyncio.run(
-            execute_recovery(
-                base=base,
-                selected_tables=selected_tables,
-                explicit_tables=explicit_set,
-                target_db=target_db,
-                dry_run=dry_run,
-                delete_on_success=delete_on_success,
-                progress=progress,
-                summary=summary,
-                echo=click.echo,
-                logger=logger,
-            )
-        )
-        _write_recover_report(report=report, summary=summary)
-        click.echo(build_summary_message(summary))
-        if verbose:
-            _print_recover_details(summary)
-        if strict and summary["errors"]:
-            raise click.ClickException("Errors encountered during recovery. See --report for details.")
-    except click.ClickException:
-        raise
-    except Exception as e:
-        logger.exception("Unexpected recover error")
-        raise click.ClickException(str(e)) from None
 
 
 if __name__ == "__main__":
