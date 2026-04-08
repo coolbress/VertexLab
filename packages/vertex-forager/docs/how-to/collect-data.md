@@ -12,8 +12,8 @@ Omit `connect_db` when you want a quick result in memory.
 from vertex_forager import create_client
 
 client = create_client(provider="yfinance")
-frame = client.get_price_data(tickers=["AAPL", "MSFT"])
-print(frame.head())
+result = client.get_price_data(tickers=["AAPL", "MSFT"])
+print(result.data.head())
 ```
 
 Use this when:
@@ -21,6 +21,8 @@ Use this when:
 - you want a DataFrame right away
 - you are exploring or debugging
 - you do not need checkpoints, run history, or DLQ replay
+
+In in-memory mode, `client.get_price_data(...)` still returns `RunResult`. The in-memory DataFrame is available as `result.data`.
 
 ### Persisted mode
 

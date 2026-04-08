@@ -112,7 +112,7 @@ Lower-level exception subclasses still exist in `vertex_forager.exceptions`, but
 
 Pipeline engine internals, flow-control helpers, HTTP/retry executors, writer implementations, lifecycle helpers, and convenience utilities still exist in implementation modules, but they are no longer part of the primary user-facing import surface documented here.
 
-Extension authors building custom providers can import `BaseRouter` and `create_router` directly from `vertex_forager.routers`.
+`BaseRouter` and `create_router` are unstable extension points and are not part of the public, semver-guaranteed API. Prefer the documented public entrypoints such as `create_client(...)` and `StateManager()`.
 
 ## Thread Safety
 

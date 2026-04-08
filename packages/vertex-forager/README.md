@@ -30,8 +30,8 @@ pip install "vertex-forager[yfinance] @ git+https://github.com/coolbress/VertexL
 from vertex_forager import create_client
 
 client = create_client(provider="yfinance")
-df = client.get_price_data(tickers=["AAPL", "MSFT"])
-print(df)
+result = client.get_price_data(tickers=["AAPL", "MSFT"])
+print(result.data)
 ```
 
 Persist to DuckDB:
@@ -40,8 +40,8 @@ Persist to DuckDB:
 from vertex_forager import create_client
 
 client = create_client(provider="yfinance")
-res = client.get_price_data(tickers=["AAPL", "MSFT"], connect_db="duckdb://./forager.duckdb")
-print(res)  # RunResult
+result = client.get_price_data(tickers=["AAPL", "MSFT"], connect_db="duckdb://./forager.duckdb")
+print(result.tables)  # RunResult
 ```
 
 ### Sharadar
@@ -51,9 +51,11 @@ import os
 from vertex_forager import create_client
 
 client = create_client(provider="sharadar", api_key=os.environ["SHARADAR_API_KEY"], rate_limit=120)
-df = client.get_price_data(tickers=["AAPL", "MSFT"])
-print(df)
+result = client.get_price_data(tickers=["AAPL", "MSFT"])
+print(result.data)
 ```
+
+`get_price_data(...)` returns a `RunResult`. In in-memory mode, the collected DataFrame is available under `result.data`.
 
 ## Configuration
 

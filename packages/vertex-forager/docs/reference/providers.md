@@ -27,7 +27,7 @@ This page is the catalog of built-in provider datasets, their target DuckDB tabl
 | yfinance | calendar | `yfinance_calendar` | `ticker`, `earnings_date`, `event` | `(provider, ticker, earnings_date)` |
 | yfinance | recommendations | `yfinance_recommendations` | `ticker`, `period`, `strong_buy`, `buy` | `(provider, ticker, period)` |
 | yfinance | news | `yfinance_news` | `ticker`, `id`, `title`, `published_at` | `(provider, ticker, id)` |
-| yfinance | financials | `yfinance_financials` | `ticker`, `period`, `statement_kind`, `metric`, `value` | `(date, ticker, provider, period, statement_kind, metric)` |
+| yfinance | financials | `yfinance_financials` | `date`, `provider`, `fetched_at`, `ticker`, `period`, `statement_kind`, `metric`, `value` | `(date, ticker, provider, period, statement_kind, metric)` |
 | yfinance | holders | `yfinance_holders` | `ticker`, `holder_type`, `holder`, `date_reported` | `(provider, ticker, holder_type, holder, date_reported)` |
 | yfinance | fast_info | `yfinance_fast_info` | `ticker`, `last_price`, `market_cap` | `(provider, ticker)` |
 | yfinance | major_holders | `yfinance_major_holders` | `ticker`, `insider_pct`, `institution_pct` | `(provider, ticker)` |

@@ -40,7 +40,7 @@ The result is operational rather than row-by-row forensic detail. It answers whi
 
 ## Built-in rules
 
-The built-in public rules include:
+The built-in schema rules include:
 
 - `NoDuplicateRows`
 - `NoFutureDates`
@@ -48,7 +48,7 @@ The built-in public rules include:
 
 Each rule is attached through `TableSchema`, so the rule set follows the table definition rather than ad hoc call-site logic.
 
-These rule classes are part of the internal schema contract. They are not a primary end-user configuration surface exposed from the package root.
+These rule classes are part of the internal schema contract. They are available from `vertex_forager.core.quality`, not from package-root imports such as `vertex_forager.__all__`.
 
 ## Why this matters
 
