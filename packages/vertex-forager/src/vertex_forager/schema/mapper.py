@@ -121,8 +121,6 @@ class SchemaMapper:
             for name in missing:
                 dtype = schema[name]
                 exprs.append(pl.lit(None).cast(dtype).alias(name))
-            # Count cells filled as nulls for observability
-            self._inc("schema_missing_cols_filled", len(missing) * frame.height)
 
         # 2. Apply Projections
         # Note: We do NOT filter out extra columns. They are preserved.
@@ -132,7 +130,13 @@ class SchemaMapper:
         except pl.exceptions.PolarsError as e:
             if self.strict_validation:
                 raise ValueError(f"Schema validation failed: type casting error: {e}") from e
+            if missing:
+                self._inc("schema_missing_cols_fill_failed", 1)
             return frame, False
+
+        if not self.strict_validation and missing:
+            # Count cells filled as nulls for observability only after successful projection
+            self._inc("schema_missing_cols_filled", len(missing) * frame.height)
 
         # 3. Reorder Columns
         # Schema columns come first in defined order, followed by any extra columns found in input

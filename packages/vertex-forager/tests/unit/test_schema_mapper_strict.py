@@ -78,6 +78,20 @@ def test_schema_mapper_non_strict_tolerates_polars_error_and_returns_original_fr
     out = mapper.normalize(pkt)
 
     assert out.frame.equals(df)
+    counters = mapper.get_counters_and_reset()
+    assert counters.get("schema_missing_cols_filled", 0) == 0
+
+
+def test_schema_mapper_non_strict_counts_missing_fill_only_on_success(pkt_factory) -> None:
+    df = pl.DataFrame({"provider": ["yfinance"], "ticker": ["AAPL"]})
+    mapper = SchemaMapper(strict_validation=False)
+    pkt = pkt_factory("yfinance_info", df)
+
+    out = mapper.normalize(pkt)
+
+    assert out.frame.height == 1
+    counters = mapper.get_counters_and_reset()
+    assert counters.get("schema_missing_cols_filled", 0) > 0
 
 
 def test_schema_mapper_strict_ok_when_columns_and_types_valid(pkt_factory) -> None:
