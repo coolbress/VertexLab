@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.30.2](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.30.1...vertex-forager-v0.30.2) (2026-04-09)
+
+
+### Bug Fixes
+
+* **vertex-forager:** tolerate polars errors in non-strict schema mapping ([#485](https://github.com/coolbress/VertexLab/issues/485)) ([d3d5a37](https://github.com/coolbress/VertexLab/commit/d3d5a37a2cc03bb0ea8061a64ee6e982e4f6daf6))
+* **vertex-forager:** tolerate polars errors in non-strict schema mapping ([#488](https://github.com/coolbress/VertexLab/issues/488)) ([c5c737e](https://github.com/coolbress/VertexLab/commit/c5c737ea0848ecd8e26293e15b0db2e33c655dd6))
+
 ## [0.30.1](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.30.0...vertex-forager-v0.30.1) (2026-04-09)
 
 
