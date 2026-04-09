@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TypeAlias, cast
 from urllib.parse import urlparse
 
 from vertex_forager.core.registries import writers as writer_registry
@@ -8,8 +9,10 @@ from vertex_forager.writers.base import BaseWriter
 from vertex_forager.writers.duckdb import DuckDBWriter
 from vertex_forager.writers.memory import InMemoryBufferWriter
 
+WriterInstance: TypeAlias = DuckDBWriter | InMemoryBufferWriter
 
-def _duckdb_factory(uri: str) -> BaseWriter:
+
+def _duckdb_factory(uri: str) -> WriterInstance:
     """Create a DuckDB writer from URI (duckdb:///path/to/db.duckdb)."""
     # Simple parsing: remove scheme prefix
     path_str = uri.replace("duckdb://", "")
@@ -20,7 +23,7 @@ def _duckdb_factory(uri: str) -> BaseWriter:
 writer_registry.register("duckdb", _duckdb_factory)
 
 
-def create_writer(connect_db: str | Path | None) -> BaseWriter:
+def create_writer(connect_db: str | Path | None) -> WriterInstance:
     """
     Factory function to instantiate the appropriate Writer.
 
@@ -33,7 +36,7 @@ def create_writer(connect_db: str | Path | None) -> BaseWriter:
         connect_db: Connection string, Path object, or None.
 
     Returns:
-        BaseWriter: An initialized writer instance.
+        DuckDBWriter | InMemoryBufferWriter: An initialized writer instance.
 
     Raises:
         NotImplementedError: If a URI scheme is unknown.
@@ -54,7 +57,7 @@ def create_writer(connect_db: str | Path | None) -> BaseWriter:
         if parsed.scheme:
             try:
                 factory = writer_registry.get(parsed.scheme)
-                return factory(connect_db)
+                return cast(WriterInstance, factory(connect_db))
             except NotImplementedError:
                 raise NotImplementedError(f"Writer for scheme '{parsed.scheme}' is not implemented") from None
 
@@ -63,4 +66,4 @@ def create_writer(connect_db: str | Path | None) -> BaseWriter:
     return DuckDBWriter(db_path=Path(connect_db))
 
 
-__all__ = ["BaseWriter", "DuckDBWriter", "InMemoryBufferWriter", "create_writer"]
+__all__ = ["BaseWriter", "DuckDBWriter", "InMemoryBufferWriter", "WriterInstance", "create_writer"]
