@@ -18,6 +18,7 @@ except ImportError:
 from vertex_forager.constants import HTTP_USER_AGENT
 from vertex_forager.core.config import RequestSpec
 from vertex_forager.core.library import get_library_fetcher
+from vertex_forager.exceptions import FetchError
 
 if TYPE_CHECKING:
     from vertex_forager.core.contracts import HttpClientProtocol
@@ -150,8 +151,11 @@ class HttpExecutor:
             bytes: Serialized payload (IPC for DataFrame-like, JSON for others).
 
         Raises:
-            ValueError: Unsupported scheme or invalid library call configuration.
-            TypeError: Invalid types passed to library call.
+            ImportError: Optional library dependencies are missing for the selected scheme.
+            FetchError: Unsupported schemes, invalid library call configuration, invalid types,
+                runtime failures, and provider-specific library exceptions are wrapped as
+                `FetchError`. The original `ValueError`, `TypeError`, or other failure is
+                preserved as the chained cause.
         """
         scheme = spec.url.split("://", 1)[0]
         params = spec.params
@@ -196,7 +200,9 @@ class HttpExecutor:
             except (TypeError, ValueError):
                 return b"JSON:" + json.dumps(data, default=str).encode("utf-8")
 
-        except (ValueError, TypeError) as e:
+        except FetchError:
+            raise
+        except Exception as e:
             prov = self._client.__class__.__name__
             msg = _redact_urls(str(e))
             logger.error(
@@ -208,7 +214,7 @@ class HttpExecutor:
                 type(e).__name__,
                 msg,
             )
-            raise
+            raise FetchError(f"Library fetch failed for scheme '{scheme}'") from e
 
 
 def build_async_client(
