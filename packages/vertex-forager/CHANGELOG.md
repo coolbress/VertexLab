@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.6](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.30.5...vertex-forager-v0.30.6) (2026-04-09)
+
+
+### Bug Fixes
+
+* **vertex-forager:** wrap library fetch failures ([#495](https://github.com/coolbress/VertexLab/issues/495)) ([a578b36](https://github.com/coolbress/VertexLab/commit/a578b366f3e1bdb2fe8719382385e0bc7618694b))
+
 ## [0.30.5](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.30.4...vertex-forager-v0.30.5) (2026-04-09)
 
 
