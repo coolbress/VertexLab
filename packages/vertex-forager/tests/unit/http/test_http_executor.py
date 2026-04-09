@@ -229,6 +229,7 @@ async def test_yfinance_unknown_or_unsupported_scheme_raises(
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(pd is None, reason="requires optional dependency: vertex-forager[yfinance]")
 async def test_library_runtime_error_is_wrapped_in_fetch_error(
     http_executor: HttpExecutor,
     mock_async_client: AsyncMock,

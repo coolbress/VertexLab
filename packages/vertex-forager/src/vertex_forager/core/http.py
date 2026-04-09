@@ -197,6 +197,8 @@ class HttpExecutor:
             except (TypeError, ValueError):
                 return b"JSON:" + json.dumps(data, default=str).encode("utf-8")
 
+        except FetchError:
+            raise
         except Exception as e:
             prov = self._client.__class__.__name__
             msg = _redact_urls(str(e))
