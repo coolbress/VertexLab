@@ -71,7 +71,10 @@ class SchemaMapper:
         if table_schema is None or packet.frame.is_empty():
             return packet
 
-        frame = self._cast_to_schema(packet.frame, table_schema.schema)
+        frame, normalized = self._cast_to_schema(packet.frame, table_schema.schema)
+
+        if not normalized:
+            return packet.model_copy(update={"frame": frame})
 
         if table_schema.analysis_date_col is not None:
             target_col = table_schema.analysis_date_col
@@ -85,7 +88,11 @@ class SchemaMapper:
 
         return packet.model_copy(update={"frame": frame})
 
-    def _cast_to_schema(self, frame: pl.DataFrame, schema: dict[str, pl.DataType | type[pl.DataType]]) -> pl.DataFrame:
+    def _cast_to_schema(
+        self,
+        frame: pl.DataFrame,
+        schema: dict[str, pl.DataType | type[pl.DataType]],
+    ) -> tuple[pl.DataFrame, bool]:
         """
         Internal helper to align a DataFrame with the target schema.
 
@@ -125,9 +132,9 @@ class SchemaMapper:
         except pl.exceptions.PolarsError as e:
             if self.strict_validation:
                 raise ValueError(f"Schema validation failed: type casting error: {e}") from e
-            return frame
+            return frame, False
 
         # 3. Reorder Columns
         # Schema columns come first in defined order, followed by any extra columns found in input
         ordered_cols = list(schema.keys()) + [c for c in out.columns if c not in schema]
-        return out.select(ordered_cols)
+        return out.select(ordered_cols), True

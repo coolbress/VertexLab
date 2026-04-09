@@ -57,14 +57,14 @@ def test_schema_mapper_non_strict_tolerates_polars_error_and_returns_original_fr
 ) -> None:
     df = pl.DataFrame(
         {
-            "date": [date(2024, 1, 1)],
-            "ticker": ["AAPL"],
-            "provider": ["yfinance"],
-            "period": ["annual"],
-            "statement_kind": ["income_stmt"],
-            "metric": ["net_income"],
-            "value": [123.45],
-            "fetched_at": [datetime.now(tz=timezone.utc)],
+            "date": [date(2024, 1, 2), date(2024, 1, 1)],
+            "ticker": ["MSFT", "AAPL"],
+            "provider": ["yfinance", "yfinance"],
+            "period": ["annual", "annual"],
+            "statement_kind": ["income_stmt", "income_stmt"],
+            "metric": ["net_income", "net_income"],
+            "value": [456.78, 123.45],
+            "fetched_at": [datetime.now(tz=timezone.utc), datetime.now(tz=timezone.utc)],
         }
     )
     mapper = SchemaMapper(strict_validation=False)
