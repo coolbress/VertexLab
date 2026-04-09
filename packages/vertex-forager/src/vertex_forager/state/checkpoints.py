@@ -5,8 +5,6 @@ from typing import TYPE_CHECKING, Any, cast
 from vertex_forager.core.checkpoint import delete_checkpoints, find_latest_checkpoint
 from vertex_forager.exceptions import CheckpointNotFoundError
 from vertex_forager.utils import run_sync_compat
-from vertex_forager.writers import create_writer
-from vertex_forager.writers.memory import InMemoryBufferWriter
 
 if TYPE_CHECKING:
     from vertex_forager.clients.base import BaseClient
@@ -32,9 +30,6 @@ class CheckpointsNamespace:
         **kwargs: Any,
     ) -> RunResult:
         if output.startswith("memory://"):
-            raise ValueError("Checkpoint resume requires a persisted output destination")
-        writer = create_writer(output)
-        if isinstance(writer, InMemoryBufferWriter):
             raise ValueError("Checkpoint resume requires a persisted output destination")
         checkpoint = find_latest_checkpoint(table_name=table)
         if checkpoint is None:

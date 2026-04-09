@@ -46,6 +46,11 @@ class InMemoryBufferWriter(BaseWriter):
             self._counters.clear()
             return data
 
+    def _deduplicate_frame(self, df: pl.DataFrame, subset: list[str]) -> pl.DataFrame:
+        order_cols = subset + [c for c in sorted(df.columns) if c not in subset]
+        ordered = df.sort(order_cols, maintain_order=True) if order_cols else df
+        return ordered.unique(subset=subset, keep="last", maintain_order=True)
+
     async def write(self, packet: FramePacket) -> WriteResult:
         """Append packet to the in-memory buffer.
 
@@ -62,14 +67,14 @@ class InMemoryBufferWriter(BaseWriter):
                 subset = [c for c in self._upsert_keys if c in df.columns]
                 if subset:
                     # Dedup within the new packet itself
-                    df = df.unique(subset=subset, keep="last", maintain_order=True)
+                    df = self._deduplicate_frame(df, subset)
 
                 existing_parts = self._tables.get(packet.table, [])
                 if existing_parts and subset:
                     # Combine existing and new, then dedup
                     combined = pl.concat([*existing_parts, df], how="vertical", rechunk=False)
                     before = combined.height
-                    deduped = combined.unique(subset=subset, keep="last", maintain_order=True)
+                    deduped = self._deduplicate_frame(combined, subset)
                     dropped = before - deduped.height
                     if dropped > 0:
                         self._counters["inmem_dedup_dropped_rows"] = (
@@ -111,8 +116,7 @@ class InMemoryBufferWriter(BaseWriter):
                 subset = [c for c in self._upsert_keys if c in df.columns]
                 if subset:
                     before = df.height
-                    # Keep last occurrence to approximate simple upsert semantics
-                    df = df.unique(subset=subset, keep="last", maintain_order=True)
+                    df = self._deduplicate_frame(df, subset)
                     dropped = before - df.height
                     if dropped > 0:
                         self._counters["inmem_dedup_dropped_rows"] = (

@@ -255,6 +255,86 @@ class TestDuckDBWriter:
         conn.close()
 
     @pytest.mark.asyncio
+    async def test_write_bulk_reports_post_upsert_rows(self, tmp_path: Path) -> None:
+        db_path = tmp_path / "bulk_upsert.duckdb"
+        async with DuckDBWriter(db_path) as writer:
+            packets = [
+                FramePacket(
+                    provider="yfinance",
+                    table="yfinance_price",
+                    frame=pl.DataFrame(
+                        {
+                            "provider": ["yfinance"],
+                            "ticker": ["AAPL"],
+                            "date": [datetime(2024, 1, 1).date()],
+                            "close": [100.0],
+                        }
+                    ),
+                    observed_at=datetime.now(),
+                ),
+                FramePacket(
+                    provider="yfinance",
+                    table="yfinance_price",
+                    frame=pl.DataFrame(
+                        {
+                            "provider": ["yfinance"],
+                            "ticker": ["AAPL"],
+                            "date": [datetime(2024, 1, 1).date()],
+                            "close": [200.0],
+                        }
+                    ),
+                    observed_at=datetime.now(),
+                ),
+            ]
+
+            results = await writer.write_bulk(packets)
+
+        assert [res.rows for res in results] == [0, 1]
+        with duckdb.connect(str(db_path)) as conn:
+            row = conn.execute("SELECT count(*) FROM yfinance_price").fetchone()
+            assert row is not None
+            assert row[0] == 1
+            close = conn.execute("SELECT close FROM yfinance_price").fetchone()
+            assert close is not None
+            assert close[0] == 200.0
+
+    @pytest.mark.asyncio
+    async def test_duckdb_writer_resets_connection_after_write_error(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        class _FakeConn:
+            def __init__(self) -> None:
+                self.closed = False
+
+            def close(self) -> None:
+                self.closed = True
+
+        writer = DuckDBWriter(tmp_path / "error_reset.duckdb")
+        fake_conn = _FakeConn()
+        writer._conn = cast(duckdb.DuckDBPyConnection, fake_conn)
+
+        def _raise_write_error(**_: Any) -> None:
+            raise duckdb.Error("boom")
+
+        monkeypatch.setattr(writer, "_write_table_entries", _raise_write_error)
+
+        packet = FramePacket(
+            provider="test",
+            table="prices",
+            frame=pl.DataFrame({"ticker": ["AAPL"], "price": [150.0], "date": ["2024-01-01"]}),
+            observed_at=datetime.now(),
+        )
+
+        with pytest.raises(duckdb.Error, match="boom"):
+            await writer.write(packet)
+
+        assert writer._conn is None
+        assert fake_conn.closed is True
+        await writer.close()
+
+    @pytest.mark.asyncio
     async def test_unsigned_integer_columns_map_to_duckdb_unsigned_types(
         self, tmp_path: Path
     ) -> None:
