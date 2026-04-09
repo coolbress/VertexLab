@@ -18,6 +18,7 @@ except ImportError:
 from vertex_forager.constants import HTTP_USER_AGENT
 from vertex_forager.core.config import RequestSpec
 from vertex_forager.core.library import get_library_fetcher
+from vertex_forager.exceptions import FetchError
 
 if TYPE_CHECKING:
     from vertex_forager.core.contracts import HttpClientProtocol
@@ -196,7 +197,7 @@ class HttpExecutor:
             except (TypeError, ValueError):
                 return b"JSON:" + json.dumps(data, default=str).encode("utf-8")
 
-        except (ValueError, TypeError) as e:
+        except Exception as e:
             prov = self._client.__class__.__name__
             msg = _redact_urls(str(e))
             logger.error(
@@ -208,7 +209,7 @@ class HttpExecutor:
                 type(e).__name__,
                 msg,
             )
-            raise
+            raise FetchError(f"Library fetch failed for scheme '{scheme}'") from e
 
 
 def build_async_client(

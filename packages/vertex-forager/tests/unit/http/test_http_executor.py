@@ -12,6 +12,7 @@ import pytest
 
 from vertex_forager.core.config import HTTPConfig, HttpMethod, RequestAuth, RequestSpec
 from vertex_forager.core.http import HttpExecutor
+from vertex_forager.exceptions import FetchError
 
 try:
     import pandas as pd
@@ -209,7 +210,7 @@ async def test_yfinance_unknown_or_unsupported_scheme_raises(
     mock_async_client: AsyncMock,
 ) -> None:
     mock_async_client.run_sync = AsyncMock(side_effect=lambda func: func())
-    with pytest.raises(ValueError, match="Unsupported library call type: unknown"):
+    with pytest.raises(FetchError, match="Library fetch failed for scheme 'yfinance'"):
         await http_executor.fetch(
             RequestSpec(
                 method=HttpMethod.GET,
@@ -217,7 +218,7 @@ async def test_yfinance_unknown_or_unsupported_scheme_raises(
                 params={"dataset": "price", "lib": {"type": "unknown", "kwargs": {}}},
             )
         )
-    with pytest.raises(ValueError, match="Unsupported library scheme: ftp"):
+    with pytest.raises(FetchError, match="Library fetch failed for scheme 'ftp'"):
         await http_executor.fetch(
             RequestSpec(
                 method=HttpMethod.GET,
@@ -225,6 +226,25 @@ async def test_yfinance_unknown_or_unsupported_scheme_raises(
                 params={"dataset": "price", "lib": {"type": "ticker_attr", "attr": "info", "kwargs": {}}},
             )
         )
+
+
+@pytest.mark.asyncio
+async def test_library_runtime_error_is_wrapped_in_fetch_error(
+    http_executor: HttpExecutor,
+    mock_async_client: AsyncMock,
+) -> None:
+    mock_async_client.run_sync = AsyncMock(side_effect=RuntimeError("boom"))
+
+    with pytest.raises(FetchError, match="Library fetch failed for scheme 'yfinance'") as exc_info:
+        await http_executor.fetch(
+            RequestSpec(
+                method=HttpMethod.GET,
+                url="yfinance://AAPL",
+                params={"dataset": "price", "lib": {"type": "download", "kwargs": {"period": "1d"}}},
+            )
+        )
+
+    assert isinstance(exc_info.value.__cause__, RuntimeError)
 
 
 class FakeClient:
