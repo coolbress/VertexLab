@@ -272,6 +272,9 @@ class FlowController:
         self._error_count = 0
         self._throttle_events = 0
         self._retry_events = 0
+        self._feedback_queue: deque[tuple[float, int | None, bool]] = deque()
+        self._feedback_lock = asyncio.Lock()
+        self._last_task: asyncio.Task[None] | None = None
 
     async def _safe_set_rpm(self, rpm: int) -> bool:
         try:
@@ -311,6 +314,54 @@ class FlowController:
             self._last_adjust_ts = applied
             self._last_upshift_ts = applied
 
+    async def _apply_feedback(self, *, now: float, status_code: int | None, retried: bool) -> None:
+        is_error = retried or (status_code in (429, 503))
+        if retried:
+            self._retry_events += 1
+        self._events.append((now, is_error))
+        if is_error:
+            self._error_count += 1
+        cutoff = now - self._window_s
+        while self._events and self._events[0][0] < cutoff:
+            _, was_err = self._events.popleft()
+            if was_err:
+                self._error_count = max(0, self._error_count - 1)
+        total = len(self._events)
+        max_samples = max(1, math.ceil(self._effective_rpm * self._window_s / 60.0))
+        effective_min = min(self._min_sample_size, max_samples)
+        ratio = 0.0 if total < effective_min else self._error_count / total if total > 0 else 0.0
+        if is_error:
+            self._last_error_ts = now
+        if (
+            total >= effective_min
+            and ratio > self._error_threshold
+            and self._effective_rpm > self._rpm_floor
+            and (self._last_downshift_ts == 0.0 or (now - self._last_downshift_ts) >= self._window_s)
+        ):
+            new_rpm = max(self._rpm_floor, int(self._effective_rpm * 0.8))
+            if new_rpm != self._effective_rpm:
+                self._last_downshift_ts = now
+                self._throttle_events += 1
+                await self._apply_downshift(prev=self._effective_rpm, new=new_rpm, ratio=ratio)
+            return
+        if (
+            now - max(self._last_error_ts, self._last_adjust_ts, self._last_upshift_ts) >= self._healthy_window_s
+        ) and self._effective_rpm < self._rpm_ceiling:
+            new_rpm = min(self._rpm_ceiling, self._effective_rpm + self._recovery_step)
+            if new_rpm != self._effective_rpm:
+                self._last_upshift_ts = now
+                await self._apply_upshift(prev=self._effective_rpm, new=new_rpm)
+
+    async def _drain_feedback_queue(self) -> None:
+        async with self._feedback_lock:
+            while self._feedback_queue:
+                now, status_code, retried = self._feedback_queue.popleft()
+                await self._apply_feedback(now=now, status_code=status_code, retried=retried)
+        self._last_task = None
+        if self._feedback_queue:
+            loop = asyncio.get_running_loop()
+            self._last_task = loop.create_task(self._drain_feedback_queue())
+
     @property
     def concurrency_limit(self) -> int:
         """Get the configured maximum concurrency limit."""
@@ -345,58 +396,15 @@ class FlowController:
 
     def record_feedback(self, *, status_code: int | None = None, retried: bool = False) -> None:
         now = time.monotonic()
-        is_error = retried or (status_code in (429, 503))
-        if retried:
-            self._retry_events += 1
-        self._events.append((now, is_error))
-        if is_error:
-            self._error_count += 1
-        cutoff = now - self._window_s
-        while self._events and self._events[0][0] < cutoff:
-            _, was_err = self._events.popleft()
-            if was_err:
-                self._error_count = max(0, self._error_count - 1)
-        total = len(self._events)
-        max_samples = max(1, math.ceil(self._effective_rpm * self._window_s / 60.0))
-        effective_min = min(self._min_sample_size, max_samples)
-        ratio = 0.0 if total < effective_min else self._error_count / total if total > 0 else 0.0
-        if is_error:
-            self._last_error_ts = now
-        if (
-            total >= effective_min
-            and ratio > self._error_threshold
-            and self._effective_rpm > self._rpm_floor
-            and (self._last_downshift_ts == 0.0 or (now - self._last_downshift_ts) >= self._window_s)
-        ):
-            new_rpm = max(self._rpm_floor, int(self._effective_rpm * 0.8))
-            if new_rpm != self._effective_rpm:
-                prev_guard = self._last_downshift_ts
-                prev_eff = self._effective_rpm
-                self._last_downshift_ts = now
-                try:
-                    loop = asyncio.get_running_loop()
-                    # Optimistic update only after ensuring loop is available
-                    self._effective_rpm = new_rpm
-                    self._throttle_events += 1
-                    self._last_task = loop.create_task(self._apply_downshift(prev=prev_eff, new=new_rpm, ratio=ratio))
-                except Exception:
-                    self._last_downshift_ts = prev_guard
-                    self._effective_rpm = prev_eff
-                    logger.exception("FLOW_EVENT rpm_downshift_schedule_failed new_rpm=%d prev=%d", new_rpm, prev_eff)
+        self._feedback_queue.append((now, status_code, retried))
+        if self._last_task is not None and not self._last_task.done():
             return
-        if (
-            now - max(self._last_error_ts, self._last_adjust_ts, self._last_upshift_ts) >= self._healthy_window_s
-        ) and self._effective_rpm < self._rpm_ceiling:
-            new_rpm = min(self._rpm_ceiling, self._effective_rpm + self._recovery_step)
-            if new_rpm != self._effective_rpm:
-                prev_up_guard = self._last_upshift_ts
-                self._last_upshift_ts = now
-                try:
-                    loop = asyncio.get_running_loop()
-                    self._last_task = loop.create_task(self._apply_upshift(prev=self._effective_rpm, new=new_rpm))
-                except Exception:
-                    self._last_upshift_ts = prev_up_guard
-                    logger.exception("FLOW_EVENT rpm_upshift_schedule_failed new_rpm=%d", new_rpm)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            logger.warning("FLOW_EVENT feedback_schedule_skipped no_running_loop")
+            return
+        self._last_task = loop.create_task(self._drain_feedback_queue())
 
     @property
     def throttle_events(self) -> int:

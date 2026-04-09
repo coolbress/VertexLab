@@ -53,7 +53,8 @@ async def test_record_feedback_triggers_downshift() -> None:
     )
     for _ in range(11):
         fc.record_feedback(status_code=429)
-    await asyncio.sleep(0.05)
+    assert fc._last_task is not None
+    await fc._last_task
     assert fc._effective_rpm < 60
     assert fc._effective_rpm >= 10
 
@@ -69,5 +70,39 @@ async def test_record_feedback_respects_floor() -> None:
     )
     for _ in range(100):
         fc.record_feedback(status_code=429)
-    await asyncio.sleep(0.1)
+    assert fc._last_task is not None
+    await fc._last_task
     assert fc._effective_rpm >= 20
+
+
+@pytest.mark.asyncio
+async def test_record_feedback_declares_last_task_and_avoids_optimistic_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fc = FlowController(
+        requests_per_minute=60,
+        concurrency_limit=4,
+        error_rate_threshold=0.2,
+        adaptive_throttle_window_s=60,
+    )
+    assert fc._last_task is None
+    gate = asyncio.Event()
+
+    async def _slow_set_rpm(_: int) -> bool:
+        await gate.wait()
+        return True
+
+    monkeypatch.setattr(fc, "_safe_set_rpm", _slow_set_rpm)
+
+    async def _worker() -> None:
+        fc.record_feedback(status_code=429)
+
+    await asyncio.gather(*[_worker() for _ in range(11)])
+
+    assert fc._last_task is not None
+    assert fc._effective_rpm == 60
+
+    gate.set()
+    await fc._last_task
+
+    assert fc._effective_rpm == 48

@@ -20,6 +20,10 @@ The rate limiter is based on the Generic Cell Rate Algorithm.
 
 Conceptually, each request is allowed only if its theoretical arrival time does not move too far ahead of the permitted schedule. That gives vertex-forager a stable RPM envelope without relying on sleep loops scattered throughout the code.
 
+In `FlowController`, the GCRA burst allowance is intentionally tied to the concurrency limit rather than to the RPM value itself.
+
+That means adaptive RPM changes update pacing, but they do not redefine the burst ceiling. The burst cap stays aligned with concurrency constraints.
+
 ## Gradient concurrency control
 
 The concurrency limiter watches latency and uses a gradient algorithm to decide whether the system is healthy enough to support more parallel work.
