@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.4](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.30.3...vertex-forager-v0.30.4) (2026-04-09)
+
+
+### Bug Fixes
+
+* **vertex-forager:** add breaking change guards ([#491](https://github.com/coolbress/VertexLab/issues/491)) ([34bf4df](https://github.com/coolbress/VertexLab/commit/34bf4dfd089263f15a96372cfef7991aa3a7585f))
+
 ## [0.30.3](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.30.2...vertex-forager-v0.30.3) (2026-04-09)
 
 
