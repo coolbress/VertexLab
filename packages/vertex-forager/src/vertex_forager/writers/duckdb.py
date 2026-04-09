@@ -185,10 +185,7 @@ class DuckDBWriter(BaseWriter):
         if not packets:
             return []
 
-        # Persist data (table-level batching for efficiency)
-        await self._write_internal(packets)
-        # Preserve BaseWriter contract: one result per input packet
-        return [WriteResult(table=p.table, rows=p.frame.height) for p in packets]
+        return await self._write_internal(packets)
 
     async def _write_internal(self, packets: Sequence[FramePacket]) -> list[WriteResult]:
         """
@@ -256,6 +253,75 @@ class DuckDBWriter(BaseWriter):
             self._logger.warning(LOG_SCHEMA_MISMATCH.format(prefix=WR_LOG_PREFIX, table=table_name, error=e))
             return pl.concat(frames, how="diagonal")
 
+    def _merge_table_frames_with_source(self, table_name: str, entries: list[tuple[int, FramePacket]]) -> pl.DataFrame:
+        frames = [packet.frame.with_columns(pl.lit(idx).alias("__vf_source_idx")) for idx, packet in entries]
+        try:
+            return pl.concat(frames, how="vertical")
+        except pl.exceptions.PolarsError as e:
+            schema = self._get_table_schema(table_name)
+            is_flexible = bool(schema and schema.flexible_schema)
+            if not is_flexible:
+                raise
+            self._logger.warning(LOG_SCHEMA_MISMATCH.format(prefix=WR_LOG_PREFIX, table=table_name, error=e))
+            return pl.concat(frames, how="diagonal")
+
+    def _table_exists(self, conn: duckdb.DuckDBPyConnection, table_name: str) -> bool:
+        row = conn.execute(
+            "SELECT count(*) FROM information_schema.tables WHERE table_name = ?",
+            [table_name],
+        ).fetchone()
+        return bool(row and row[0] > 0)
+
+    def _count_rows_by_source(self, df: pl.DataFrame) -> dict[int, int]:
+        if df.is_empty():
+            return {}
+        counts = df.group_by("__vf_source_idx").len()
+        return {int(row[0]): int(row[1]) for row in counts.iter_rows()}
+
+    def _deduplicate_frame(self, df: pl.DataFrame, subset: list[str]) -> pl.DataFrame:
+        order_cols = subset + [c for c in sorted(df.columns) if c not in subset and c != "__vf_source_idx"]
+        ordered = df.sort(order_cols, maintain_order=True) if order_cols else df
+        return ordered.unique(subset=subset, keep="last", maintain_order=True)
+
+    def _prepare_write_frame(
+        self,
+        conn: duckdb.DuckDBPyConnection,
+        table_name: str,
+        entries: list[tuple[int, FramePacket]],
+    ) -> tuple[pl.DataFrame, dict[int, int]]:
+        merged_df = self._merge_table_frames_with_source(table_name, entries)
+        pk_cols = self._get_primary_keys(table_name)
+        if pk_cols:
+            self._validate_pk_columns(table_name, merged_df, pk_cols)
+            merged_df = self._deduplicate_frame(merged_df, list(pk_cols))
+            if self._table_exists(conn, table_name):
+                q_table = self._quote_identifier(table_name)
+                q_source = self._quote_identifier("__vf_source_idx")
+                join_on = " AND ".join(
+                    f"t.{self._quote_identifier(col)} = v.{self._quote_identifier(col)}" for col in pk_cols
+                )
+                probe_col = self._quote_identifier(pk_cols[0])
+                existing_probe = merged_df.select([*pk_cols, "__vf_source_idx"])
+                conn.register("temp_write_probe_view", existing_probe)
+                try:
+                    _tmpl = Template(
+                        "SELECT v.${source}, COUNT(*) "
+                        "FROM temp_write_probe_view v "
+                        "LEFT JOIN ${table} t ON ${join_on} "
+                        "WHERE t.${probe} IS NULL "
+                        "GROUP BY 1"
+                    )
+                    query = _tmpl.substitute(source=q_source, table=q_table, join_on=join_on, probe=probe_col)
+                    rows = conn.execute(query).fetchall()
+                finally:
+                    conn.unregister("temp_write_probe_view")
+                counts = {int(row[0]): int(row[1]) for row in rows}
+            else:
+                counts = self._count_rows_by_source(merged_df)
+        else:
+            counts = {idx: len(packet.frame) for idx, packet in entries}
+        return merged_df.drop("__vf_source_idx"), counts
+
     def _validate_pk_columns(self, table_name: str, merged_df: pl.DataFrame, pk_cols: tuple[str, ...]) -> None:
         for column in pk_cols:
             if column not in merged_df.columns:
@@ -289,16 +355,13 @@ class DuckDBWriter(BaseWriter):
         entries: list[tuple[int, FramePacket]],
         final_results: list[WriteResult | None],
     ) -> None:
-        merged_df = self._merge_table_frames(table_name, entries)
-        pk_cols = self._get_primary_keys(table_name)
-        if pk_cols:
-            self._validate_pk_columns(table_name, merged_df, pk_cols)
+        merged_df, write_counts = self._prepare_write_frame(conn, table_name, entries)
         rows = len(merged_df)
         if rows > 0:
             self._ensure_table_exists(conn, table_name, merged_df)
             self._upsert_data(conn, table_name, merged_df)
-        for idx, packet in entries:
-            final_results[idx] = WriteResult(table=table_name, rows=len(packet.frame))
+        for idx, _packet in entries:
+            final_results[idx] = WriteResult(table=table_name, rows=write_counts.get(idx, 0))
 
     def _finalize_sync_results(self, final_results: list[WriteResult | None]) -> list[WriteResult]:
         return [res for res in final_results if res is not None]
@@ -322,6 +385,7 @@ class DuckDBWriter(BaseWriter):
                     final_results=final_results,
                 )
             except duckdb.Error as e:
+                self._reset_connection()
                 self._logger.error(LOG_FAILED_BATCH.format(prefix=WR_LOG_PREFIX, table=table_name, error=e))
                 raise
             except ValidationError as e:
@@ -332,6 +396,17 @@ class DuckDBWriter(BaseWriter):
         t1 = time.monotonic()
         self._logger.debug(LOG_FINISH_SYNC_WRITE.format(prefix=DK_LOG_PREFIX, seconds=(t1 - t0), results=len(results)))
         return results
+
+    def _reset_connection(self) -> None:
+        if self._conn is None:
+            return
+        conn = self._conn
+        self._conn = None
+        self._table_schemas.clear()
+        try:
+            conn.close()
+        except duckdb.Error as e:
+            self._logger.warning(LOG_CLOSE_CONN_WARNING.format(prefix=DK_LOG_PREFIX, error=e))
 
     async def flush(self) -> None:
         """Flush is now no-op as we write immediately."""
@@ -625,7 +700,6 @@ class DuckDBWriter(BaseWriter):
                 _q = _tmpl.substitute(t=q_table, cols=cols_str)
                 conn.execute(_q)
                 return len(df)
-
 
             # If PK exists, perform Upsert
             # DuckDB's INSERT OR REPLACE / ON CONFLICT logic
