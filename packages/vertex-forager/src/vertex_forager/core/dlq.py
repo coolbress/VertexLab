@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextlib import suppress
 import os
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NoReturn
 from uuid import uuid4
 
 import polars as pl
@@ -132,7 +132,7 @@ async def _on_spool_failed(
     inc: Any,
     result: RunResult,
     result_lock: asyncio.Lock,
-) -> None:
+) -> NoReturn:
     async with result_lock:
         pending = result.dlq_pending.get(table, [])
         pending.extend(failed_packets)
