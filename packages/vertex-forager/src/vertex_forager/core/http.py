@@ -151,8 +151,11 @@ class HttpExecutor:
             bytes: Serialized payload (IPC for DataFrame-like, JSON for others).
 
         Raises:
-            ValueError: Unsupported scheme or invalid library call configuration.
-            TypeError: Invalid types passed to library call.
+            ImportError: Optional library dependencies are missing for the selected scheme.
+            FetchError: Unsupported schemes, invalid library call configuration, invalid types,
+                runtime failures, and provider-specific library exceptions are wrapped as
+                `FetchError`. The original `ValueError`, `TypeError`, or other failure is
+                preserved as the chained cause.
         """
         scheme = spec.url.split("://", 1)[0]
         params = spec.params

@@ -210,7 +210,7 @@ async def test_yfinance_unknown_or_unsupported_scheme_raises(
     mock_async_client: AsyncMock,
 ) -> None:
     mock_async_client.run_sync = AsyncMock(side_effect=lambda func: func())
-    with pytest.raises(FetchError, match="Library fetch failed for scheme 'yfinance'"):
+    with pytest.raises(FetchError, match="Library fetch failed for scheme 'yfinance'") as exc_info:
         await http_executor.fetch(
             RequestSpec(
                 method=HttpMethod.GET,
@@ -218,7 +218,9 @@ async def test_yfinance_unknown_or_unsupported_scheme_raises(
                 params={"dataset": "price", "lib": {"type": "unknown", "kwargs": {}}},
             )
         )
-    with pytest.raises(FetchError, match="Library fetch failed for scheme 'ftp'"):
+    assert isinstance(exc_info.value.__cause__, ValueError)
+
+    with pytest.raises(FetchError, match="Library fetch failed for scheme 'ftp'") as exc_info:
         await http_executor.fetch(
             RequestSpec(
                 method=HttpMethod.GET,
@@ -226,6 +228,7 @@ async def test_yfinance_unknown_or_unsupported_scheme_raises(
                 params={"dataset": "price", "lib": {"type": "ticker_attr", "attr": "info", "kwargs": {}}},
             )
         )
+    assert isinstance(exc_info.value.__cause__, ValueError)
 
 
 @pytest.mark.asyncio
