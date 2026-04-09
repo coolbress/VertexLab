@@ -125,7 +125,7 @@ class SchemaMapper:
         except pl.exceptions.PolarsError as e:
             if self.strict_validation:
                 raise ValueError(f"Schema validation failed: type casting error: {e}") from e
-            return frame
+            raise
 
         # 3. Reorder Columns
         # Schema columns come first in defined order, followed by any extra columns found in input
