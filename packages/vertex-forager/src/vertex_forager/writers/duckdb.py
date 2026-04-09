@@ -278,6 +278,11 @@ class DuckDBWriter(BaseWriter):
         counts = df.group_by("__vf_source_idx").len()
         return {int(row[0]): int(row[1]) for row in counts.iter_rows()}
 
+    def _deduplicate_frame(self, df: pl.DataFrame, subset: list[str]) -> pl.DataFrame:
+        order_cols = subset + [c for c in sorted(df.columns) if c not in subset and c != "__vf_source_idx"]
+        ordered = df.sort(order_cols, maintain_order=True) if order_cols else df
+        return ordered.unique(subset=subset, keep="last", maintain_order=True)
+
     def _prepare_write_frame(
         self,
         conn: duckdb.DuckDBPyConnection,
@@ -288,7 +293,7 @@ class DuckDBWriter(BaseWriter):
         pk_cols = self._get_primary_keys(table_name)
         if pk_cols:
             self._validate_pk_columns(table_name, merged_df, pk_cols)
-            merged_df = merged_df.unique(subset=list(pk_cols), keep="last", maintain_order=True)
+            merged_df = self._deduplicate_frame(merged_df, list(pk_cols))
             if self._table_exists(conn, table_name):
                 q_table = self._quote_identifier(table_name)
                 q_source = self._quote_identifier("__vf_source_idx")

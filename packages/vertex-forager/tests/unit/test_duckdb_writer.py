@@ -299,6 +299,51 @@ class TestDuckDBWriter:
             assert close[0] == 200.0
 
     @pytest.mark.asyncio
+    async def test_write_bulk_dedup_is_deterministic_across_packet_order(self, tmp_path: Path) -> None:
+        db_path_a = tmp_path / "deterministic_a.duckdb"
+        db_path_b = tmp_path / "deterministic_b.duckdb"
+        packet_a = FramePacket(
+            provider="yfinance",
+            table="yfinance_price",
+            frame=pl.DataFrame(
+                {
+                    "provider": ["yfinance"],
+                    "ticker": ["AAPL"],
+                    "date": [datetime(2024, 1, 1).date()],
+                    "close": [100.0],
+                }
+            ),
+            observed_at=datetime.now(),
+        )
+        packet_b = FramePacket(
+            provider="yfinance",
+            table="yfinance_price",
+            frame=pl.DataFrame(
+                {
+                    "provider": ["yfinance"],
+                    "ticker": ["AAPL"],
+                    "date": [datetime(2024, 1, 1).date()],
+                    "close": [200.0],
+                }
+            ),
+            observed_at=datetime.now(),
+        )
+
+        async with DuckDBWriter(db_path_a) as writer_a:
+            await writer_a.write_bulk([packet_a, packet_b])
+
+        async with DuckDBWriter(db_path_b) as writer_b:
+            await writer_b.write_bulk([packet_b, packet_a])
+
+        with duckdb.connect(str(db_path_a)) as conn_a, duckdb.connect(str(db_path_b)) as conn_b:
+            close_a = conn_a.execute("SELECT close FROM yfinance_price").fetchone()
+            close_b = conn_b.execute("SELECT close FROM yfinance_price").fetchone()
+            assert close_a is not None
+            assert close_b is not None
+            assert close_a[0] == close_b[0]
+            assert close_a[0] == 200.0
+
+    @pytest.mark.asyncio
     async def test_duckdb_writer_resets_connection_after_write_error(
         self,
         tmp_path: Path,
@@ -335,9 +380,7 @@ class TestDuckDBWriter:
         await writer.close()
 
     @pytest.mark.asyncio
-    async def test_unsigned_integer_columns_map_to_duckdb_unsigned_types(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_unsigned_integer_columns_map_to_duckdb_unsigned_types(self, tmp_path: Path) -> None:
         db_path = tmp_path / "uint_types.duckdb"
         async with DuckDBWriter(db_path) as writer:
             df = pl.DataFrame(
@@ -368,9 +411,7 @@ class TestDuckDBWriter:
             assert type_map["u64"] == "UBIGINT"
 
 
-def test_compact_sync_checkpoint_warning_on_error(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_compact_sync_checkpoint_warning_on_error(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     import logging
 
     class _FakeConn:
@@ -389,14 +430,10 @@ def test_compact_sync_checkpoint_warning_on_error(
     writer._conn = cast(duckdb.DuckDBPyConnection, fake)
     writer._compact_sync()
     assert fake.calls == 2
-    assert any(
-        "CHECKPOINT failed or unsupported" in rec.message for rec in caplog.records
-    )
+    assert any("CHECKPOINT failed or unsupported" in rec.message for rec in caplog.records)
 
 
-def test_compact_sync_checkpoint_ok(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_compact_sync_checkpoint_ok(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     import logging
 
     class _FakeConnOK:
@@ -413,6 +450,4 @@ def test_compact_sync_checkpoint_ok(
     caplog.set_level(logging.WARNING)
     writer._compact_sync()
     assert fake.calls == 2
-    assert not any(
-        "CHECKPOINT failed or unsupported" in rec.message for rec in caplog.records
-    )
+    assert not any("CHECKPOINT failed or unsupported" in rec.message for rec in caplog.records)
