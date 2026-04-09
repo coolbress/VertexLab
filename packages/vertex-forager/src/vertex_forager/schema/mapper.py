@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import threading
 from typing import TYPE_CHECKING
 
@@ -9,6 +10,9 @@ from vertex_forager.schema.registry import get_table_schema
 
 if TYPE_CHECKING:
     from vertex_forager.core.config import FramePacket
+
+
+logger = logging.getLogger(__name__)
 
 
 class SchemaMapper:
@@ -59,7 +63,7 @@ class SchemaMapper:
         are reordered. When `analysis_date_col` is set on the schema and present
         in `frame.columns`, the frame is sorted by that column.
 
-        If no schema is registered for the table, the packet is returned strictly as-is.
+        If no schema is registered for the table, a warning is emitted and the packet is returned as-is.
 
         Args:
             packet: Input packet containing potentially raw/untyped data.
@@ -68,7 +72,14 @@ class SchemaMapper:
             FramePacket: A new packet containing the normalized DataFrame.
         """
         table_schema = get_table_schema(packet.table)
-        if table_schema is None or packet.frame.is_empty():
+        if table_schema is None:
+            logger.warning(
+                "SCHEMA_MAPPER no registered schema for table=%s; passing frame through without normalization",
+                packet.table,
+            )
+            self._inc("schema_unknown_table_count", 1)
+            return packet
+        if packet.frame.is_empty():
             return packet
 
         frame, normalized = self._cast_to_schema(packet.frame, table_schema.schema)
