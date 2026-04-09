@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.3](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.30.2...vertex-forager-v0.30.3) (2026-04-09)
+
+
+### Bug Fixes
+
+* **vertex-forager:** harden writer correctness paths ([#489](https://github.com/coolbress/VertexLab/issues/489)) ([cf6d01b](https://github.com/coolbress/VertexLab/commit/cf6d01b6d2938765e33e1a9743675ada978f04ba))
+
 ## [0.30.2](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.30.1...vertex-forager-v0.30.2) (2026-04-09)
 
 
