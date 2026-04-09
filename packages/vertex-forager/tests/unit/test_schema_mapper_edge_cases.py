@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 import polars as pl
+import pytest
 
 from vertex_forager.core.config import FramePacket
 from vertex_forager.schema.mapper import SchemaMapper
@@ -34,3 +35,22 @@ def test_schema_mapper_casts_and_preserves_extra_columns() -> None:
     # required columns from schema should exist
     for col in ("open", "close", "low", "high", "volume"):
         assert col in out.frame.columns
+
+
+def test_schema_mapper_warns_when_schema_is_missing(caplog: pytest.LogCaptureFixture) -> None:
+    mapper = SchemaMapper()
+    df = pl.DataFrame({"id": [1], "value": ["x"]})
+    pkt = FramePacket(
+        provider="test",
+        table="unknown_table",
+        frame=df,
+        observed_at=datetime.now(timezone.utc),
+    )
+
+    with caplog.at_level("WARNING"):
+        out = mapper.normalize(packet=pkt)
+
+    assert out.frame.equals(df)
+    assert "no registered schema" in caplog.text.lower()
+    counters = mapper.get_counters_and_reset()
+    assert counters.get("schema_unknown_table_count", 0) == 1

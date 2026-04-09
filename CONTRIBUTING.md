@@ -109,6 +109,24 @@ Use integration tests for end-to-end writer, pipeline, and CLI paths. Use unit t
 - Use squash merge. The PR title becomes the final merge commit title.
 - Do not append issue numbers to the PR title. Link issues in the PR body instead.
 
+## Breaking Change Policy
+
+- Breaking changes must not appear without advance notice.
+- Deprecate in release `0.N`.
+- Keep the old path available through at least `0.N+1`.
+- Remove it no earlier than `0.N+2`.
+- The old path must emit `DeprecationWarning` and point to the replacement.
+- The warning message must state both the deprecation release and the planned removal release.
+- Warning behavior must be testable with `pytest.warns(...)`.
+- Every breaking or deprecating change must be documented in the package changelog and migration guide.
+- Persisted contract changes must call out migration impact explicitly, including renamed tables, removed parameters, and new validation rules.
+- When adding a deprecated path:
+  - keep the old behavior reachable for the full notice period
+  - emit `DeprecationWarning` from the legacy path
+  - add or update tests that assert the warning
+  - add a changelog entry and migration note
+  - remove the path only after the documented notice window has passed
+
 ## Labels
 
 VertexLab keeps pull-request labels low-maintenance and automation-friendly by managing only `type:*` and `package:*` labels in normal workflow.

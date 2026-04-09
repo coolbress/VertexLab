@@ -19,6 +19,7 @@ from vertex_forager.core.config import (
     StorageConfig,
 )
 from vertex_forager.core.types import YFinanceDataset
+from vertex_forager.deprecations import warn_deprecated
 from vertex_forager.exceptions import InputError
 from vertex_forager.logging.constants import (
     CLIENT_LOG_PREFIX,
@@ -317,8 +318,12 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         """
         target_kind = "financials" if kind in ("income_stmt", "earnings") else kind
         if kind == "earnings":
-            logger.warning(
-                "YFinance 'earnings' maps to 'financials' (income statements). Annual earnings requests are redirected."
+            warn_deprecated(
+                old="kind='earnings'",
+                new="kind='income_stmt'",
+                deprecated_in="0.30.3",
+                removed_in="0.32.0",
+                stacklevel=3,
             )
         if kind == "earnings" and period == "quarterly":
             raise InputError("quarterly_earnings is deprecated in yfinance; use income_stmt with period='quarterly'.")

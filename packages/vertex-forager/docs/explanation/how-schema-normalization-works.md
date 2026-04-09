@@ -50,6 +50,8 @@ In strict mode, unsupported or invalid casts fail loudly.
 
 In non-strict mode, the mapper can coerce more aggressively to keep the pipeline moving when the payload is close enough to the expected contract.
 
+If no schema is registered for a table, the mapper emits a warning and passes the frame through unchanged.
+
 If schema casting still triggers a Polars-level failure, the mapper keeps the original frame instead of raising.
 
 ## Why this matters to users

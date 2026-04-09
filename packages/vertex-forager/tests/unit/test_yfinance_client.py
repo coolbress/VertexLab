@@ -165,13 +165,14 @@ async def test_get_financials_maps_earnings_to_financials_async(
         return {"ok": True}
 
     monkeypatch.setattr(client, "_dispatch_fetch", _fake_dispatch_fetch)
-    result = await client.get_financials_async(
-        kind="earnings",
-        period="annual",
-        tickers=["AAPL"],
-        connect_db=None,
-        progress=False,
-    )
+    with pytest.warns(DeprecationWarning, match="kind='earnings'"):
+        result = await client.get_financials_async(
+            kind="earnings",
+            period="annual",
+            tickers=["AAPL"],
+            connect_db=None,
+            progress=False,
+        )
     assert result == {"ok": True}
     assert captured["dataset"] == "financials"
     assert captured["table_name"] == "yfinance_financials"
@@ -203,14 +204,15 @@ async def test_get_financials_quarterly_income_stmt_dataset_async(
 @pytest.mark.asyncio
 async def test_get_financials_rejects_quarterly_earnings_async() -> None:
     client = YFinanceClient()
-    with pytest.raises(InputError, match="quarterly_earnings"):
-        await client.get_financials_async(
-            kind="earnings",
-            period="quarterly",
-            tickers=["AAPL"],
-            connect_db=None,
-            progress=False,
-        )
+    with pytest.warns(DeprecationWarning, match="kind='earnings'"):
+        with pytest.raises(InputError, match="quarterly_earnings"):
+            await client.get_financials_async(
+                kind="earnings",
+                period="quarterly",
+                tickers=["AAPL"],
+                connect_db=None,
+                progress=False,
+            )
 
 
 @pytest.mark.asyncio
