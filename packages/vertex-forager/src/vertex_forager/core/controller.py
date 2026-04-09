@@ -396,13 +396,13 @@ class FlowController:
 
     def record_feedback(self, *, status_code: int | None = None, retried: bool = False) -> None:
         now = time.monotonic()
-        self._feedback_queue.append((now, status_code, retried))
-        if self._last_task is not None and not self._last_task.done():
-            return
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             logger.warning("FLOW_EVENT feedback_schedule_skipped no_running_loop")
+            return
+        self._feedback_queue.append((now, status_code, retried))
+        if self._last_task is not None and not self._last_task.done():
             return
         self._last_task = loop.create_task(self._drain_feedback_queue())
 

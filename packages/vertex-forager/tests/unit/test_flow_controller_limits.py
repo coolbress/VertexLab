@@ -42,6 +42,13 @@ def test_flow_controller_concurrency_property() -> None:
     assert fc.concurrency_limit == 8
 
 
+def test_record_feedback_without_running_loop_does_not_queue_event() -> None:
+    fc = FlowController(requests_per_minute=60, concurrency_limit=1)
+    fc.record_feedback(status_code=429)
+    assert len(fc._feedback_queue) == 0
+    assert fc._last_task is None
+
+
 @pytest.mark.asyncio
 async def test_record_feedback_triggers_downshift() -> None:
     fc = FlowController(
