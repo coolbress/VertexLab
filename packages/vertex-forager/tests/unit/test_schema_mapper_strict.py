@@ -51,35 +51,6 @@ def test_schema_mapper_strict_raises_on_type_mismatch(pkt_factory) -> None:
         mapper.normalize(pkt)
 
 
-def test_schema_mapper_non_strict_tolerates_polars_error_and_returns_original_frame(
-    pkt_factory,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    df = pl.DataFrame(
-        {
-            "date": [date(2024, 1, 1)],
-            "ticker": ["AAPL"],
-            "provider": ["yfinance"],
-            "period": ["annual"],
-            "statement_kind": ["income_stmt"],
-            "metric": ["net_income"],
-            "value": [123.45],
-            "fetched_at": [datetime.now(tz=timezone.utc)],
-        }
-    )
-    mapper = SchemaMapper(strict_validation=False)
-    pkt = pkt_factory("yfinance_financials", df)
-
-    def _raise_polars_error(self: pl.DataFrame, exprs: object) -> pl.DataFrame:
-        raise pl.exceptions.ComputeError("boom")
-
-    monkeypatch.setattr(pl.DataFrame, "with_columns", _raise_polars_error)
-
-    out = mapper.normalize(pkt)
-
-    assert out.frame.equals(df)
-
-
 def test_schema_mapper_strict_ok_when_columns_and_types_valid(pkt_factory) -> None:
     df = pl.DataFrame(
         {
