@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.5](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.30.4...vertex-forager-v0.30.5) (2026-04-09)
+
+
+### Bug Fixes
+
+* **vertex-forager:** tighten writer typing annotations ([#493](https://github.com/coolbress/VertexLab/issues/493)) ([111f965](https://github.com/coolbress/VertexLab/commit/111f965d2e1c649b15bea73eeb6e42329053112c))
+
 ## [0.30.4](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.30.3...vertex-forager-v0.30.4) (2026-04-09)
 
 
