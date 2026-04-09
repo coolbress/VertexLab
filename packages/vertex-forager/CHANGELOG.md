@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.1](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.30.0...vertex-forager-v0.30.1) (2026-04-09)
+
+
+### Bug Fixes
+
+* **vertex-forager:** serialize flow controller feedback ([#483](https://github.com/coolbress/VertexLab/issues/483)) ([44e514a](https://github.com/coolbress/VertexLab/commit/44e514a27abfe2726297807acf15a88f613e8482))
+
 ## [0.30.0](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.29.0...vertex-forager-v0.30.0) (2026-04-08)
 
 
