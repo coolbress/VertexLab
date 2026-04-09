@@ -15,7 +15,7 @@
 | packages/vertex-forager/src/vertex\_forager/core/controller.py      |      229 |       30 |     87% |121, 244, 246, 250, 254, 258, 262, 264, 283-285, 303-306, 309-315, 326-328, 350-353, 362-363 |
 | packages/vertex-forager/src/vertex\_forager/core/dlq.py             |      151 |       40 |     74% |47-48, 93-94, 120-122, 136-155, 179-189, 192-193, 240-251 |
 | packages/vertex-forager/src/vertex\_forager/core/errors.py          |       38 |       12 |     68% |18-19, 24-25, 105-111, 117, 123, 129 |
-| packages/vertex-forager/src/vertex\_forager/core/http.py            |      105 |       26 |     75% |16-17, 100, 104-112, 163-164, 182-184, 186-193, 196-197 |
+| packages/vertex-forager/src/vertex\_forager/core/http.py            |      108 |       27 |     75% |16-17, 101, 105-113, 167-168, 186-188, 190-197, 200-201, 204 |
 | packages/vertex-forager/src/vertex\_forager/core/library.py         |       25 |        1 |     96% |        26 |
 | packages/vertex-forager/src/vertex\_forager/core/lifecycle.py       |       70 |        4 |     94% |60-61, 64-65 |
 | packages/vertex-forager/src/vertex\_forager/core/orchestration.py   |       74 |       10 |     86% |43-44, 92-93, 95-97, 125, 188-189 |
@@ -38,7 +38,7 @@
 | packages/vertex-forager/src/vertex\_forager/writers/constants.py    |       24 |        0 |    100% |           |
 | packages/vertex-forager/src/vertex\_forager/writers/duckdb.py       |      360 |       53 |     85% |141-142, 163, 239-240, 245-254, 260-266, 277, 376, 402, 408-409, 423-425, 430-431, 461-462, 536-537, 561-568, 578-582, 588, 619-629, 710-711 |
 | packages/vertex-forager/src/vertex\_forager/writers/memory.py       |       64 |        8 |     88% |61, 116-122 |
-| **TOTAL**                                                           | **3953** |  **578** | **85%** |           |
+| **TOTAL**                                                           | **3956** |  **579** | **85%** |           |
 
 
 ## Setup coverage badge
