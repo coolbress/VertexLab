@@ -12,7 +12,7 @@
 | packages/vertex-forager/src/vertex\_forager/core/checkpoint.py      |      341 |       39 |     89% |148, 155, 167, 170-171, 189, 247, 315, 462-463, 486, 508-509, 521, 660, 692, 708-709, 767-768, 831-832, 847-848, 853-854, 863-864, 866-867, 884-887, 904-905, 910-911, 929 |
 | packages/vertex-forager/src/vertex\_forager/core/config.py          |      209 |       16 |     92% |69, 79, 112, 115, 227, 230, 233, 236, 309, 312-313, 317, 319, 380, 401, 405 |
 | packages/vertex-forager/src/vertex\_forager/core/contracts.py       |       24 |        0 |    100% |           |
-| packages/vertex-forager/src/vertex\_forager/core/controller.py      |      222 |       38 |     83% |121, 244, 246, 250, 254, 258, 262, 264, 280-282, 300-303, 306-312, 356-358, 382-385, 390-399 |
+| packages/vertex-forager/src/vertex\_forager/core/controller.py      |      229 |       30 |     87% |121, 244, 246, 250, 254, 258, 262, 264, 283-285, 303-306, 309-315, 326-328, 350-353, 362-363 |
 | packages/vertex-forager/src/vertex\_forager/core/dlq.py             |      151 |       40 |     74% |47-48, 93-94, 120-122, 136-155, 179-189, 192-193, 240-251 |
 | packages/vertex-forager/src/vertex\_forager/core/errors.py          |       38 |       12 |     68% |18-19, 24-25, 105-111, 117, 123, 129 |
 | packages/vertex-forager/src/vertex\_forager/core/http.py            |      105 |       26 |     75% |16-17, 100, 104-112, 163-164, 182-184, 186-193, 196-197 |
@@ -38,7 +38,7 @@
 | packages/vertex-forager/src/vertex\_forager/writers/constants.py    |       24 |        0 |    100% |           |
 | packages/vertex-forager/src/vertex\_forager/writers/duckdb.py       |      308 |       41 |     87% |141-142, 163, 242-243, 251-257, 313, 325-326, 348-350, 355-356, 386-387, 461-462, 486-493, 503-507, 513, 544-554, 636-637 |
 | packages/vertex-forager/src/vertex\_forager/writers/memory.py       |       60 |        8 |     87% |56, 111-118 |
-| **TOTAL**                                                           | **3888** |  **574** | **85%** |           |
+| **TOTAL**                                                           | **3895** |  **566** | **85%** |           |
 
 
 ## Setup coverage badge
