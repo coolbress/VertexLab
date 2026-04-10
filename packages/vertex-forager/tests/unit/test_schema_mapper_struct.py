@@ -108,6 +108,39 @@ def test_dataset_spec_rejects_missing_date_filter_column() -> None:
         )
 
 
+def test_dataset_spec_defaults_date_filter_col_from_analysis_date_col() -> None:
+    schema = TableSchema(
+        table="tmp_dataset_spec_default",
+        schema={"ticker": pl.String, "date": pl.Date},
+        analysis_date_col="date",
+    )
+
+    spec = DatasetSpec(
+        name="tmp_dataset",
+        schema=schema,
+        endpoint="history",
+    )
+
+    assert spec.date_filter_col == "date"
+
+
+def test_dataset_spec_keeps_explicit_date_filter_col_when_it_differs_from_analysis_date_col() -> None:
+    schema = TableSchema(
+        table="tmp_dataset_spec_warning",
+        schema={"ticker": pl.String, "date": pl.Date, "requested_at": pl.Date},
+        analysis_date_col="date",
+    )
+
+    spec = DatasetSpec(
+        name="tmp_dataset",
+        schema=schema,
+        endpoint="history",
+        date_filter_col="requested_at",
+    )
+
+    assert spec.date_filter_col == "requested_at"
+
+
 def test_registry_returns_dataset_spec() -> None:
     spec = get_dataset_spec("sharadar", "price")
 

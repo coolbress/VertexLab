@@ -1,5 +1,23 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
+try:
+    import httpx
+
+    HAS_HTTPX = True
+except ImportError:
+    HAS_HTTPX = False
+
+try:
+    import requests
+
+    HAS_REQUESTS = True
+except ImportError:
+    HAS_REQUESTS = False
+
+from vertex_forager.core.retry_policy import DEFAULT_RETRY_STATUS_CODES, is_retryable_status_code
+
 
 class VertexForagerError(Exception):
     """Base exception for all Vertex Forager errors.
@@ -133,6 +151,76 @@ class DataQualityError(VertexForagerError):
         super().__init__(f"Data quality validation failed for table '{table}' with rule '{rule}'")
 
 
+@dataclass(frozen=True)
+class RunError:
+    """Structured error information for pipeline runs."""
+
+    provider: str
+    dataset: str
+    symbol: str
+    exc_type: str
+    message: str
+    retryable: bool
+
+    @classmethod
+    def from_exception(
+        cls,
+        exc: Exception,
+        provider: str,
+        dataset: str,
+        symbol: str | None,
+    ) -> RunError:
+        exc_type = f"{exc.__class__.__module__}.{exc.__class__.__name__}"
+        message = str(exc)
+        retryable = any(cls._is_retryable_error(candidate) for candidate in cls._iter_exception_chain(exc))
+        return cls(
+            provider=provider,
+            dataset=dataset,
+            symbol=symbol or "",
+            exc_type=exc_type,
+            message=message,
+            retryable=retryable,
+        )
+
+    @staticmethod
+    def _iter_exception_chain(exc: Exception) -> list[Exception]:
+        chain: list[Exception] = []
+        seen: set[int] = set()
+        current: Exception | None = exc
+        while current is not None and id(current) not in seen:
+            chain.append(current)
+            seen.add(id(current))
+            next_exc = current.__cause__ or current.__context__
+            current = next_exc if isinstance(next_exc, Exception) else None
+        return chain
+
+    @staticmethod
+    def _is_retryable_error(exc: Exception) -> bool:
+        if hasattr(exc, "response") and exc.response is not None and hasattr(exc.response, "status_code"):
+            status_code = exc.response.status_code
+            if is_retryable_status_code(status_code, DEFAULT_RETRY_STATUS_CODES):
+                return True
+            try:
+                normalized_status_code = int(status_code)
+            except (TypeError, ValueError):
+                normalized_status_code = None
+            if normalized_status_code is not None and 400 <= normalized_status_code < 500:
+                return False
+        if isinstance(exc, TimeoutError):
+            return True
+        if HAS_HTTPX and isinstance(exc, httpx.TransportError):
+            return True
+        return HAS_REQUESTS and isinstance(
+            exc,
+            (
+                requests.exceptions.ConnectionError,
+                requests.exceptions.Timeout,
+                requests.exceptions.ConnectTimeout,
+                requests.exceptions.ReadTimeout,
+            ),
+        )
+
+
 __all__ = [
     "CheckpointNotFoundError",
     "ComputeError",
@@ -142,6 +230,7 @@ __all__ = [
     "InputError",
     "PrimaryKeyMissingError",
     "PrimaryKeyNullError",
+    "RunError",
     "SchemaMapError",
     "TransformError",
     "ValidationError",

@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from vertex_forager.core.types import JSONValue
 
 from vertex_forager.core.config import FetchJob
-from vertex_forager.core.errors import RunError
+from vertex_forager.exceptions import RunError
 
 
 def get_cache_dir() -> Path:

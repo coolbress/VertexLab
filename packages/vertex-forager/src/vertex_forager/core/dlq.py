@@ -9,7 +9,7 @@ from uuid import uuid4
 import polars as pl
 
 from vertex_forager.core.checkpoint import get_cache_dir, register_dlq_entry
-from vertex_forager.core.errors import DLQSpoolError, RunError
+from vertex_forager.exceptions import DLQSpoolError, RunError
 from vertex_forager.schema.registry import get_table_schema
 
 if TYPE_CHECKING:

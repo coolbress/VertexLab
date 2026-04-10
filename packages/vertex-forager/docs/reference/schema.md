@@ -5,6 +5,7 @@ This page belongs in the reference section because it documents the exact schema
 Use this page when you want to inspect the schema system itself:
 
 - `TableSchema` field meanings
+- `DatasetSpec` field meanings
 - `SchemaMapper` API surface
 - registry lookup behavior
 
@@ -47,6 +48,10 @@ The shared registry resolves a table name to its canonical `TableSchema`.
 ## TableSchema
 
 ::: vertex_forager.schema.config.TableSchema
+
+## DatasetSpec
+
+::: vertex_forager.schema.config.DatasetSpec
 
 ## SchemaMapper
 

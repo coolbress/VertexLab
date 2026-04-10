@@ -86,6 +86,16 @@ def test_clear_confirms_and_calls(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "Cache cleared" in result.output
 
 
+def test_clear_surfaces_cache_safety_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(click, "confirm", lambda _: True, raising=True)
+    monkeypatch.setattr(cli_mod, "clear_app_cache", lambda: False, raising=True)
+
+    result = CliRunner().invoke(cli_mod.main, ["clear"])
+
+    assert result.exit_code != 0
+    assert "Cache clear refused by safety checks." in result.output
+
+
 def test_constants_json_global() -> None:
     result = CliRunner().invoke(cli_mod.main, ["constants", "--section", "global", "--format", "json"])
     assert result.exit_code == 0

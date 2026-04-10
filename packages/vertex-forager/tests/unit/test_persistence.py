@@ -23,7 +23,7 @@ from vertex_forager.core.checkpoint import (
     save_run_history,
 )
 from vertex_forager.core.config import FetchJob, RequestSpec, ResolvedClientConfig, RunResult
-from vertex_forager.core.errors import RunError
+from vertex_forager.exceptions import RunError
 
 
 def test_get_cache_dir() -> None:
@@ -401,10 +401,6 @@ def test_dlq_index_registration_roundtrip() -> None:
             "vertex_forager.core.checkpoint.get_cache_dir",
             return_value=Path(tmpdir),
         ),
-        patch(
-            "vertex_forager.utils.get_cache_dir",
-            return_value=Path(tmpdir),
-        ),
     ):
         path = Path(tmpdir) / "dlq" / "prices" / "batch_1.ipc"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -424,10 +420,6 @@ def test_delete_dlq_entry_validates_root_and_deletes_db_row() -> None:
         tempfile.TemporaryDirectory() as tmpdir,
         patch(
             "vertex_forager.core.checkpoint.get_cache_dir",
-            return_value=Path(tmpdir),
-        ),
-        patch(
-            "vertex_forager.utils.get_cache_dir",
             return_value=Path(tmpdir),
         ),
     ):

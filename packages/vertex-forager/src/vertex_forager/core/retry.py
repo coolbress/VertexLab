@@ -22,7 +22,8 @@ if TYPE_CHECKING:
 
     from vertex_forager.core.config import FetchJob, RequestSpec, RetryConfig
 
-from vertex_forager.core.errors import FetchError
+from vertex_forager.core.retry_policy import is_retryable_status_code
+from vertex_forager.exceptions import FetchError
 
 logger = logging.getLogger("vertex_forager.retry")
 
@@ -52,7 +53,7 @@ def create_retry_controller(
         if isinstance(exc, httpx.HTTPStatusError):
             resp = getattr(exc, "response", None)
             status = getattr(resp, "status_code", None)
-            if status in set(config.retry_status_codes):
+            if is_retryable_status_code(status, config.retry_status_codes):
                 return True
         return False
 

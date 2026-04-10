@@ -9,9 +9,8 @@ import pytest
 from tqdm import tqdm
 
 from vertex_forager.core.config import ProgressSnapshot
-from vertex_forager.core.errors import RunError
 from vertex_forager.core.http import _redact_urls
-from vertex_forager.exceptions import InputError
+from vertex_forager.exceptions import FetchError, InputError, RunError
 from vertex_forager.utils import (  # type: ignore[attr-defined]
     CompactLevelFormatter,
     ListHandler,
@@ -136,8 +135,8 @@ class TestPbarUpdater:
 
 
 class TestCacheUtils:
-    @patch("vertex_forager.utils.get_app_root")
-    @patch("vertex_forager.utils.get_cache_dir")
+    @patch("vertex_forager.utils.filesystem._compute_app_root")
+    @patch("vertex_forager.utils.filesystem._compute_cache_path")
     @patch("shutil.rmtree")
     def test_clear_app_cache_safety_check_pass(self, mock_rmtree, mock_get_cache, mock_get_root, tmp_path: Path):
         """Test that clear_app_cache proceeds when cache is inside app root."""
@@ -153,16 +152,20 @@ class TestCacheUtils:
         with (
             patch.object(Path, "exists", return_value=True),
             patch.object(Path, "is_dir", return_value=True),
+            patch.object(Path, "is_symlink", return_value=False),
+            patch.object(Path, "stat", return_value=types.SimpleNamespace(st_uid=os.geteuid())),
+            patch("os.access", return_value=True),
             patch.object(Path, "mkdir") as mock_mkdir,
+            patch.object(Path, "touch"),
         ):
-            clear_app_cache()
+            assert clear_app_cache() is True
 
             # Should verify relative_to and call rmtree
             mock_rmtree.assert_called_once_with(cache_path)
-            mock_mkdir.assert_called_once()
+            assert mock_mkdir.call_count >= 1
 
-    @patch("vertex_forager.utils.get_app_root")
-    @patch("vertex_forager.utils.get_cache_dir")
+    @patch("vertex_forager.utils.filesystem._compute_app_root")
+    @patch("vertex_forager.utils.filesystem._compute_cache_path")
     @patch("shutil.rmtree")
     def test_clear_app_cache_safety_check_fail(self, mock_rmtree, mock_get_cache, mock_get_root, tmp_path: Path):
         """Test that clear_app_cache aborts when cache is outside app root."""
@@ -174,10 +177,32 @@ class TestCacheUtils:
         mock_get_cache.return_value = cache_path
 
         # Mock existence and is_dir to pass initial checks
-        with patch.object(Path, "exists", return_value=True), patch.object(Path, "is_dir", return_value=True):
-            clear_app_cache()
+        with (
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "is_dir", return_value=True),
+            patch.object(Path, "is_symlink", return_value=False),
+        ):
+            assert clear_app_cache() is False
 
         # Should NOT call rmtree
+        mock_rmtree.assert_not_called()
+
+    @patch("vertex_forager.utils.filesystem._compute_app_root")
+    @patch("vertex_forager.utils.filesystem._compute_cache_path")
+    @patch("shutil.rmtree")
+    def test_clear_app_cache_missing_cache_is_success(self, mock_rmtree, mock_get_cache, mock_get_root, tmp_path: Path):
+        root_path = (tmp_path / "vertex_root").resolve()
+        cache_path = (root_path / "cache").resolve()
+
+        mock_get_root.return_value = root_path
+        mock_get_cache.return_value = cache_path
+
+        with (
+            patch.object(Path, "exists", return_value=False),
+            patch.object(Path, "is_symlink", return_value=False),
+        ):
+            assert clear_app_cache() is True
+
         mock_rmtree.assert_not_called()
 
 
@@ -312,7 +337,7 @@ def test_check_memory_safety_paths() -> None:
 
 def test_validate_memory_usage_invokes_check(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_psutil = types.SimpleNamespace(virtual_memory=lambda: types.SimpleNamespace(available=1024 * 1024 * 1024))
-    monkeypatch.setattr("vertex_forager.utils.psutil", fake_psutil, raising=False)
+    monkeypatch.setattr("vertex_forager.utils.resources.psutil", fake_psutil, raising=False)
     called = {"ok": False}
 
     def _check(estimated_size: int, available_memory: int, num_tickers: int, **_: object) -> None:
@@ -321,7 +346,7 @@ def test_validate_memory_usage_invokes_check(monkeypatch: pytest.MonkeyPatch) ->
         assert available_memory > 0
         assert num_tickers == 2
 
-    monkeypatch.setattr("vertex_forager.utils.check_memory_safety", _check, raising=False)
+    monkeypatch.setattr("vertex_forager.utils.resources.check_memory_safety", _check, raising=False)
     validate_memory_usage(symbols=["A", "B"], connect_db=None, bytes_per_item=1024)
     assert called["ok"] is True
 
@@ -329,6 +354,23 @@ def test_validate_memory_usage_invokes_check(monkeypatch: pytest.MonkeyPatch) ->
 def test_validate_memory_usage_invalid_bytes_per_item() -> None:
     with pytest.raises(ValueError, match="bytes_per_item must be a positive integer"):
         validate_memory_usage(symbols=["A"], connect_db=None, bytes_per_item=0)
+
+
+def test_validate_memory_usage_rejects_negative_estimated_count() -> None:
+    with pytest.raises(ValueError, match="estimated_count must be non-negative"):
+        validate_memory_usage(symbols=None, connect_db=None, estimated_count=-1)
+
+
+def test_run_error_retryable_when_wrapped_timeout_error() -> None:
+    try:
+        try:
+            raise TimeoutError("slow")
+        except TimeoutError as exc:
+            raise FetchError("wrapped fetch failure") from exc
+    except FetchError as exc:
+        err = RunError.from_exception(exc, provider="test", dataset="price", symbol="AAPL")
+
+    assert err.retryable is True
 
 
 def test_cleanup_dlq_tmp_default_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -479,6 +521,18 @@ def test_cleanup_dlq_tmp_negative_retention_raises(tmp_path: Path) -> None:
     base.mkdir()
     with pytest.raises(ValueError, match="cleanup_dlq_tmp: retention_s must be non-negative"):
         cleanup_dlq_tmp(base=base, retention_s=-1)
+
+
+def test_cleanup_dlq_tmp_negative_retention_raises_before_default_base_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _boom() -> Path:
+        raise AssertionError("get_cache_dir should not be called")
+
+    monkeypatch.setattr("vertex_forager.utils.filesystem.get_cache_dir", _boom, raising=True)
+
+    with pytest.raises(ValueError, match="cleanup_dlq_tmp: retention_s must be non-negative"):
+        cleanup_dlq_tmp(base=None, retention_s=-1)
 
 
 def test_sanitize_field_cases() -> None:

@@ -18,12 +18,12 @@ from vertex_forager.core import (
     SchedulerConfig,
     StorageConfig,
 )
-from vertex_forager.core.errors import RunError
 from vertex_forager.exceptions import (
     CheckpointNotFoundError,
     DataQualityError,
     FetchError,
     InputError,
+    RunError,
     ValidationError,
     VertexForagerError,
     WriterError,
