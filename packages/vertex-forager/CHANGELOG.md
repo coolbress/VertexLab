@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.7](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.30.6...vertex-forager-v0.30.7) (2026-04-10)
+
+
+### Documentation
+
+* **vertex-forager:** document provider authoring and logging contracts ([#498](https://github.com/coolbress/VertexLab/issues/498)) ([c1c2cda](https://github.com/coolbress/VertexLab/commit/c1c2cda62e032cd7d15788a691d73b0d0de80a8a))
+
 ## [0.30.6](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.30.5...vertex-forager-v0.30.6) (2026-04-09)
 
 
