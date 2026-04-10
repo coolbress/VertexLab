@@ -170,7 +170,7 @@ class RunError:
     ) -> RunError:
         exc_type = f"{exc.__class__.__module__}.{exc.__class__.__name__}"
         message = str(exc)
-        retryable = cls._is_retryable_error(exc)
+        retryable = any(cls._is_retryable_error(candidate) for candidate in cls._iter_exception_chain(exc))
         return cls(
             provider=provider,
             dataset=dataset,
@@ -179,6 +179,18 @@ class RunError:
             message=message,
             retryable=retryable,
         )
+
+    @staticmethod
+    def _iter_exception_chain(exc: Exception) -> list[Exception]:
+        chain: list[Exception] = []
+        seen: set[int] = set()
+        current: Exception | None = exc
+        while current is not None and id(current) not in seen:
+            chain.append(current)
+            seen.add(id(current))
+            next_exc = current.__cause__ or current.__context__
+            current = next_exc if isinstance(next_exc, Exception) else None
+        return chain
 
     @staticmethod
     def _is_retryable_error(exc: Exception) -> bool:

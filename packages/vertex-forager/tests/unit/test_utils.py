@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 from vertex_forager.core.config import ProgressSnapshot
 from vertex_forager.core.http import _redact_urls
-from vertex_forager.exceptions import InputError, RunError
+from vertex_forager.exceptions import FetchError, InputError, RunError
 from vertex_forager.utils import (  # type: ignore[attr-defined]
     CompactLevelFormatter,
     ListHandler,
@@ -135,7 +135,7 @@ class TestPbarUpdater:
 
 
 class TestCacheUtils:
-    @patch("vertex_forager.utils.filesystem.get_app_root")
+    @patch("vertex_forager.utils.filesystem._compute_app_root")
     @patch("vertex_forager.utils.filesystem._compute_cache_path")
     @patch("shutil.rmtree")
     def test_clear_app_cache_safety_check_pass(self, mock_rmtree, mock_get_cache, mock_get_root, tmp_path: Path):
@@ -152,15 +152,19 @@ class TestCacheUtils:
         with (
             patch.object(Path, "exists", return_value=True),
             patch.object(Path, "is_dir", return_value=True),
+            patch.object(Path, "is_symlink", return_value=False),
+            patch.object(Path, "stat", return_value=types.SimpleNamespace(st_uid=os.geteuid())),
+            patch("os.access", return_value=True),
             patch.object(Path, "mkdir") as mock_mkdir,
+            patch.object(Path, "touch"),
         ):
-            clear_app_cache()
+            assert clear_app_cache() is True
 
             # Should verify relative_to and call rmtree
             mock_rmtree.assert_called_once_with(cache_path)
-            mock_mkdir.assert_called_once()
+            assert mock_mkdir.call_count >= 1
 
-    @patch("vertex_forager.utils.filesystem.get_app_root")
+    @patch("vertex_forager.utils.filesystem._compute_app_root")
     @patch("vertex_forager.utils.filesystem._compute_cache_path")
     @patch("shutil.rmtree")
     def test_clear_app_cache_safety_check_fail(self, mock_rmtree, mock_get_cache, mock_get_root, tmp_path: Path):
@@ -173,8 +177,12 @@ class TestCacheUtils:
         mock_get_cache.return_value = cache_path
 
         # Mock existence and is_dir to pass initial checks
-        with patch.object(Path, "exists", return_value=True), patch.object(Path, "is_dir", return_value=True):
-            clear_app_cache()
+        with (
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "is_dir", return_value=True),
+            patch.object(Path, "is_symlink", return_value=False),
+        ):
+            assert clear_app_cache() is False
 
         # Should NOT call rmtree
         mock_rmtree.assert_not_called()
@@ -333,6 +341,18 @@ def test_validate_memory_usage_invalid_bytes_per_item() -> None:
 def test_validate_memory_usage_rejects_negative_estimated_count() -> None:
     with pytest.raises(ValueError, match="estimated_count must be non-negative"):
         validate_memory_usage(symbols=None, connect_db=None, estimated_count=-1)
+
+
+def test_run_error_retryable_when_wrapped_timeout_error() -> None:
+    try:
+        try:
+            raise TimeoutError("slow")
+        except TimeoutError as exc:
+            raise FetchError("wrapped fetch failure") from exc
+    except FetchError as exc:
+        err = RunError.from_exception(exc, provider="test", dataset="price", symbol="AAPL")
+
+    assert err.retryable is True
 
 
 def test_cleanup_dlq_tmp_default_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

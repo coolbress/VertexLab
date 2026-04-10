@@ -597,8 +597,10 @@ def clear(checkpoints: bool, clear_runs: bool, clear_dlq: bool, clear_all: bool)
         clear_all = True
     if clear_all:
         if click.confirm("⚠️ Delete all cache data?"):
-            clear_app_cache()
-            click.echo("🧹 Cache cleared.")
+            if clear_app_cache():
+                click.echo("🧹 Cache cleared.")
+            else:
+                raise click.ClickException("Cache clear refused by safety checks.")
         return
     selections: list[str] = []
     if checkpoints:
