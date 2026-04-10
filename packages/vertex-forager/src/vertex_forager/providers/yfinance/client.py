@@ -138,10 +138,7 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         self._mapper = SchemaMapper()
 
     def _table_name_for_dataset(self, dataset: YFinanceDataset) -> str:
-        spec = self.get_dataset_spec(dataset)
-        if spec is None:
-            raise InputError(f"Unsupported YFinance dataset: {dataset}")
-        return spec.schema.table
+        return self.get_dataset_spec(dataset).schema.table
 
     def get_supported_datasets(self) -> tuple[YFinanceDataset, ...]:
         return cast("tuple[YFinanceDataset, ...]", tuple(get_provider_dataset_names("yfinance")))
