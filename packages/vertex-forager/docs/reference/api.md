@@ -59,6 +59,8 @@ Hierarchy:
   - `WriterError`
   - `DataQualityError`
   - `ValidationError`
+    - `PrimaryKeyMissingError`
+    - `PrimaryKeyNullError`
   - `CheckpointNotFoundError`
   - `InputError`
 
@@ -94,6 +96,22 @@ Raised when normalized data does not satisfy required validation rules.
 
 ::: vertex_forager.api.ValidationError
 
+### `PrimaryKeyMissingError`
+
+Raised when a write-path operation reaches validation with one or more required primary-key columns missing.
+
+This subtype is root-exported from `vertex_forager` and `vertex_forager.api` because callers may reasonably catch it to distinguish schema/PK contract failures from other validation failures.
+
+::: vertex_forager.api.PrimaryKeyMissingError
+
+### `PrimaryKeyNullError`
+
+Raised when a write-path operation reaches validation with null values in one or more required primary-key columns.
+
+This subtype is root-exported from `vertex_forager` and `vertex_forager.api` because callers may reasonably catch it to distinguish PK nullability failures from other validation failures.
+
+::: vertex_forager.api.PrimaryKeyNullError
+
 ### `DataQualityError`
 
 Raised when `quality_check="error"` converts a quality violation into a hard failure.
@@ -106,7 +124,12 @@ Raised when checkpoint resume is requested for a table that has no resumable che
 
 ::: vertex_forager.api.CheckpointNotFoundError
 
-Lower-level exception subclasses still exist in `vertex_forager.exceptions`, but they are not part of the primary end-user surface documented here.
+## Exception Export Policy
+
+- Root-exported and `vertex_forager.api` exception types are the preferred public surface for most callers.
+- `PrimaryKeyMissingError` and `PrimaryKeyNullError` are intentionally root-exported because they are common write-path handling cases.
+- Finer-grained exceptions such as `SchemaMapError` and `DLQSpoolError` remain available from `vertex_forager.exceptions`.
+- Import those lower-level names directly from `vertex_forager.exceptions` when you need implementation-specific recovery behavior.
 
 ## Lower-level implementation modules
 
