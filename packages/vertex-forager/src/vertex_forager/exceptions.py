@@ -208,17 +208,7 @@ class RunError:
                 return False
         if isinstance(exc, TimeoutError):
             return True
-        if HAS_HTTPX and isinstance(
-            exc,
-            (
-                httpx.TransportError,
-                httpx.ConnectError,
-                httpx.ConnectTimeout,
-                httpx.ReadTimeout,
-                httpx.PoolTimeout,
-                httpx.NetworkError,
-            ),
-        ):
+        if HAS_HTTPX and isinstance(exc, httpx.TransportError):
             return True
         return HAS_REQUESTS and isinstance(
             exc,

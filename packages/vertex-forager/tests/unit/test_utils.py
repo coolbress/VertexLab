@@ -523,6 +523,18 @@ def test_cleanup_dlq_tmp_negative_retention_raises(tmp_path: Path) -> None:
         cleanup_dlq_tmp(base=base, retention_s=-1)
 
 
+def test_cleanup_dlq_tmp_negative_retention_raises_before_default_base_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _boom() -> Path:
+        raise AssertionError("get_cache_dir should not be called")
+
+    monkeypatch.setattr("vertex_forager.utils.filesystem.get_cache_dir", _boom, raising=True)
+
+    with pytest.raises(ValueError, match="cleanup_dlq_tmp: retention_s must be non-negative"):
+        cleanup_dlq_tmp(base=None, retention_s=-1)
+
+
 def test_sanitize_field_cases() -> None:
     assert sanitize_field(None) == ""
     assert sanitize_field("  a  b\tc  ") == "a_b_c"

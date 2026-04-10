@@ -123,14 +123,14 @@ def clear_app_cache() -> bool:
 
 
 def cleanup_dlq_tmp(base: Path | None, retention_s: int) -> int:
+    retention = float(retention_s)
+    if retention < 0:
+        raise ValueError("cleanup_dlq_tmp: retention_s must be non-negative")
     base = base or (get_cache_dir() / "dlq")
     if not base.exists():
         return 0
     now = time.time()
     deleted = 0
-    retention = float(retention_s)
-    if retention < 0:
-        raise ValueError("cleanup_dlq_tmp: retention_s must be non-negative")
     try:
         for f in base.rglob("*.ipc.tmp"):
             try:
