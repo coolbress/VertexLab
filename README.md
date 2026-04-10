@@ -5,7 +5,7 @@
 | Name                                                                |    Stmts |     Miss |   Cover |   Missing |
 |-------------------------------------------------------------------- | -------: | -------: | ------: | --------: |
 | packages/vertex-forager/src/vertex\_forager/clients/\_\_init\_\_.py |       48 |        0 |    100% |           |
-| packages/vertex-forager/src/vertex\_forager/clients/base.py         |      166 |       28 |     83% |69, 248-250, 257-259, 271, 295-297, 304-306, 325-326, 331-333, 443-444, 520, 540-545, 558, 560-561 |
+| packages/vertex-forager/src/vertex\_forager/clients/base.py         |      170 |       28 |     84% |70, 249-251, 258-260, 272, 296-298, 305-307, 326-327, 332-334, 475-476, 552, 572-577, 590, 592-593 |
 | packages/vertex-forager/src/vertex\_forager/clients/dispatcher.py   |       22 |        0 |    100% |           |
 | packages/vertex-forager/src/vertex\_forager/clients/validation.py   |        5 |        0 |    100% |           |
 | packages/vertex-forager/src/vertex\_forager/core/\_\_init\_\_.py    |       11 |        0 |    100% |           |
@@ -38,7 +38,7 @@
 | packages/vertex-forager/src/vertex\_forager/writers/constants.py    |       24 |        0 |    100% |           |
 | packages/vertex-forager/src/vertex\_forager/writers/duckdb.py       |      360 |       53 |     85% |141-142, 163, 239-240, 245-254, 260-266, 277, 376, 402, 408-409, 423-425, 430-431, 461-462, 536-537, 561-568, 578-582, 588, 619-629, 710-711 |
 | packages/vertex-forager/src/vertex\_forager/writers/memory.py       |       64 |        8 |     88% |61, 116-122 |
-| **TOTAL**                                                           | **3929** |  **568** | **86%** |           |
+| **TOTAL**                                                           | **3933** |  **568** | **86%** |           |
 
 
 ## Setup coverage badge
