@@ -17,8 +17,8 @@ from vertex_forager.constants import (
     QUEUE_MIN,
     QUEUE_TARGET_RAM_RATIO,
 )
-from vertex_forager.core.errors import RunError
 from vertex_forager.core.types import JSONValue  # Pydantic v2: used in field types at runtime
+from vertex_forager.exceptions import RunError
 
 _RUNTIME_TYPE_REFERENCES = (Mapping, date, datetime, pl.DataFrame, JSONValue)
 

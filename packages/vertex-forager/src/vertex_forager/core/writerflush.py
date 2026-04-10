@@ -11,7 +11,7 @@ import polars as pl
 
 from vertex_forager.constants import WRITER_CHUNK_ROWS
 from vertex_forager.core.config import FramePacket, RunResult
-from vertex_forager.core.errors import (
+from vertex_forager.exceptions import (
     PrimaryKeyMissingError,
     PrimaryKeyNullError,
     RunError,

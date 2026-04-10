@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Protocol
 
+from vertex_forager.core.registries import Registry
+
 if TYPE_CHECKING:
     from vertex_forager.core.config import RequestSpec
     from vertex_forager.core.types import JSONValue
@@ -35,16 +37,18 @@ class BaseLibraryFetcher:
         return payload, str(dataset), dict(lib)
 
 
-_REGISTRY: dict[str, LibraryFetcher] = {}
+library_fetchers = Registry[LibraryFetcher]("library fetcher")
 
 
 def register_library_fetcher(fetcher: LibraryFetcher) -> None:
     """Register a provider-specific library fetcher instance."""
-    if fetcher.scheme in _REGISTRY:
+    if fetcher.scheme in library_fetchers:
         raise ValueError(f"Library fetcher for scheme '{fetcher.scheme}' already registered")
-    _REGISTRY[fetcher.scheme] = fetcher
+    library_fetchers.register(fetcher.scheme, fetcher)
 
 
 def get_library_fetcher(scheme: str) -> LibraryFetcher | None:
     """Retrieve the registered library fetcher for a scheme."""
-    return _REGISTRY.get(scheme)
+    if scheme not in library_fetchers:
+        return None
+    return library_fetchers.get(scheme)

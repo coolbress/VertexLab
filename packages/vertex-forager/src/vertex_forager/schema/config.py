@@ -80,6 +80,8 @@ class DatasetSpec:
             raise ValueError("DatasetSpec.name must be non-empty")
         if not self.endpoint.strip():
             raise ValueError(f"DatasetSpec '{self.name}' endpoint must be non-empty")
+        if self.date_filter_col is None and self.schema.analysis_date_col is not None:
+            object.__setattr__(self, "date_filter_col", self.schema.analysis_date_col)
         if self.date_filter_col is not None and self.date_filter_col not in self.schema.schema:
             raise ValueError(
                 f"DatasetSpec '{self.name}' date_filter_col '{self.date_filter_col}' "

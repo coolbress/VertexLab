@@ -8,7 +8,7 @@ import time
 from typing import Any
 
 from vertex_forager.core.config import FetchJob, FramePacket, ParseResult, RunResult
-from vertex_forager.core.errors import RunError
+from vertex_forager.exceptions import RunError
 
 
 async def fetch_payload(

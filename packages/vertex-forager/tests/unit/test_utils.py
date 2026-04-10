@@ -9,9 +9,8 @@ import pytest
 from tqdm import tqdm
 
 from vertex_forager.core.config import ProgressSnapshot
-from vertex_forager.core.errors import RunError
 from vertex_forager.core.http import _redact_urls
-from vertex_forager.exceptions import InputError
+from vertex_forager.exceptions import InputError, RunError
 from vertex_forager.utils import (  # type: ignore[attr-defined]
     CompactLevelFormatter,
     ListHandler,
@@ -136,8 +135,8 @@ class TestPbarUpdater:
 
 
 class TestCacheUtils:
-    @patch("vertex_forager.utils.get_app_root")
-    @patch("vertex_forager.utils.get_cache_dir")
+    @patch("vertex_forager.utils.filesystem.get_app_root")
+    @patch("vertex_forager.utils.filesystem.get_cache_dir")
     @patch("shutil.rmtree")
     def test_clear_app_cache_safety_check_pass(self, mock_rmtree, mock_get_cache, mock_get_root, tmp_path: Path):
         """Test that clear_app_cache proceeds when cache is inside app root."""
@@ -161,8 +160,8 @@ class TestCacheUtils:
             mock_rmtree.assert_called_once_with(cache_path)
             mock_mkdir.assert_called_once()
 
-    @patch("vertex_forager.utils.get_app_root")
-    @patch("vertex_forager.utils.get_cache_dir")
+    @patch("vertex_forager.utils.filesystem.get_app_root")
+    @patch("vertex_forager.utils.filesystem.get_cache_dir")
     @patch("shutil.rmtree")
     def test_clear_app_cache_safety_check_fail(self, mock_rmtree, mock_get_cache, mock_get_root, tmp_path: Path):
         """Test that clear_app_cache aborts when cache is outside app root."""
@@ -312,7 +311,7 @@ def test_check_memory_safety_paths() -> None:
 
 def test_validate_memory_usage_invokes_check(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_psutil = types.SimpleNamespace(virtual_memory=lambda: types.SimpleNamespace(available=1024 * 1024 * 1024))
-    monkeypatch.setattr("vertex_forager.utils.psutil", fake_psutil, raising=False)
+    monkeypatch.setattr("vertex_forager.utils.resources.psutil", fake_psutil, raising=False)
     called = {"ok": False}
 
     def _check(estimated_size: int, available_memory: int, num_tickers: int, **_: object) -> None:
@@ -321,7 +320,7 @@ def test_validate_memory_usage_invokes_check(monkeypatch: pytest.MonkeyPatch) ->
         assert available_memory > 0
         assert num_tickers == 2
 
-    monkeypatch.setattr("vertex_forager.utils.check_memory_safety", _check, raising=False)
+    monkeypatch.setattr("vertex_forager.utils.resources.check_memory_safety", _check, raising=False)
     validate_memory_usage(symbols=["A", "B"], connect_db=None, bytes_per_item=1024)
     assert called["ok"] is True
 

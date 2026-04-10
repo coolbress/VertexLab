@@ -21,9 +21,8 @@ from vertex_forager.core.checkpoint import (
 )
 from vertex_forager.core.config import ResolvedClientConfig, RunResult, StorageConfig
 from vertex_forager.core.controller import FlowController
-from vertex_forager.core.errors import RunError
 from vertex_forager.core.pipeline import VertexForager
-from vertex_forager.exceptions import CheckpointNotFoundError
+from vertex_forager.exceptions import CheckpointNotFoundError, RunError
 from vertex_forager.writers.memory import InMemoryBufferWriter
 
 

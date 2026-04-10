@@ -112,7 +112,7 @@ try:
 except ImportError:
     _duckdb = cast("Any", None)
 
-from vertex_forager.core.errors import (
+from vertex_forager.exceptions import (
     DLQSpoolError,
     FetchError,
     PrimaryKeyMissingError,

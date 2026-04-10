@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
     from vertex_forager.core.config import FetchJob, RequestSpec, RetryConfig
 
-from vertex_forager.core.errors import FetchError
+from vertex_forager.exceptions import FetchError
 
 logger = logging.getLogger("vertex_forager.retry")
 

@@ -21,7 +21,7 @@ This is the internal contract the writer and quality system depend on.
 
 - its `TableSchema`
 - the provider endpoint or method alias
-- the request-side date filter column
+- the request-side date filter column, which defaults to `TableSchema.analysis_date_col` when omitted and stays explicit when a provider needs a different outbound filter field
 
 This is how one provider-facing dataset resolves into one stable internal table contract.
 
