@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.8](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.30.7...vertex-forager-v0.30.8) (2026-04-10)
+
+
+### Documentation
+
+* **vertex-forager:** promote write-path exceptions ([#500](https://github.com/coolbress/VertexLab/issues/500)) ([85bdfa8](https://github.com/coolbress/VertexLab/commit/85bdfa80ccd4770f552b2ddaa0a5b22f61af2cc1))
+
 ## [0.30.7](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.30.6...vertex-forager-v0.30.7) (2026-04-10)
 
 
