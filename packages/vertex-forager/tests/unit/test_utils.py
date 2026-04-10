@@ -136,7 +136,7 @@ class TestPbarUpdater:
 
 class TestCacheUtils:
     @patch("vertex_forager.utils.filesystem.get_app_root")
-    @patch("vertex_forager.utils.filesystem.get_cache_dir")
+    @patch("vertex_forager.utils.filesystem._compute_cache_path")
     @patch("shutil.rmtree")
     def test_clear_app_cache_safety_check_pass(self, mock_rmtree, mock_get_cache, mock_get_root, tmp_path: Path):
         """Test that clear_app_cache proceeds when cache is inside app root."""
@@ -161,7 +161,7 @@ class TestCacheUtils:
             mock_mkdir.assert_called_once()
 
     @patch("vertex_forager.utils.filesystem.get_app_root")
-    @patch("vertex_forager.utils.filesystem.get_cache_dir")
+    @patch("vertex_forager.utils.filesystem._compute_cache_path")
     @patch("shutil.rmtree")
     def test_clear_app_cache_safety_check_fail(self, mock_rmtree, mock_get_cache, mock_get_root, tmp_path: Path):
         """Test that clear_app_cache aborts when cache is outside app root."""

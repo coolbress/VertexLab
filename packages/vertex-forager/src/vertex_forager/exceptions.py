@@ -202,7 +202,7 @@ class RunError:
             ),
         ):
             return True
-        if HAS_REQUESTS and isinstance(
+        return HAS_REQUESTS and isinstance(
             exc,
             (
                 requests.exceptions.ConnectionError,
@@ -210,9 +210,7 @@ class RunError:
                 requests.exceptions.ConnectTimeout,
                 requests.exceptions.ReadTimeout,
             ),
-        ):
-            return True
-        return False
+        )
 
 
 __all__ = [

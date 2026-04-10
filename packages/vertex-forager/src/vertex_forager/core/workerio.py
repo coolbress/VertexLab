@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
 from functools import partial
 import itertools
 import time
-from typing import Any
+from typing import TYPE_CHECKING
 
-from vertex_forager.core.config import FetchJob, FramePacket, ParseResult, RunResult
 from vertex_forager.exceptions import RunError
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+
+    from vertex_forager.core.config import FetchJob, FramePacket, ParseResult, RunResult
 
 
 async def fetch_payload(

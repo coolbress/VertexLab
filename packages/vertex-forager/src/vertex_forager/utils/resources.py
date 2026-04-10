@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 import warnings
 
 import psutil
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def validate_memory_usage(

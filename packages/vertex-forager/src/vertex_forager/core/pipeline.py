@@ -127,7 +127,7 @@ from vertex_forager.writers.memory import InMemoryBufferWriter
 if TYPE_CHECKING:
     import polars as pl
 
-    from vertex_forager.core.config import FetchJob, FramePacket, ParseResult, ResolvedClientConfig
+    from vertex_forager.core.config import FramePacket, ParseResult, ResolvedClientConfig
     from vertex_forager.core.contracts import IMapper, IRouter, IWriter
     from vertex_forager.core.controller import FlowController
     from vertex_forager.core.http import HttpExecutor
