@@ -135,7 +135,6 @@ This is the canonical source for provider dataset lookup.
 Update `src/vertex_forager/clients/__init__.py`:
 
 - add the provider to the direct dispatch branch in `create_client(...)`
-- add the provider to `create_client(...)`
 - extend any overloads or literal-based return typing as needed
 
 ### Router factory
