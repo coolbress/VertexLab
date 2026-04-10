@@ -7,7 +7,7 @@ Use this reference when building dashboards, alerting rules, or log processors.
 ## Conventions
 
 - Field names use the `vf_` prefix.
-- String identifiers are sanitized before emission.
+- String identifiers are sanitized before emission with the current `sanitize_field(...)` rules: `None` becomes an empty string, runs of whitespace become `_`, `=` becomes `_`, repeated underscores collapse to a single `_`, and leading or trailing underscores are removed. Example: `"  AAPL = US  "` becomes `AAPL_US`. There is currently no lowercase normalization or max-length truncation.
 - Durations are emitted in seconds.
 - Counts are emitted as integers.
 
@@ -23,6 +23,8 @@ These fields are the stable core of structured stage logs.
 | `vf_stage` | `str` | Event/stage name. |
 | `vf_attempt` | `int` | Attempt counter for the event. |
 | `vf_duration_s` | `float \| None` | Duration in seconds when known. |
+
+Treat `vf_duration_s` as optional in the general schema, but note that some event categories are stricter: `client_run_start` always emits `0.0`, while `client_run_end`, router packet logs, and pipeline summary logs emit a concrete `float`. Fetch and pipeline stage events may still emit `None` when duration is not yet known.
 
 ## Event categories
 
@@ -71,7 +73,7 @@ Typical stage values include fetch start, fetch completion, parse completion, wr
 
 ### Router packet completion
 
-Source: `YFinanceRouter._log_structured` in `src/vertex_forager/providers/yfinance/router.py`
+Source: `YFinanceRouter._emit_structured_parse_log` in `src/vertex_forager/providers/yfinance/router.py`
 
 Guaranteed fields:
 
@@ -89,7 +91,7 @@ Optional fields:
 
 ### Pipeline summary
 
-Source: `emit_pipeline_summary` in `src/vertex_forager/core/lifecycle.py`
+Source: `emit_pipeline_summary_log` in `src/vertex_forager/core/lifecycle.py`
 
 Guaranteed fields:
 
