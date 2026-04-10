@@ -3,6 +3,8 @@ import sys
 
 import pytest
 
+from vertex_forager.schema.registry import get_dataset_spec
+
 
 class TestSharadarInitLazyExport:
     """Tests for vertex_forager.providers.sharadar lazy-export behavior."""
@@ -51,3 +53,13 @@ class TestSharadarInitLazyExport:
         _ = mod.SharadarRouter
         assert "vertex_forager.providers.sharadar.client" in sys.modules
         assert "vertex_forager.providers.sharadar.router" in sys.modules
+
+    def test_client_exposes_dataset_contracts(self) -> None:
+        from vertex_forager.providers.sharadar.client import SharadarClient
+
+        client = SharadarClient(api_key="demo", rate_limit=60)
+
+        datasets = client.get_supported_datasets()
+
+        assert "price" in datasets
+        assert client.get_dataset_spec("price") == get_dataset_spec("sharadar", "price")

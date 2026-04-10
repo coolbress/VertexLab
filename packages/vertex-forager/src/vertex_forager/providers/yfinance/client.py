@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from vertex_forager.clients.base import BaseClient
 from vertex_forager.constants import (
@@ -34,7 +34,7 @@ from vertex_forager.providers.yfinance.constants import (
 from vertex_forager.providers.yfinance.constants import SIZE_MAP as YF_SIZE_MAP
 from vertex_forager.routers import create_router
 from vertex_forager.schema.mapper import SchemaMapper
-from vertex_forager.schema.registry import get_dataset_spec
+from vertex_forager.schema.registry import get_dataset_spec, get_provider_dataset_names
 from vertex_forager.utils import make_sync, validate_memory_usage, validate_tickers
 
 if TYPE_CHECKING:
@@ -43,6 +43,7 @@ if TYPE_CHECKING:
 
     from vertex_forager.core.checkpoint import Checkpoint
     from vertex_forager.core.config import ProgressSnapshot
+    from vertex_forager.schema.config import DatasetSpec
 
 logger = logging.getLogger(__name__)
 
@@ -137,10 +138,16 @@ class YFinanceClient(BaseClient[YFinanceDataset]):
         self._mapper = SchemaMapper()
 
     def _table_name_for_dataset(self, dataset: YFinanceDataset) -> str:
+        return self.get_dataset_spec(dataset).schema.table
+
+    def get_supported_datasets(self) -> tuple[YFinanceDataset, ...]:
+        return cast("tuple[YFinanceDataset, ...]", tuple(get_provider_dataset_names("yfinance")))
+
+    def get_dataset_spec(self, dataset: YFinanceDataset) -> DatasetSpec:
         spec = get_dataset_spec("yfinance", dataset)
         if spec is None:
-            raise InputError(f"Unsupported YFinance dataset: {dataset}")
-        return spec.schema.table
+            raise KeyError(f"Unsupported dataset: {dataset}")
+        return spec
 
     # ----------------------------------------------------------------
     # Public User Methods

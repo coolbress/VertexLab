@@ -8,6 +8,7 @@ import pytest
 
 from vertex_forager.clients import create_client
 from vertex_forager.exceptions import InputError
+from vertex_forager.schema.registry import get_dataset_spec
 
 try:
     from vertex_forager.providers.yfinance.client import YFinanceClient
@@ -61,6 +62,14 @@ class TestYFinanceClientDefaults:
                 provider="yfinance",
                 api_key="user_supplied",
             )
+
+    def test_client_exposes_dataset_contracts(self) -> None:
+        client = YFinanceClient()
+
+        datasets = client.get_supported_datasets()
+
+        assert "price" in datasets
+        assert client.get_dataset_spec("price") == get_dataset_spec("yfinance", "price")
 
 
 class TestYFinanceRouterDateParams:

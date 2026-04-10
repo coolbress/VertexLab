@@ -42,6 +42,8 @@ That means future built-in providers should still be able to share:
 
 This is an internal architecture goal for the package itself, not a statement that normal users are expected to build custom providers as part of the primary workflow.
 
+If you are extending the package with a new built-in provider, use the internal implementation checklist in [provider-authoring.md](./provider-authoring.md). That guide covers the file layout, schema registration, direct dispatch wiring, and test expectations that turn this architecture into a working provider package.
+
 ## What users should expect
 
 From a user point of view, the most important consequence of this design is consistency. Built-in providers may fetch data differently internally, but they should still feel like one package when you use them.

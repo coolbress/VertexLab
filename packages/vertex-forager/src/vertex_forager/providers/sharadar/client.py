@@ -23,7 +23,7 @@ from vertex_forager.providers.sharadar.constants import (
 )
 from vertex_forager.routers import create_router
 from vertex_forager.schema.mapper import SchemaMapper
-from vertex_forager.schema.registry import get_dataset_spec
+from vertex_forager.schema.registry import get_dataset_spec, get_provider_dataset_names
 from vertex_forager.utils import make_sync, validate_tickers
 
 if TYPE_CHECKING:
@@ -39,6 +39,7 @@ if TYPE_CHECKING:
         SchedulerConfig,
         StorageConfig,
     )
+    from vertex_forager.schema.config import DatasetSpec
 
 logger = logging.getLogger(__name__)
 
@@ -145,10 +146,17 @@ class SharadarClient(BaseClient[SharadarDataset]):
         return df.unique(subset=["ticker"], keep="last", maintain_order=True)
 
     def _table_name_for_dataset(self, dataset: SharadarDataset) -> str:
+        spec = self.get_dataset_spec(dataset)
+        return spec.schema.table
+
+    def get_supported_datasets(self) -> tuple[SharadarDataset, ...]:
+        return cast("tuple[SharadarDataset, ...]", tuple(get_provider_dataset_names("sharadar")))
+
+    def get_dataset_spec(self, dataset: SharadarDataset) -> DatasetSpec:
         spec = get_dataset_spec("sharadar", dataset)
         if spec is None:
-            raise InputError(f"Unsupported Sharadar dataset: {dataset}")
-        return spec.schema.table
+            raise KeyError(f"Unsupported dataset: {dataset}")
+        return spec
 
     # ----------------------------------------------------------------
     # Public User Methods
