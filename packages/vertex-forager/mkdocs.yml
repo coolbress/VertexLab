@@ -20,6 +20,7 @@ nav:
       - Migration Guide: how-to/migration.md
   - Reference:
       - Providers: reference/providers.md
+      - Logging schema: reference/logging-schema.md
       - StateManager: reference/statemanager.md
       - CLI: reference/cli.md
       - API: reference/api.md
@@ -30,6 +31,7 @@ nav:
       - Pipeline architecture: explanation/architecture.md
       - How pipeline orchestrates: explanation/how-pipeline-orchestrates.md
       - How built-in providers work: explanation/how-built-in-providers-work.md
+      - Provider authoring: explanation/provider-authoring.md
       - How flow controller works: explanation/how-flow-controller-works.md
       - How retry and backoff work: explanation/how-retry-and-backoff-work.md
       - How data quality rules work: explanation/how-data-quality-rules-work.md

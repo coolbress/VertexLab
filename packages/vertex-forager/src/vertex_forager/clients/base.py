@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from abc import ABC
+from abc import ABC, abstractmethod
 import asyncio
 from collections.abc import Coroutine, Mapping
 from contextlib import AsyncExitStack, asynccontextmanager, nullcontext
@@ -48,6 +48,7 @@ if TYPE_CHECKING:
     import httpx
 
     from vertex_forager.core.contracts import IMapper, IRouter, IWriter
+    from vertex_forager.schema.config import DatasetSpec
     from vertex_forager.writers.base import BaseWriter
 
 HttpExecutor = _HttpExecutor
@@ -331,6 +332,37 @@ class BaseClient(ABC, Generic[T]):
         except (TypeError, ValueError):
             logger.debug("bad attempt value: %s", value)
             return 0
+
+    @abstractmethod
+    def get_supported_datasets(self) -> tuple[T, ...]:
+        """Return the provider-local dataset names supported by this client.
+
+        Returns:
+            tuple[T, ...]: Immutable tuple of provider-local dataset identifiers
+                accepted by this client's collection methods and routers.
+
+        Raises:
+            RuntimeError: If a subclass cannot resolve its dataset registry at
+                runtime due to an internal configuration or import problem.
+        """
+
+    @abstractmethod
+    def get_dataset_spec(self, dataset: T) -> DatasetSpec:
+        """Return the canonical dataset contract for a provider-local dataset.
+
+        Args:
+            dataset: Provider-local dataset identifier such as `"price"` or
+                `"fundamental"`.
+
+        Returns:
+            DatasetSpec: The registered dataset contract describing endpoint,
+                target schema, and request-side date filtering behavior.
+
+        Raises:
+            KeyError: If the dataset is not supported by this client.
+            RuntimeError: If the dataset registry cannot be resolved because of
+                an internal configuration or import problem.
+        """
 
     async def run_pipeline(
         self,
