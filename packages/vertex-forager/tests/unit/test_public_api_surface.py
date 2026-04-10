@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 
 import vertex_forager
+from vertex_forager import PrimaryKeyMissingError, PrimaryKeyNullError
 from vertex_forager import api as public_api
 from vertex_forager.providers.sharadar.client import SharadarClient
 
@@ -10,6 +11,8 @@ from vertex_forager.providers.sharadar.client import SharadarClient
 def test_package_root_exposes_stable_public_surface() -> None:
     assert hasattr(vertex_forager, "VertexForagerError")
     assert hasattr(vertex_forager, "InputError")
+    assert hasattr(vertex_forager, "PrimaryKeyMissingError")
+    assert hasattr(vertex_forager, "PrimaryKeyNullError")
     assert hasattr(vertex_forager, "SchedulerConfig")
     assert hasattr(vertex_forager, "SharadarClient")
     assert hasattr(vertex_forager, "YFinanceClient")
@@ -27,10 +30,17 @@ def test_public_api_module_exposes_expected_surface() -> None:
     assert hasattr(public_api, "RunResult")
     assert hasattr(public_api, "VertexForagerError")
     assert hasattr(public_api, "InputError")
+    assert hasattr(public_api, "PrimaryKeyMissingError")
+    assert hasattr(public_api, "PrimaryKeyNullError")
     assert hasattr(public_api, "SharadarClient")
     assert hasattr(public_api, "YFinanceClient")
     assert not hasattr(public_api, "create_router")
     assert not hasattr(public_api, "BaseRouter")
+
+
+def test_root_import_supports_primary_key_validation_errors() -> None:
+    assert PrimaryKeyMissingError is vertex_forager.PrimaryKeyMissingError
+    assert PrimaryKeyNullError is vertex_forager.PrimaryKeyNullError
 
 
 def test_sharadar_client_exposes_public_async_aliases() -> None:
