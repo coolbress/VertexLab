@@ -184,9 +184,13 @@ class RunError:
     def _is_retryable_error(exc: Exception) -> bool:
         if hasattr(exc, "response") and exc.response is not None and hasattr(exc.response, "status_code"):
             status_code = exc.response.status_code
+            try:
+                status_code = int(status_code)
+            except (TypeError, ValueError):
+                status_code = None
             if status_code in {429, 503}:
                 return True
-            if 400 <= status_code < 500:
+            if status_code is not None and 400 <= status_code < 500:
                 return False
         if isinstance(exc, TimeoutError):
             return True

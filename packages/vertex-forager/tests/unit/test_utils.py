@@ -330,6 +330,11 @@ def test_validate_memory_usage_invalid_bytes_per_item() -> None:
         validate_memory_usage(symbols=["A"], connect_db=None, bytes_per_item=0)
 
 
+def test_validate_memory_usage_rejects_negative_estimated_count() -> None:
+    with pytest.raises(ValueError, match="estimated_count must be non-negative"):
+        validate_memory_usage(symbols=None, connect_db=None, estimated_count=-1)
+
+
 def test_cleanup_dlq_tmp_default_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "app"))
     # create default dlq tmp under get_cache_dir()

@@ -47,6 +47,9 @@ def clear_app_cache() -> None:
 
     app_root = get_app_root().resolve()
     cache_dir = raw_cache_dir.resolve()
+    if app_root == Path("/").resolve() or app_root == Path.home().resolve():
+        logging.error("Safety check failed: App root must not be root or home directory: %s", app_root)
+        return
     expected_cache_dir = (
         (Path(vertex_root) / "cache").resolve()
         if vertex_root

@@ -22,6 +22,8 @@ def validate_memory_usage(
     if symbols is None:
         if estimated_count is None:
             return
+        if estimated_count < 0:
+            raise ValueError("estimated_count must be non-negative")
         num_items = estimated_count
     else:
         num_items = len(symbols)
