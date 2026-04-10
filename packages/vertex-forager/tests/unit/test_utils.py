@@ -187,6 +187,24 @@ class TestCacheUtils:
         # Should NOT call rmtree
         mock_rmtree.assert_not_called()
 
+    @patch("vertex_forager.utils.filesystem._compute_app_root")
+    @patch("vertex_forager.utils.filesystem._compute_cache_path")
+    @patch("shutil.rmtree")
+    def test_clear_app_cache_missing_cache_is_success(self, mock_rmtree, mock_get_cache, mock_get_root, tmp_path: Path):
+        root_path = (tmp_path / "vertex_root").resolve()
+        cache_path = (root_path / "cache").resolve()
+
+        mock_get_root.return_value = root_path
+        mock_get_cache.return_value = cache_path
+
+        with (
+            patch.object(Path, "exists", return_value=False),
+            patch.object(Path, "is_symlink", return_value=False),
+        ):
+            assert clear_app_cache() is True
+
+        mock_rmtree.assert_not_called()
+
 
 def test_cleanup_dlq_tmp_removes_old_files(tmp_path, monkeypatch):
     # Setup app root and dlq temp file

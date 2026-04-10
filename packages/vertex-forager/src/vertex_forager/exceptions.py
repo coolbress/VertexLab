@@ -16,6 +16,8 @@ try:
 except ImportError:
     HAS_REQUESTS = False
 
+from vertex_forager.core.retry_policy import DEFAULT_RETRY_STATUS_CODES, is_retryable_status_code
+
 
 class VertexForagerError(Exception):
     """Base exception for all Vertex Forager errors.
@@ -196,13 +198,13 @@ class RunError:
     def _is_retryable_error(exc: Exception) -> bool:
         if hasattr(exc, "response") and exc.response is not None and hasattr(exc.response, "status_code"):
             status_code = exc.response.status_code
-            try:
-                status_code = int(status_code)
-            except (TypeError, ValueError):
-                status_code = None
-            if status_code in {429, 503}:
+            if is_retryable_status_code(status_code, DEFAULT_RETRY_STATUS_CODES):
                 return True
-            if status_code is not None and 400 <= status_code < 500:
+            try:
+                normalized_status_code = int(status_code)
+            except (TypeError, ValueError):
+                normalized_status_code = None
+            if normalized_status_code is not None and 400 <= normalized_status_code < 500:
                 return False
         if isinstance(exc, TimeoutError):
             return True

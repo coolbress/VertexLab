@@ -85,7 +85,8 @@ def clear_app_cache() -> bool:
     )
 
     if not cache_dir.exists():
-        return False
+        logger.info("Cache dir %s does not exist; nothing to clear", cache_dir)
+        return True
     if not cache_dir.is_dir():
         logging.error("Cache path exists but is not a directory: %s", cache_dir)
         return False
