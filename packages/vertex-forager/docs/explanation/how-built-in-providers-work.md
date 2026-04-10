@@ -42,7 +42,7 @@ That means future built-in providers should still be able to share:
 
 This is an internal architecture goal for the package itself, not a statement that normal users are expected to build custom providers as part of the primary workflow.
 
-If you are extending the package with a new built-in provider, use the internal implementation checklist in [provider-authoring.md](file:///Users/coolbress/vertex-lab/packages/vertex-forager/docs/explanation/provider-authoring.md). That guide covers the file layout, schema registration, direct dispatch wiring, and test expectations that turn this architecture into a working provider package.
+If you are extending the package with a new built-in provider, use the internal implementation checklist in [provider-authoring.md](./provider-authoring.md). That guide covers the file layout, schema registration, direct dispatch wiring, and test expectations that turn this architecture into a working provider package.
 
 ## What users should expect
 

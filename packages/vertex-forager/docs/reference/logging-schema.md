@@ -28,7 +28,7 @@ These fields are the stable core of structured stage logs.
 
 ### Client run start
 
-Source: [BaseClient.run_pipeline](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/clients/base.py)
+Source: `BaseClient.run_pipeline` in `src/vertex_forager/clients/base.py`
 
 Guaranteed fields:
 
@@ -42,7 +42,7 @@ Guaranteed fields:
 
 ### Client run complete
 
-Source: [BaseClient.run_pipeline](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/clients/base.py)
+Source: `BaseClient.run_pipeline` in `src/vertex_forager/clients/base.py`
 
 Guaranteed fields:
 
@@ -56,7 +56,7 @@ Guaranteed fields:
 
 ### Fetch and pipeline stage events
 
-Source: [VertexForager._log_structured](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/core/pipeline.py)
+Source: `VertexForager._log_structured` in `src/vertex_forager/core/pipeline.py`
 
 Guaranteed fields:
 
@@ -71,7 +71,7 @@ Typical stage values include fetch start, fetch completion, parse completion, wr
 
 ### Router packet completion
 
-Source: [YFinanceRouter._log_structured](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/providers/yfinance/router.py)
+Source: `YFinanceRouter._log_structured` in `src/vertex_forager/providers/yfinance/router.py`
 
 Guaranteed fields:
 
@@ -89,7 +89,7 @@ Optional fields:
 
 ### Pipeline summary
 
-Source: [emit_pipeline_summary](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/core/lifecycle.py)
+Source: `emit_pipeline_summary` in `src/vertex_forager/core/lifecycle.py`
 
 Guaranteed fields:
 

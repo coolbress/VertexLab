@@ -52,8 +52,8 @@ If the provider uses a local library transport instead of plain HTTP, add any ex
 
 Subclass `BaseRouter` and follow the existing built-in examples:
 
-- [yfinance/router.py](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/providers/yfinance/router.py)
-- [sharadar/router.py](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/providers/sharadar/router.py)
+- `src/vertex_forager/providers/yfinance/router.py`
+- `src/vertex_forager/providers/sharadar/router.py`
 
 The router is responsible for:
 
@@ -83,8 +83,8 @@ Those methods are part of the `BaseClient` abstract contract and should reflect 
 
 Use the built-in clients as references:
 
-- [yfinance/client.py](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/providers/yfinance/client.py)
-- [sharadar/client.py](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/providers/sharadar/client.py)
+- `src/vertex_forager/providers/yfinance/client.py`
+- `src/vertex_forager/providers/sharadar/client.py`
 
 The client should own:
 
@@ -107,8 +107,8 @@ Use:
 
 Pattern examples:
 
-- [yfinance/schema.py](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/providers/yfinance/schema.py)
-- [sharadar/schema.py](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/providers/sharadar/schema.py)
+- `src/vertex_forager/providers/yfinance/schema.py`
+- `src/vertex_forager/providers/sharadar/schema.py`
 
 Keep these rules in mind:
 
@@ -118,7 +118,7 @@ Keep these rules in mind:
 
 ## 5. Register the provider schema
 
-Add the new provider to [schema/registry.py](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/schema/registry.py).
+Add the new provider to `src/vertex_forager/schema/registry.py`.
 
 You need to:
 
@@ -132,7 +132,7 @@ This is the canonical source for provider dataset lookup.
 
 ### Client factory
 
-Update [clients/__init__.py](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/clients/__init__.py):
+Update `src/vertex_forager/clients/__init__.py`:
 
 - add lazy registration for the new client
 - add the provider to `create_client(...)`
@@ -140,7 +140,7 @@ Update [clients/__init__.py](file:///Users/coolbress/vertex-lab/packages/vertex-
 
 ### Router factory
 
-Update [routers/__init__.py](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/routers/__init__.py):
+Update `src/vertex_forager/routers/__init__.py`:
 
 - add a provider-specific router factory
 - register it in `router_registry`
@@ -151,9 +151,9 @@ If the provider uses a local library transport path, also wire any provider fetc
 
 Review whether the provider needs updates in:
 
-- [core/types.py](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/core/types.py)
-- [api.py](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/api.py)
-- [__init__.py](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/__init__.py)
+- `src/vertex_forager/core/types.py`
+- `src/vertex_forager/api.py`
+- `src/vertex_forager/__init__.py`
 - `providers/<name>/__init__.py`
 
 If the provider introduces a new dataset literal or public client type, keep those exports aligned.
@@ -162,10 +162,10 @@ If the provider introduces a new dataset literal or public client type, keep tho
 
 Review whether the provider must also be added to:
 
-- [docs/reference/providers.md](file:///Users/coolbress/vertex-lab/packages/vertex-forager/docs/reference/providers.md)
-- [docs/explanation/how-built-in-providers-work.md](file:///Users/coolbress/vertex-lab/packages/vertex-forager/docs/explanation/how-built-in-providers-work.md)
-- [mkdocs.yml](file:///Users/coolbress/vertex-lab/packages/vertex-forager/mkdocs.yml)
-- [cli.py](file:///Users/coolbress/vertex-lab/packages/vertex-forager/src/vertex_forager/cli.py) if the provider is exposed through command groups or provider choices
+- `docs/reference/providers.md`
+- `docs/explanation/how-built-in-providers-work.md`
+- `mkdocs.yml`
+- `src/vertex_forager/cli.py` if the provider is exposed through command groups or provider choices
 
 ## 9. Test expectations
 
