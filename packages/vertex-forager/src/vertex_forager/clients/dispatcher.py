@@ -12,7 +12,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from vertex_forager.core.config import ProgressSnapshot, RunResult
-    from vertex_forager.core.contracts import IMapper, IRouter, IWriter
+    from vertex_forager.core.contracts import BaseMapper, IWriter
+    from vertex_forager.routers.base import BaseRouter
 
 T = TypeVar("T", bound=SharadarDataset | YFinanceDataset | str)
 
@@ -20,11 +21,11 @@ T = TypeVar("T", bound=SharadarDataset | YFinanceDataset | str)
 async def run_pipeline_for(
     *,
     client: Any,
-    router: IRouter,
+    router: BaseRouter,
     dataset: T,
     symbols: list[str] | None,
     writer: IWriter,
-    mapper: IMapper,
+    mapper: BaseMapper,
     on_progress: Callable[[ProgressSnapshot], None] | None = None,
     progress: bool = False,
     http_executor_cls: type[Any] | None = None,

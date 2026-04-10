@@ -17,12 +17,13 @@ from vertex_forager.core.config import (
     ResolvedClientConfig,
     RunResult,
 )
-from vertex_forager.core.contracts import IMapper, IRouter, IWriter
+from vertex_forager.core.contracts import BaseMapper, IWriter
 from vertex_forager.exceptions import InputError
+from vertex_forager.routers.base import BaseRouter
 from vertex_forager.writers.base import WriteResult
 
 
-class StubRouter(IRouter[str]):
+class StubRouter(BaseRouter[str]):
     @property
     def provider(self) -> str:
         return "stub"
@@ -59,7 +60,7 @@ class StubWriter(IWriter):
         return None
 
 
-class StubMapper(IMapper):
+class StubMapper(BaseMapper):
     def normalize(self, *, packet: FramePacket) -> FramePacket:
         return packet
 

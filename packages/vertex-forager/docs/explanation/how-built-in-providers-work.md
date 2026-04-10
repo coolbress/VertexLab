@@ -80,7 +80,7 @@ For a library-backed provider such as yfinance, the flow is:
 
 1. a client method requests a dataset
 2. the router emits a request spec with an internal scheme such as `yfinance://...`
-3. the shared executor routes that spec to the registered library fetcher
+3. the shared executor routes that spec to the provider-specific library handler for that scheme
 4. the returned Python object is serialized across the fetch boundary
 5. the router decodes and normalizes it into shared frames and tables
 

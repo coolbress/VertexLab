@@ -47,7 +47,8 @@ if TYPE_CHECKING:
 
     import httpx
 
-    from vertex_forager.core.contracts import IMapper, IRouter, IWriter
+    from vertex_forager.core.contracts import BaseMapper, IWriter
+    from vertex_forager.routers.base import BaseRouter
     from vertex_forager.schema.config import DatasetSpec
     from vertex_forager.writers.base import BaseWriter
 
@@ -367,11 +368,11 @@ class BaseClient(ABC, Generic[T]):
     async def run_pipeline(
         self,
         *,
-        router: IRouter,
+        router: BaseRouter,
         dataset: T,
         symbols: list[str] | None,
         writer: IWriter,
-        mapper: IMapper,
+        mapper: BaseMapper,
         on_progress: Callable[[ProgressSnapshot], None] | None = None,
         progress: bool = False,
         **kwargs: Any,

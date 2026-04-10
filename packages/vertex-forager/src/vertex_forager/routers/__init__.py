@@ -1,23 +1,14 @@
 """Router implementations for different data sources.
 
 DIP Note:
-- Factories return instances conforming to the IRouter protocol
-  to keep core layers dependent on abstractions, not concretes.
+- Factories return `BaseRouter` implementations to keep provider dispatch explicit
+  while leaving routing behavior isolated inside provider modules.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from vertex_forager.core.registries import (
-    RouterRegistration,
-)
-
-# from vertex_forager.providers.sharadar.router import SharadarRouter
-# from vertex_forager.providers.yfinance.router import YFinanceRouter
-from vertex_forager.core.registries import (
-    routers as router_registry,
-)
 from vertex_forager.routers.base import BaseRouter
 
 
@@ -31,17 +22,6 @@ def _yfinance_factory(**kwargs: Any) -> BaseRouter:
     from vertex_forager.providers.yfinance.router import YFinanceRouter
 
     return YFinanceRouter(**kwargs)
-
-
-# Register known providers
-router_registry.register(
-    "sharadar",
-    RouterRegistration(factory=_sharadar_factory),
-)
-router_registry.register(
-    "yfinance",
-    RouterRegistration(factory=_yfinance_factory),
-)
 
 
 def create_router(
@@ -70,14 +50,16 @@ def create_router(
     Raises:
         KeyError: If provider is unknown.
     """
-    registration = router_registry.get(provider)
-
-    # We pass explicit arguments that match the RouterFactory protocol/signature
-    # assuming most routers will need these standard parameters.
     # Provider-specific validation
     if provider == "sharadar" and (api_key is None or str(api_key).strip() == ""):
         raise ValueError("Sharadar router requires a non-empty api_key")
-    return registration.factory(
+    if provider == "sharadar":
+        factory = _sharadar_factory
+    elif provider == "yfinance":
+        factory = _yfinance_factory
+    else:
+        raise KeyError(f"Unsupported router: {provider}") from None
+    return factory(
         api_key=api_key,
         rate_limit=rate_limit,
         start_date=start_date,

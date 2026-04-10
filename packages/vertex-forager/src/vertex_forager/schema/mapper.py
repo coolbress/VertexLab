@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import polars as pl
 
+from vertex_forager.core.contracts import BaseMapper
 from vertex_forager.schema.registry import get_table_schema
 
 if TYPE_CHECKING:
@@ -15,7 +16,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class SchemaMapper:
+class SchemaMapper(BaseMapper):
     """
     Core component responsible for data normalization and schema enforcement.
 
