@@ -46,3 +46,21 @@ def test_fetch_yfinance_rejects_invalid_attr() -> None:
 
     with pytest.raises(ValueError, match="Unknown yfinance dataset"):
         fetch_yfinance(spec, yf_lib=fake_yf)
+
+
+def test_fetch_yfinance_allows_only_dataset_mapped_attr() -> None:
+    fake_yf = SimpleNamespace(Ticker=lambda _ticker: SimpleNamespace(history=lambda **kwargs: kwargs))
+
+    spec = RequestSpec(
+        url="yfinance://AAPL",
+        params={
+            "dataset": "price",
+            "lib": {
+                "type": "ticker_attr",
+                "attr": "history",
+                "kwargs": {"period": "1mo"},
+            },
+        },
+    )
+
+    assert fetch_yfinance(spec, yf_lib=fake_yf) == {"period": "1mo"}

@@ -75,3 +75,11 @@ class BaseMapper(ABC):
             FramePacket: Output packet aligned to sink schema (types/columns).
         """
         ...
+
+
+__all__ = [
+    "BaseMapper",
+    "HttpClientProtocol",
+    "IWriter",
+    "TracerProtocol",
+]

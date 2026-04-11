@@ -6,6 +6,30 @@ if TYPE_CHECKING:
     from vertex_forager.core.config import RequestSpec
     from vertex_forager.core.types import JSONValue
 
+TICKER_ATTR_ALLOWLIST: dict[str, frozenset[str]] = {
+    "actions": frozenset({"actions"}),
+    "balance_sheet": frozenset({"balance_sheet"}),
+    "calendar": frozenset({"calendar"}),
+    "cashflow": frozenset({"cashflow"}),
+    "dividends": frozenset({"dividends"}),
+    "earnings": frozenset({"earnings"}),
+    "fast_info": frozenset({"fast_info"}),
+    "financials": frozenset({"financials"}),
+    "info": frozenset({"info"}),
+    "insider_purchases": frozenset({"insider_purchases"}),
+    "insider_roster_holders": frozenset({"insider_roster_holders"}),
+    "institutional_holders": frozenset({"institutional_holders"}),
+    "major_holders": frozenset({"major_holders"}),
+    "mutualfund_holders": frozenset({"mutualfund_holders"}),
+    "news": frozenset({"news"}),
+    "price": frozenset({"history"}),
+    "quarterly_balance_sheet": frozenset({"quarterly_balance_sheet"}),
+    "quarterly_cashflow": frozenset({"quarterly_cashflow"}),
+    "quarterly_financials": frozenset({"quarterly_financials"}),
+    "recommendations": frozenset({"recommendations"}),
+    "splits": frozenset({"splits"}),
+}
+
 
 def _parse_spec(spec: RequestSpec) -> tuple[str, str, dict[str, JSONValue]]:
     if "://" not in spec.url:
@@ -37,7 +61,8 @@ def fetch_yfinance(spec: RequestSpec, *, yf_lib: Any) -> Any:
         return yf_lib.download(tickers=ticker_symbol, **call_kwargs)
     if call_type == "ticker_attr":
         attr_name = lib.get("attr")
-        if not isinstance(attr_name, str) or attr_name.startswith("_") or "__" in attr_name:
+        allowed_attrs = TICKER_ATTR_ALLOWLIST.get(dataset)
+        if not isinstance(attr_name, str) or allowed_attrs is None or attr_name not in allowed_attrs:
             raise ValueError(f"Unknown yfinance dataset: {dataset} -> {attr_name}")
         ticker = yf_lib.Ticker(ticker_symbol)
         try:
