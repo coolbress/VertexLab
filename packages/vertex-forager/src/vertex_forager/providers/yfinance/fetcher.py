@@ -35,6 +35,9 @@ def _parse_spec(spec: RequestSpec) -> tuple[str, str, dict[str, JSONValue]]:
     if "://" not in spec.url:
         raise ValueError("Library URL must contain scheme separator '://'")
     scheme, payload = spec.url.split("://", 1)
+    payload = payload.strip()
+    if not payload:
+        raise ValueError("Empty library payload in request URL")
     if scheme != "yfinance":
         raise ValueError(f"Unsupported library scheme: {scheme}")
     params = spec.params
@@ -76,5 +79,9 @@ def fetch_yfinance(spec: RequestSpec, *, yf_lib: Any) -> Any:
             attr = getattr(ticker, attr_name)
         except AttributeError:
             raise ValueError(f"Unknown yfinance dataset: {dataset} -> {attr_name}") from None
-        return attr(**call_kwargs) if callable(attr) else attr
+        if callable(attr):
+            return attr(**call_kwargs)
+        if call_kwargs:
+            raise ValueError(f"Invalid library kwargs for non-callable yfinance dataset '{dataset}' -> {attr_name}")
+        return attr
     raise ValueError(f"Unsupported library call type: {call_type}")

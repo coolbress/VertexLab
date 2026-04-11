@@ -30,6 +30,21 @@ def test_fetch_yfinance_validates_missing_lib_spec() -> None:
         fetch_yfinance(spec, yf_lib=SimpleNamespace(download=lambda **_: None))
 
 
+def test_fetch_yfinance_rejects_empty_payload() -> None:
+    spec = RequestSpec(
+        url="yfinance://   ",
+        params={
+            "dataset": "price",
+            "lib": {
+                "type": "download",
+            },
+        },
+    )
+
+    with pytest.raises(ValueError, match="Empty library payload"):
+        fetch_yfinance(spec, yf_lib=SimpleNamespace(download=lambda **_: None))
+
+
 def test_fetch_yfinance_rejects_invalid_attr() -> None:
     fake_yf = SimpleNamespace(Ticker=lambda _ticker: SimpleNamespace(history=lambda **_: None))
 
@@ -80,3 +95,22 @@ def test_fetch_yfinance_allows_only_dataset_mapped_attr() -> None:
     )
 
     assert fetch_yfinance(spec, yf_lib=fake_yf) == {"period": "1mo"}
+
+
+def test_fetch_yfinance_rejects_kwargs_for_non_callable_attr() -> None:
+    fake_yf = SimpleNamespace(Ticker=lambda _ticker: SimpleNamespace(info={"symbol": "AAPL"}))
+
+    spec = RequestSpec(
+        url="yfinance://AAPL",
+        params={
+            "dataset": "info",
+            "lib": {
+                "type": "ticker_attr",
+                "attr": "info",
+                "kwargs": {"period": "1mo"},
+            },
+        },
+    )
+
+    with pytest.raises(ValueError, match="non-callable yfinance dataset"):
+        fetch_yfinance(spec, yf_lib=fake_yf)
