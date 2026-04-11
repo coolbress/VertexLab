@@ -56,7 +56,14 @@ def fetch_yfinance(spec: RequestSpec, *, yf_lib: Any) -> Any:
     ticker_symbol, dataset, lib = _parse_spec(spec)
     call_type = lib.get("type")
     kw = lib.get("kwargs")
-    call_kwargs: dict[str, JSONValue] = dict(kw) if isinstance(kw, dict) else {}
+    if kw is None:
+        call_kwargs: dict[str, JSONValue] = {}
+    elif isinstance(kw, dict):
+        call_kwargs = dict(kw)
+    else:
+        raise ValueError(
+            f"Invalid library kwargs for yfinance dataset '{dataset}': expected dict, got {type(kw).__name__}"
+        )
     if call_type == "download":
         return yf_lib.download(tickers=ticker_symbol, **call_kwargs)
     if call_type == "ticker_attr":

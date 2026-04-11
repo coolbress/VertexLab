@@ -48,6 +48,22 @@ def test_fetch_yfinance_rejects_invalid_attr() -> None:
         fetch_yfinance(spec, yf_lib=fake_yf)
 
 
+def test_fetch_yfinance_rejects_invalid_kwargs_type() -> None:
+    spec = RequestSpec(
+        url="yfinance://AAPL",
+        params={
+            "dataset": "price",
+            "lib": {
+                "type": "download",
+                "kwargs": ["1d"],
+            },
+        },
+    )
+
+    with pytest.raises(ValueError, match="Invalid library kwargs"):
+        fetch_yfinance(spec, yf_lib=SimpleNamespace(download=lambda **_: None))
+
+
 def test_fetch_yfinance_allows_only_dataset_mapped_attr() -> None:
     fake_yf = SimpleNamespace(Ticker=lambda _ticker: SimpleNamespace(history=lambda **kwargs: kwargs))
 
