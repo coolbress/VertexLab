@@ -31,12 +31,12 @@
 | packages/vertex-forager/src/vertex\_forager/routers/errors.py       |       14 |        0 |    100% |           |
 | packages/vertex-forager/src/vertex\_forager/routers/jobs.py         |       25 |        3 |     88% |   124-127 |
 | packages/vertex-forager/src/vertex\_forager/routers/transforms.py   |       43 |        5 |     88% |48, 66-67, 88-89 |
-| packages/vertex-forager/src/vertex\_forager/writers/\_\_init\_\_.py |       24 |        2 |     92% |     55-59 |
+| packages/vertex-forager/src/vertex\_forager/writers/\_\_init\_\_.py |       44 |        6 |     86% |19, 32, 45-46, 83-87 |
 | packages/vertex-forager/src/vertex\_forager/writers/base.py         |       26 |        5 |     81% |103-106, 147 |
 | packages/vertex-forager/src/vertex\_forager/writers/constants.py    |       24 |        0 |    100% |           |
 | packages/vertex-forager/src/vertex\_forager/writers/duckdb.py       |      360 |       53 |     85% |141-142, 163, 239-240, 245-254, 260-266, 277, 376, 402, 408-409, 423-425, 430-431, 461-462, 536-537, 561-568, 578-582, 588, 619-629, 710-711 |
 | packages/vertex-forager/src/vertex\_forager/writers/memory.py       |       64 |        8 |     88% |61, 116-122 |
-| **TOTAL**                                                           | **3836** |  **561** | **85%** |           |
+| **TOTAL**                                                           | **3856** |  **565** | **85%** |           |
 
 
 ## Setup coverage badge
