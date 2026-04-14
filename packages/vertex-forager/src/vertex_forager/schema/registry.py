@@ -25,6 +25,15 @@ def _build_registry() -> _SchemaRegistry:
 
     provider_tables = get_provider_tables()
     provider_datasets = get_provider_datasets()
+    table_keys = set(provider_tables)
+    dataset_keys = set(provider_datasets)
+    if table_keys != dataset_keys:
+        missing_tables = sorted(dataset_keys - table_keys)
+        missing_datasets = sorted(table_keys - dataset_keys)
+        raise ValueError(
+            "Provider registry key mismatch: "
+            f"tables missing for {missing_tables}, datasets missing for {missing_datasets}"
+        )
     tables: dict[str, TableSchema] = {}
     for provider, table_map in provider_tables.items():
         duplicates = sorted(set(tables).intersection(table_map))

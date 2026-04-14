@@ -56,7 +56,7 @@ def build_constants_preview(section: str) -> dict[str, dict[str, object]]:
     from vertex_forager import constants as global_constants
 
     preview: dict[str, dict[str, object]] = {}
-    provider_preview = get_provider_constants_preview()
+    provider_preview: dict[str, dict[str, object]] | None = None
     if section in ("global", "all"):
         preview["global"] = _global_constants_map(constants_mod=global_constants)
     if section in ("flow", "all"):
@@ -64,8 +64,12 @@ def build_constants_preview(section: str) -> dict[str, dict[str, object]]:
     if section in ("queue", "all"):
         preview["queue"] = _queue_constants_map(constants_mod=global_constants)
     if section in ("yfinance", "all"):
+        if provider_preview is None:
+            provider_preview = get_provider_constants_preview()
         preview["yfinance"] = provider_preview["yfinance"]
     if section in ("sharadar", "all"):
+        if provider_preview is None:
+            provider_preview = get_provider_constants_preview()
         preview["sharadar"] = provider_preview["sharadar"]
     if section in ("writers", "all"):
         preview["writers"] = {
