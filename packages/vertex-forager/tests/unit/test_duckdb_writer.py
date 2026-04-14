@@ -8,6 +8,7 @@ import polars as pl
 import pytest
 
 from vertex_forager.core.config import FramePacket
+from vertex_forager.exceptions import InputError
 from vertex_forager.writers import create_writer
 from vertex_forager.writers.duckdb import DuckDBWriter
 
@@ -24,6 +25,39 @@ class TestDuckDBWriter:
         writer = create_writer(uri)
         assert isinstance(writer, DuckDBWriter)
         assert writer.db_path == str(db_path)
+
+    def test_triple_slash_single_segment_uri_resolves_relative_path(self) -> None:
+        writer = create_writer("duckdb:///forager.duckdb")
+
+        assert isinstance(writer, DuckDBWriter)
+        assert writer.db_path == "forager.duckdb"
+
+    def test_triple_slash_absolute_path_preserved(self) -> None:
+        absolute_path = Path("/").joinpath("var", "tmp", "forager.duckdb")
+        writer = create_writer(f"duckdb://{absolute_path}")
+
+        assert isinstance(writer, DuckDBWriter)
+        assert writer.db_path == str(absolute_path)
+
+    def test_triple_slash_empty_path_raises_input_error(self) -> None:
+        with pytest.raises(InputError):
+            create_writer("duckdb:///")
+
+    def test_dot_relative_uri_resolves_relative_path(self) -> None:
+        writer = create_writer("duckdb://./forager.duckdb")
+
+        assert isinstance(writer, DuckDBWriter)
+        assert writer.db_path == "forager.duckdb"
+
+    def test_dot_relative_empty_path_raises_input_error(self) -> None:
+        with pytest.raises(InputError):
+            create_writer("duckdb://./")
+
+    def test_memory_uri_is_supported(self) -> None:
+        writer = create_writer("duckdb://:memory:")
+
+        assert isinstance(writer, DuckDBWriter)
+        assert writer.db_path == ":memory:"
 
     @pytest.mark.asyncio
     async def test_write_single_packet(self, tmp_path: Path) -> None:
