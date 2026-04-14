@@ -251,6 +251,26 @@ async def test_library_runtime_error_is_wrapped_in_fetch_error(
     assert isinstance(exc_info.value.__cause__, RuntimeError)
 
 
+@pytest.mark.asyncio
+@pytest.mark.skipif(pd is None, reason="requires optional dependency: vertex-forager[yfinance]")
+async def test_yfinance_missing_library_dependency_raises_import_error(
+    http_executor: HttpExecutor,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import vertex_forager.core.http as http_mod
+
+    monkeypatch.setattr(http_mod, "yf", None)
+
+    with pytest.raises(ImportError, match="Install with: pip install vertex-forager\\[yfinance\\]"):
+        await http_executor.fetch(
+            RequestSpec(
+                method=HttpMethod.GET,
+                url="yfinance://AAPL",
+                params={"dataset": "price", "lib": {"type": "download"}},
+            )
+        )
+
+
 class FakeClient:
     _http_limits: HTTPConfig
 

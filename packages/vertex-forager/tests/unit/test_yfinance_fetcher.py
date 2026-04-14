@@ -23,6 +23,21 @@ def test_fetch_yfinance_download() -> None:
     assert fetch_yfinance(spec, yf_lib=fake_yf) == {"tickers": "AAPL", "period": "1d"}
 
 
+def test_fetch_yfinance_requires_optional_dependency() -> None:
+    spec = RequestSpec(
+        url="yfinance://AAPL",
+        params={
+            "dataset": "price",
+            "lib": {
+                "type": "download",
+            },
+        },
+    )
+
+    with pytest.raises(ImportError, match="Install with: pip install vertex-forager\\[yfinance\\]"):
+        fetch_yfinance(spec, yf_lib=None)
+
+
 def test_fetch_yfinance_validates_missing_lib_spec() -> None:
     spec = RequestSpec(url="yfinance://AAPL", params={"dataset": "price"})
 

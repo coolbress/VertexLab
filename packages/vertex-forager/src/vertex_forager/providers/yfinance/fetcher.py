@@ -55,7 +55,7 @@ def fetch_yfinance(spec: RequestSpec, *, yf_lib: Any) -> Any:
     `yfinance://` scheme.
     """
     if yf_lib is None:
-        raise ValueError("yfinance library not available")
+        raise ImportError("yfinance library path requires yfinance. Install with: pip install vertex-forager[yfinance]")
     ticker_symbol, dataset, lib = _parse_spec(spec)
     call_type = lib.get("type")
     kw = lib.get("kwargs")

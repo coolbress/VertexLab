@@ -168,6 +168,10 @@ class HttpExecutor:
                     "yfinance library path requires optional dependencies. "
                     "Install with: pip install vertex-forager[yfinance]"
                 ) from exc
+            if yf is None:
+                raise ImportError(
+                    "yfinance library path requires yfinance. Install with: pip install vertex-forager[yfinance]"
+                )
 
         try:
 
