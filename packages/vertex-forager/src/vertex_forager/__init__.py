@@ -33,7 +33,7 @@ from vertex_forager.exceptions import (
 
 stdlib_logging.getLogger("vertex_forager").addHandler(stdlib_logging.NullHandler())
 
-__version__ = "0.30.8"
+__version__ = "0.30.9"
 
 __all__ = [
     "AdaptiveThrottleConfig",

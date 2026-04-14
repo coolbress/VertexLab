@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.9](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.30.8...vertex-forager-v0.30.9) (2026-04-14)
+
+
+### Bug Fixes
+
+* **vertex-forager:** normalize duckdb URI parsing ([#506](https://github.com/coolbress/VertexLab/issues/506)) ([00180cf](https://github.com/coolbress/VertexLab/commit/00180cf0409c4248da32835b8d7511a81ea23ec8))
+
 ## [0.30.8](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.30.7...vertex-forager-v0.30.8) (2026-04-10)
 
 
