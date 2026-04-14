@@ -7,18 +7,17 @@ Use `vertex-forager` when you want a packaged entrypoint for data collection, no
 ## Install From GitHub
 
 ```bash
-pip install "vertex-forager @ git+https://github.com/coolbress/VertexLab.git@vertex-forager-v0.11.4#subdirectory=packages/vertex-forager"
+pip install "vertex-forager @ git+https://github.com/coolbress/VertexLab.git@vertex-forager-v0.30.9#subdirectory=packages/vertex-forager"
 ```
 
 ## Optional Extras
 
 ```bash
-pip install "vertex-forager[yfinance] @ git+https://github.com/coolbress/VertexLab.git@vertex-forager-v0.11.4#subdirectory=packages/vertex-forager"
-pip install "vertex-forager[notebook] @ git+https://github.com/coolbress/VertexLab.git@vertex-forager-v0.11.4#subdirectory=packages/vertex-forager"
+pip install "vertex-forager[yfinance] @ git+https://github.com/coolbress/VertexLab.git@vertex-forager-v0.30.9#subdirectory=packages/vertex-forager"
 ```
 
 - `yfinance` installs the library-backed provider dependencies: `pandas` and `yfinance`
-- `notebook` installs the notebook runtime dependencies: `ipywidgets`, `ipython`, and `nest-asyncio`
+- For notebooks, prefer the repository workflow below (`uv sync --group dev`) or install your preferred notebook runtime separately.
 
 You can also install from a wheel or sdist attached to [GitHub Releases](https://github.com/coolbress/VertexLab/releases).
 

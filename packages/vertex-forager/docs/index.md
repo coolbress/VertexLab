@@ -26,7 +26,7 @@ vertex-forager handles the operational complexity so you can focus on the data:
 ## Installation
 
 ```bash
-pip install "vertex-forager[yfinance] @ git+https://github.com/coolbress/VertexLab.git@vertex-forager-v0.11.4#subdirectory=packages/vertex-forager"
+pip install "vertex-forager[yfinance] @ git+https://github.com/coolbress/VertexLab.git@vertex-forager-v0.30.9#subdirectory=packages/vertex-forager"
 ```
 
 vertex-forager is currently distributed from GitHub rather than PyPI. The example below uses the yfinance provider, so the install snippet includes the `yfinance` extra. See [Installation](installation.md) for other install variants, extras, and repository-based workflows.
