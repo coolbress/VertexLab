@@ -9,13 +9,6 @@ try:
 except ImportError:
     HAS_HTTPX = False
 
-try:
-    import requests
-
-    HAS_REQUESTS = True
-except ImportError:
-    HAS_REQUESTS = False
-
 from vertex_forager.core.retry_policy import DEFAULT_RETRY_STATUS_CODES, is_retryable_status_code
 
 
@@ -210,15 +203,9 @@ class RunError:
             return True
         if HAS_HTTPX and isinstance(exc, httpx.TransportError):
             return True
-        return HAS_REQUESTS and isinstance(
-            exc,
-            (
-                requests.exceptions.ConnectionError,
-                requests.exceptions.Timeout,
-                requests.exceptions.ConnectTimeout,
-                requests.exceptions.ReadTimeout,
-            ),
-        )
+        from vertex_forager.providers.yfinance.errors import is_retryable_yfinance_error
+
+        return is_retryable_yfinance_error(exc)
 
 
 __all__ = [

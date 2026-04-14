@@ -373,6 +373,20 @@ def test_run_error_retryable_when_wrapped_timeout_error() -> None:
     assert err.retryable is True
 
 
+def test_run_error_retryable_for_wrapped_yfinance_requests_error() -> None:
+    RequestsTimeout = type("Timeout", (Exception,), {"__module__": "requests.exceptions"})
+
+    try:
+        try:
+            raise RequestsTimeout("yfinance timeout")
+        except Exception as exc:
+            raise FetchError("wrapped fetch failure") from exc
+    except FetchError as exc:
+        err = RunError.from_exception(exc, provider="yfinance", dataset="price", symbol="AAPL")
+
+    assert err.retryable is True
+
+
 def test_cleanup_dlq_tmp_default_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("VERTEXFORAGER_ROOT", str(tmp_path / "app"))
     # create default dlq tmp under get_cache_dir()
