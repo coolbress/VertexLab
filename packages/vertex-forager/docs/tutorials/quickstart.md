@@ -8,14 +8,10 @@ Follow this tutorial from a minimal in-memory example to a local DuckDB-backed b
 - Install the package from GitHub:
 
 ```bash
-pip install "vertex-forager[yfinance] @ git+https://github.com/coolbress/VertexLab.git@vertex-forager-v0.11.4#subdirectory=packages/vertex-forager"
+pip install "vertex-forager[yfinance] @ git+https://github.com/coolbress/VertexLab.git@vertex-forager-v0.30.9#subdirectory=packages/vertex-forager"
 ```
 
-- Optional notebook extras:
-
-```bash
-pip install "vertex-forager[notebook] @ git+https://github.com/coolbress/VertexLab.git@vertex-forager-v0.11.4#subdirectory=packages/vertex-forager"
-```
+- For notebook workflows, use the repository workflow from [Installation](../installation.md) or install your preferred notebook runtime separately.
 
 ## 1. Create a client
 
@@ -44,14 +40,15 @@ client = create_client(
 
 ## 2. Fetch data into memory
 
-If you do not pass `connect_db`, the result stays in memory and you get a Polars DataFrame back immediately.
+If you do not pass `connect_db`, the result stays in memory and `get_price_data(...)` returns `RunResult` with the Polars DataFrame in `result.data`.
 
 ```python
 from vertex_forager import create_client
 
 client = create_client(provider="yfinance")
-prices = client.get_price_data(tickers=["AAPL", "MSFT"])
-print(prices.head())
+result = client.get_price_data(tickers=["AAPL", "MSFT"])
+if result.data is not None:
+    print(result.data.head())
 ```
 
 This is the right stopping point if you only need a DataFrame for analysis or ad hoc exploration.
@@ -66,7 +63,7 @@ from vertex_forager import create_client
 client = create_client(provider="yfinance")
 run = client.get_price_data(
     tickers=["AAPL", "MSFT"],
-    connect_db="duckdb://./forager.duckdb",
+    connect_db="duckdb:///forager.duckdb",
 )
 print(run.tables)
 print(run.errors)
