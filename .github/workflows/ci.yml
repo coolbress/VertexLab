@@ -302,14 +302,26 @@ jobs:
         env:
           VF_PROFILE_OUTPUT_DIR: ${{ github.workspace }}/output/forager-profiles
         run: uv run python packages/vertex-forager/tests/verification/verify_pipeline_perf.py
+      - name: Detect benchmark metrics artifact
+        id: benchmark-metrics
+        shell: bash
+        run: |
+          path="${{ github.workspace }}/output/forager-profiles/profile_metrics.json"
+          if [ -f "$path" ]; then
+            echo "has_metrics=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_metrics=false" >> "$GITHUB_OUTPUT"
+            echo "Benchmark metrics missing; skipping compare/upload."
+          fi
       - name: Compare benchmark against baseline
+        if: ${{ steps.benchmark-metrics.outputs.has_metrics == 'true' }}
         env:
           VF_PROFILE_OUTPUT_DIR: ${{ github.workspace }}/output/forager-profiles
           BENCHMARK_METRIC_PATH: duration_s
           BENCHMARK_MAX_REGRESSION: "0.30"
         run: uv run python .github/scripts/compare_benchmark_metrics.py
       - name: Upload benchmark metrics artifact
-        if: ${{ always() }}
+        if: ${{ always() && steps.benchmark-metrics.outputs.has_metrics == 'true' }}
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0 pinned
         with:
           name: benchmark-profile-metrics

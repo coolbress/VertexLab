@@ -21,19 +21,10 @@ class _SchemaRegistry:
 
 @lru_cache(maxsize=1)
 def _build_registry() -> _SchemaRegistry:
-    from vertex_forager.providers.sharadar.schema import DATASETS as SHARADAR_DATASETS
-    from vertex_forager.providers.sharadar.schema import TABLES as SHARADAR_TABLES
-    from vertex_forager.providers.yfinance.schema import DATASETS as YFINANCE_DATASETS
-    from vertex_forager.providers.yfinance.schema import TABLES as YFINANCE_TABLES
+    from vertex_forager.providers.catalog import get_provider_datasets, get_provider_tables
 
-    provider_tables = {
-        "sharadar": SHARADAR_TABLES,
-        "yfinance": YFINANCE_TABLES,
-    }
-    provider_datasets = {
-        "sharadar": SHARADAR_DATASETS,
-        "yfinance": YFINANCE_DATASETS,
-    }
+    provider_tables = get_provider_tables()
+    provider_datasets = get_provider_datasets()
     tables: dict[str, TableSchema] = {}
     for provider, table_map in provider_tables.items():
         duplicates = sorted(set(tables).intersection(table_map))
