@@ -33,7 +33,7 @@ async def test_core_http_dispatch_library(monkeypatch):
     spec = RequestSpec(
         url="yfinance://AAPL",
         params={
-            "dataset": "price",
+            "dataset": "info",
             "lib": {"type": "ticker_attr", "attr": "info", "kwargs": {}},
         },
     )

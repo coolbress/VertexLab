@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TypeAlias, cast
+from typing import TypeAlias
 from urllib.parse import urlparse
 
-from vertex_forager.core.registries import writers as writer_registry
 from vertex_forager.writers.base import BaseWriter
 from vertex_forager.writers.duckdb import DuckDBWriter
 from vertex_forager.writers.memory import InMemoryBufferWriter
@@ -17,10 +16,6 @@ def _duckdb_factory(uri: str) -> WriterInstance:
     # Simple parsing: remove scheme prefix
     path_str = uri.replace("duckdb://", "")
     return DuckDBWriter(db_path=Path(path_str))
-
-
-# Register built-in writers
-writer_registry.register("duckdb", _duckdb_factory)
 
 
 def create_writer(connect_db: str | Path | None) -> WriterInstance:
@@ -55,11 +50,9 @@ def create_writer(connect_db: str | Path | None) -> WriterInstance:
 
         # 1. URI with Scheme (e.g., duckdb://)
         if parsed.scheme:
-            try:
-                factory = writer_registry.get(parsed.scheme)
-                return cast(WriterInstance, factory(connect_db))
-            except NotImplementedError:
-                raise NotImplementedError(f"Writer for scheme '{parsed.scheme}' is not implemented") from None
+            if parsed.scheme == "duckdb":
+                return _duckdb_factory(connect_db)
+            raise NotImplementedError(f"Writer for scheme '{parsed.scheme}' is not implemented")
 
     # 2. Plain String Path (No Scheme) -> Assume DuckDB
     # Previously mapped to HiveParquetWriter, now defaulting to DuckDB for simplicity

@@ -2,8 +2,6 @@
 
 from typing import Any
 
-__import__("vertex_forager.providers.yfinance.fetcher")
-
 
 def __getattr__(name: str) -> Any:
     if name == "YFinanceClient":

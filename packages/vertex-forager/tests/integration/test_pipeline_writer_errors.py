@@ -18,9 +18,10 @@ from vertex_forager.core.config import (
     ResolvedClientConfig,
     RunResult,
 )
-from vertex_forager.core.contracts import IMapper, IRouter
+from vertex_forager.core.contracts import BaseMapper
 from vertex_forager.core.http import HttpExecutor
 from vertex_forager.core.pipeline import VertexForager
+from vertex_forager.routers.base import BaseRouter
 from vertex_forager.writers.duckdb import DuckDBWriter
 
 
@@ -52,7 +53,7 @@ class StubClient:
         yield None
 
 
-class StubRouter(IRouter[str]):
+class StubRouter(BaseRouter[str]):
     @property
     def provider(self) -> str:
         return "yfinance"
@@ -87,7 +88,7 @@ class StubRouter(IRouter[str]):
         )
         return ParseResult(packets=[pkt], next_jobs=[])
 
-class StubMapper(IMapper):
+class StubMapper(BaseMapper):
     def normalize(self, *, packet: FramePacket) -> FramePacket:
         return packet
 @pytest.mark.asyncio

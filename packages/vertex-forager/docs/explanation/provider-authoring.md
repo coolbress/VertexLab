@@ -134,8 +134,7 @@ This is the canonical source for provider dataset lookup.
 
 Update `src/vertex_forager/clients/__init__.py`:
 
-- add lazy registration for the new client
-- add the provider to `create_client(...)`
+- add the provider to the direct dispatch branch in `create_client(...)`
 - extend any overloads or literal-based return typing as needed
 
 ### Router factory
@@ -143,9 +142,9 @@ Update `src/vertex_forager/clients/__init__.py`:
 Update `src/vertex_forager/routers/__init__.py`:
 
 - add a provider-specific router factory
-- register it in `router_registry`
+- add the provider to the direct dispatch branch in `create_router(...)`
 
-If the provider uses a local library transport path, also wire any provider fetcher registration alongside the provider package import path.
+If the provider uses a local library transport path, also wire the provider-specific fetch helper into the internal scheme handling path used by `HttpExecutor`.
 
 ## 7. Update public typing and exports
 

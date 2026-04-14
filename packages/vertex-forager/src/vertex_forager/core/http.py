@@ -17,7 +17,6 @@ except ImportError:
     yf = None
 from vertex_forager.constants import HTTP_USER_AGENT
 from vertex_forager.core.config import RequestSpec
-from vertex_forager.core.library import get_library_fetcher
 from vertex_forager.exceptions import FetchError
 
 if TYPE_CHECKING:
@@ -169,15 +168,19 @@ class HttpExecutor:
                     "yfinance library path requires optional dependencies. "
                     "Install with: pip install vertex-forager[yfinance]"
                 ) from exc
+            if yf is None:
+                raise ImportError(
+                    "yfinance library path requires yfinance. Install with: pip install vertex-forager[yfinance]"
+                )
 
         try:
-            # 1. Execute provider-specific library call via registry
-            fetcher = get_library_fetcher(scheme)
-            if fetcher is None:
-                raise ValueError(f"Unsupported library scheme: {scheme}")
 
             def _execute() -> Any:
-                return fetcher.fetch(spec)
+                if scheme == "yfinance":
+                    from vertex_forager.providers.yfinance.fetcher import fetch_yfinance
+
+                    return fetch_yfinance(spec, yf_lib=yf)
+                raise ValueError(f"Unsupported library scheme: {scheme}")
 
             # Use the client's run_sync method
             data = await self._client.run_sync(_execute)

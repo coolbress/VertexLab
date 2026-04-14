@@ -7,12 +7,6 @@ from typing import TYPE_CHECKING, Any, Literal, cast, overload
 
 from vertex_forager.clients.base import BaseClient
 from vertex_forager.constants import DEFAULT_RATE_LIMIT
-from vertex_forager.core.registries import (
-    ClientRegistration,
-)
-from vertex_forager.core.registries import (
-    clients as client_registry,
-)
 
 if TYPE_CHECKING:
     from vertex_forager.core.config import (
@@ -29,80 +23,61 @@ if TYPE_CHECKING:
 _UNSET = object()
 
 
-def _register_sharadar() -> None:
+def _create_sharadar_client(
+    *,
+    api_key: str | None = None,
+    rate_limit: int,
+    schedule: SchedulerConfig | dict[str, Any] | None = None,
+    retry: RetryConfig | dict[str, Any] | None = None,
+    throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
+    quality_check: Literal["warn", "error"] = "warn",
+    concurrency: int | None = None,
+    storage: StorageConfig | dict[str, Any] | None = None,
+    limits: HTTPConfig | dict[str, Any] | None = None,
+    **_kwargs: Any,
+) -> BaseClient:
     from vertex_forager.providers.sharadar.client import SharadarClient
 
-    def _sharadar_factory(
-        *,
-        api_key: str | None = None,
-        rate_limit: int,
-        schedule: SchedulerConfig | dict[str, Any] | None = None,
-        retry: RetryConfig | dict[str, Any] | None = None,
-        throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
-        quality_check: Literal["warn", "error"] = "warn",
-        concurrency: int | None = None,
-        storage: StorageConfig | dict[str, Any] | None = None,
-        limits: HTTPConfig | dict[str, Any] | None = None,
-        **_kwargs: Any,
-    ) -> BaseClient:
-        return SharadarClient(
-            api_key=api_key or "",
-            rate_limit=rate_limit,
-            schedule=schedule,
-            retry=retry,
-            throttle=throttle,
-            quality_check=quality_check,
-            concurrency=concurrency,
-            storage=storage,
-            limits=limits,
-        )
-
-    # Register known providers
-    client_registry.register(
-        "sharadar",
-        ClientRegistration(
-            env_api_key="SHARADAR_API_KEY",  # pragma: allowlist secret (variable name only)
-            factory=_sharadar_factory,
-        ),
+    return SharadarClient(
+        api_key=api_key or "",
+        rate_limit=rate_limit,
+        schedule=schedule,
+        retry=retry,
+        throttle=throttle,
+        quality_check=quality_check,
+        concurrency=concurrency,
+        storage=storage,
+        limits=limits,
     )
 
 
-def _register_yfinance() -> None:
+def _create_yfinance_client(
+    *,
+    api_key: str | None = None,
+    rate_limit: int,
+    schedule: SchedulerConfig | dict[str, Any] | None = None,
+    retry: RetryConfig | dict[str, Any] | None = None,
+    throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
+    quality_check: Literal["warn", "error"] = "warn",
+    pickle_compat_datasets: list[str] | None = None,
+    concurrency: int | None = None,
+    storage: StorageConfig | dict[str, Any] | None = None,
+    limits: HTTPConfig | dict[str, Any] | None = None,
+    **_kwargs: Any,
+) -> BaseClient:
     from vertex_forager.providers.yfinance.client import YFinanceClient
 
-    def _yfinance_factory(
-        *,
-        api_key: str | None = None,
-        rate_limit: int,
-        schedule: SchedulerConfig | dict[str, Any] | None = None,
-        retry: RetryConfig | dict[str, Any] | None = None,
-        throttle: AdaptiveThrottleConfig | dict[str, Any] | None = None,
-        quality_check: Literal["warn", "error"] = "warn",
-        pickle_compat_datasets: list[str] | None = None,
-        concurrency: int | None = None,
-        storage: StorageConfig | dict[str, Any] | None = None,
-        limits: HTTPConfig | dict[str, Any] | None = None,
-        **_kwargs: Any,
-    ) -> BaseClient:
-        return YFinanceClient(
-            api_key=api_key or "",
-            rate_limit=rate_limit,
-            schedule=schedule,
-            retry=retry,
-            throttle=throttle,
-            quality_check=quality_check,
-            pickle_compat_datasets=pickle_compat_datasets,
-            concurrency=concurrency,
-            storage=storage,
-            limits=limits,
-        )
-
-    client_registry.register(
-        "yfinance",
-        ClientRegistration(
-            env_api_key=None,
-            factory=_yfinance_factory,
-        ),
+    return YFinanceClient(
+        api_key=api_key or "",
+        rate_limit=rate_limit,
+        schedule=schedule,
+        retry=retry,
+        throttle=throttle,
+        quality_check=quality_check,
+        pickle_compat_datasets=pickle_compat_datasets,
+        concurrency=concurrency,
+        storage=storage,
+        limits=limits,
     )
 
 
@@ -174,33 +149,23 @@ def create_client(
         ValueError: If API key is missing.
         KeyError: If provider is unknown.
     """
-    try:
-        registration = client_registry.get(provider)
-    except KeyError:
-        if provider == "sharadar":
-            _register_sharadar()
-            registration = client_registry.get(provider)
-        elif provider == "yfinance":
-            _register_yfinance()
-            registration = client_registry.get(provider)
-        else:
-            raise KeyError(f"Unsupported client: {provider}") from None
-
     api_key_supplied = api_key is not _UNSET
     rate_limit_supplied = rate_limit is not _UNSET
     resolved_key = None if api_key is _UNSET else cast("str | None", api_key)
-    if not resolved_key and registration.env_api_key:
-        resolved_key = os.getenv(registration.env_api_key)
-
-    if not resolved_key and registration.env_api_key:
-        raise ValueError(f"Missing api_key (set api_key or {registration.env_api_key} in environment/.env)")
+    env_api_key = "SHARADAR_API_KEY" if provider == "sharadar" else None
+    if provider not in {"sharadar", "yfinance"}:
+        raise KeyError(f"Unsupported client: {provider}") from None
+    if not resolved_key and env_api_key:
+        resolved_key = os.getenv(env_api_key)
+    if not resolved_key and env_api_key:
+        raise ValueError(f"Missing api_key (set api_key or {env_api_key} in environment/.env)")
 
     if provider == "yfinance":
         if api_key_supplied:
             raise TypeError("api_key is not supported when provider='yfinance'")
         if rate_limit_supplied:
             raise TypeError("rate_limit is not supported when provider='yfinance'")
-        return registration.factory(
+        return _create_yfinance_client(
             api_key=None,
             rate_limit=DEFAULT_RATE_LIMIT,
             schedule=schedule,
@@ -216,7 +181,7 @@ def create_client(
         raise TypeError("pickle_compat_datasets is only supported when provider='yfinance'")
     if not rate_limit_supplied or rate_limit is None:
         raise ValueError(f"Missing rate_limit for provider '{provider}'")
-    return registration.factory(
+    return _create_sharadar_client(
         api_key=resolved_key,
         rate_limit=cast("int", rate_limit),
         schedule=schedule,

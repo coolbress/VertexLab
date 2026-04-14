@@ -128,9 +128,10 @@ if TYPE_CHECKING:
     import polars as pl
 
     from vertex_forager.core.config import FramePacket, ParseResult, ResolvedClientConfig
-    from vertex_forager.core.contracts import IMapper, IRouter, IWriter
+    from vertex_forager.core.contracts import BaseMapper, IWriter
     from vertex_forager.core.controller import FlowController
     from vertex_forager.core.http import HttpExecutor
+    from vertex_forager.routers.base import BaseRouter
     from vertex_forager.schema.config import TableSchema
 
 InMemoryBufferWriterType: type | None
@@ -267,10 +268,10 @@ class VertexForager:
     (Writer Workers).
 
     Attributes:
-        _router (IRouter): Router/Queue manager for fetch jobs.
+        _router (BaseRouter): Router/Queue manager for fetch jobs.
         _http (HttpExecutor): Handles HTTP requests.
         _writer (IWriter): Writer task manager.
-        _mapper (IMapper): Normalizes data schemas.
+        _mapper (BaseMapper): Normalizes data schemas.
         _config (ResolvedClientConfig): Internal resolved configuration object.
         controller (FlowController): Rate limiter and concurrency controller.
         _flush_threshold (int): Row count threshold for flushing buffers.
@@ -294,10 +295,10 @@ class VertexForager:
     def __init__(
         self,
         *,
-        router: IRouter,
+        router: BaseRouter,
         http: HttpExecutor,
         writer: IWriter,
-        mapper: IMapper,
+        mapper: BaseMapper,
         config: ResolvedClientConfig,
         controller: FlowController,
     ) -> None:
