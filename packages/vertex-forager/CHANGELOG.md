@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.10](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.30.9...vertex-forager-v0.30.10) (2026-04-14)
+
+
+### Documentation
+
+* **vertex-forager:** fix installation and quickstart accuracy ([#508](https://github.com/coolbress/VertexLab/issues/508)) ([a22ee09](https://github.com/coolbress/VertexLab/commit/a22ee097697d19bc95451d9b5e5c00b0ad940a19))
+
 ## [0.30.9](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.30.8...vertex-forager-v0.30.9) (2026-04-14)
 
 
