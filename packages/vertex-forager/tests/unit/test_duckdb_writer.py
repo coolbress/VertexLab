@@ -26,6 +26,27 @@ class TestDuckDBWriter:
         assert writer.db_path == str(db_path)
 
     @pytest.mark.asyncio
+    async def test_triple_slash_single_segment_uri_resolves_relative_path(self) -> None:
+        writer = create_writer("duckdb:///forager.duckdb")
+
+        assert isinstance(writer, DuckDBWriter)
+        assert writer.db_path == "forager.duckdb"
+
+    @pytest.mark.asyncio
+    async def test_dot_relative_uri_resolves_relative_path(self) -> None:
+        writer = create_writer("duckdb://./forager.duckdb")
+
+        assert isinstance(writer, DuckDBWriter)
+        assert writer.db_path == "forager.duckdb"
+
+    @pytest.mark.asyncio
+    async def test_memory_uri_is_supported(self) -> None:
+        writer = create_writer("duckdb://:memory:")
+
+        assert isinstance(writer, DuckDBWriter)
+        assert writer.db_path == ":memory:"
+
+    @pytest.mark.asyncio
     async def test_write_single_packet(self, tmp_path: Path) -> None:
         """Test writing a single data packet to DuckDB."""
         db_path = tmp_path / "test.duckdb"
