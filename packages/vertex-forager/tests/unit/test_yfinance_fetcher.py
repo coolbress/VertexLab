@@ -38,6 +38,22 @@ def test_fetch_yfinance_requires_optional_dependency() -> None:
         fetch_yfinance(spec, yf_lib=None)
 
 
+def test_fetch_yfinance_rejects_invalid_download_dataset() -> None:
+    spec = RequestSpec(
+        url="yfinance://AAPL",
+        params={
+            "dataset": "info",
+            "lib": {
+                "type": "download",
+                "kwargs": {"period": "1d"},
+            },
+        },
+    )
+
+    with pytest.raises(ValueError, match="Unsupported yfinance download dataset: info"):
+        fetch_yfinance(spec, yf_lib=SimpleNamespace(download=lambda **_: None))
+
+
 def test_fetch_yfinance_validates_missing_lib_spec() -> None:
     spec = RequestSpec(url="yfinance://AAPL", params={"dataset": "price"})
 

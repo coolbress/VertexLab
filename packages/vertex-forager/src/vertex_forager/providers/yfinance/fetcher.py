@@ -29,6 +29,7 @@ TICKER_ATTR_ALLOWLIST: dict[str, frozenset[str]] = {
     "recommendations": frozenset({"recommendations"}),
     "splits": frozenset({"splits"}),
 }
+DOWNLOAD_DATASETS: frozenset[str] = frozenset({"price"})
 
 
 def _parse_spec(spec: RequestSpec) -> tuple[str, str, dict[str, JSONValue]]:
@@ -68,6 +69,8 @@ def fetch_yfinance(spec: RequestSpec, *, yf_lib: Any) -> Any:
             f"Invalid library kwargs for yfinance dataset '{dataset}': expected dict, got {type(kw).__name__}"
         )
     if call_type == "download":
+        if dataset not in DOWNLOAD_DATASETS:
+            raise ValueError(f"Unsupported yfinance download dataset: {dataset}")
         return yf_lib.download(tickers=ticker_symbol, **call_kwargs)
     if call_type == "ticker_attr":
         attr_name = lib.get("attr")
