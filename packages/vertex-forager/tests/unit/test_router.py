@@ -200,6 +200,27 @@ class TestSharadarRouterUnit:
         with pytest.raises(ValueError, match="Invalid symbol"):
             router._build_per_symbol_job(dataset="price", symbol="   ")
 
+    def test_should_paginate_without_symbols_only_for_supported_datasets(
+        self,
+        router: SharadarRouter,
+    ) -> None:
+        assert router._should_paginate_without_symbols(dataset="tickers", symbols=None) is True
+        assert router._should_paginate_without_symbols(dataset="sp500", symbols=None) is True
+        assert router._should_paginate_without_symbols(dataset="price", symbols=None) is False
+        assert router._should_paginate_without_symbols(dataset="tickers", symbols=["AAPL"]) is False
+
+    def test_resolve_dimension_and_per_page_apply_defaults_and_clamps(
+        self,
+        router: SharadarRouter,
+    ) -> None:
+        assert router._resolve_dimension(None) == "MRT"
+        assert router._resolve_dimension("   ") == "MRT"
+        assert router._resolve_dimension("ARQ") == "ARQ"
+
+        assert router._resolve_per_page("invalid") == MAX_ROWS_PER_REQUEST
+        assert router._resolve_per_page(MAX_ROWS_PER_REQUEST * 5) == MAX_ROWS_PER_REQUEST
+        assert router._resolve_per_page(0) == 1
+
     @pytest.mark.asyncio
     async def test_generate_jobs_does_not_batch_by_default(
         self, router: SharadarRouter
