@@ -11,13 +11,19 @@ import pytest
 
 from vertex_forager.core.checkpoint import (
     Checkpoint,
+    cleanup_state_retention,
+    delete_checkpoints,
+    delete_dlq_entries,
     delete_dlq_entry,
+    delete_run_history,
     find_latest_checkpoint,
     get_cache_dir,
     get_state_db_path,
+    list_dlq_entries,
     list_pending_dlq_entries,
     list_run_history,
     load_checkpoint,
+    mark_dlq_retry_result,
     register_dlq_entry,
     save_checkpoint,
     save_run_history,
@@ -112,6 +118,51 @@ def test_save_and_load_checkpoint_with_pending_jobs() -> None:
         assert loaded.pending_jobs[0].spec.params["page"] == 2
 
 
+def test_delete_run_history_and_checkpoints_with_filters() -> None:
+    with (
+        tempfile.TemporaryDirectory() as tmpdir,
+        patch("vertex_forager.core.checkpoint.get_cache_dir", return_value=Path(tmpdir)),
+        patch("vertex_forager.core.checkpoint.time.time", side_effect=[100.0, 100.0, 200.0, 200.0]),
+    ):
+        save_checkpoint(Checkpoint(run_id="keep", provider="stub", dataset="prices", table_name="keep_table"))
+        save_checkpoint(Checkpoint(run_id="drop", provider="stub", dataset="prices", table_name="drop_table"))
+
+        save_run_history(
+            RunResult(
+                run_id="run-keep",
+                provider="stub",
+                dataset="prices",
+                table_name="keep_table",
+                total_rows=1,
+                errors=[],
+                quality_violations={},
+            ),
+            "run-keep",
+            table_name="keep_table",
+        )
+        save_run_history(
+            RunResult(
+                run_id="run-drop",
+                provider="stub",
+                dataset="prices",
+                table_name="drop_table",
+                total_rows=2,
+                errors=[],
+                quality_violations={},
+            ),
+            "run-drop",
+            table_name="drop_table",
+        )
+
+        assert delete_checkpoints(table_name="drop_table") == 1
+        assert find_latest_checkpoint(table_name="drop_table") is None
+        assert find_latest_checkpoint(table_name="keep_table") is not None
+
+        assert delete_run_history(table_name="drop_table") == 1
+        history = list_run_history(limit=10)
+        assert [entry["table_name"] for entry in history] == ["keep_table"]
+
+
 def test_find_latest_checkpoint_uses_sqlite_ordering() -> None:
     with (
         tempfile.TemporaryDirectory() as tmpdir,
@@ -126,6 +177,99 @@ def test_find_latest_checkpoint_uses_sqlite_ordering() -> None:
         latest = find_latest_checkpoint(table_name="stub_prices")
         assert latest is not None
         assert latest.run_id == "run_new"
+
+
+def test_mark_dlq_retry_result_and_delete_dlq_entries() -> None:
+    with (
+        tempfile.TemporaryDirectory() as tmpdir,
+        patch("vertex_forager.core.checkpoint.get_cache_dir", return_value=Path(tmpdir)),
+    ):
+        dlq_root = Path(tmpdir) / "dlq"
+        dlq_root.mkdir(parents=True, exist_ok=True)
+        payload_path = dlq_root / "failed" / "pkt.ipc"
+        payload_path.parent.mkdir(parents=True, exist_ok=True)
+        payload_path.write_bytes(b"payload")
+
+        register_dlq_entry(
+            path=payload_path,
+            table="yfinance_price",
+            provider="yfinance",
+            row_count=3,
+            output_uri="duckdb:///forager.duckdb",
+        )
+
+        mark_dlq_retry_result(path=payload_path.resolve(), success=False, error="still failing")
+        pending = list_dlq_entries(provider="yfinance", status="pending")
+        assert len(pending) == 1
+        assert pending[0]["retry_count"] == 1
+        assert pending[0]["last_error"] == "still failing"
+
+        mark_dlq_retry_result(path=payload_path.resolve(), success=True)
+        recovered = list_dlq_entries(provider="yfinance", status="recovered")
+        assert len(recovered) == 1
+        assert recovered[0]["retry_count"] == 2
+
+        deleted = delete_dlq_entries(provider="yfinance", status="recovered")
+        assert deleted == {"rows": 1, "files": 1}
+        assert not payload_path.exists()
+        assert list_dlq_entries(provider="yfinance", status=None) == []
+
+
+def test_cleanup_state_retention_removes_old_state() -> None:
+    with (
+        tempfile.TemporaryDirectory() as tmpdir,
+        patch("vertex_forager.core.checkpoint.get_cache_dir", return_value=Path(tmpdir)),
+    ):
+        with patch("vertex_forager.core.checkpoint.time.time", return_value=100.0):
+            save_checkpoint(
+                Checkpoint(
+                    run_id="old-run",
+                    provider="stub",
+                    dataset="prices",
+                    table_name="stub_prices",
+                    status="completed",
+                )
+            )
+        save_run_history(
+            RunResult(
+                run_id="old-run",
+                provider="stub",
+                dataset="prices",
+                table_name="stub_prices",
+                total_rows=1,
+                started_at=100.0,
+                finished_at=100.0,
+                errors=[],
+                quality_violations={},
+            ),
+            "old-run",
+            table_name="stub_prices",
+        )
+
+        dlq_root = Path(tmpdir) / "dlq"
+        dlq_root.mkdir(parents=True, exist_ok=True)
+        payload_path = dlq_root / "stale.ipc"
+        payload_path.write_bytes(b"payload")
+        with patch("vertex_forager.core.checkpoint.time.time", return_value=100.0):
+            register_dlq_entry(
+                path=payload_path,
+                table="stub_prices",
+                provider="stub",
+                row_count=1,
+                output_uri=None,
+            )
+
+        with patch("vertex_forager.core.checkpoint.time.time", return_value=5000.0):
+            result = cleanup_state_retention(
+                checkpoint_retention_days=0,
+                run_history_retention_days=0,
+                dlq_retention_s=0,
+            )
+
+        assert result == {"checkpoints": 1, "runs": 1, "dlq_rows": 1, "dlq_files": 1}
+        assert find_latest_checkpoint(table_name="stub_prices") is None
+        assert list_run_history(limit=10) == []
+        assert list_dlq_entries(status=None) == []
 
 
 def test_initialize_schema_marks_legacy_in_progress_checkpoints_completed() -> None:

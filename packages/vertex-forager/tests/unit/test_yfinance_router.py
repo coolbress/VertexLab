@@ -12,6 +12,7 @@ import pytest
 
 from vertex_forager.core.config import FetchJob, ParseResult, RequestSpec
 from vertex_forager.exceptions import TransformError
+from vertex_forager.providers.yfinance.constants import PRICE_BATCH_MAX
 
 if TYPE_CHECKING:
     from vertex_forager.providers.yfinance.router import YFinanceRouter
@@ -20,9 +21,11 @@ try:
     import pandas as pd
 
     from vertex_forager.providers.yfinance.router import YFinanceRouter as _YFinanceRouter
+    from vertex_forager.providers.yfinance.router import _normalize_pickle_compat_datasets
 except ImportError as err:
     if err.name in {"pandas", "yfinance"}:
         pd = None
+        _normalize_pickle_compat_datasets = None
         _YFinanceRouter = None
     else:
         raise
@@ -179,6 +182,21 @@ class TestYFinanceRouterUnit:
         with pytest.raises(TransformError):
             _ = router.parse(job=job, payload=payload)
 
+    def test_normalize_pickle_compat_datasets_dedups_and_drops_blanks(self) -> None:
+        assert _normalize_pickle_compat_datasets(["price", " price ", "", "financials", "price"]) == (
+            "price",
+            "financials",
+        )
+
+    def test_router_clamps_price_batch_size_and_coerces_invalid_values(self) -> None:
+        default_router = YFinanceRouter(rate_limit=60, price_batch_size="bad")
+        max_router = YFinanceRouter(rate_limit=60, price_batch_size=10_000)
+        min_router = YFinanceRouter(rate_limit=60, price_batch_size=0)
+
+        assert default_router._price_batch_size == default_router.PRICE_BATCH_SIZE
+        assert max_router._price_batch_size == PRICE_BATCH_MAX
+        assert min_router._price_batch_size == 1
+
     def test_pickle_compat_env_vars_no_longer_enable_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VF_ALLOW_PICKLE_COMPAT", "1")
         monkeypatch.setenv("VF_PICKLE_ALLOWED_DATASETS", "price")
@@ -261,6 +279,32 @@ class TestYFinanceRouterUnit:
         assert frame.get_column("period").to_list() == ["0m", "-1m", "-2m"]
         assert "strongbuy" in frame.columns
         assert frame.get_column("strongbuy").to_list() == [5, 3, 2]
+
+    def test_typed_job_context_coerces_attempt_and_ignores_invalid_values(
+        self,
+        yfinance_router: YFinanceRouter,
+    ) -> None:
+        valid_job = FetchJob(
+            provider="yfinance",
+            dataset="price",
+            symbol="AAPL",
+            spec=RequestSpec(url="yfinance://AAPL", params={"dataset": "price"}),
+            context={"symbol": "AAPL", "attempt": "2", "is_batch": True},
+        )
+        invalid_job = FetchJob(
+            provider="yfinance",
+            dataset="price",
+            symbol="AAPL",
+            spec=RequestSpec(url="yfinance://AAPL", params={"dataset": "price"}),
+            context={"symbol": 123, "attempt": "abc", "is_batch": "yes"},
+        )
+
+        assert yfinance_router._typed_job_context(job=valid_job) == {
+            "symbol": "AAPL",
+            "attempt": 2,
+            "is_batch": True,
+        }
+        assert yfinance_router._typed_job_context(job=invalid_job) == {"attempt": None}
 
     def test_parse_price_ipc_with_secure_router(
         self, yfinance_router: YFinanceRouter, yf_price_df: pd.DataFrame
