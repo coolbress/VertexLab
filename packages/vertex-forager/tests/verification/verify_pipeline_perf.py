@@ -76,7 +76,7 @@ def _run_mocked_price_collection(
             raise ValueError(f"Unexpected ticker requested in mocked yfinance.Ticker.history: {self._symbol}")
 
     with patch(
-        "vertex_forager.providers.yfinance.fetcher._http_mod.yf",
+        "vertex_forager.core.http.yf",
         new=SimpleNamespace(download=_mock_download, Ticker=_MockTicker),
     ):
         if warmup_db_path.exists():

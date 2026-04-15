@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
-from datetime import date, datetime
 from enum import Enum
+from importlib import import_module
 from typing import Any, Literal
 
-import polars as pl
 import psutil
-from pydantic import BaseModel, Field, ValidationInfo, field_serializer, field_validator, model_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
 from vertex_forager.constants import (
     PACKET_SIZE_EST_BYTES,
@@ -18,9 +16,6 @@ from vertex_forager.constants import (
     QUEUE_TARGET_RAM_RATIO,
 )
 from vertex_forager.core.types import JSONValue  # Pydantic v2: used in field types at runtime
-from vertex_forager.exceptions import RunError
-
-_RUNTIME_TYPE_REFERENCES = (Mapping, date, datetime, pl.DataFrame, JSONValue)
 
 
 class RetryConfig(BaseModel):
@@ -237,44 +232,11 @@ class RequestSpec(BaseModel):
         return v
 
 
-class FetchJob(BaseModel):
-    """Unit of work for the fetch pipeline.
-
-    Attributes:
-        provider (str): Data provider name (e.g., ``'sharadar'``).
-        dataset (str): Dataset identifier (e.g., ``'SEP'``, ``'SF1'``).
-        symbol (str | None): Target symbol or ticker if applicable (default: None).
-        spec (RequestSpec): HTTP request specification details.
-        context (Mapping[str, JSONValue]): Additional context for job execution and tracing (default: empty dict).
-    """
-
-    provider: str
-    dataset: str
-    symbol: str | None = None
-    spec: RequestSpec
-    context: Mapping[str, JSONValue] = Field(default_factory=dict)
-
-
-class FramePacket(BaseModel):
-    """Polars frame packet passed from provider to sink.
-
-    Attributes:
-        provider (str): Data provider name.
-        table (str): Target table name for storage.
-        frame (pl.DataFrame): Polars DataFrame containing the data.
-        observed_at (datetime): Timestamp when the data was observed/fetched.
-        partition_date (date | None): Optional date for partitioning logic (default: None).
-        context (Mapping[str, JSONValue]): Metadata context passed along with the data (default: empty dict).
-    """
-
-    provider: str
-    table: str
-    frame: pl.DataFrame
-    observed_at: datetime
-    partition_date: date | None = None
-    context: Mapping[str, JSONValue] = Field(default_factory=dict)
-
-    model_config = {"arbitrary_types_allowed": True}
+_domain = import_module("vertex_forager.core.domain")
+FetchJob = _domain.FetchJob
+FramePacket = _domain.FramePacket
+ParseResult = _domain.ParseResult
+RunResult = _domain.RunResult
 
 
 class ResolvedClientConfig(BaseModel):
@@ -321,93 +283,6 @@ class ResolvedClientConfig(BaseModel):
             raise ValueError("quality_check must be either 'warn' or 'error'")
 
 
-class RunResult(BaseModel):
-    """Result summary for a pipeline run.
-
-    Attributes:
-        provider (str): Data provider name.
-        run_id (str | None): Unique identifier for the run (default: None).
-        dataset (str | None): Dataset name for the run (default: None).
-        started_at (float | None): Timestamp when the run started (default: None).
-        finished_at (float | None): Timestamp when the run finished (default: None).
-        duration_s (float | None): Duration of the run in seconds (default: None).
-        coverage_pct (float | None): Coverage percentage for the run (default: None).
-        data (pl.DataFrame | None): In-memory collected payload for non-persisted runs.
-        tables (dict[str, int]): Dictionary mapping table names to row counts (default: empty dict).
-        errors (list[RunError]): List of structured error information (default: empty list).
-        dlq_pending (dict[str, list[FramePacket]]): Packets preserved for post-mortem/dead-letter
-            processing when DLQ spool/dispatch fails. Items are appended by writer/rescue
-            logic upon spool errors and can be consumed by operator recovery flows.
-        dlq_counts (dict[str, dict[str, int]]): Per-table counts for rescued and remaining packets
-            when DLQ is disabled or spooling occurs. Always populated regardless of metrics settings.
-        quality_violations (dict[str, int]): Dictionary mapping table names to quality violation counts
-            (default: empty dict).
-    """
-
-    provider: str
-    run_id: str | None = Field(default=None)
-    dataset: str | None = Field(default=None)
-    started_at: float | None = Field(default=None)
-    finished_at: float | None = Field(default=None)
-    duration_s: float | None = Field(default=None)
-    coverage_pct: float | None = Field(default=None)
-    tables: dict[str, int] = Field(default_factory=dict)
-    errors: list[RunError] = Field(default_factory=list)
-    data: pl.DataFrame | None = Field(default=None)
-    metrics_counters: dict[str, int] = Field(default_factory=dict, exclude=True)
-    metrics_histograms: dict[str, list[float]] = Field(default_factory=dict, exclude=True)
-    metrics_summary: dict[str, float] = Field(default_factory=dict)
-    dlq_pending: dict[str, list[FramePacket]] = Field(
-        default_factory=dict,
-        exclude=True,
-        description="Packets preserved per table for post-mortem DLQ handling when spool/dispatch fails",
-    )
-    dlq_counts: dict[str, dict[str, int]] = Field(
-        default_factory=dict,
-        description="Per-table DLQ counts: {'rescued': int, 'remaining': int}",
-    )
-    quality_violations: dict[str, int] = Field(
-        default_factory=dict,
-        description="Per-table quality violation counts",
-    )
-
-    model_config = {"arbitrary_types_allowed": True}
-
-    @field_validator("errors", mode="before")
-    @classmethod
-    def _coerce_string_errors(cls, v: Any) -> Any:
-        if not isinstance(v, (list, tuple)):
-            return v
-        result: list[Any] = []
-        for item in v:
-            if isinstance(item, str):
-                result.append(
-                    RunError(
-                        provider="",
-                        dataset="",
-                        symbol="",
-                        exc_type="builtins.str",
-                        message=item,
-                        retryable=False,
-                    )
-                )
-            else:
-                result.append(item)
-        return result
-
-    @field_serializer("data", when_used="json")
-    def _serialize_data_for_json(self, value: pl.DataFrame | None) -> list[dict[str, Any]] | None:
-        if value is None:
-            return None
-        return value.to_dicts()
-
-    def add_rows(self, *, table: str, rows: int) -> None:
-        self.tables[table] = self.tables.get(table, 0) + rows
-
-    def add_quality_violations(self, *, table: str, count: int) -> None:
-        self.quality_violations[table] = self.quality_violations.get(table, 0) + count
-
-
 class ProgressSnapshot(BaseModel):
     jobs_done: int
     jobs_total: int | None
@@ -425,19 +300,6 @@ class ProgressSnapshot(BaseModel):
     memory_mb: float
     cpu_pct: float
     finished: bool = False
-
-
-@dataclass(frozen=True, slots=True)
-class ParseResult:
-    """Result of parsing a response.
-
-    Attributes:
-        packets (list[FramePacket]): List of extracted FramePackets containing data.
-        next_jobs (list[FetchJob]): List of subsequent FetchJobs to be executed.
-    """
-
-    packets: list[FramePacket]
-    next_jobs: list[FetchJob]
 
 
 __all__ = [

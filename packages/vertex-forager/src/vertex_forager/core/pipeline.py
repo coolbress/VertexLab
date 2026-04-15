@@ -475,7 +475,7 @@ class VertexForager:
 
     @staticmethod
     def _job_signature(job: FetchJob) -> str:
-        return job.model_dump_json()
+        return cast(str, job.model_dump_json())
 
     def _remove_pending_job(self, job: FetchJob) -> None:
         signature = self._job_signature(job)
@@ -980,10 +980,7 @@ class VertexForager:
             cache_dir=get_cache_dir(),
             logger=logger,
         )
-        return (
-            cast("asyncio.PriorityQueue[tuple[int, int, FetchJob | None]]", req_q),
-            cast("asyncio.Queue[FramePacket | None]", pkt_q),
-        )
+        return req_q, pkt_q
 
     def _init_metrics_for_run(self) -> None:
         counters, hists, summary = init_metrics_for_run_impl()

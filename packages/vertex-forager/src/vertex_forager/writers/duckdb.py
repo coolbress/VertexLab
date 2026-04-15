@@ -23,7 +23,7 @@ import functools
 import logging
 from string import Template
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import duckdb
 import polars as pl
@@ -244,26 +244,26 @@ class DuckDBWriter(BaseWriter):
     def _merge_table_frames(self, table_name: str, entries: list[tuple[int, FramePacket]]) -> pl.DataFrame:
         frames = [packet.frame for _, packet in entries]
         try:
-            return pl.concat(frames, how="vertical")
+            return cast(pl.DataFrame, pl.concat(frames, how="vertical"))
         except pl.exceptions.PolarsError as e:
             schema = self._get_table_schema(table_name)
             is_flexible = bool(schema and schema.flexible_schema)
             if not is_flexible:
                 raise
             self._logger.warning(LOG_SCHEMA_MISMATCH.format(prefix=WR_LOG_PREFIX, table=table_name, error=e))
-            return pl.concat(frames, how="diagonal")
+            return cast(pl.DataFrame, pl.concat(frames, how="diagonal"))
 
     def _merge_table_frames_with_source(self, table_name: str, entries: list[tuple[int, FramePacket]]) -> pl.DataFrame:
         frames = [packet.frame.with_columns(pl.lit(idx).alias("__vf_source_idx")) for idx, packet in entries]
         try:
-            return pl.concat(frames, how="vertical")
+            return cast(pl.DataFrame, pl.concat(frames, how="vertical"))
         except pl.exceptions.PolarsError as e:
             schema = self._get_table_schema(table_name)
             is_flexible = bool(schema and schema.flexible_schema)
             if not is_flexible:
                 raise
             self._logger.warning(LOG_SCHEMA_MISMATCH.format(prefix=WR_LOG_PREFIX, table=table_name, error=e))
-            return pl.concat(frames, how="diagonal")
+            return cast(pl.DataFrame, pl.concat(frames, how="diagonal"))
 
     def _table_exists(self, conn: duckdb.DuckDBPyConnection, table_name: str) -> bool:
         row = conn.execute(
