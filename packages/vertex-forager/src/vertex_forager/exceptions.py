@@ -9,13 +9,6 @@ try:
 except ImportError:
     HAS_HTTPX = False
 
-try:
-    import requests
-
-    HAS_REQUESTS = True
-except ImportError:
-    HAS_REQUESTS = False
-
 from vertex_forager.core.retry_policy import DEFAULT_RETRY_STATUS_CODES, is_retryable_status_code
 
 
@@ -172,7 +165,9 @@ class RunError:
     ) -> RunError:
         exc_type = f"{exc.__class__.__module__}.{exc.__class__.__name__}"
         message = str(exc)
-        retryable = any(cls._is_retryable_error(candidate) for candidate in cls._iter_exception_chain(exc))
+        retryable = any(
+            cls._is_retryable_error(candidate, provider=provider) for candidate in cls._iter_exception_chain(exc)
+        )
         return cls(
             provider=provider,
             dataset=dataset,
@@ -195,7 +190,7 @@ class RunError:
         return chain
 
     @staticmethod
-    def _is_retryable_error(exc: Exception) -> bool:
+    def _is_retryable_error(exc: Exception, *, provider: str) -> bool:
         if hasattr(exc, "response") and exc.response is not None and hasattr(exc.response, "status_code"):
             status_code = exc.response.status_code
             if is_retryable_status_code(status_code, DEFAULT_RETRY_STATUS_CODES):
@@ -210,15 +205,11 @@ class RunError:
             return True
         if HAS_HTTPX and isinstance(exc, httpx.TransportError):
             return True
-        return HAS_REQUESTS and isinstance(
-            exc,
-            (
-                requests.exceptions.ConnectionError,
-                requests.exceptions.Timeout,
-                requests.exceptions.ConnectTimeout,
-                requests.exceptions.ReadTimeout,
-            ),
-        )
+        if provider != "yfinance":
+            return False
+        from vertex_forager.providers.yfinance.errors import is_retryable_yfinance_error
+
+        return is_retryable_yfinance_error(exc)
 
 
 __all__ = [

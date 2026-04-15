@@ -4,6 +4,8 @@ import json
 import os
 from typing import Any
 
+from vertex_forager.providers.catalog import get_provider_constants_preview
+
 
 def _global_constants_map(constants_mod: Any) -> dict[str, object]:
     return {
@@ -52,10 +54,9 @@ def _collect_env_overrides() -> dict[str, object]:
 
 def build_constants_preview(section: str) -> dict[str, dict[str, object]]:
     from vertex_forager import constants as global_constants
-    from vertex_forager.providers.sharadar import constants as sh_constants
-    from vertex_forager.providers.yfinance import constants as yf_constants
 
     preview: dict[str, dict[str, object]] = {}
+    provider_preview: dict[str, dict[str, object]] | None = None
     if section in ("global", "all"):
         preview["global"] = _global_constants_map(constants_mod=global_constants)
     if section in ("flow", "all"):
@@ -63,25 +64,13 @@ def build_constants_preview(section: str) -> dict[str, dict[str, object]]:
     if section in ("queue", "all"):
         preview["queue"] = _queue_constants_map(constants_mod=global_constants)
     if section in ("yfinance", "all"):
-        preview["yfinance"] = {
-            "PRICE_BATCH_SIZE": yf_constants.PRICE_BATCH_SIZE,
-            "PRICE_BATCH_MAX": yf_constants.PRICE_BATCH_MAX,
-            "THREADS_THRESHOLD": yf_constants.THREADS_THRESHOLD,
-            "PRICE_BATCH_SIZE_KEY": yf_constants.PRICE_BATCH_SIZE_KEY,
-            "DEFAULT_INTERVAL": yf_constants.DEFAULT_INTERVAL,
-            "DEFAULT_PRICE_PERIOD": yf_constants.DEFAULT_PRICE_PERIOD,
-        }
+        if provider_preview is None:
+            provider_preview = get_provider_constants_preview()
+        preview["yfinance"] = provider_preview["yfinance"]
     if section in ("sharadar", "all"):
-        preview["sharadar"] = {
-            "MAX_ROWS_PER_REQUEST": sh_constants.MAX_ROWS_PER_REQUEST,
-            "DEFAULT_BATCH_SIZE": sh_constants.DEFAULT_BATCH_SIZE,
-            "MIN_BATCH_SIZE": sh_constants.MIN_BATCH_SIZE,
-            "TRADING_DAYS_RATIO": sh_constants.TRADING_DAYS_RATIO,
-            "QUARTERLY_DAYS_RATIO": sh_constants.QUARTERLY_DAYS_RATIO,
-            "PAGINATION_META_KEY": sh_constants.PAGINATION_META_KEY,
-            "PAGINATION_CURSOR_PARAM": sh_constants.PAGINATION_CURSOR_PARAM,
-            "MAX_PAGES": sh_constants.MAX_PAGES,
-        }
+        if provider_preview is None:
+            provider_preview = get_provider_constants_preview()
+        preview["sharadar"] = provider_preview["sharadar"]
     if section in ("writers", "all"):
         preview["writers"] = {
             "WRITER_DUCKDB_MAX_WORKERS": global_constants.WRITER_DUCKDB_MAX_WORKERS,
