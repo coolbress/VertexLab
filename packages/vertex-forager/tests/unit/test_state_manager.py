@@ -251,5 +251,14 @@ def test_inmemory_writer_skips_checkpoint_persistence(tmp_path: Path, monkeypatc
         controller=FlowController(requests_per_minute=60, concurrency_limit=1),
     )
     engine._requested_symbols = ["AAPL"]
-    engine._update_checkpoint("run-1", "stub", "price", "stub_price", {"AAPL"}, set(), [], "completed")
+    engine._checkpoint_tracker.save(
+        run_id="run-1",
+        provider="stub",
+        dataset="price",
+        table_name="stub_price",
+        completed_symbols={"AAPL"},
+        failed_symbols=set(),
+        pending_jobs=[],
+        status="completed",
+    )
     assert not get_state_db_path().exists()
