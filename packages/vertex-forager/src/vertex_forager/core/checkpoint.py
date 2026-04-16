@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from contextlib import closing
+from collections.abc import Iterator
+from contextlib import closing, contextmanager
 import json
 import os
 from pathlib import Path
@@ -66,6 +67,20 @@ def _connect_state_db() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     _initialize_schema(conn)
     return conn
+
+
+def open_state_db() -> sqlite3.Connection:
+    """Open a reusable SQLite state connection with schema initialized once."""
+    return _connect_state_db()
+
+
+@contextmanager
+def _use_state_db(conn: sqlite3.Connection | None = None) -> Iterator[sqlite3.Connection]:
+    if conn is not None:
+        yield conn
+        return
+    with closing(_connect_state_db()) as local_conn:
+        yield local_conn
 
 
 def _initialize_schema(conn: sqlite3.Connection) -> None:
@@ -362,15 +377,15 @@ def _migrate_run_history_table(conn: sqlite3.Connection) -> None:
     conn.execute("RELEASE SAVEPOINT migrate_run_history")
 
 
-def save_checkpoint(checkpoint: Checkpoint) -> None:
+def save_checkpoint(checkpoint: Checkpoint, *, conn: sqlite3.Connection | None = None) -> None:
     """Save checkpoint state to SQLite.
 
     Args:
         checkpoint: Checkpoint data to save.
     """
     now = time.time()
-    with closing(_connect_state_db()) as conn:
-        conn.execute(
+    with _use_state_db(conn) as db_conn:  # type: sqlite3.Connection
+        db_conn.execute(
             """
             INSERT INTO checkpoints (
                 run_id,
@@ -411,10 +426,10 @@ def save_checkpoint(checkpoint: Checkpoint) -> None:
                 now,
             ),
         )
-        conn.commit()
+        db_conn.commit()
 
 
-def load_checkpoint(run_id: str) -> Checkpoint | None:
+def load_checkpoint(run_id: str, *, conn: sqlite3.Connection | None = None) -> Checkpoint | None:
     """Load checkpoint state from SQLite.
 
     Args:
@@ -423,8 +438,8 @@ def load_checkpoint(run_id: str) -> Checkpoint | None:
     Returns:
         Checkpoint if present and valid, otherwise None.
     """
-    with closing(_connect_state_db()) as conn:
-        row = conn.execute(
+    with _use_state_db(conn) as db_conn:  # type: sqlite3.Connection
+        row = db_conn.execute(
             """
             SELECT
                 run_id,
@@ -468,6 +483,7 @@ def find_latest_checkpoint(
     dataset: str | None = None,
     *,
     table_name: str | None = None,
+    conn: sqlite3.Connection | None = None,
 ) -> Checkpoint | None:
     """Find the latest checkpoint by table name or by provider and dataset."""
     query = """
@@ -485,8 +501,8 @@ def find_latest_checkpoint(
     else:
         raise ValueError("find_latest_checkpoint requires table_name or provider+dataset")
     query += " ORDER BY updated_at DESC, rowid DESC LIMIT 1"
-    with closing(_connect_state_db()) as conn:
-        row = conn.execute(query, tuple(params)).fetchone()
+    with _use_state_db(conn) as db_conn:  # type: sqlite3.Connection
+        row = db_conn.execute(query, tuple(params)).fetchone()
     if row is None:
         return None
     try:
@@ -671,7 +687,7 @@ def delete_completed_checkpoints_before(before_ts: float) -> int:
         return int(cursor.rowcount)
 
 
-def delete_checkpoints(*, table_name: str | None = None) -> int:
+def delete_checkpoints(*, table_name: str | None = None, conn: sqlite3.Connection | None = None) -> int:
     """Delete checkpoints scoped to an optional table name."""
     query = "DELETE FROM checkpoints"
     clauses: list[str] = []
@@ -681,9 +697,9 @@ def delete_checkpoints(*, table_name: str | None = None) -> int:
         params.append(table_name)
     if clauses:
         query += " WHERE " + " AND ".join(clauses)
-    with closing(_connect_state_db()) as conn:
-        cursor = conn.execute(query, tuple(params))
-        conn.commit()
+    with _use_state_db(conn) as db_conn:  # type: sqlite3.Connection
+        cursor = db_conn.execute(query, tuple(params))
+        db_conn.commit()
         return int(cursor.rowcount)
 
 
