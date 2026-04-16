@@ -1,7 +1,9 @@
+from datetime import datetime, timezone
 import json
 import math
 import os
 from pathlib import Path
+import time
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -95,6 +97,92 @@ def _run_mocked_price_collection(
         )
 
 
+def _measure_domain_model_construction() -> dict[str, float]:
+    import polars as pl
+    from pydantic import BaseModel, ConfigDict
+
+    from vertex_forager.core.config import FetchJob, FramePacket, RequestSpec
+
+    class _PydanticFetchJob(BaseModel):
+        provider: str
+        dataset: str
+        symbol: str | None = None
+        spec: RequestSpec
+        context: dict[str, object] = {}
+
+    class _PydanticFramePacket(BaseModel):
+        provider: str
+        table: str
+        frame: pl.DataFrame
+        observed_at: object
+        partition_date: object = None
+        context: dict[str, object] = {}
+
+        model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    request_spec = RequestSpec(url="https://example.test", params={"page": 1, "symbols": ["AAPL", "MSFT"]})
+    frame = pl.DataFrame({"ticker": ["AAPL"], "close": [181.2]})
+    observed_at = datetime.now(timezone.utc)
+    iterations = 20_000
+
+    start = time.perf_counter()
+    for _ in range(iterations):
+        FetchJob(
+            provider="yfinance",
+            dataset="price",
+            symbol="AAPL",
+            spec=request_spec,
+            context={"attempt": 1, "trace_id": "trace-1"},
+        )
+    fetch_job_current_s = time.perf_counter() - start
+
+    start = time.perf_counter()
+    for _ in range(iterations):
+        _PydanticFetchJob(
+            provider="yfinance",
+            dataset="price",
+            symbol="AAPL",
+            spec=request_spec,
+            context={"attempt": 1, "trace_id": "trace-1"},
+        )
+    fetch_job_pydantic_s = time.perf_counter() - start
+
+    start = time.perf_counter()
+    for _ in range(iterations):
+        FramePacket(
+            provider="yfinance",
+            table="yfinance_price",
+            frame=frame,
+            observed_at=observed_at,
+            context={"ticker": "AAPL"},
+        )
+    frame_packet_current_s = time.perf_counter() - start
+
+    start = time.perf_counter()
+    for _ in range(iterations):
+        _PydanticFramePacket(
+            provider="yfinance",
+            table="yfinance_price",
+            frame=frame,
+            observed_at=observed_at,
+            context={"ticker": "AAPL"},
+        )
+    frame_packet_pydantic_s = time.perf_counter() - start
+
+    return {
+        "iterations": float(iterations),
+        "fetch_job_current_avg_us": (fetch_job_current_s / iterations) * 1_000_000.0,
+        "fetch_job_pydantic_avg_us": (fetch_job_pydantic_s / iterations) * 1_000_000.0,
+        "fetch_job_speedup_x": fetch_job_pydantic_s / fetch_job_current_s if fetch_job_current_s > 0 else 0.0,
+        "frame_packet_current_avg_us": (frame_packet_current_s / iterations) * 1_000_000.0,
+        "frame_packet_pydantic_avg_us": (frame_packet_pydantic_s / iterations) * 1_000_000.0,
+        "frame_packet_speedup_x": frame_packet_pydantic_s / frame_packet_current_s
+        if frame_packet_current_s > 0
+        else 0.0,
+        "baseline": "local_pydantic_baseline",
+    }
+
+
 def main() -> None:
     """Verify pipeline performance for Price data.
 
@@ -145,6 +233,7 @@ def main() -> None:
     data["duration_s"] = _resolve_duration_s(run)
     data["started_at"] = getattr(run, "started_at", None)
     data["finished_at"] = getattr(run, "finished_at", None)
+    data["construction_benchmarks"] = _measure_domain_model_construction()
     metrics_path.write_text(json.dumps(data, indent=2))
     print(f"Wrote metrics: {metrics_path}")
 

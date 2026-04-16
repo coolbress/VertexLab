@@ -118,6 +118,44 @@ def test_save_and_load_checkpoint_with_pending_jobs() -> None:
         assert loaded.pending_jobs[0].spec.params["page"] == 2
 
 
+def test_fetch_job_checkpoint_round_trip_through_sqlite() -> None:
+    with (
+        tempfile.TemporaryDirectory() as tmpdir,
+        patch(
+            "vertex_forager.core.checkpoint.get_cache_dir",
+            return_value=Path(tmpdir),
+        ),
+    ):
+        job = FetchJob(
+            provider="sharadar",
+            dataset="SF1",
+            symbol="AAPL",
+            spec=RequestSpec(
+                url="https://example.com/sf1",
+                params={"page": 2, "filters": {"dimension": "ARQ"}, "symbols": ["AAPL"]},
+            ),
+            context={"attempt": 1, "trace_id": "trace-1"},
+        )
+
+        helper_round_trip = FetchJob.from_checkpoint_dict(job.to_checkpoint_dict())
+        assert helper_round_trip == job
+        assert helper_round_trip.signature == job.signature
+
+        checkpoint = Checkpoint(
+            run_id="job-roundtrip",
+            provider="sharadar",
+            dataset="SF1",
+            table_name="sharadar_sf1",
+            pending_jobs=[job],
+        )
+        save_checkpoint(checkpoint)
+
+        loaded = load_checkpoint("job-roundtrip")
+        assert loaded is not None
+        assert loaded.pending_jobs == [job]
+        assert loaded.pending_jobs[0].signature == job.signature
+
+
 def test_delete_run_history_and_checkpoints_with_filters() -> None:
     with (
         tempfile.TemporaryDirectory() as tmpdir,
