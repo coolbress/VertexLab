@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import Callable, Sequence
 from contextlib import suppress
 import sqlite3
+import threading
 from typing import Literal, Protocol
 
 from vertex_forager.core.checkpoint import (
@@ -74,14 +75,18 @@ class CheckpointTracker:
         self._save_every = max(1, int(save_every))
         self._save_attempts = 0
         self._lock = asyncio.Lock()
+        self._conn_lock = threading.Lock()
         self._conn: sqlite3.Connection | None = None
 
     def _connection(self) -> sqlite3.Connection | None:
         if isinstance(self._writer, InMemoryBufferWriter):
             return None
-        if self._conn is None:
-            self._conn = open_state_db()
-        return self._conn
+        if self._conn is not None:
+            return self._conn
+        with self._conn_lock:
+            if self._conn is None:
+                self._conn = open_state_db()
+            return self._conn
 
     def find_latest(self, provider: str, dataset: str) -> Checkpoint | None:
         return find_latest_checkpoint(provider, dataset, conn=self._connection())
@@ -162,11 +167,13 @@ class CheckpointTracker:
         return delete_checkpoints(table_name=table_name, conn=conn)
 
     def close(self) -> None:
-        if self._conn is None:
+        with self._conn_lock:
+            conn = self._conn
+            self._conn = None
+        if conn is None:
             return
         with suppress(Exception):
-            self._conn.close()
-        self._conn = None
+            conn.close()
 
 
 __all__ = ["CheckpointTracker", "PendingJobRegistry"]

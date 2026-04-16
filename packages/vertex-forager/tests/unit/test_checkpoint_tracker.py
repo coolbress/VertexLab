@@ -62,6 +62,7 @@ def test_checkpoint_tracker_frequency_policy_and_clear() -> None:
     with (
         patch("vertex_forager.core.runtime_state.save_checkpoint", side_effect=_record_save),
         patch("vertex_forager.core.runtime_state.delete_checkpoints", return_value=3) as delete_mock,
+        patch("vertex_forager.core.runtime_state.open_state_db", return_value=object()),
     ):
         tracker = CheckpointTracker(
             writer=object(),
