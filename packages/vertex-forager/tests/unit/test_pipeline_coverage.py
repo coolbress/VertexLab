@@ -44,6 +44,10 @@ from vertex_forager.core.scheduler import (
 # ─── Stubs ──────────────────────────────────────────────────────────────
 
 
+def _pending_job_map(*jobs: FetchJob) -> dict[str, FetchJob]:
+    return {job.signature: job for job in jobs}
+
+
 class _StubClient:
     async def run_async(self, method: str, url: str, **kwargs: Any) -> Any:
         class R:
@@ -1233,7 +1237,7 @@ async def test_initialize_run_state_preserves_flat_pending_jobs_on_resume(
 
     assert run_id == "rid"
     assert completed_symbols == set()
-    assert engine._pending_jobs == [dataset_job, symbol_job]
+    assert list(engine._pending_jobs.values()) == [dataset_job, symbol_job]
 
 
 @pytest.mark.asyncio
@@ -1262,7 +1266,7 @@ async def test_record_worker_symbol_state_persists_pending_pagination_jobs(
 
     assert "AAPL" not in engine._completed_symbols
     assert "AAPL" not in engine._failed_symbols
-    assert engine._pending_jobs[0].spec.params["page"] == 2
+    assert next(iter(engine._pending_jobs.values())).spec.params["page"] == 2
 
 
 @pytest.mark.asyncio
@@ -1294,7 +1298,7 @@ async def test_record_worker_symbol_state_merges_next_jobs_with_existing_pending
         symbol=None,
         spec=RequestSpec(url="https://x", params={"cursor": "next"}),
     )
-    engine._pending_jobs = [current_job, existing_job]
+    engine._pending_jobs = _pending_job_map(current_job, existing_job)
     parse_result = ParseResult(packets=[], next_jobs=[next_job_symbol, next_job_dataset])
 
     await engine._record_worker_symbol_state(
@@ -1303,7 +1307,7 @@ async def test_record_worker_symbol_state_merges_next_jobs_with_existing_pending
         parse_result=parse_result,
     )
 
-    assert engine._pending_jobs == [existing_job, next_job_symbol, next_job_dataset]
+    assert list(engine._pending_jobs.values()) == [existing_job, next_job_symbol, next_job_dataset]
 
 
 @pytest.mark.asyncio
@@ -1322,7 +1326,7 @@ async def test_record_worker_symbol_state_keeps_pending_jobs_on_failure(
         symbol="AAPL",
         spec=RequestSpec(url="https://x", params={"page": 2}),
     )
-    engine._pending_jobs = [pending_job]
+    engine._pending_jobs = _pending_job_map(pending_job)
     engine._completed_symbols = {"AAPL"}
 
     await engine._record_worker_symbol_state(
@@ -1333,7 +1337,7 @@ async def test_record_worker_symbol_state_keeps_pending_jobs_on_failure(
 
     assert "AAPL" not in engine._completed_symbols
     assert "AAPL" in engine._failed_symbols
-    assert engine._pending_jobs[0].spec.params["page"] == 2
+    assert next(iter(engine._pending_jobs.values())).spec.params["page"] == 2
 
 
 @pytest.mark.asyncio
@@ -1363,7 +1367,7 @@ async def test_record_worker_symbol_state_retries_current_job_after_emit_failure
 
     assert "AAPL" not in engine._completed_symbols
     assert "AAPL" in engine._failed_symbols
-    assert engine._pending_jobs == [current_job]
+    assert list(engine._pending_jobs.values()) == [current_job]
 
 
 @pytest.mark.asyncio
@@ -1413,7 +1417,7 @@ async def test_finalize_run_keeps_checkpoint_resumable_when_failures_remain(
     engine, _ = _make_engine(router)
     engine._completed_symbols = {"AAPL"}
     engine._failed_symbols = {"MSFT"}
-    engine._pending_jobs = []
+    engine._pending_jobs = {}
     engine._checkpoint_lock = asyncio.Lock()
     root = tmp_path / "vf-root"
 

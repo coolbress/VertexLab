@@ -13,10 +13,10 @@ from typing import TYPE_CHECKING, Literal, cast
 from pydantic import BaseModel, Field, ValidationError
 
 if TYPE_CHECKING:
-    from vertex_forager.core.config import RunResult
+    from vertex_forager.core.domain import RunResult
     from vertex_forager.core.types import JSONValue
 
-from vertex_forager.core.config import FetchJob
+from vertex_forager.core.domain import FetchJob
 from vertex_forager.exceptions import RunError
 
 
@@ -404,7 +404,7 @@ def save_checkpoint(checkpoint: Checkpoint) -> None:
                 checkpoint.table_name,
                 _json_dumps(checkpoint.completed),
                 _json_dumps(checkpoint.failed),
-                _json_dumps([job.model_dump(mode="json") for job in checkpoint.pending_jobs]),
+                _json_dumps([job.to_checkpoint_dict() for job in checkpoint.pending_jobs]),
                 _json_dumps(checkpoint.meta),
                 checkpoint.status,
                 now,
@@ -452,7 +452,7 @@ def load_checkpoint(run_id: str) -> Checkpoint | None:
             completed=list(cast("list[str]", _json_loads(str(row["completed_json"]), []))),
             failed=list(cast("list[str]", _json_loads(str(row["failed_json"]), []))),
             pending_jobs=[
-                FetchJob.model_validate(item)
+                FetchJob.from_checkpoint_dict(item)
                 for item in cast("list[object]", _json_loads(str(row["pending_jobs_json"]), []))
                 if isinstance(item, dict)
             ],
@@ -498,7 +498,7 @@ def find_latest_checkpoint(
             completed=list(cast("list[str]", _json_loads(str(row["completed_json"]), []))),
             failed=list(cast("list[str]", _json_loads(str(row["failed_json"]), []))),
             pending_jobs=[
-                FetchJob.model_validate(item)
+                FetchJob.from_checkpoint_dict(item)
                 for item in cast("list[object]", _json_loads(str(row["pending_jobs_json"]), []))
                 if isinstance(item, dict)
             ],
