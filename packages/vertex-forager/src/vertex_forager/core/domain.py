@@ -96,27 +96,9 @@ class FramePacket:
     observed_at: datetime
     partition_date: date | None = None
     context: Mapping[str, JSONValue] = field(default_factory=dict)
-    _hash_key: int = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "context", dict(self.context))
-        object.__setattr__(
-            self,
-            "_hash_key",
-            hash(
-                (
-                    self.provider,
-                    self.table,
-                    self.observed_at,
-                    self.partition_date,
-                    json.dumps(dict(self.context), sort_keys=True, separators=(",", ":"), default=str),
-                    id(self.frame),
-                )
-            ),
-        )
-
-    def __hash__(self) -> int:
-        return self._hash_key
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, FramePacket):
