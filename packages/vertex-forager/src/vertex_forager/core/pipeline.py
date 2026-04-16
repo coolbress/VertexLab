@@ -53,11 +53,12 @@ from vertex_forager.core.checkpoint import (
     save_checkpoint,
     save_run_history,
 )
-from vertex_forager.core.config import FetchJob, ProgressSnapshot, RunResult
+from vertex_forager.core.config import ProgressSnapshot
 from vertex_forager.core.dlq import (
     build_writer_error_summary,
     spool_to_dlq_and_rescue,
 )
+from vertex_forager.core.domain import FetchJob, FramePacket, ParseResult, RunResult
 from vertex_forager.core.lifecycle import RunFinalizer
 from vertex_forager.core.lifecycle import create_run_queues as create_run_queues_impl
 from vertex_forager.core.lifecycle import create_run_result as create_run_result_impl
@@ -127,7 +128,7 @@ from vertex_forager.writers.memory import InMemoryBufferWriter
 if TYPE_CHECKING:
     import polars as pl
 
-    from vertex_forager.core.config import FramePacket, ParseResult, ResolvedClientConfig
+    from vertex_forager.core.config import ResolvedClientConfig
     from vertex_forager.core.contracts import BaseMapper, IWriter
     from vertex_forager.core.controller import FlowController
     from vertex_forager.core.http import HttpExecutor
@@ -394,7 +395,7 @@ class VertexForager:
         # For checkpoint tracking
         self._completed_symbols: set[str] = set()
         self._failed_symbols: set[str] = set()
-        self._pending_jobs: list[FetchJob] = []
+        self._pending_jobs: dict[str, FetchJob] = {}
         self._checkpoint_lock = asyncio.Lock()
 
         pickle_compat_datasets = getattr(self._router, "pickle_compat_datasets", ())
@@ -475,22 +476,14 @@ class VertexForager:
 
     @staticmethod
     def _job_signature(job: FetchJob) -> str:
-        return job.model_dump_json()
+        return job.signature
 
     def _remove_pending_job(self, job: FetchJob) -> None:
-        signature = self._job_signature(job)
-        self._pending_jobs = [
-            pending_job for pending_job in self._pending_jobs if self._job_signature(pending_job) != signature
-        ]
+        self._pending_jobs.pop(self._job_signature(job), None)
 
     def _merge_pending_jobs(self, jobs: Sequence[FetchJob]) -> None:
-        existing = {self._job_signature(job) for job in self._pending_jobs}
         for job in jobs:
-            signature = self._job_signature(job)
-            if signature in existing:
-                continue
-            self._pending_jobs.append(job)
-            existing.add(signature)
+            self._pending_jobs.setdefault(self._job_signature(job), job)
 
     @contextmanager
     def _span(self, name: str, **attributes: object) -> Iterator[None]:
@@ -568,14 +561,8 @@ class VertexForager:
 
     def _snapshot_pending_jobs(self) -> list[FetchJob]:
         req_q = cast("asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] | None", getattr(self, "_req_q", None))
-        jobs: list[FetchJob] = []
-        seen: set[str] = set()
-        for job in self._pending_jobs:
-            signature = self._job_signature(job)
-            if signature in seen:
-                continue
-            seen.add(signature)
-            jobs.append(job)
+        jobs = list(self._pending_jobs.values())
+        seen: set[str] = set(self._pending_jobs)
         if req_q is None:
             return jobs
         for _, _, queued_job in list(getattr(req_q, "_queue", [])):
@@ -836,7 +823,7 @@ class VertexForager:
                 symbols=symbols,
                 order_counter=order_counter,
                 completed_symbols=completed_symbols,
-                pending_jobs=self._pending_jobs,
+                pending_jobs=tuple(self._pending_jobs.values()),
                 **kwargs,
             ),
             name="vertex-forager:producer",
@@ -961,7 +948,7 @@ class VertexForager:
         self._run_id = run_id
         self._completed_symbols = set(completed_symbols)
         self._failed_symbols = set(failed_symbols)
-        self._pending_jobs = []
+        self._pending_jobs = {}
         if checkpoint is not None:
             self._merge_pending_jobs(checkpoint.pending_jobs)
         return run_id, completed_symbols
@@ -980,10 +967,7 @@ class VertexForager:
             cache_dir=get_cache_dir(),
             logger=logger,
         )
-        return (
-            cast("asyncio.PriorityQueue[tuple[int, int, FetchJob | None]]", req_q),
-            cast("asyncio.Queue[FramePacket | None]", pkt_q),
-        )
+        return req_q, pkt_q
 
     def _init_metrics_for_run(self) -> None:
         counters, hists, summary = init_metrics_for_run_impl()
@@ -1265,7 +1249,7 @@ class VertexForager:
             or (pending_job.symbol is None and requested_symbols is None)
             or pending_job.symbol in requested_symbols
         ]
-        pending_job_signatures = {self._job_signature(pending_job) for pending_job in filtered_pending_jobs}
+        pending_job_signatures = {pending_job.signature for pending_job in filtered_pending_jobs}
         pending_symbols = {
             pending_job.symbol for pending_job in filtered_pending_jobs if pending_job.symbol is not None
         }
@@ -1789,7 +1773,9 @@ class VertexForager:
         )
 
     async def _parse_payload(self, *, job: FetchJob, payload: bytes, worker_id: int) -> ParseResult:
-        return await parse_payload_impl(
+        return cast(
+            ParseResult,
+            await parse_payload_impl(
             job=job,
             payload=payload,
             worker_id=worker_id,
@@ -1799,6 +1785,7 @@ class VertexForager:
             observe=self._observe,
             log_structured=self._log_structured,
             logger=logger,
+            ),
         )
 
     async def _emit_packets_and_next_jobs(

@@ -17,7 +17,8 @@ Notes:
 from __future__ import annotations
 
 from vertex_forager.clients import create_client
-from vertex_forager.core.config import ProgressSnapshot, RunResult
+from vertex_forager.core.config import ProgressSnapshot
+from vertex_forager.core.domain import RunResult
 from vertex_forager.exceptions import (
     CheckpointNotFoundError,
     DataQualityError,

@@ -3,7 +3,8 @@ Core module for Vertex Forager.
 
 This module contains the fundamental components of the scraping engine:
 - `pipeline`: Main orchestration logic (`VertexForager`).
-- `config`: Configuration data structures used by the runtime (`FetchJob`, etc.).
+5:- `config`: Configuration data structures used by the runtime.
+6:- `domain`: Runtime pipeline domain objects (`FetchJob`, `FramePacket`, `RunResult`).
 - `controller`: Flow control (Concurrency & Rate Limiting).
 - `http`: Low-level HTTP execution.
 - `retry`: Retry strategies.
@@ -13,16 +14,14 @@ from typing import TYPE_CHECKING, Any
 
 from vertex_forager.core.config import (
     AdaptiveThrottleConfig,
-    FetchJob,
-    FramePacket,
     HTTPConfig,
     ProgressSnapshot,
     RetryConfig,
-    RunResult,
     SchedulerConfig,
     StorageConfig,
 )
 from vertex_forager.core.controller import FlowController
+from vertex_forager.core.domain import FetchJob, FramePacket, RunResult
 from vertex_forager.core.http import HttpExecutor
 
 from . import retry

@@ -11,8 +11,9 @@ from vertex_forager.exceptions import InputError
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from vertex_forager.core.config import ProgressSnapshot, RunResult
+    from vertex_forager.core.config import ProgressSnapshot
     from vertex_forager.core.contracts import BaseMapper, IWriter
+    from vertex_forager.core.domain import RunResult
     from vertex_forager.routers.base import BaseRouter
 
 T = TypeVar("T", bound=SharadarDataset | YFinanceDataset | str)
