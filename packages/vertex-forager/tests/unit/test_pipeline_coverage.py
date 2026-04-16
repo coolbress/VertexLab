@@ -34,6 +34,7 @@ from vertex_forager.core.config import (
 from vertex_forager.core.controller import FlowController
 from vertex_forager.core.http import HttpExecutor
 from vertex_forager.core.pipeline import VertexForager
+from vertex_forager.core.runtime_state import PendingJobRegistry
 from vertex_forager.core.scheduler import (
     FairnessState,
     SchedulerResult,
@@ -44,8 +45,8 @@ from vertex_forager.core.scheduler import (
 # ─── Stubs ──────────────────────────────────────────────────────────────
 
 
-def _pending_job_map(*jobs: FetchJob) -> dict[str, FetchJob]:
-    return {job.signature: job for job in jobs}
+def _pending_job_registry(*jobs: FetchJob) -> PendingJobRegistry:
+    return PendingJobRegistry(jobs)
 
 
 class _StubClient:
@@ -1007,7 +1008,7 @@ def test_find_latest_checkpoint_returns_most_recent_by_timestamp(
             raising=False,
         )
         save_checkpoint(Checkpoint(run_id="stub_d_200", provider="stub", dataset="d"))
-    cp = engine._find_latest_checkpoint("stub", "d")
+    cp = engine._checkpoint_tracker.find_latest("stub", "d")
     assert cp is not None
     assert cp.run_id == "stub_d_200"
 
@@ -1237,7 +1238,7 @@ async def test_initialize_run_state_preserves_flat_pending_jobs_on_resume(
 
     assert run_id == "rid"
     assert completed_symbols == set()
-    assert list(engine._pending_jobs.values()) == [dataset_job, symbol_job]
+    assert engine._pending_jobs.snapshot() == [dataset_job, symbol_job]
 
 
 @pytest.mark.asyncio
@@ -1266,7 +1267,7 @@ async def test_record_worker_symbol_state_persists_pending_pagination_jobs(
 
     assert "AAPL" not in engine._completed_symbols
     assert "AAPL" not in engine._failed_symbols
-    assert next(iter(engine._pending_jobs.values())).spec.params["page"] == 2
+    assert engine._pending_jobs.snapshot()[0].spec.params["page"] == 2
 
 
 @pytest.mark.asyncio
@@ -1298,7 +1299,7 @@ async def test_record_worker_symbol_state_merges_next_jobs_with_existing_pending
         symbol=None,
         spec=RequestSpec(url="https://x", params={"cursor": "next"}),
     )
-    engine._pending_jobs = _pending_job_map(current_job, existing_job)
+    engine._pending_jobs = _pending_job_registry(current_job, existing_job)
     parse_result = ParseResult(packets=[], next_jobs=[next_job_symbol, next_job_dataset])
 
     await engine._record_worker_symbol_state(
@@ -1307,7 +1308,7 @@ async def test_record_worker_symbol_state_merges_next_jobs_with_existing_pending
         parse_result=parse_result,
     )
 
-    assert list(engine._pending_jobs.values()) == [existing_job, next_job_symbol, next_job_dataset]
+    assert engine._pending_jobs.snapshot() == [existing_job, next_job_symbol, next_job_dataset]
 
 
 @pytest.mark.asyncio
@@ -1326,7 +1327,7 @@ async def test_record_worker_symbol_state_keeps_pending_jobs_on_failure(
         symbol="AAPL",
         spec=RequestSpec(url="https://x", params={"page": 2}),
     )
-    engine._pending_jobs = _pending_job_map(pending_job)
+    engine._pending_jobs = _pending_job_registry(pending_job)
     engine._completed_symbols = {"AAPL"}
 
     await engine._record_worker_symbol_state(
@@ -1337,7 +1338,7 @@ async def test_record_worker_symbol_state_keeps_pending_jobs_on_failure(
 
     assert "AAPL" not in engine._completed_symbols
     assert "AAPL" in engine._failed_symbols
-    assert next(iter(engine._pending_jobs.values())).spec.params["page"] == 2
+    assert engine._pending_jobs.snapshot()[0].spec.params["page"] == 2
 
 
 @pytest.mark.asyncio
@@ -1367,7 +1368,7 @@ async def test_record_worker_symbol_state_retries_current_job_after_emit_failure
 
     assert "AAPL" not in engine._completed_symbols
     assert "AAPL" in engine._failed_symbols
-    assert list(engine._pending_jobs.values()) == [current_job]
+    assert engine._pending_jobs.snapshot() == [current_job]
 
 
 @pytest.mark.asyncio
@@ -1391,11 +1392,14 @@ async def test_finalize_run_metrics_sink_and_history_error_suppressed(monkeypatc
     async def _noop_flush(*, suppress: bool, consume: bool = True) -> None:
         return None
 
+    async def _noop_checkpoint_save(**kwargs: object) -> bool:
+        return True
+
     monkeypatch.setattr(engine, "_try_flush_once", _noop_flush, raising=True)
     monkeypatch.setattr(engine, "_merge_component_counters", lambda: None, raising=True)
     monkeypatch.setattr(engine, "_compute_summary", lambda: {"http_duration_s_p95": 1.0}, raising=True)
     monkeypatch.setattr(engine, "_emit_pipeline_summary_log", lambda **kwargs: None, raising=True)
-    monkeypatch.setattr(engine, "_update_checkpoint", lambda *args, **kwargs: None, raising=True)
+    monkeypatch.setattr(engine._checkpoint_tracker, "save_async", _noop_checkpoint_save, raising=True)
     import vertex_forager.core.pipeline as pipeline_mod
 
     def _save_run_history_fail(*args: object, **kwargs: object) -> None:
@@ -1417,7 +1421,7 @@ async def test_finalize_run_keeps_checkpoint_resumable_when_failures_remain(
     engine, _ = _make_engine(router)
     engine._completed_symbols = {"AAPL"}
     engine._failed_symbols = {"MSFT"}
-    engine._pending_jobs = {}
+    engine._pending_jobs = PendingJobRegistry()
     engine._checkpoint_lock = asyncio.Lock()
     root = tmp_path / "vf-root"
 
@@ -1429,7 +1433,7 @@ async def test_finalize_run_keeps_checkpoint_resumable_when_failures_remain(
     result = RunResult(provider="stub")
     monkeypatch.setattr(engine, "_try_flush_once", _noop_flush, raising=True)
     await engine._finalize_run(result=result, dataset="d", run_id="rid", started_monotonic=time.monotonic() - 1.0)
-    checkpoint = engine._find_latest_checkpoint("stub", "d")
+    checkpoint = engine._checkpoint_tracker.find_latest("stub", "d")
     assert checkpoint is not None
     assert checkpoint.status == "in_progress"
     assert checkpoint.failed == ["MSFT"]
