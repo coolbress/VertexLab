@@ -24,12 +24,14 @@ def _get_yfinance_client(client_config: dict[str, Any]) -> Any:
     client_kwargs = dict(client_config)
     flush_threshold_rows = client_kwargs.pop("flush_threshold_rows", None)
     if flush_threshold_rows is not None:
-        storage = dict(client_kwargs.get("storage", {}))
+        storage_cfg = client_kwargs.get("storage")
+        storage = dict(storage_cfg) if isinstance(storage_cfg, dict) else {}
         storage["flush_threshold_rows"] = flush_threshold_rows
         client_kwargs["storage"] = storage
     timeout_s = client_kwargs.pop("http_timeout_s", None)
     if timeout_s is not None:
-        limits = dict(client_kwargs.get("limits", {}))
+        limits_cfg = client_kwargs.get("limits")
+        limits = dict(limits_cfg) if isinstance(limits_cfg, dict) else {}
         limits["timeout_s"] = timeout_s
         client_kwargs["limits"] = limits
     return YFinanceClient(rate_limit=60, **client_kwargs)
@@ -233,6 +235,8 @@ def run_sweep() -> dict[str, Any]:
 
 
 def test_pipeline_sweep_collects_runs() -> None:
+    pytest.importorskip("pandas", reason=_YF_OPTIONAL_DEPS_MSG)
+    pytest.importorskip("yfinance", reason=_YF_OPTIONAL_DEPS_MSG)
     results = run_sweep()
     assert len(results["runs"]) == len(_build_combos())
     assert "yfinance_financials" in results["best"]
