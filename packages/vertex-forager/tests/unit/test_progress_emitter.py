@@ -108,3 +108,23 @@ async def test_emit_invokes_callback_and_progress_bar() -> None:
     progress_bar.set_postfix.assert_called_once()
     progress_bar.close.assert_called_once()
     logger.error.assert_not_called()
+
+
+def test_should_emit_rate_limits_non_finished_snapshots_but_allows_finished(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    proc = _Proc()
+    with patch("vertex_forager.core.progress.psutil.Process", return_value=proc):
+        emitter = ProgressEmitter()
+        emitter.reset(jobs_total=5)
+
+    fake_now = {"value": 100.0}
+    monkeypatch.setattr("vertex_forager.core.progress.time.monotonic", lambda: fake_now["value"])
+    assert emitter.should_emit(finished=False) is True
+    assert emitter._last_emit_at == 100.0
+    assert emitter.should_emit(finished=False) is False
+    fake_now["value"] = 100.05
+    assert emitter.should_emit(finished=False) is False
+    assert emitter.should_emit(finished=True) is True
+    fake_now["value"] = 100.20
+    assert emitter.should_emit(finished=False) is True
