@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from datetime import datetime
 import os
 import time
@@ -50,9 +50,9 @@ class _NoopObserver:
     def on_log(**kwargs: object) -> None:
         pass
 
-    @staticmethod
     @contextmanager
-    def span(name: str, **attributes: object) -> object:
+    def span(self, name: str, **attributes: object) -> AbstractContextManager[object]:
+        del self
         del name, attributes
         yield
 
