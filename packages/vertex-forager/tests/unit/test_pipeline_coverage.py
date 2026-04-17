@@ -879,7 +879,8 @@ async def test_fairness_prefers_req_get_when_both_waits_complete(monkeypatch: py
 
     req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
 
-    async def _immediate_pagination_wait(*, fairness_state: FairnessState) -> None:
+    async def _immediate_pagination_wait(*, fair_lock: asyncio.Lock, fairness_state: FairnessState) -> None:
+        del fair_lock, fairness_state
         return None
 
     async def _immediate_req_get(
