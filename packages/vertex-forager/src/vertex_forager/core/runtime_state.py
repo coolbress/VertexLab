@@ -2,9 +2,18 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable, Sequence
+from contextlib import suppress
+import sqlite3
+import threading
 from typing import Literal, Protocol
 
-from vertex_forager.core.checkpoint import Checkpoint, delete_checkpoints, find_latest_checkpoint, save_checkpoint
+from vertex_forager.core.checkpoint import (
+    Checkpoint,
+    delete_checkpoints,
+    find_latest_checkpoint,
+    open_state_db,
+    save_checkpoint,
+)
 from vertex_forager.core.domain import FetchJob
 from vertex_forager.writers.memory import InMemoryBufferWriter
 
@@ -66,9 +75,21 @@ class CheckpointTracker:
         self._save_every = max(1, int(save_every))
         self._save_attempts = 0
         self._lock = asyncio.Lock()
+        self._conn_lock = threading.Lock()
+        self._conn: sqlite3.Connection | None = None
+
+    def _connection(self) -> sqlite3.Connection | None:
+        if isinstance(self._writer, InMemoryBufferWriter):
+            return None
+        if self._conn is not None:
+            return self._conn
+        with self._conn_lock:
+            if self._conn is None:
+                self._conn = open_state_db()
+            return self._conn
 
     def find_latest(self, provider: str, dataset: str) -> Checkpoint | None:
-        return find_latest_checkpoint(provider, dataset)
+        return find_latest_checkpoint(provider, dataset, conn=self._connection())
 
     def save(
         self,
@@ -83,7 +104,8 @@ class CheckpointTracker:
         status: Literal["in_progress", "completed"] = "in_progress",
         force: bool = False,
     ) -> bool:
-        if isinstance(self._writer, InMemoryBufferWriter):
+        conn = self._connection()
+        if conn is None:
             return False
         if not completed_symbols and not failed_symbols and not pending_jobs:
             return False
@@ -103,7 +125,7 @@ class CheckpointTracker:
             status=status,
         )
         try:
-            save_checkpoint(checkpoint)
+            save_checkpoint(checkpoint, conn=conn)
             self._logger.debug("PIPELINE: Checkpoint updated for run %s", run_id)
             return True
         except Exception as exc:
@@ -139,9 +161,19 @@ class CheckpointTracker:
 
     def clear(self, *, table_name: str | None = None) -> int:
         self._save_attempts = 0
-        if isinstance(self._writer, InMemoryBufferWriter):
+        conn = self._connection()
+        if conn is None:
             return 0
-        return delete_checkpoints(table_name=table_name)
+        return delete_checkpoints(table_name=table_name, conn=conn)
+
+    def close(self) -> None:
+        with self._conn_lock:
+            conn = self._conn
+            self._conn = None
+        if conn is None:
+            return
+        with suppress(Exception):
+            conn.close()
 
 
 __all__ = ["CheckpointTracker", "PendingJobRegistry"]

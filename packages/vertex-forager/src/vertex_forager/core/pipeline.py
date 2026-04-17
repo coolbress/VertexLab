@@ -995,6 +995,8 @@ class VertexForager:
             logger.debug("PIPELINE: Run history saved for run %s", run_id)
         except Exception as e:
             logger.warning("PIPELINE: Failed to save run history: %s", e)
+        finally:
+            self._checkpoint_tracker.close()
 
     def _merge_component_counters(self) -> None:
         self._run_finalizer.merge_component_counters()
@@ -1053,6 +1055,7 @@ class VertexForager:
                 exceptions from tasks are logged and suppressed via ``return_exceptions=True``.
         """
         if not self._active_tasks:
+            self._checkpoint_tracker.close()
             return
 
         logger.debug("PIPELINE: Stopping pipeline...")
@@ -1086,6 +1089,7 @@ class VertexForager:
             logger.exception("PIPELINE: Parse executor shutdown failed: %s", e)
         except Exception:
             logger.exception("PIPELINE: Unexpected error during parse executor shutdown")
+        self._checkpoint_tracker.close()
         logger.debug("PIPELINE: Pipeline stopped.")
 
     async def _cancel_non_writer_tasks(self, writer_set: set[asyncio.Task[Any]]) -> None:
