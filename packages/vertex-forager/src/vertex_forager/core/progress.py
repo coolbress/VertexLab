@@ -58,6 +58,7 @@ class ProgressEmitter:
         self._active_workers = 0
         self._display_done = jobs_done_initial
         self._counters = {}
+        self._process = None
 
     def _ensure_process_initialized(self) -> psutil.Process:
         if self._process is None:

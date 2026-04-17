@@ -377,15 +377,13 @@ async def test_progress_snapshot_exceptional_shutdown_ignores_request_sentinels_
 
     async def _boom(**_: object) -> None:
         req_q = cast("asyncio.PriorityQueue[tuple[int, int, FetchJob | None]]", engine._req_q)
-        engine._pending_jobs.add(
-            [FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x"))]
-        )
-        await req_q.put(
-            (
+        await engine._put_request_queue(
+            req_q=req_q,
+            item=(
                 engine.PRIORITY_NEW_JOB,
                 1,
                 FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x")),
-            )
+            ),
         )
         raise RuntimeError("pipeline boom")
 

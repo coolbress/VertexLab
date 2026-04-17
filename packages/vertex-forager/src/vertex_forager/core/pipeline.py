@@ -1148,6 +1148,7 @@ class VertexForager:
             for pending_job in filtered_pending_jobs
             if _symbol_tokens(pending_job.symbol)
         ]
+        self._pending_jobs.add(filtered_pending_jobs)
         for pending_job in filtered_pending_jobs:
             await enqueue_pagination_job_impl(
                 fair_lock=self._fair_lock,
@@ -1420,6 +1421,9 @@ class VertexForager:
         req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]],
         item: tuple[int, int, FetchJob | None],
     ) -> None:
+        job = item[2]
+        if isinstance(job, FetchJob):
+            self._pending_jobs.add([job])
         await req_q.put(item)
 
     async def _get_request_queue(

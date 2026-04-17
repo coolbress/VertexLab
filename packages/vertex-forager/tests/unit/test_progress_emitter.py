@@ -35,6 +35,8 @@ def test_progress_emitter_initializes_psutil_lazily() -> None:
         )
 
         process_cls.assert_called_once()
+        emitter.reset(jobs_total=2)
+        assert emitter._process is None
 
 
 def test_build_snapshot_uses_counter_state_and_pending_len() -> None:
