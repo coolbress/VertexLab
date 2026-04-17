@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.13](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.30.12...vertex-forager-v0.30.13) (2026-04-17)
+
+
+### Performance Improvements
+
+* **vertex-forager:** streamline scheduler hot paths ([#520](https://github.com/coolbress/VertexLab/issues/520)) ([c44ebc9](https://github.com/coolbress/VertexLab/commit/c44ebc929c72469c75d2e65d0730fca729f90537))
+
 ## [0.30.12](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.30.11...vertex-forager-v0.30.12) (2026-04-17)
 
 
