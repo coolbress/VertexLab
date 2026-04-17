@@ -4,10 +4,14 @@ from pathlib import Path
 import time
 from typing import Any
 
+import pytest
+
 from vertex_forager.providers.sharadar.client import SharadarClient
 from vertex_forager.utils import load_tickers_env
 
 _YF_OPTIONAL_DEPS_MSG = "install optional deps with `pip install vertex-forager[yfinance]`"
+
+pytestmark = pytest.mark.manual
 
 
 def _get_yfinance_client(client_config: dict[str, Any]) -> Any:
@@ -17,7 +21,20 @@ def _get_yfinance_client(client_config: dict[str, Any]) -> Any:
         if err.name in {"pandas", "yfinance"}:
             raise RuntimeError(f"Skipping verification: {_YF_OPTIONAL_DEPS_MSG}") from err
         raise
-    return YFinanceClient(rate_limit=60, **client_config)
+    client_kwargs = dict(client_config)
+    flush_threshold_rows = client_kwargs.pop("flush_threshold_rows", None)
+    if flush_threshold_rows is not None:
+        storage_cfg = client_kwargs.get("storage")
+        storage = dict(storage_cfg) if isinstance(storage_cfg, dict) else {}
+        storage["flush_threshold_rows"] = flush_threshold_rows
+        client_kwargs["storage"] = storage
+    timeout_s = client_kwargs.pop("http_timeout_s", None)
+    if timeout_s is not None:
+        limits_cfg = client_kwargs.get("limits")
+        limits = dict(limits_cfg) if isinstance(limits_cfg, dict) else {}
+        limits["timeout_s"] = timeout_s
+        client_kwargs["limits"] = limits
+    return YFinanceClient(rate_limit=60, **client_kwargs)
 
 
 def _resolve_paths() -> tuple[Path, Path, Path]:
@@ -215,6 +232,22 @@ def run_sweep() -> dict[str, Any]:
     if db_path.exists():
         db_path.unlink()
     return results
+
+
+def test_pipeline_sweep_collects_runs() -> None:
+    pytest.importorskip("pandas", reason=_YF_OPTIONAL_DEPS_MSG)
+    pytest.importorskip("yfinance", reason=_YF_OPTIONAL_DEPS_MSG)
+    results = run_sweep()
+    assert len(results["runs"]) == len(_build_combos())
+    assert "yfinance_financials" in results["best"]
+    assert any(
+        not run["measurements"].get("yfinance_price", {}).get("error")
+        for run in results["runs"]
+    )
+    assert any(
+        not run["measurements"].get("yfinance_financials", {}).get("error")
+        for run in results["runs"]
+    )
 
 
 if __name__ == "__main__":

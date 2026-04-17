@@ -41,6 +41,7 @@ vertex-forager = "vertex_forager.cli:main"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+python_files = ["test_*.py", "verify_*.py"]
 markers = [
     "integration: integration tests",
     "manual: opt-in manual verification tests",

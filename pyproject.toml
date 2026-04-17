@@ -33,6 +33,7 @@ force-sort-within-sections = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+python_files = ["test_*.py", "verify_*.py"]
 markers = [
     "integration: integration tests",
     "manual: opt-in manual verification tests",
