@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.11](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.30.10...vertex-forager-v0.30.11) (2026-04-17)
+
+
+### Performance Improvements
+
+* **vertex-forager:** reuse checkpoint sqlite connection ([#514](https://github.com/coolbress/VertexLab/issues/514)) ([bc9f308](https://github.com/coolbress/VertexLab/commit/bc9f308a1b33ed8f7e8eb16176346bc26ee88321))
+
 ## [0.30.10](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.30.9...vertex-forager-v0.30.10) (2026-04-14)
 
 
