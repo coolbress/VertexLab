@@ -15,6 +15,14 @@ if TYPE_CHECKING:
     from vertex_forager.core.config import FetchJob, FramePacket, ParseResult, RunResult
 
 
+def _normalize_all(
+    *,
+    packets: list[FramePacket],
+    normalize_packet: Callable[..., FramePacket],
+) -> list[FramePacket]:
+    return [normalize_packet(packet=packet) for packet in packets]
+
+
 async def fetch_payload(
     *,
     worker_id: int,
@@ -72,6 +80,7 @@ async def parse_payload(
         )
     parse_latency = time.monotonic() - t1
     observe("parse_duration_s", parse_latency)
+    observe(f"parse_duration_s.{job.provider}.{job.dataset}", parse_latency)
     logger.debug(
         "[Worker-%s] Parsed %s in %.3fs. Packets: %s, Next Jobs: %s",
         worker_id,
@@ -105,12 +114,16 @@ async def emit_packets_and_next_jobs(
     enqueue_pagination_job: Callable[[FetchJob], Awaitable[None]],
     logger: Any,
 ) -> None:
-    for packet in parse_result.packets:
+    normalized_packets: list[FramePacket]
+    if parse_result.packets:
         loop = asyncio.get_running_loop()
-        normalized_packet = await loop.run_in_executor(
+        normalized_packets = await loop.run_in_executor(
             parse_executor,
-            partial(normalize_packet, packet=packet),
+            partial(_normalize_all, packets=parse_result.packets, normalize_packet=normalize_packet),
         )
+    else:
+        normalized_packets = []
+    for normalized_packet in normalized_packets:
         await pkt_q.put(normalized_packet)
         inc("packets_emitted", 1)
     if parse_result.next_jobs:

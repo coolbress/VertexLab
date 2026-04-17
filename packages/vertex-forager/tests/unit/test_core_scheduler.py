@@ -7,10 +7,13 @@ import pytest
 
 from vertex_forager.core.config import FetchJob, RequestSpec
 from vertex_forager.core.scheduler import (
+    FairnessEvents,
     FairnessState,
+    FairnessWaiter,
     enqueue_pagination_job,
     mark_pagination_job_done,
     pop_next_job_respecting_fairness,
+    wait_for_pagination_drain,
 )
 
 
@@ -21,6 +24,10 @@ def _job(symbol: str, page: int) -> FetchJob:
         symbol=symbol,
         spec=RequestSpec(url=f"https://example.test/{symbol}/{page}", params={"ticker": symbol, "page": page}),
     )
+
+
+def _waiter(lock: asyncio.Lock, state: FairnessState) -> FairnessWaiter:
+    return FairnessWaiter(fair_lock=lock, fairness_state=state, fairness_events=FairnessEvents())
 
 
 @pytest.mark.asyncio
@@ -122,9 +129,10 @@ async def test_new_symbol_enters_active_list_mid_run() -> None:
 async def test_drr_drained_event_tracks_unfinished_jobs() -> None:
     state = FairnessState(quantum=3)
     lock = asyncio.Lock()
-    await enqueue_pagination_job(fair_lock=lock, fairness_state=state, job=_job("TSLA", 1))
+    waiter = _waiter(lock, state)
+    await waiter.enqueue_pagination_job(job=_job("TSLA", 1))
 
-    assert state.drained.is_set() is False
+    assert waiter._events.drained.is_set() is False
 
     result = await pop_next_job_respecting_fairness(
         fair_lock=lock,
@@ -135,9 +143,9 @@ async def test_drr_drained_event_tracks_unfinished_jobs() -> None:
     assert result.job is not None
     assert result.job.symbol == "TSLA"
 
-    await mark_pagination_job_done(fair_lock=lock, fairness_state=state)
+    await waiter.mark_pagination_job_done()
 
-    assert state.drained.is_set() is True
+    assert waiter._events.drained.is_set() is True
 
 
 @pytest.mark.asyncio
@@ -208,16 +216,13 @@ async def test_backpressure_ignores_currently_running_job() -> None:
 async def test_symbol_capacity_cache_is_removed_when_queue_drains() -> None:
     state = FairnessState(quantum=3, max_pending_per_symbol=1)
     lock = asyncio.Lock()
-    await enqueue_pagination_job(fair_lock=lock, fairness_state=state, job=_job("AAPL", 1))
+    waiter = _waiter(lock, state)
+    await waiter.enqueue_pagination_job(job=_job("AAPL", 1))
 
-    result = await pop_next_job_respecting_fairness(
-        fair_lock=lock,
-        priority_pagination=1,
-        fairness_state=state,
-    )
+    result = await waiter.pop_next_job_respecting_fairness(priority_pagination=1)
 
     assert result.job is not None
-    assert "AAPL" not in state.symbol_capacity
+    assert "AAPL" not in waiter._events.symbol_capacity
 
 
 @pytest.mark.asyncio
@@ -226,14 +231,44 @@ async def test_symbol_capacity_cache_is_removed_for_stale_empty_queue() -> None:
     state.active.append("AAPL")
     state.active_symbols.add("AAPL")
     state.queues["AAPL"] = deque()
-    state.symbol_capacity["AAPL"] = asyncio.Event()
     lock = asyncio.Lock()
+    waiter = _waiter(lock, state)
+    waiter._events.symbol_capacity["AAPL"] = asyncio.Event()
 
-    result = await pop_next_job_respecting_fairness(
-        fair_lock=lock,
-        priority_pagination=1,
-        fairness_state=state,
-    )
+    result = await waiter.pop_next_job_respecting_fairness(priority_pagination=1)
 
     assert result.job is None
-    assert "AAPL" not in state.symbol_capacity
+    assert "AAPL" not in waiter._events.symbol_capacity
+
+
+@pytest.mark.asyncio
+async def test_total_backlog_tracks_enqueued_and_popped_jobs() -> None:
+    state = FairnessState(quantum=3)
+    lock = asyncio.Lock()
+    waiter = _waiter(lock, state)
+
+    await waiter.enqueue_pagination_job(job=_job("AAPL", 1))
+    await waiter.enqueue_pagination_job(job=_job("MSFT", 1))
+    assert state.total_backlog == 2
+
+    result_a = await waiter.pop_next_job_respecting_fairness(priority_pagination=1)
+    assert result_a.job is not None
+    assert state.total_backlog == 1
+
+    result_b = await waiter.pop_next_job_respecting_fairness(priority_pagination=1)
+    assert result_b.job is not None
+    assert state.total_backlog == 0
+
+
+@pytest.mark.asyncio
+async def test_wait_for_pagination_drain_uses_canonical_waiter() -> None:
+    state = FairnessState(quantum=3)
+    lock = asyncio.Lock()
+
+    await enqueue_pagination_job(fair_lock=lock, fairness_state=state, job=_job("AAPL", 1))
+    waiter = asyncio.create_task(wait_for_pagination_drain(fair_lock=lock, fairness_state=state))
+    await asyncio.sleep(0)
+    assert waiter.done() is False
+
+    await mark_pagination_job_done(fair_lock=lock, fairness_state=state)
+    await asyncio.wait_for(waiter, timeout=0.5)

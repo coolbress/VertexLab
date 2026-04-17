@@ -545,6 +545,7 @@ async def flush_chunked_table(
     packets: list[FramePacket],
     schema: TableSchema | None,
     chunk_size: int,
+    total_rows: int,
     buffers: dict[str, list[FramePacket]],
     buffer_rows: dict[str, int],
     result: RunResult,
@@ -556,13 +557,12 @@ async def flush_chunked_table(
     logger: LoggerLike,
 ) -> None:
     first = packets[0]
-    total_rows_est = sum(len(p.frame) for p in packets)
-    if total_rows_est > 0:
-        est_chunks = (total_rows_est + chunk_size - 1) // chunk_size
+    if total_rows > 0:
+        est_chunks = (total_rows + chunk_size - 1) // chunk_size
         logger.debug(
             "WRITER: Chunking flush for %s rows~=%s chunk_size=%s chunks~=%s",
             table,
-            total_rows_est,
+            total_rows,
             chunk_size,
             est_chunks,
         )
@@ -570,7 +570,7 @@ async def flush_chunked_table(
             provider=first.provider,
             dataset=first.table,
             symbol=None,
-            stage=f"write_chunking_rows_{total_rows_est}_size_{chunk_size}_chunks_{est_chunks}",
+            stage=f"write_chunking_rows_{total_rows}_size_{chunk_size}_chunks_{est_chunks}",
         )
     for chunk in planner.plan(packets=packets, chunk_size=chunk_size):
         try:
@@ -615,6 +615,7 @@ async def flush_writer_table(
         packets=packets,
         schema=schema,
         chunk_size=WRITER_CHUNK_ROWS,
+        total_rows=buffer_rows.get(table, 0),
         buffers=buffers,
         buffer_rows=buffer_rows,
         result=result,

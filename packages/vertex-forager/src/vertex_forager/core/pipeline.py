@@ -393,6 +393,12 @@ class VertexForager:
             s[f"{key}_p99"] = _pctl(vals, 99.0)
         # Per-table writer latencies and rows per flush
         for key, vals_deque in self._hists.items():
+            if key.startswith("parse_duration_s."):
+                target = key.split(".", 1)[1]
+                vals = list(vals_deque)
+                s[f"parse_duration_s.{target}_p50"] = _pctl(vals, 50.0)
+                s[f"parse_duration_s.{target}_p95"] = _pctl(vals, 95.0)
+                s[f"parse_duration_s.{target}_p99"] = _pctl(vals, 99.0)
             if key.startswith("writer_flush_duration_s."):
                 table = key.split(".", 1)[1]
                 vals = list(vals_deque)
@@ -778,7 +784,7 @@ class VertexForager:
                 self._summary["req_q_len_after_producer"] = float(req_q.qsize())
                 self._summary["pkt_q_len_after_producer"] = float(pkt_q.qsize())
         await req_q.join()
-        await wait_for_pagination_drain_impl(fairness_state=self._fair_state)
+        await wait_for_pagination_drain_impl(fair_lock=self._fair_lock, fairness_state=self._fair_state)
         logger.info("PIPELINE: Request queue joined, sending sentinel signals...")
         with suppress(Exception):
             self._summary["req_q_len_after_req_join"] = float(req_q.qsize())
@@ -1481,7 +1487,7 @@ class VertexForager:
             if selected.job is not None:
                 return selected
             pagination_wait = asyncio.create_task(
-                wait_for_pagination_availability_impl(fairness_state=self._fair_state)
+                wait_for_pagination_availability_impl(fair_lock=self._fair_lock, fairness_state=self._fair_state)
             )
             req_get = asyncio.create_task(self._get_request_queue(req_q=req_q))
             pending_tasks = (pagination_wait, req_get)

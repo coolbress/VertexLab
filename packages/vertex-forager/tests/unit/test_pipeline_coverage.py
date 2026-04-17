@@ -10,6 +10,7 @@ Covers:
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 from contextlib import asynccontextmanager
 import itertools
 import logging
@@ -646,6 +647,18 @@ async def test_progress_snapshot_uses_retained_sample_window_for_throughput(
     assert snapshots[-1].throughput_sym_per_s == pytest.approx(0.8)
 
 
+def test_build_summary_emits_tagged_parse_duration_percentiles() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    engine._hists["parse_duration_s.sharadar.price"] = deque([0.1, 0.2, 0.3])
+
+    summary = engine._compute_summary()
+
+    assert summary["parse_duration_s.sharadar.price_p50"] == 0.2
+    assert summary["parse_duration_s.sharadar.price_p95"] == 0.3
+    assert summary["parse_duration_s.sharadar.price_p99"] == 0.3
+
+
 @pytest.mark.asyncio
 async def test_progress_snapshot_uses_run_start_for_single_sample_throughput(
     monkeypatch: pytest.MonkeyPatch,
@@ -866,7 +879,8 @@ async def test_fairness_prefers_req_get_when_both_waits_complete(monkeypatch: py
 
     req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
 
-    async def _immediate_pagination_wait(*, fairness_state: FairnessState) -> None:
+    async def _immediate_pagination_wait(*, fair_lock: asyncio.Lock, fairness_state: FairnessState) -> None:
+        del fair_lock, fairness_state
         return None
 
     async def _immediate_req_get(
