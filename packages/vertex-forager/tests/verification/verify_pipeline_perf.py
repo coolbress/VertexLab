@@ -252,7 +252,12 @@ def _assert_pipeline_perf_budget(metrics: dict[str, object]) -> None:
     reason="pipeline perf test disabled by default",
 )
 def test_pipeline_perf_budget() -> None:
-    metrics = run_pipeline_perf_verification()
+    try:
+        metrics = run_pipeline_perf_verification()
+    except RuntimeError as err:
+        if "Skipping verification:" in str(err):
+            pytest.skip(str(err))
+        raise
     _assert_pipeline_perf_budget(metrics)
 
 

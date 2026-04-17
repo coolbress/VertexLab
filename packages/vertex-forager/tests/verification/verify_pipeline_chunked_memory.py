@@ -64,6 +64,14 @@ class _NoopObserver:
         return _Span()
 
 
+async def _noop_async() -> None:
+    return None
+
+
+async def _noop_status() -> dict[str, object]:
+    return {"status": "spooled", "rescued": 0, "remaining": 0, "path": None, "error": None}
+
+
 def _build_packets() -> tuple[list[FramePacket], int]:
     rows_per_frame = 100_000
     num_frames = 6
@@ -143,7 +151,7 @@ def _child_run_memory_peak(chunk_rows: int, conn: Connection) -> None:
         await flush_chunked_table(
             table="t",
             packets=packets,
-            schema=object(),
+            schema=None,
             chunk_size=flush_size,
             total_rows=total_rows,
             buffers={"t": packets.copy()},
@@ -190,11 +198,3 @@ def test_chunked_flush_lower_memory_peak() -> None:
     assert chunked_calls > 1
     assert baseline_calls == 1
     assert chunked_peak + dynamic_margin < baseline_peak
-
-
-async def _noop_async() -> None:
-    return None
-
-
-async def _noop_status() -> dict[str, object]:
-    return {"status": "spooled", "rescued": 0, "remaining": 0, "path": None, "error": None}

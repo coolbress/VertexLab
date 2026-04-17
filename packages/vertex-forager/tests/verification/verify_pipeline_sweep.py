@@ -225,6 +225,7 @@ def test_pipeline_sweep_collects_runs() -> None:
     results = run_sweep()
     assert len(results["runs"]) == len(_build_combos())
     assert "yfinance_financials" in results["best"]
+    assert any("error" not in run for run in results["runs"])
 
 
 if __name__ == "__main__":

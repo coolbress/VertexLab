@@ -46,11 +46,11 @@ def test_examples_provider_matrix(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _skip_if_provider_unavailable(provider)
-    mod = _import_from_file(example_path)
     db = tmp_path / "forager.duckdb"
     monkeypatch.setenv("VF_PROVIDER", provider)
     monkeypatch.setenv("VF_TICKERS", "AAPL,MSFT")
     monkeypatch.setenv("VF_DUCKDB_PATH", str(db))
+    mod = _import_from_file(example_path)
     assert hasattr(mod, "main")
     mod.main()  # type: ignore[attr-defined]
     if example_path.name == "advanced_duckdb_metrics.py":

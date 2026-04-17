@@ -79,10 +79,25 @@ def _high_conflict_upsert_benchmark() -> dict[str, float]:
             )
         upsert_elapsed = time.perf_counter() - start
 
-        dedup_frame = pl.concat(
-            [base.with_columns((pl.col("close") + rewrite).alias("close")) for rewrite in range(rewrites)],
-            how="vertical",
-        ).unique(subset=["provider", "ticker", "date"], keep="last")
+        dedup_frame = (
+            pl.concat(
+                [
+                    base.with_columns(
+                        (pl.col("close") + rewrite).alias("close"),
+                        pl.lit(rewrite).alias("_rewrite_order"),
+                    )
+                    for rewrite in range(rewrites)
+                ],
+                how="vertical",
+            )
+            .sort(["provider", "ticker", "date", "_rewrite_order"])
+            .unique(
+                subset=["provider", "ticker", "date"],
+                keep="last",
+                maintain_order=True,
+            )
+            .drop("_rewrite_order")
+        )
         conn.execute("DELETE FROM t")
         start = time.perf_counter()
         conn.register("dedup_df", dedup_frame)
