@@ -25,12 +25,12 @@ import asyncio
 from collections import deque
 from collections.abc import Callable, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager, suppress
+from contextlib import AbstractContextManager, contextmanager, suppress
 import itertools
 import logging
 import os
 import time
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 from uuid import uuid4
 
 import httpx
@@ -93,16 +93,16 @@ from vertex_forager.core.workerio import fetch_payload as fetch_payload_impl
 from vertex_forager.core.workerio import parse_payload as parse_payload_impl
 from vertex_forager.core.workerio import record_worker_error as record_worker_error_impl
 from vertex_forager.core.writerflush import (
-    WriterContext,
+    FlushExecutor,
+    FlushPlanner,
+    FlushRecovery,
     buffer_or_flush_packet,
     concat_frames_with_flex,
     flush_all_writer_buffers,
     flush_chunked_table,
     flush_on_writer_cancel,
     flush_writer_table,
-    handle_writer_flush_error,
     validate_unique_key,
-    write_merged_packet,
     writer_worker,
 )
 
@@ -329,25 +329,6 @@ class VertexForager:
             sanitize_field=sanitize_field,
             logger=logger,
         )
-        self._writer_context = WriterContext(
-            writer=self._writer,
-            config=self._config,
-            logger=logger,
-            inc=self._inc,
-            observe=self._observe,
-            log_structured=self._log_structured,
-            span=self._span,
-            validate_data_quality=self._validate_data_quality,
-            get_table_schema=get_table_schema,
-            spool_to_dlq_and_rescue=spool_to_dlq_and_rescue,
-            build_writer_error_summary=build_writer_error_summary,
-            compute_error_cls=ComputeError,
-            validation_error_cls=ValidationError,
-            dlq_spool_error_cls=DLQSpoolError,
-            duckdb_module=_duckdb,
-            progress_log_chunk_rows=PROGRESS_LOG_CHUNK_ROWS,
-            router_flexible_schema=bool(getattr(self._router, "flexible_schema", False)),
-        )
 
         # For checkpoint tracking
         self._completed_symbols: set[str] = set()
@@ -391,6 +372,12 @@ class VertexForager:
             with suppress(Exception):
                 sink.observe(name, float(value))
 
+    def on_metric(self, name: str, value: float, *, kind: Literal["counter", "observe"]) -> None:
+        if kind == "counter":
+            self._inc(name, int(value))
+            return
+        self._observe(name, value)
+
     def _compute_summary(self) -> dict[str, float]:
         def _pctl(values: list[float], p: float) -> float:
             if not values:
@@ -431,6 +418,9 @@ class VertexForager:
         with _tracer.start_as_current_span(f"vertex_forager.{name}", attributes=attributes):  # type: ignore[arg-type]
             yield
 
+    def span(self, name: str, **attributes: object) -> AbstractContextManager[object]:
+        return self._span(name, **attributes)
+
     def _log_structured(
         self,
         *,
@@ -451,6 +441,23 @@ class VertexForager:
                 "vf_attempt": int(attempt if attempt is not None else 0),
                 "vf_duration_s": None if duration_s is None else round(float(duration_s), 3),
             },
+        )
+
+    def on_log(
+        self,
+        *,
+        provider: str,
+        dataset: str,
+        symbol: str | None,
+        stage: str,
+        duration_s: float | None = None,
+    ) -> None:
+        self._log_structured(
+            provider=provider,
+            dataset=dataset,
+            symbol=symbol,
+            stage=stage,
+            duration_s=duration_s,
         )
 
     def _queued_pending_jobs(self) -> list[FetchJob]:
@@ -1588,15 +1595,15 @@ class VertexForager:
         return cast(
             ParseResult,
             await parse_payload_impl(
-            job=job,
-            payload=payload,
-            worker_id=worker_id,
-            parse_executor=self._parse_executor,
-            router_parse=self._router.parse,
-            span=self._span,
-            observe=self._observe,
-            log_structured=self._log_structured,
-            logger=logger,
+                job=job,
+                payload=payload,
+                worker_id=worker_id,
+                parse_executor=self._parse_executor,
+                router_parse=self._router.parse,
+                span=self._span,
+                observe=self._observe,
+                log_structured=self._log_structured,
+                logger=logger,
             ),
         )
 
@@ -1711,7 +1718,6 @@ class VertexForager:
         result: RunResult,
         result_lock: asyncio.Lock,
     ) -> None:
-        ctx = self._writer_context
         await writer_worker(
             pkt_q=pkt_q,
             result=result,
@@ -1720,8 +1726,8 @@ class VertexForager:
             flush_all_writer_buffers=self._flush_all_writer_buffers,
             buffer_or_flush_packet=self._buffer_or_flush_packet,
             flush_on_writer_cancel=self._flush_on_writer_cancel,
-            dlq_spool_error_cls=ctx.dlq_spool_error_cls,
-            logger=ctx.logger,
+            dlq_spool_error_cls=DLQSpoolError,
+            logger=logger,
         )
 
     async def _flush_on_writer_cancel(
@@ -1732,14 +1738,13 @@ class VertexForager:
         result: RunResult,
         result_lock: asyncio.Lock,
     ) -> None:
-        ctx = self._writer_context
         await flush_on_writer_cancel(
             buffers=buffers,
             buffer_rows=buffer_rows,
             result=result,
             result_lock=result_lock,
             flush_writer_table=self._flush_writer_table,
-            logger=ctx.logger,
+            logger=logger,
         )
 
     async def _flush_all_writer_buffers(
@@ -1750,14 +1755,13 @@ class VertexForager:
         result: RunResult,
         result_lock: asyncio.Lock,
     ) -> None:
-        ctx = self._writer_context
         await flush_all_writer_buffers(
             buffers=buffers,
             buffer_rows=buffer_rows,
             result=result,
             result_lock=result_lock,
             flush_writer_table=self._flush_writer_table,
-            logger=ctx.logger,
+            logger=logger,
         )
 
     async def _buffer_or_flush_packet(
@@ -1770,7 +1774,6 @@ class VertexForager:
         result: RunResult,
         result_lock: asyncio.Lock,
     ) -> None:
-        ctx = self._writer_context
         await buffer_or_flush_packet(
             packet=packet,
             threshold=threshold,
@@ -1779,8 +1782,8 @@ class VertexForager:
             result=result,
             result_lock=result_lock,
             flush_writer_table=self._flush_writer_table,
-            progress_log_chunk_rows=ctx.progress_log_chunk_rows,
-            logger=ctx.logger,
+            progress_log_chunk_rows=PROGRESS_LOG_CHUNK_ROWS,
+            logger=logger,
         )
 
     async def _flush_writer_table(
@@ -1792,8 +1795,6 @@ class VertexForager:
         result: RunResult,
         result_lock: asyncio.Lock,
     ) -> None:
-        ctx = self._writer_context
-
         def _concat_frames_with_flex(
             *,
             frames: list[pl.DataFrame],
@@ -1806,95 +1807,32 @@ class VertexForager:
                 table_name=table_name,
                 schema=schema,
                 rechunk=rechunk,
-                router_flexible_schema=ctx.router_flexible_schema,
-                logger=ctx.logger,
+                router_flexible_schema=bool(getattr(self._router, "flexible_schema", False)),
+                logger=logger,
             )
 
-        async def _write_merged_packet(
-            *,
-            table: str,
-            packet: FramePacket,
-            stage: str,
-            result: RunResult,
-            result_lock: asyncio.Lock,
-        ) -> None:
-            await write_merged_packet(
-                table=table,
-                packet=packet,
-                stage=stage,
-                result=result,
-                result_lock=result_lock,
-                writer=ctx.writer,
-                span=ctx.span,
-                inc=ctx.inc,
-                observe=ctx.observe,
-                log_structured=ctx.log_structured,
-            )
-
-        async def _handle_writer_flush_error(
-            *,
-            table: str,
-            packets: list[FramePacket],
-            exc: Exception,
-            prefix: str,
-            buffers: dict[str, list[FramePacket]],
-            buffer_rows: dict[str, int],
-            result: RunResult,
-            result_lock: asyncio.Lock,
-        ) -> None:
-            await handle_writer_flush_error(
-                table=table,
-                packets=packets,
-                exc=exc,
-                prefix=prefix,
-                buffers=buffers,
-                buffer_rows=buffer_rows,
-                result=result,
-                result_lock=result_lock,
-                writer=ctx.writer,
-                config=ctx.config,
-                inc=ctx.inc,
-                log_structured=ctx.log_structured,
-                spool_to_dlq_and_rescue=ctx.spool_to_dlq_and_rescue,
-                build_writer_error_summary=ctx.build_writer_error_summary,
-                dlq_spool_error_cls=ctx.dlq_spool_error_cls,
-                logger=ctx.logger,
-            )
-
-        async def _flush_chunked_table(
-            *,
-            table: str,
-            packets: list[FramePacket],
-            schema: TableSchema | None,
-            chunk_size: int,
-            buffers: dict[str, list[FramePacket]],
-            buffer_rows: dict[str, int],
-            result: RunResult,
-            result_lock: asyncio.Lock,
-        ) -> None:
-            await flush_chunked_table(
-                table=table,
-                packets=packets,
-                schema=schema,
-                chunk_size=chunk_size,
-                buffers=buffers,
-                buffer_rows=buffer_rows,
-                result=result,
-                result_lock=result_lock,
-                concat_frames_with_flex=_concat_frames_with_flex,
-                validate_unique_key=validate_unique_key,
-                validate_data_quality=ctx.validate_data_quality,
-                write_merged_packet=_write_merged_packet,
-                handle_writer_flush_error=_handle_writer_flush_error,
-                compute_error_cls=ctx.compute_error_cls,
-                validation_error_cls=ctx.validation_error_cls,
-                primary_key_missing_error_cls=PrimaryKeyMissingError,
-                primary_key_null_error_cls=PrimaryKeyNullError,
-                dlq_spool_error_cls=ctx.dlq_spool_error_cls,
-                duckdb_module=ctx.duckdb_module,
-                log_structured=ctx.log_structured,
-                logger=ctx.logger,
-            )
+        planner = FlushPlanner()
+        executor = FlushExecutor(
+            writer=self._writer,
+            observer=self,
+            concat_frames_with_flex=_concat_frames_with_flex,
+            validate_unique_key=validate_unique_key,
+            validate_data_quality=self._validate_data_quality,
+        )
+        recovery = FlushRecovery(
+            writer=self._writer,
+            config=self._config,
+            observer=self,
+            spool_to_dlq_and_rescue=spool_to_dlq_and_rescue,
+            build_writer_error_summary=build_writer_error_summary,
+            compute_error_cls=ComputeError,
+            validation_error_cls=ValidationError,
+            primary_key_missing_error_cls=PrimaryKeyMissingError,
+            primary_key_null_error_cls=PrimaryKeyNullError,
+            dlq_spool_error_cls=DLQSpoolError,
+            duckdb_module=_duckdb,
+            logger=logger,
+        )
 
         await flush_writer_table(
             table=table,
@@ -1902,8 +1840,15 @@ class VertexForager:
             buffer_rows=buffer_rows,
             result=result,
             result_lock=result_lock,
-            get_table_schema=ctx.get_table_schema,
-            flush_chunked_table=_flush_chunked_table,
+            get_table_schema=get_table_schema,
+            flush_chunked_table=lambda **kwargs: flush_chunked_table(
+                **kwargs,
+                planner=planner,
+                executor=executor,
+                recovery=recovery,
+                observer=self,
+                logger=logger,
+            ),
         )
 
     async def _fetch_with_retry(self, job: FetchJob) -> bytes:

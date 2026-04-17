@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import contextmanager
 from datetime import datetime
 import os
 import time
@@ -10,7 +11,8 @@ import pytest
 
 from vertex_forager.core.config import FetchJob, FramePacket, RequestSpec, RetryConfig, RunResult
 from vertex_forager.core.retry import RetryExecutor
-from vertex_forager.core.writerflush import flush_chunked_table
+from vertex_forager.core.writerflush import FlushExecutor, FlushPlanner, FlushRecovery, flush_chunked_table
+from vertex_forager.exceptions import RunError
 
 pytestmark = pytest.mark.manual
 
@@ -31,6 +33,27 @@ class _NoopLogger:
     @staticmethod
     def exception(msg: str, *args: object) -> None:
         pass
+
+
+class _NoopObserver:
+    @staticmethod
+    def on_metric(name: str, value: float, *, kind: str) -> None:
+        pass
+
+    @staticmethod
+    def on_log(**kwargs: object) -> None:
+        pass
+
+    @staticmethod
+    @contextmanager
+    def span(name: str, **attributes: object) -> object:
+        del name, attributes
+        yield
+
+
+class _NoopWriter:
+    async def write(self, packet: FramePacket) -> object:
+        return type("WriteResult", (), {"rows": len(packet.frame), "table": packet.table})()
 
 
 class _Throttle:
@@ -92,18 +115,31 @@ async def test_retry_and_writer_chunk_perf_budget() -> None:
         buffer_rows={"t": sum(len(p.frame) for p in packets)},
         result=RunResult(provider="test"),
         result_lock=asyncio.Lock(),
-        concat_frames_with_flex=lambda **kwargs: pl.concat(kwargs["frames"], how="vertical"),
-        validate_unique_key=lambda **kwargs: None,
-        validate_data_quality=lambda **kwargs: _noop_async(),
-        write_merged_packet=lambda **kwargs: _noop_async(),
-        handle_writer_flush_error=lambda **kwargs: _noop_async(),
-        compute_error_cls=Exception,
-        validation_error_cls=Exception,
-        primary_key_missing_error_cls=Exception,
-        primary_key_null_error_cls=Exception,
-        dlq_spool_error_cls=Exception,
-        duckdb_module=None,
-        log_structured=lambda **kwargs: None,
+        planner=FlushPlanner(),
+        executor=FlushExecutor(
+            writer=_NoopWriter(),
+            observer=_NoopObserver(),
+            concat_frames_with_flex=lambda **kwargs: pl.concat(kwargs["frames"], how="vertical"),
+            validate_unique_key=lambda **kwargs: None,
+            validate_data_quality=lambda **kwargs: _noop_async(),
+        ),
+        recovery=FlushRecovery(
+            writer=_NoopWriter(),
+            config=object(),
+            observer=_NoopObserver(),
+            spool_to_dlq_and_rescue=lambda **kwargs: _noop_status(),
+            build_writer_error_summary=lambda **kwargs: RunError.from_exception(
+                exc=kwargs["exc"], provider="test", dataset="t", symbol=""
+            ),
+            compute_error_cls=Exception,
+            validation_error_cls=Exception,
+            primary_key_missing_error_cls=Exception,
+            primary_key_null_error_cls=Exception,
+            dlq_spool_error_cls=Exception,
+            duckdb_module=None,
+            logger=_NoopLogger(),
+        ),
+        observer=_NoopObserver(),
         logger=_NoopLogger(),
     )
     writer_elapsed = time.monotonic() - t1
@@ -125,3 +161,7 @@ async def _return_bytes() -> bytes:
 
 async def _noop_async() -> None:
     return None
+
+
+async def _noop_status() -> dict[str, object]:
+    return {"status": "spooled", "rescued": 0, "remaining": 0, "path": None, "error": None}

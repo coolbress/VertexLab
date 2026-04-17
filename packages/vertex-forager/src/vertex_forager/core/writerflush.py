@@ -5,7 +5,7 @@ from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 import time
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
 
 import polars as pl
 
@@ -23,9 +23,7 @@ if TYPE_CHECKING:
     from vertex_forager.schema.config import TableSchema
     from vertex_forager.writers.base import WriteResult
 
-LogStructuredFunc = Callable[..., None]
-IncFunc = Callable[[str, int], None]
-ObserveFunc = Callable[[str, float], None]
+MetricKind = Literal["counter", "observe"]
 AsyncFunc = Callable[..., Awaitable[None]]
 
 
@@ -47,25 +45,29 @@ class ConfigLike(Protocol):
     pass
 
 
-@dataclass(frozen=True)
-class WriterContext:
-    writer: WriterLike
-    config: ConfigLike
-    logger: LoggerLike
-    inc: IncFunc
-    observe: ObserveFunc
-    log_structured: LogStructuredFunc
-    span: Callable[..., AbstractContextManager[object]]
-    validate_data_quality: Callable[..., Awaitable[None]]
-    get_table_schema: Callable[[str], TableSchema | None]
-    spool_to_dlq_and_rescue: Callable[..., Awaitable[object]]
-    build_writer_error_summary: Callable[..., RunError]
-    compute_error_cls: type[Exception]
-    validation_error_cls: type[Exception]
-    dlq_spool_error_cls: type[Exception]
-    duckdb_module: object | None
-    progress_log_chunk_rows: int
-    router_flexible_schema: bool
+@runtime_checkable
+class FlushObserver(Protocol):
+    def on_metric(self, name: str, value: float, *, kind: MetricKind) -> None: ...
+
+    def on_log(
+        self,
+        *,
+        provider: str,
+        dataset: str,
+        symbol: str | None,
+        stage: str,
+        duration_s: float | None = None,
+    ) -> None: ...
+
+    def span(self, name: str, **attributes: object) -> AbstractContextManager[object]: ...
+
+
+def _counter(observer: FlushObserver, name: str, amount: int) -> None:
+    observer.on_metric(name, float(amount), kind="counter")
+
+
+def _observe(observer: FlushObserver, name: str, value: float) -> None:
+    observer.on_metric(name, value, kind="observe")
 
 
 async def writer_worker(
@@ -234,14 +236,13 @@ async def handle_writer_flush_error(
     result_lock: asyncio.Lock,
     writer: WriterLike,
     config: ConfigLike,
-    inc: IncFunc,
-    log_structured: LogStructuredFunc,
+    observer: FlushObserver,
     spool_to_dlq_and_rescue: Callable[..., Awaitable[object]],
     build_writer_error_summary: Callable[..., RunError],
     dlq_spool_error_cls: type[Exception],
     logger: LoggerLike,
 ) -> None:
-    inc("errors_total", 1)
+    _counter(observer, "errors_total", 1)
     provider, symbol = writer_table_context(packets)
     try:
         status = await spool_to_dlq_and_rescue(
@@ -251,8 +252,8 @@ async def handle_writer_flush_error(
             config=config,
             result=result,
             result_lock=result_lock,
-            inc=inc,
-            log_structured=log_structured,
+            inc=lambda name, amount=1: _counter(observer, name, amount),
+            log_structured=lambda **kwargs: observer.on_log(**kwargs),
         )
     except Exception as spool_exc:
         if isinstance(spool_exc, dlq_spool_error_cls):
@@ -348,22 +349,19 @@ async def write_merged_packet(
     result: RunResult,
     result_lock: asyncio.Lock,
     writer: WriterLike,
-    span: Callable[..., AbstractContextManager[object]],
-    inc: IncFunc,
-    observe: ObserveFunc,
-    log_structured: LogStructuredFunc,
+    observer: FlushObserver,
 ) -> None:
     t_w0 = time.monotonic()
-    with span("write_flush", table=table, rows=len(packet.frame)):
+    with observer.span("write_flush", table=table, rows=len(packet.frame)):
         write_result = await writer.write(packet)
     t_w1 = time.monotonic()
-    inc("writer_flushes", 1)
-    observe("writer_flush_duration_s", float(t_w1 - t_w0))
-    observe("writer_rows", float(write_result.rows))
-    observe(f"writer_flush_duration_s.{table}", float(t_w1 - t_w0))
-    observe(f"writer_rows.{table}", float(write_result.rows))
-    inc("rows_written_total", int(write_result.rows))
-    log_structured(
+    _counter(observer, "writer_flushes", 1)
+    _observe(observer, "writer_flush_duration_s", float(t_w1 - t_w0))
+    _observe(observer, "writer_rows", float(write_result.rows))
+    _observe(observer, f"writer_flush_duration_s.{table}", float(t_w1 - t_w0))
+    _observe(observer, f"writer_rows.{table}", float(write_result.rows))
+    _counter(observer, "rows_written_total", int(write_result.rows))
+    observer.on_log(
         provider=packet.provider,
         dataset=packet.table,
         symbol=None,
@@ -372,6 +370,173 @@ async def write_merged_packet(
     )
     async with result_lock:
         result.tables[write_result.table] = result.tables.get(write_result.table, 0) + write_result.rows
+
+
+@dataclass(frozen=True)
+class FlushChunk:
+    index: int
+    start_index: int
+    packets: list[FramePacket]
+    frames: list[pl.DataFrame]
+    rows: int
+
+
+@dataclass(frozen=True)
+class FlushPlanner:
+    def plan(self, *, packets: list[FramePacket], chunk_size: int) -> list[FlushChunk]:
+        chunks: list[FlushChunk] = []
+        i = 0
+        idx = 0
+        while i < len(packets):
+            rows_in_chunk = 0
+            current_packets: list[FramePacket] = []
+            current_frames: list[pl.DataFrame] = []
+            start_i = i
+            while i < len(packets) and rows_in_chunk < chunk_size:
+                pkt = packets[i]
+                current_packets.append(pkt)
+                current_frames.append(pkt.frame)
+                rows_in_chunk += len(pkt.frame)
+                i += 1
+            chunks.append(
+                FlushChunk(
+                    index=idx,
+                    start_index=start_i,
+                    packets=current_packets,
+                    frames=current_frames,
+                    rows=rows_in_chunk,
+                )
+            )
+            idx += 1
+        return chunks
+
+
+@dataclass(frozen=True)
+class FlushExecutor:
+    writer: WriterLike
+    observer: FlushObserver
+    concat_frames_with_flex: Callable[..., pl.DataFrame]
+    validate_unique_key: Callable[..., None]
+    validate_data_quality: AsyncFunc
+
+    async def execute(
+        self,
+        *,
+        table: str,
+        chunk: FlushChunk,
+        schema: TableSchema | None,
+        result: RunResult,
+        result_lock: asyncio.Lock,
+    ) -> None:
+        first = chunk.packets[0]
+        chunk_df = self.concat_frames_with_flex(
+            frames=chunk.frames,
+            table_name=first.table,
+            schema=schema,
+            rechunk=False,
+        )
+        await self.validate_data_quality(table=table, df=chunk_df, result=result, result_lock=result_lock)
+        self.validate_unique_key(schema=schema, table=table, frame=chunk_df)
+        chunk_packet = FramePacket(
+            provider=first.provider,
+            table=first.table,
+            frame=chunk_df,
+            observed_at=first.observed_at,
+            context=first.context,
+        )
+        await write_merged_packet(
+            table=table,
+            packet=chunk_packet,
+            stage=f"write_flush_chunk_{chunk.index + 1}",
+            result=result,
+            result_lock=result_lock,
+            writer=self.writer,
+            observer=self.observer,
+        )
+
+
+@dataclass(frozen=True)
+class FlushRecovery:
+    writer: WriterLike
+    config: ConfigLike
+    observer: FlushObserver
+    spool_to_dlq_and_rescue: Callable[..., Awaitable[object]]
+    build_writer_error_summary: Callable[..., RunError]
+    compute_error_cls: type[Exception]
+    validation_error_cls: type[Exception]
+    primary_key_missing_error_cls: type[Exception]
+    primary_key_null_error_cls: type[Exception]
+    dlq_spool_error_cls: type[Exception]
+    duckdb_module: object | None
+    logger: LoggerLike
+
+    async def recover(
+        self,
+        *,
+        table: str,
+        chunk: FlushChunk,
+        packets: list[FramePacket],
+        exc: Exception,
+        buffers: dict[str, list[FramePacket]],
+        buffer_rows: dict[str, int],
+        result: RunResult,
+        result_lock: asyncio.Lock,
+    ) -> None:
+        remaining_packets = packets[chunk.start_index : len(packets)]
+        if isinstance(exc, (self.compute_error_cls, self.validation_error_cls)):
+            await handle_writer_flush_error(
+                table=table,
+                packets=remaining_packets,
+                exc=exc,
+                prefix="WriterError",
+                buffers=buffers,
+                buffer_rows=buffer_rows,
+                result=result,
+                result_lock=result_lock,
+                writer=self.writer,
+                config=self.config,
+                observer=self.observer,
+                spool_to_dlq_and_rescue=self.spool_to_dlq_and_rescue,
+                build_writer_error_summary=self.build_writer_error_summary,
+                dlq_spool_error_cls=self.dlq_spool_error_cls,
+                logger=self.logger,
+            )
+            if isinstance(exc, self.primary_key_missing_error_cls):
+                self.logger.error("WRITER: PKMissing table=%s column=%s", table, getattr(exc, "column", ""))
+            elif isinstance(exc, self.primary_key_null_error_cls):
+                self.logger.error(
+                    "WRITER: PKNull table=%s column=%s nulls=%s",
+                    table,
+                    getattr(exc, "column", ""),
+                    getattr(exc, "null_count", ""),
+                )
+            else:
+                self.logger.error("WRITER: Error writing chunk for %s: %s", table, exc)
+            return
+        if isinstance(exc, self.dlq_spool_error_cls):
+            raise
+        prefix = "DuckDBError" if _is_duckdb_error(self.duckdb_module, exc) else "UnexpectedWriterError"
+        await handle_writer_flush_error(
+            table=table,
+            packets=remaining_packets,
+            exc=exc,
+            prefix=prefix,
+            buffers=buffers,
+            buffer_rows=buffer_rows,
+            result=result,
+            result_lock=result_lock,
+            writer=self.writer,
+            config=self.config,
+            observer=self.observer,
+            spool_to_dlq_and_rescue=self.spool_to_dlq_and_rescue,
+            build_writer_error_summary=self.build_writer_error_summary,
+            dlq_spool_error_cls=self.dlq_spool_error_cls,
+            logger=self.logger,
+        )
+        if prefix == "DuckDBError":
+            self.logger.exception("WRITER: DuckDB error for %s: %s", table, exc)
+        else:
+            self.logger.exception("WRITER: Unexpected error writing chunk for %s: %s", table, exc)
 
 
 async def flush_chunked_table(
@@ -384,18 +549,10 @@ async def flush_chunked_table(
     buffer_rows: dict[str, int],
     result: RunResult,
     result_lock: asyncio.Lock,
-    concat_frames_with_flex: Callable[..., pl.DataFrame],
-    validate_unique_key: Callable[..., None],
-    validate_data_quality: AsyncFunc,
-    write_merged_packet: AsyncFunc,
-    handle_writer_flush_error: AsyncFunc,
-    compute_error_cls: type[Exception],
-    validation_error_cls: type[Exception],
-    primary_key_missing_error_cls: type[Exception],
-    primary_key_null_error_cls: type[Exception],
-    dlq_spool_error_cls: type[Exception],
-    duckdb_module: object | None,
-    log_structured: LogStructuredFunc,
+    planner: FlushPlanner,
+    executor: FlushExecutor,
+    recovery: FlushRecovery,
+    observer: FlushObserver,
     logger: LoggerLike,
 ) -> None:
     first = packets[0]
@@ -409,91 +566,32 @@ async def flush_chunked_table(
             chunk_size,
             est_chunks,
         )
-        log_structured(
+        observer.on_log(
             provider=first.provider,
             dataset=first.table,
             symbol=None,
             stage=f"write_chunking_rows_{total_rows_est}_size_{chunk_size}_chunks_{est_chunks}",
         )
-    i = 0
-    idx = 0
-    while i < len(packets):
-        rows_in_chunk = 0
-        current_frames: list[pl.DataFrame] = []
-        start_i = i
-        while i < len(packets) and rows_in_chunk < chunk_size:
-            pkt = packets[i]
-            current_frames.append(pkt.frame)
-            rows_in_chunk += len(pkt.frame)
-            i += 1
+    for chunk in planner.plan(packets=packets, chunk_size=chunk_size):
         try:
-            chunk_df = concat_frames_with_flex(
-                frames=current_frames,
-                table_name=first.table,
-                schema=schema,
-                rechunk=False,
-            )
-            await validate_data_quality(table=table, df=chunk_df, result=result, result_lock=result_lock)
-            validate_unique_key(schema=schema, table=table, frame=chunk_df)
-            chunk_packet = FramePacket(
-                provider=first.provider,
-                table=first.table,
-                frame=chunk_df,
-                observed_at=first.observed_at,
-                context=first.context,
-            )
-            await write_merged_packet(
+            await executor.execute(
                 table=table,
-                packet=chunk_packet,
-                stage=f"write_flush_chunk_{idx + 1}",
+                chunk=chunk,
+                schema=schema,
                 result=result,
                 result_lock=result_lock,
             )
-            idx += 1
         except Exception as exc:
-            if isinstance(exc, (compute_error_cls, validation_error_cls)):
-                remaining_packets = packets[start_i : len(packets)]
-                await handle_writer_flush_error(
-                    table=table,
-                    packets=remaining_packets,
-                    exc=exc,
-                    prefix="WriterError",
-                    buffers=buffers,
-                    buffer_rows=buffer_rows,
-                    result=result,
-                    result_lock=result_lock,
-                )
-                if isinstance(exc, primary_key_missing_error_cls):
-                    logger.error("WRITER: PKMissing table=%s column=%s", table, getattr(exc, "column", ""))
-                elif isinstance(exc, primary_key_null_error_cls):
-                    logger.error(
-                        "WRITER: PKNull table=%s column=%s nulls=%s",
-                        table,
-                        getattr(exc, "column", ""),
-                        getattr(exc, "null_count", ""),
-                    )
-                else:
-                    logger.error("WRITER: Error writing chunk for %s: %s", table, exc)
-                return
-            if isinstance(exc, dlq_spool_error_cls):
-                raise
-            remaining_packets = packets[start_i : len(packets)]
-            is_duckdb_error = _is_duckdb_error(duckdb_module, exc)
-            prefix = "DuckDBError" if is_duckdb_error else "UnexpectedWriterError"
-            await handle_writer_flush_error(
+            await recovery.recover(
                 table=table,
-                packets=remaining_packets,
+                chunk=chunk,
+                packets=packets,
                 exc=exc,
-                prefix=prefix,
                 buffers=buffers,
                 buffer_rows=buffer_rows,
                 result=result,
                 result_lock=result_lock,
             )
-            if prefix == "DuckDBError":
-                logger.exception("WRITER: DuckDB error for %s: %s", table, exc)
-            else:
-                logger.exception("WRITER: Unexpected error writing chunk for %s: %s", table, exc)
             return
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
+from contextlib import contextmanager
 from datetime import datetime
 
 import polars as pl
@@ -10,13 +11,17 @@ import pytest
 from vertex_forager.constants import WRITER_CHUNK_ROWS
 from vertex_forager.core.config import FramePacket, RunResult
 from vertex_forager.core.writerflush import (
+    FlushChunk,
+    FlushExecutor,
+    FlushPlanner,
+    FlushRecovery,
     buffer_or_flush_packet,
     flush_writer_table,
     validate_unique_key,
     writer_table_context,
     writer_worker,
 )
-from vertex_forager.exceptions import PrimaryKeyMissingError
+from vertex_forager.exceptions import PrimaryKeyMissingError, RunError
 from vertex_forager.schema.config import TableSchema
 
 
@@ -27,6 +32,36 @@ def _packet(table: str, rows: int = 1) -> FramePacket:
         frame=pl.DataFrame({"x": list(range(rows))}),
         observed_at=datetime.now(),
     )
+
+
+class _Observer:
+    def __init__(self) -> None:
+        self.metrics: list[tuple[str, float, str]] = []
+        self.logs: list[dict[str, object]] = []
+
+    def on_metric(self, name: str, value: float, *, kind: str) -> None:
+        self.metrics.append((name, value, kind))
+
+    def on_log(self, **kwargs: object) -> None:
+        self.logs.append(dict(kwargs))
+
+    @contextmanager
+    def span(self, name: str, **attributes: object) -> object:
+        del name, attributes
+        yield
+
+
+class _Writer:
+    def __init__(self) -> None:
+        self.packets: list[FramePacket] = []
+
+    async def write(self, packet: FramePacket) -> object:
+        self.packets.append(packet)
+        return type("WriteResult", (), {"rows": len(packet.frame), "table": packet.table})()
+
+
+class _ValidationError(Exception):
+    pass
 
 
 @pytest.mark.asyncio
@@ -103,6 +138,109 @@ def test_validate_unique_key_raises_missing_column() -> None:
 
     with pytest.raises(PrimaryKeyMissingError):
         validate_unique_key(schema=schema, table="t", frame=pl.DataFrame({"x": [1]}))
+
+
+def test_flush_planner_splits_packets_by_chunk_rows() -> None:
+    planner = FlushPlanner()
+    chunks = planner.plan(packets=[_packet("t", 2), _packet("t", 2), _packet("t", 3)], chunk_size=4)
+
+    assert [(chunk.index, chunk.start_index, chunk.rows, len(chunk.packets)) for chunk in chunks] == [
+        (0, 0, 4, 2),
+        (1, 2, 3, 1),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_flush_executor_validates_and_writes_chunk() -> None:
+    observer = _Observer()
+    writer = _Writer()
+    calls = {"quality": 0, "unique": 0}
+
+    async def _validate_quality(**kwargs: object) -> None:
+        calls["quality"] += 1
+        assert kwargs["table"] == "t"
+
+    def _validate_unique(**kwargs: object) -> None:
+        calls["unique"] += 1
+        assert kwargs["table"] == "t"
+
+    executor = FlushExecutor(
+        writer=writer,
+        observer=observer,
+        concat_frames_with_flex=lambda **kwargs: pl.concat(kwargs["frames"], how="vertical"),
+        validate_unique_key=_validate_unique,
+        validate_data_quality=_validate_quality,
+    )
+    packets = [_packet("t", 2), _packet("t", 1)]
+    chunk = FlushChunk(index=0, start_index=0, packets=packets, frames=[packet.frame for packet in packets], rows=3)
+    result = RunResult(provider="sharadar")
+
+    await executor.execute(
+        table="t",
+        chunk=chunk,
+        schema=TableSchema(table="t", schema={"x": pl.Int64}),
+        result=result,
+        result_lock=asyncio.Lock(),
+    )
+
+    assert calls == {"quality": 1, "unique": 1}
+    assert len(writer.packets) == 1
+    assert len(writer.packets[0].frame) == 3
+    assert result.tables == {"t": 3}
+    assert any(metric[0] == "writer_flushes" for metric in observer.metrics)
+    assert observer.logs[0]["stage"] == "write_flush_chunk_1"
+
+
+@pytest.mark.asyncio
+async def test_flush_recovery_handles_validation_errors_with_writererror_prefix() -> None:
+    observer = _Observer()
+    build_calls: list[dict[str, object]] = []
+    spool_calls: list[dict[str, object]] = []
+
+    async def _spool(**kwargs: object) -> object:
+        spool_calls.append(dict(kwargs))
+        return {"status": "spooled", "rescued": 0, "remaining": len(kwargs["packets"]), "path": "x", "error": None}
+
+    def _build_summary(**kwargs: object) -> RunError:
+        build_calls.append(dict(kwargs))
+        return RunError.from_exception(exc=kwargs["exc"], provider="sharadar", dataset="t", symbol="")
+
+    recovery = FlushRecovery(
+        writer=_Writer(),
+        config=object(),
+        observer=observer,
+        spool_to_dlq_and_rescue=_spool,
+        build_writer_error_summary=_build_summary,
+        compute_error_cls=Exception,
+        validation_error_cls=_ValidationError,
+        primary_key_missing_error_cls=PrimaryKeyMissingError,
+        primary_key_null_error_cls=Exception,
+        dlq_spool_error_cls=Exception,
+        duckdb_module=None,
+        logger=type("L", (), {"error": lambda *args, **kwargs: None, "exception": lambda *args, **kwargs: None})(),
+    )
+    packets = [_packet("t", 1), _packet("t", 1), _packet("t", 1)]
+    chunk = FlushChunk(index=1, start_index=1, packets=packets[1:], frames=[p.frame for p in packets[1:]], rows=2)
+    result = RunResult(provider="sharadar")
+    buffers = {"t": packets.copy()}
+    buffer_rows = {"t": 3}
+
+    await recovery.recover(
+        table="t",
+        chunk=chunk,
+        packets=packets,
+        exc=_ValidationError("bad"),
+        buffers=buffers,
+        buffer_rows=buffer_rows,
+        result=result,
+        result_lock=asyncio.Lock(),
+    )
+
+    assert build_calls[0]["prefix"] == "WriterError"
+    assert len(spool_calls[0]["packets"]) == 2
+    assert len(result.errors) == 1
+    assert buffers["t"] == []
+    assert buffer_rows["t"] == 0
 
 
 @pytest.mark.asyncio
