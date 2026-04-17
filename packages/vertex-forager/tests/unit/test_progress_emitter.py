@@ -121,7 +121,8 @@ def test_should_emit_rate_limits_non_finished_snapshots_but_allows_finished(
     fake_now = {"value": 100.0}
     monkeypatch.setattr("vertex_forager.core.progress.time.monotonic", lambda: fake_now["value"])
     assert emitter.should_emit(finished=False) is True
-    emitter._last_emit_at = 100.0
+    assert emitter._last_emit_at == 100.0
+    assert emitter.should_emit(finished=False) is False
     fake_now["value"] = 100.05
     assert emitter.should_emit(finished=False) is False
     assert emitter.should_emit(finished=True) is True
