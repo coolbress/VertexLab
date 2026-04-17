@@ -6,6 +6,7 @@ import contextlib
 from dataclasses import dataclass, field
 import math
 from typing import TYPE_CHECKING
+from weakref import WeakValueDictionary
 
 if TYPE_CHECKING:
     from vertex_forager.core.config import FetchJob
@@ -251,7 +252,7 @@ class FairnessWaiter:
             return SchedulerResult(priority=priority_pagination, job=None, demoted=[], already_done=False)
 
 
-_WAITER_CACHE: dict[tuple[int, int], FairnessWaiter] = {}
+_WAITER_CACHE: WeakValueDictionary[tuple[int, int], FairnessWaiter] = WeakValueDictionary()
 
 
 def _get_waiter(*, fair_lock: asyncio.Lock, fairness_state: FairnessState) -> FairnessWaiter:
@@ -288,39 +289,36 @@ async def mark_pagination_job_done(
     await _get_waiter(fair_lock=fair_lock, fairness_state=fairness_state).mark_pagination_job_done()
 
 
-async def wait_for_pagination_drain(*, fairness_state: FairnessState) -> None:
-    for waiter in _WAITER_CACHE.values():
-        if waiter._state is fairness_state:
-            await waiter.wait_for_pagination_drain()
-            return
-    await FairnessWaiter(
-        fair_lock=asyncio.Lock(),
+async def wait_for_pagination_drain(
+    *,
+    fair_lock: asyncio.Lock,
+    fairness_state: FairnessState,
+) -> None:
+    await _get_waiter(
+        fair_lock=fair_lock,
         fairness_state=fairness_state,
-        fairness_events=FairnessEvents(),
     ).wait_for_pagination_drain()
 
 
-async def wait_for_pagination_availability(*, fairness_state: FairnessState) -> None:
-    for waiter in _WAITER_CACHE.values():
-        if waiter._state is fairness_state:
-            await waiter.wait_for_pagination_availability()
-            return
-    await FairnessWaiter(
-        fair_lock=asyncio.Lock(),
+async def wait_for_pagination_availability(
+    *,
+    fair_lock: asyncio.Lock,
+    fairness_state: FairnessState,
+) -> None:
+    await _get_waiter(
+        fair_lock=fair_lock,
         fairness_state=fairness_state,
-        fairness_events=FairnessEvents(),
     ).wait_for_pagination_availability()
 
 
-async def wait_for_pagination_below_threshold(*, fairness_state: FairnessState) -> None:
-    for waiter in _WAITER_CACHE.values():
-        if waiter._state is fairness_state:
-            await waiter.wait_for_pagination_below_threshold()
-            return
-    await FairnessWaiter(
-        fair_lock=asyncio.Lock(),
+async def wait_for_pagination_below_threshold(
+    *,
+    fair_lock: asyncio.Lock,
+    fairness_state: FairnessState,
+) -> None:
+    await _get_waiter(
+        fair_lock=fair_lock,
         fairness_state=fairness_state,
-        fairness_events=FairnessEvents(),
     ).wait_for_pagination_below_threshold()
 
 

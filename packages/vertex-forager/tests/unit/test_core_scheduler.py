@@ -13,6 +13,7 @@ from vertex_forager.core.scheduler import (
     enqueue_pagination_job,
     mark_pagination_job_done,
     pop_next_job_respecting_fairness,
+    wait_for_pagination_drain,
 )
 
 
@@ -257,3 +258,17 @@ async def test_total_backlog_tracks_enqueued_and_popped_jobs() -> None:
     result_b = await waiter.pop_next_job_respecting_fairness(priority_pagination=1)
     assert result_b.job is not None
     assert state.total_backlog == 0
+
+
+@pytest.mark.asyncio
+async def test_wait_for_pagination_drain_uses_canonical_waiter() -> None:
+    state = FairnessState(quantum=3)
+    lock = asyncio.Lock()
+
+    await enqueue_pagination_job(fair_lock=lock, fairness_state=state, job=_job("AAPL", 1))
+    waiter = asyncio.create_task(wait_for_pagination_drain(fair_lock=lock, fairness_state=state))
+    await asyncio.sleep(0)
+    assert waiter.done() is False
+
+    await mark_pagination_job_done(fair_lock=lock, fairness_state=state)
+    await asyncio.wait_for(waiter, timeout=0.5)

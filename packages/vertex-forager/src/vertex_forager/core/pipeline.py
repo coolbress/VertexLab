@@ -784,7 +784,7 @@ class VertexForager:
                 self._summary["req_q_len_after_producer"] = float(req_q.qsize())
                 self._summary["pkt_q_len_after_producer"] = float(pkt_q.qsize())
         await req_q.join()
-        await wait_for_pagination_drain_impl(fairness_state=self._fair_state)
+        await wait_for_pagination_drain_impl(fair_lock=self._fair_lock, fairness_state=self._fair_state)
         logger.info("PIPELINE: Request queue joined, sending sentinel signals...")
         with suppress(Exception):
             self._summary["req_q_len_after_req_join"] = float(req_q.qsize())
@@ -1487,7 +1487,7 @@ class VertexForager:
             if selected.job is not None:
                 return selected
             pagination_wait = asyncio.create_task(
-                wait_for_pagination_availability_impl(fairness_state=self._fair_state)
+                wait_for_pagination_availability_impl(fair_lock=self._fair_lock, fairness_state=self._fair_state)
             )
             req_get = asyncio.create_task(self._get_request_queue(req_q=req_q))
             pending_tasks = (pagination_wait, req_get)
