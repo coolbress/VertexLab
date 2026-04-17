@@ -1382,7 +1382,7 @@ class VertexForager:
         pending_jobs_override: int | None = None,
     ) -> None:
         self._progress.record_terminal(terminal_count)
-        if not finished and progress_bar is None and on_progress is None:
+        if progress_bar is None and on_progress is None:
             return
         if result is None:
             result = RunResult(provider=self._router.provider, dataset=None)

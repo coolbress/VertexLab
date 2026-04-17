@@ -410,7 +410,7 @@ async def test_progress_snapshot_exceptional_shutdown_ignores_request_sentinels_
 
 
 @pytest.mark.asyncio
-async def test_progress_snapshot_prints_summary_when_progress_enabled_without_bar(
+async def test_progress_snapshot_skips_summary_when_no_progress_consumers(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     router = _PaginatingRouter(pages=0)
@@ -430,9 +430,7 @@ async def test_progress_snapshot_prints_summary_when_progress_enabled_without_ba
         summary_dataset="d",
     )
 
-    output = capsys.readouterr().out
-    assert "vertex-forager run complete" in output
-    assert "dataset=d" in output
+    assert capsys.readouterr().out == ""
 
 
 @pytest.mark.asyncio
@@ -556,6 +554,32 @@ async def test_emit_progress_short_circuits_without_consumers() -> None:
         progress_bar=None,
         terminal_count=1,
         finished=False,
+        show_summary=False,
+        summary_dataset="d",
+    )
+
+    assert engine._progress._jobs_done == 1
+    assert engine._progress._window_events == 1
+
+
+@pytest.mark.asyncio
+async def test_emit_progress_short_circuits_without_consumers_when_finished() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    engine._progress.reset(jobs_total=1)
+
+    def _boom(**_: object) -> object:
+        raise AssertionError("build_snapshot should not be called without consumers")
+
+    engine._progress.build_snapshot = _boom  # type: ignore[method-assign]
+
+    await engine._emit_progress(
+        result=RunResult(provider="stub", dataset="d"),
+        result_lock=asyncio.Lock(),
+        on_progress=None,
+        progress_bar=None,
+        terminal_count=1,
+        finished=True,
         show_summary=False,
         summary_dataset="d",
     )

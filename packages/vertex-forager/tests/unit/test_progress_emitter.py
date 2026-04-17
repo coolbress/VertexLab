@@ -19,6 +19,24 @@ class _Proc:
         return type("_Mem", (), {"rss": 64 * 1024 * 1024})()
 
 
+def test_progress_emitter_initializes_psutil_lazily() -> None:
+    with patch("vertex_forager.core.progress.psutil.Process") as process_cls:
+        emitter = ProgressEmitter()
+        emitter.reset(jobs_total=1)
+        assert emitter._process is None
+        process_cls.assert_not_called()
+
+        emitter.build_snapshot(
+            pending_jobs=0,
+            errors=0,
+            retries=0,
+            throttle_events=0,
+            finished=False,
+        )
+
+        process_cls.assert_called_once()
+
+
 def test_build_snapshot_uses_counter_state_and_pending_len() -> None:
     proc = _Proc()
     with patch("vertex_forager.core.progress.psutil.Process", return_value=proc):

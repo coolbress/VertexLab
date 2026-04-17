@@ -47,8 +47,7 @@ class ProgressEmitter:
         self._active_workers = 0
         self._display_done = 0
         self._counters: dict[str, int] = {}
-        self._process = psutil.Process(os.getpid())
-        self._process.cpu_percent(interval=None)
+        self._process: psutil.Process | None = None
 
     def reset(self, *, jobs_total: int | None, jobs_done_initial: int = 0) -> None:
         self._started_at = time.monotonic()
@@ -59,7 +58,12 @@ class ProgressEmitter:
         self._active_workers = 0
         self._display_done = jobs_done_initial
         self._counters = {}
-        self._process.cpu_percent(interval=None)
+
+    def _ensure_process_initialized(self) -> psutil.Process:
+        if self._process is None:
+            self._process = psutil.Process(os.getpid())
+            self._process.cpu_percent(interval=None)
+        return self._process
 
     def inc_counter(self, name: str, amount: int = 1) -> None:
         self._counters[name] = self._counters.get(name, 0) + amount
@@ -92,6 +96,7 @@ class ProgressEmitter:
         finished: bool,
         result_duration_s: float | None = None,
     ) -> ProgressSnapshot:
+        process = self._ensure_process_initialized()
         now = time.monotonic()
         cutoff = now - 30.0
         while self._history and self._history[0][0] < cutoff:
@@ -126,8 +131,8 @@ class ProgressEmitter:
             pending_jobs=pending_jobs,
             throttle_events=throttle_events,
             dlq_spooled=int(self._counters.get("dlq_spooled_files_total", 0)),
-            memory_mb=float(self._process.memory_info().rss / (1024 * 1024)),
-            cpu_pct=float(self._process.cpu_percent(interval=None)),
+            memory_mb=float(process.memory_info().rss / (1024 * 1024)),
+            cpu_pct=float(process.cpu_percent(interval=None)),
             finished=finished,
         )
 
