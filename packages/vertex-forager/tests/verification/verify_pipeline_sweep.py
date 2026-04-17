@@ -21,7 +21,16 @@ def _get_yfinance_client(client_config: dict[str, Any]) -> Any:
         if err.name in {"pandas", "yfinance"}:
             raise RuntimeError(f"Skipping verification: {_YF_OPTIONAL_DEPS_MSG}") from err
         raise
-    return YFinanceClient(rate_limit=60, **client_config)
+    client_kwargs = dict(client_config)
+    flush_threshold_rows = client_kwargs.pop("flush_threshold_rows", None)
+    if flush_threshold_rows is not None:
+        client_kwargs["storage"] = {"flush_threshold_rows": flush_threshold_rows}
+    timeout_s = client_kwargs.pop("http_timeout_s", None)
+    if timeout_s is not None:
+        limits = dict(client_kwargs.get("limits", {}))
+        limits["timeout_s"] = timeout_s
+        client_kwargs["limits"] = limits
+    return YFinanceClient(rate_limit=60, **client_kwargs)
 
 
 def _resolve_paths() -> tuple[Path, Path, Path]:
@@ -225,7 +234,10 @@ def test_pipeline_sweep_collects_runs() -> None:
     results = run_sweep()
     assert len(results["runs"]) == len(_build_combos())
     assert "yfinance_financials" in results["best"]
-    assert any("error" not in run for run in results["runs"])
+    assert any(
+        not run["measurements"].get("yfinance_price", {}).get("error")
+        for run in results["runs"]
+    )
 
 
 if __name__ == "__main__":
