@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.12](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.30.11...vertex-forager-v0.30.12) (2026-04-17)
+
+
+### Performance Improvements
+
+* **vertex-forager:** rate limit progress emit ([#517](https://github.com/coolbress/VertexLab/issues/517)) ([e70f34c](https://github.com/coolbress/VertexLab/commit/e70f34c27065e13c42ebe2d2011d50385eea04fb))
+
 ## [0.30.11](https://github.com/coolbress/VertexLab/compare/vertex-forager-v0.30.10...vertex-forager-v0.30.11) (2026-04-17)
 
 
