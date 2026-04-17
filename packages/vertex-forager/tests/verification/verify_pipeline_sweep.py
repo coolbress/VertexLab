@@ -24,7 +24,9 @@ def _get_yfinance_client(client_config: dict[str, Any]) -> Any:
     client_kwargs = dict(client_config)
     flush_threshold_rows = client_kwargs.pop("flush_threshold_rows", None)
     if flush_threshold_rows is not None:
-        client_kwargs["storage"] = {"flush_threshold_rows": flush_threshold_rows}
+        storage = dict(client_kwargs.get("storage", {}))
+        storage["flush_threshold_rows"] = flush_threshold_rows
+        client_kwargs["storage"] = storage
     timeout_s = client_kwargs.pop("http_timeout_s", None)
     if timeout_s is not None:
         limits = dict(client_kwargs.get("limits", {}))
@@ -236,6 +238,10 @@ def test_pipeline_sweep_collects_runs() -> None:
     assert "yfinance_financials" in results["best"]
     assert any(
         not run["measurements"].get("yfinance_price", {}).get("error")
+        for run in results["runs"]
+    )
+    assert any(
+        not run["measurements"].get("yfinance_financials", {}).get("error")
         for run in results["runs"]
     )
 
