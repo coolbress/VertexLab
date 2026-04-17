@@ -514,7 +514,7 @@ class FlushRecovery:
                 self.logger.error("WRITER: Error writing chunk for %s: %s", table, exc)
             return
         if isinstance(exc, self.dlq_spool_error_cls):
-            raise
+            raise exc
         prefix = "DuckDBError" if _is_duckdb_error(self.duckdb_module, exc) else "UnexpectedWriterError"
         await handle_writer_flush_error(
             table=table,

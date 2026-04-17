@@ -11,7 +11,13 @@ import pytest
 
 from vertex_forager.core.config import FetchJob, FramePacket, RequestSpec, RetryConfig, RunResult
 from vertex_forager.core.retry import RetryExecutor
-from vertex_forager.core.writerflush import FlushExecutor, FlushPlanner, FlushRecovery, flush_chunked_table
+from vertex_forager.core.writerflush import (
+    FlushExecutor,
+    FlushPlanner,
+    FlushRecovery,
+    MetricKind,
+    flush_chunked_table,
+)
 from vertex_forager.exceptions import RunError
 
 pytestmark = pytest.mark.manual
@@ -37,7 +43,7 @@ class _NoopLogger:
 
 class _NoopObserver:
     @staticmethod
-    def on_metric(name: str, value: float, *, kind: str) -> None:
+    def on_metric(name: str, value: float, *, kind: MetricKind) -> None:
         pass
 
     @staticmethod
