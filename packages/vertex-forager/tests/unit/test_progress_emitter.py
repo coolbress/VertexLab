@@ -110,8 +110,7 @@ async def test_emit_invokes_callback_and_progress_bar() -> None:
     logger.error.assert_not_called()
 
 
-@pytest.mark.asyncio
-async def test_emit_rate_limits_non_finished_snapshots_but_allows_finished(
+def test_should_emit_rate_limits_non_finished_snapshots_but_allows_finished(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     proc = _Proc()
@@ -121,65 +120,10 @@ async def test_emit_rate_limits_non_finished_snapshots_but_allows_finished(
 
     fake_now = {"value": 100.0}
     monkeypatch.setattr("vertex_forager.core.progress.time.monotonic", lambda: fake_now["value"])
-
-    seen: list[object] = []
-
-    async def on_progress(progress_snapshot: object) -> None:
-        seen.append(progress_snapshot)
-
-    logger = MagicMock()
-
-    snapshot_a = emitter.build_snapshot(
-        pending_jobs=1,
-        errors=0,
-        retries=0,
-        throttle_events=0,
-        finished=False,
-    )
+    assert emitter.should_emit(finished=False) is True
+    emitter._last_emit_at = 100.0
     fake_now["value"] = 100.05
-    snapshot_b = emitter.build_snapshot(
-        pending_jobs=1,
-        errors=0,
-        retries=0,
-        throttle_events=0,
-        finished=False,
-    )
+    assert emitter.should_emit(finished=False) is False
+    assert emitter.should_emit(finished=True) is True
     fake_now["value"] = 100.20
-    snapshot_c = emitter.build_snapshot(
-        pending_jobs=0,
-        errors=0,
-        retries=0,
-        throttle_events=0,
-        finished=True,
-        result_duration_s=1.0,
-    )
-
-    await emitter.emit(
-        snapshot=snapshot_a,
-        on_progress=on_progress,
-        progress_bar=None,
-        show_summary=False,
-        provider="stub",
-        dataset="price",
-        logger=logger,
-    )
-    await emitter.emit(
-        snapshot=snapshot_b,
-        on_progress=on_progress,
-        progress_bar=None,
-        show_summary=False,
-        provider="stub",
-        dataset="price",
-        logger=logger,
-    )
-    await emitter.emit(
-        snapshot=snapshot_c,
-        on_progress=on_progress,
-        progress_bar=None,
-        show_summary=False,
-        provider="stub",
-        dataset="price",
-        logger=logger,
-    )
-
-    assert seen == [snapshot_a, snapshot_c]
+    assert emitter.should_emit(finished=False) is True

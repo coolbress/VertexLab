@@ -1385,6 +1385,8 @@ class VertexForager:
         self._progress.record_terminal(terminal_count)
         if progress_bar is None and on_progress is None:
             return
+        if not self._progress.should_emit(finished=finished):
+            return
         if result is None:
             result = RunResult(provider=self._router.provider, dataset=None)
         if result_lock is None:

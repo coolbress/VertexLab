@@ -587,6 +587,33 @@ async def test_emit_progress_short_circuits_without_consumers_when_finished() ->
 
 
 @pytest.mark.asyncio
+async def test_emit_progress_skips_snapshot_build_when_rate_limited() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    engine._progress.reset(jobs_total=1)
+
+    def _boom(**_: object) -> object:
+        raise AssertionError("build_snapshot should not be called when emission is rate-limited")
+
+    engine._progress.build_snapshot = _boom  # type: ignore[method-assign]
+    engine._progress.should_emit = lambda *, finished: False  # type: ignore[method-assign]
+
+    await engine._emit_progress(
+        result=RunResult(provider="stub", dataset="d"),
+        result_lock=asyncio.Lock(),
+        on_progress=lambda snapshot: None,
+        progress_bar=None,
+        terminal_count=1,
+        finished=False,
+        show_summary=False,
+        summary_dataset="d",
+    )
+
+    assert engine._progress._jobs_done == 1
+    assert engine._progress._window_events == 1
+
+
+@pytest.mark.asyncio
 async def test_progress_snapshot_uses_retained_sample_window_for_throughput(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

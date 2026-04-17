@@ -141,6 +141,12 @@ class ProgressEmitter:
             finished=finished,
         )
 
+    def should_emit(self, *, finished: bool) -> bool:
+        now = time.monotonic()
+        if not finished and self._last_emit_at and now - self._last_emit_at < PROGRESS_EMIT_INTERVAL_S:
+            return False
+        return True
+
     async def emit(
         self,
         *,
@@ -152,10 +158,7 @@ class ProgressEmitter:
         dataset: str,
         logger: Any,
     ) -> None:
-        now = time.monotonic()
-        if not snapshot.finished and self._last_emit_at and now - self._last_emit_at < PROGRESS_EMIT_INTERVAL_S:
-            return
-        self._last_emit_at = now
+        self._last_emit_at = time.monotonic()
         if progress_bar is not None:
             delta = max(0, snapshot.jobs_done - self._display_done)
             if delta:
