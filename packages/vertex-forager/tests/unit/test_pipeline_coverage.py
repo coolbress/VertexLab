@@ -285,11 +285,11 @@ async def test_progress_snapshot_early_init_failure_does_not_reuse_prior_run_sta
     engine, _ = _make_engine(router)
     snapshots: list[ProgressSnapshot] = []
 
-    engine._progress_started_at = 123.0
-    engine._progress_total = 99
-    engine._progress_done = 77
-    engine._progress_history.append((122.0, 5))
-    engine._progress_window_events = 5
+    engine._progress._started_at = 123.0
+    engine._progress._jobs_total = 99
+    engine._progress._jobs_done = 77
+    engine._progress._history.append((122.0, 5))
+    engine._progress._window_events = 5
 
     def _boom(dataset: str, checkpoint: Checkpoint | None) -> tuple[str, set[str]]:
         raise RuntimeError("init boom")
@@ -361,7 +361,7 @@ async def test_progress_snapshot_exceptional_shutdown_emits_terminal_after_stop(
 
     engine._await_pipeline_completion = _boom  # type: ignore[method-assign]
     engine.stop = _stop  # type: ignore[method-assign]
-    engine._emit_progress_snapshot = _emit  # type: ignore[method-assign]
+    engine._emit_progress = _emit  # type: ignore[method-assign]
 
     with pytest.raises(RuntimeError, match="pipeline boom"):
         await engine.run(dataset="d", symbols=["AAPL"], on_progress=lambda snapshot: None)
@@ -377,6 +377,9 @@ async def test_progress_snapshot_exceptional_shutdown_ignores_request_sentinels_
 
     async def _boom(**_: object) -> None:
         req_q = cast("asyncio.PriorityQueue[tuple[int, int, FetchJob | None]]", engine._req_q)
+        engine._pending_jobs.add(
+            [FetchJob(provider="stub", dataset="d", symbol="AAPL", spec=RequestSpec(url="https://x"))]
+        )
         await req_q.put(
             (
                 engine.PRIORITY_NEW_JOB,
@@ -414,12 +417,11 @@ async def test_progress_snapshot_prints_summary_when_progress_enabled_without_ba
     engine, _ = _make_engine(router)
     result = RunResult(provider="stub", dataset="ignored")
 
-    engine._reset_progress_runtime(jobs_total=1)
+    engine._progress.reset(jobs_total=1)
 
-    await engine._emit_progress_snapshot(
+    await engine._emit_progress(
         result=result,
         result_lock=asyncio.Lock(),
-        req_q=asyncio.PriorityQueue(),
         on_progress=None,
         progress_bar=None,
         terminal_count=1,
@@ -505,17 +507,15 @@ async def test_progress_snapshot_uses_progress_counters_when_metrics_disabled() 
     engine, _ = _make_engine(router)
     result = RunResult(provider="stub", dataset="d")
     lock = asyncio.Lock()
-    req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
     snapshots: list[ProgressSnapshot] = []
 
-    engine._reset_progress_runtime(jobs_total=1)
+    engine._progress.reset(jobs_total=1)
     engine._inc("rows_written_total", 5)
     engine._inc("dlq_spooled_files_total", 2)
 
-    await engine._emit_progress_snapshot(
+    await engine._emit_progress(
         result=result,
         result_lock=lock,
-        req_q=req_q,
         on_progress=lambda snapshot: snapshots.append(snapshot),
         progress_bar=None,
         terminal_count=1,
@@ -535,10 +535,10 @@ def test_logical_symbol_count_defaults_to_one_for_missing_symbol() -> None:
 
 
 @pytest.mark.asyncio
-async def test_emit_progress_snapshot_short_circuits_without_consumers() -> None:
+async def test_emit_progress_short_circuits_without_consumers() -> None:
     router = _PaginatingRouter(pages=0)
     engine, _ = _make_engine(router)
-    engine._reset_progress_runtime(jobs_total=1)
+    engine._progress.reset(jobs_total=1)
 
     class _Proc:
         def memory_info(self) -> object:
@@ -547,12 +547,11 @@ async def test_emit_progress_snapshot_short_circuits_without_consumers() -> None
         def cpu_percent(self, interval: float | None = None) -> float:
             raise AssertionError("cpu_percent should not be called without consumers")
 
-    engine._progress_process = _Proc()  # type: ignore[assignment]
+    engine._progress._process = _Proc()  # type: ignore[assignment]
 
-    await engine._emit_progress_snapshot(
+    await engine._emit_progress(
         result=RunResult(provider="stub", dataset="d"),
         result_lock=asyncio.Lock(),
-        req_q=asyncio.PriorityQueue(),
         on_progress=None,
         progress_bar=None,
         terminal_count=1,
@@ -561,8 +560,8 @@ async def test_emit_progress_snapshot_short_circuits_without_consumers() -> None
         summary_dataset="d",
     )
 
-    assert engine._progress_done == 1
-    assert engine._progress_window_events == 1
+    assert engine._progress._jobs_done == 1
+    assert engine._progress._window_events == 1
 
 
 @pytest.mark.asyncio
@@ -573,21 +572,19 @@ async def test_progress_snapshot_uses_retained_sample_window_for_throughput(
     engine, _ = _make_engine(router)
     result = RunResult(provider="stub", dataset="d")
     lock = asyncio.Lock()
-    req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
     snapshots: list[ProgressSnapshot] = []
 
-    engine._progress_started_at = 80.0
-    engine._progress_total = 10
-    engine._progress_done = 4
-    engine._progress_history.append((95.0, 3))
-    engine._progress_history.append((99.0, 1))
-    engine._progress_window_events = 4
-    monkeypatch.setattr(pipeline_module.time, "monotonic", lambda: 100.0)
+    engine._progress._started_at = 80.0
+    engine._progress._jobs_total = 10
+    engine._progress._jobs_done = 4
+    engine._progress._history.append((95.0, 3))
+    engine._progress._history.append((99.0, 1))
+    engine._progress._window_events = 4
+    monkeypatch.setattr("vertex_forager.core.progress.time.monotonic", lambda: 100.0)
 
-    await engine._emit_progress_snapshot(
+    await engine._emit_progress(
         result=result,
         result_lock=lock,
-        req_q=req_q,
         on_progress=lambda snapshot: snapshots.append(snapshot),
         progress_bar=None,
         terminal_count=0,
@@ -608,20 +605,18 @@ async def test_progress_snapshot_uses_run_start_for_single_sample_throughput(
     engine, _ = _make_engine(router)
     result = RunResult(provider="stub", dataset="d")
     lock = asyncio.Lock()
-    req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] = asyncio.PriorityQueue()
     snapshots: list[ProgressSnapshot] = []
 
-    engine._progress_started_at = 90.0
-    engine._progress_total = 10
-    engine._progress_done = 1
-    engine._progress_history.append((100.0, 1))
-    engine._progress_window_events = 1
-    monkeypatch.setattr(pipeline_module.time, "monotonic", lambda: 100.0)
+    engine._progress._started_at = 90.0
+    engine._progress._jobs_total = 10
+    engine._progress._jobs_done = 1
+    engine._progress._history.append((100.0, 1))
+    engine._progress._window_events = 1
+    monkeypatch.setattr("vertex_forager.core.progress.time.monotonic", lambda: 100.0)
 
-    await engine._emit_progress_snapshot(
+    await engine._emit_progress(
         result=result,
         result_lock=lock,
-        req_q=req_q,
         on_progress=lambda snapshot: snapshots.append(snapshot),
         progress_bar=None,
         terminal_count=0,

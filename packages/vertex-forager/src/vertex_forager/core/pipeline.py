@@ -26,7 +26,6 @@ from collections import deque
 from collections.abc import Callable, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
-import inspect
 import itertools
 import logging
 import os
@@ -37,7 +36,6 @@ from uuid import uuid4
 import httpx
 from opentelemetry import trace as otel_trace
 from polars.exceptions import ComputeError
-import psutil
 from tqdm.auto import tqdm
 
 from vertex_forager.constants import FLUSH_THRESHOLD_INFINITE as CONST_FLUSH_THRESHOLD_INFINITE
@@ -67,6 +65,7 @@ from vertex_forager.core.orchestration import await_writer_tasks as await_writer
 from vertex_forager.core.orchestration import cancel_non_writer_tasks as cancel_non_writer_tasks_impl
 from vertex_forager.core.orchestration import enqueue_request_sentinels as enqueue_request_sentinels_impl
 from vertex_forager.core.orchestration import schedule_packet_sentinels as schedule_packet_sentinels_impl
+from vertex_forager.core.progress import ProgressEmitter
 from vertex_forager.core.quality import validate_data_quality as validate_data_quality_impl
 from vertex_forager.core.retry import RetryExecutor
 from vertex_forager.core.runtime_state import CheckpointTracker, PendingJobRegistry
@@ -216,45 +215,6 @@ def _fsync_dir(path: str) -> None:
         pass
 
 
-def _count_pending_request_jobs(req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] | None) -> int:
-    """Count pending (non-sentinel) jobs in a request queue.
-
-    Note: Reading req_q._queue relies on CPython implementation details and may
-    break on other Python implementations. The qsize() fallback provides only an
-    approximate count because it cannot filter sentinel entries (items where
-    item[2] is None). Callers should treat qsize() results as best-effort.
-    """
-    if req_q is None:
-        return 0
-    queue_items = getattr(req_q, "_queue", None)
-    if queue_items is None:
-        qsize = getattr(req_q, "qsize", None)
-        return int(qsize()) if callable(qsize) else 0
-    return sum(1 for item in queue_items if len(item) >= 3 and item[2] is not None)
-
-
-def _compute_window_start(
-    *, progress_started_at: float, progress_history: deque[tuple[float, int]], now: float
-) -> float:
-    if len(progress_history) == 1:
-        return progress_started_at
-    if progress_history:
-        return progress_history[0][0]
-    return now
-
-
-def _format_progress_summary(*, provider: str, dataset: str, snapshot: ProgressSnapshot) -> str:
-    pct = f"{snapshot.pct:.1f}%" if snapshot.pct is not None else "n/a"
-    eta = f"{snapshot.eta_s:.1f}s" if snapshot.eta_s is not None else "n/a"
-    return (
-        f"vertex-forager run complete | provider={provider} dataset={dataset} jobs={snapshot.jobs_done}"
-        f"/{snapshot.jobs_total if snapshot.jobs_total is not None else '?'} pct={pct} "
-        f"elapsed={snapshot.elapsed_s:.1f}s throughput={snapshot.throughput_sym_per_s:.2f}/s "
-        f"eta={eta} rows={snapshot.rows_written} errors={snapshot.errors} retries={snapshot.retries} "
-        f"throttle_events={snapshot.throttle_events} dlq_spooled={snapshot.dlq_spooled}"
-    )
-
-
 _tracer = otel_trace.get_tracer("vertex_forager")
 
 
@@ -308,13 +268,12 @@ class VertexForager:
         self._config = config
         self.controller = controller
         self._counters: dict[str, int] = {}
-        self._progress_counters: dict[str, int] = {}
         self._hists: dict[str, deque[float]] = {}
 
         # Track active tasks for graceful shutdown
         self._active_tasks: list[asyncio.Future[Any]] = []
         self._running = False
-        self._initialize_progress_runtime()
+        self._progress = ProgressEmitter()
 
         # Validate configuration
         self._config.assert_valid()
@@ -413,18 +372,8 @@ class VertexForager:
             )
             self._inc("pickle_compat_enabled", 1)
 
-    def _initialize_progress_runtime(self) -> None:
-        self._progress_started_at = 0.0
-        self._progress_total: int | None = None
-        self._progress_done = 0
-        self._progress_history: deque[tuple[float, int]] = deque()
-        self._progress_window_events = 0
-        self._active_workers = 0
-        self._progress_process = psutil.Process(os.getpid())
-        self._progress_process.cpu_percent(interval=None)
-
     def _inc(self, name: str, amount: int = 1) -> None:
-        self._progress_counters[name] = self._progress_counters.get(name, 0) + amount
+        self._progress.inc_counter(name, amount)
         self._counters[name] = self._counters.get(name, 0) + amount
         sink = self._metrics_sink
         if sink is not None:
@@ -627,7 +576,7 @@ class VertexForager:
                 if checkpoint is not None
                 else 0
             )
-            self._reset_progress_runtime(jobs_total=jobs_total, jobs_done_initial=jobs_done_initial)
+            self._progress.reset(jobs_total=jobs_total, jobs_done_initial=jobs_done_initial)
             progress_runtime_initialized = True
             progress_bar = (
                 tqdm(total=jobs_total, initial=jobs_done_initial, unit="jobs", desc=dataset, leave=True)
@@ -670,10 +619,9 @@ class VertexForager:
                 run_id=run_id,
                 started_monotonic=t_run0,
             )
-            await self._emit_progress_snapshot(
+            await self._emit_progress(
                 result=result,
                 result_lock=result_lock,
-                req_q=req_q,
                 on_progress=on_progress,
                 progress_bar=progress_bar,
                 terminal_count=0,
@@ -685,12 +633,12 @@ class VertexForager:
             return result
         finally:
             try:
-                pending_jobs_before_stop = _count_pending_request_jobs(req_q)
+                pending_jobs_before_stop = len(self._pending_jobs)
                 await self.stop()
                 if not final_progress_emitted:
                     try:
                         if not progress_runtime_initialized:
-                            self._reset_progress_runtime(
+                            self._progress.reset(
                                 jobs_total=_count_requested_symbol_units(symbols),
                                 jobs_done_initial=_count_completed_symbol_units(
                                     requested_symbols=symbols,
@@ -699,10 +647,9 @@ class VertexForager:
                                 if checkpoint is not None
                                 else 0,
                             )
-                        await self._emit_progress_snapshot(
+                        await self._emit_progress(
                             result=result,
                             result_lock=result_lock,
-                            req_q=req_q,
                             on_progress=on_progress,
                             progress_bar=progress_bar,
                             terminal_count=0,
@@ -1368,7 +1315,7 @@ class VertexForager:
             worker_exc: BaseException | None = None
             parse_result: ParseResult | None = None
             try:
-                self._active_workers += 1
+                self._progress.worker_started()
                 _payload, worker_exc, parse_result = await self._process_worker_job(
                     worker_id=worker_id,
                     priority=priority,
@@ -1391,7 +1338,7 @@ class VertexForager:
                 else:
                     req_q.task_done()
                 try:
-                    self._active_workers = max(0, self._active_workers - 1)
+                    self._progress.worker_finished()
                     await self._record_worker_symbol_state(job=job, worker_exc=worker_exc, parse_result=parse_result)
                     terminal_count = 0
                     next_jobs = list(parse_result.next_jobs if parse_result is not None else [])
@@ -1401,10 +1348,9 @@ class VertexForager:
                         terminal_count = _logical_symbol_count(job)
                     elif job.symbol is None and next_jobs:
                         terminal_count = 1
-                    await self._emit_progress_snapshot(
+                    await self._emit_progress(
                         result=result,
                         result_lock=result_lock,
-                        req_q=req_q,
                         on_progress=on_progress,
                         progress_bar=progress_bar,
                         terminal_count=terminal_count,
@@ -1422,40 +1368,11 @@ class VertexForager:
                         e,
                     )
 
-    def _reset_progress_runtime(self, *, jobs_total: int | None, jobs_done_initial: int = 0) -> None:
-        self._progress_started_at = time.monotonic()
-        self._progress_total = jobs_total
-        self._progress_done = jobs_done_initial
-        self._progress_history.clear()
-        self._progress_window_events = 0
-        self._active_workers = 0
-        self._progress_display_done = jobs_done_initial
-        self._progress_counters = {}
-        self._progress_process.cpu_percent(interval=None)
-
-    def _update_progress_bar(self, *, progress_bar: tqdm | None, snapshot: ProgressSnapshot) -> None:
-        if progress_bar is None:
-            return
-        delta = max(0, snapshot.jobs_done - self._progress_display_done)
-        if delta:
-            progress_bar.update(delta)
-            self._progress_display_done += delta
-        progress_bar.set_postfix(
-            throughput=f"{snapshot.throughput_sym_per_s:.2f}/s",
-            eta="n/a" if snapshot.eta_s is None else f"{snapshot.eta_s:.1f}s",
-            errors=snapshot.errors,
-            rows=snapshot.rows_written,
-            refresh=False,
-        )
-        if snapshot.finished:
-            progress_bar.close()
-
-    async def _emit_progress_snapshot(
+    async def _emit_progress(
         self,
         *,
         result: RunResult | None,
         result_lock: asyncio.Lock | None,
-        req_q: asyncio.PriorityQueue[tuple[int, int, FetchJob | None]] | None,
         on_progress: Callable[[ProgressSnapshot], Any] | None,
         progress_bar: tqdm | None,
         terminal_count: int,
@@ -1464,86 +1381,32 @@ class VertexForager:
         summary_dataset: str | None,
         pending_jobs_override: int | None = None,
     ) -> None:
-        now = time.monotonic()
-        if terminal_count > 0:
-            self._progress_done += terminal_count
-            self._progress_history.append((now, terminal_count))
-            self._progress_window_events += terminal_count
-        cutoff = now - 30.0
-        while self._progress_history and self._progress_history[0][0] < cutoff:
-            _ts, count = self._progress_history.popleft()
-            self._progress_window_events = max(0, self._progress_window_events - count)
+        self._progress.record_terminal(terminal_count)
         if not finished and progress_bar is None and on_progress is None:
             return
-        elapsed_s = max(0.0, now - self._progress_started_at)
-        window_events = self._progress_window_events
-        window_start = _compute_window_start(
-            progress_started_at=self._progress_started_at,
-            progress_history=self._progress_history,
-            now=now,
-        )
-        window_span = min(30.0, max(0.0, now - window_start)) if self._progress_history else 0.0
-        throughput = float(window_events / window_span) if window_span > 0.0 else 0.0
-        jobs_total = self._progress_total
-        if jobs_total not in (None, 0):
-            known_jobs_total = cast("int", jobs_total)
-            pct = float((self._progress_done / known_jobs_total) * 100.0)
-            eta_s = float(max(0, known_jobs_total - self._progress_done) / throughput) if throughput > 0.0 else None
-        else:
-            pct = None
-            eta_s = None
         if result is None:
             result = RunResult(provider=self._router.provider, dataset=None)
         if result_lock is None:
             result_lock = asyncio.Lock()
         async with result_lock:
             errors = len(result.errors)
-        pending_jobs = (
-            pending_jobs_override if pending_jobs_override is not None else _count_pending_request_jobs(req_q)
-        )
-        snapshot = ProgressSnapshot(
-            jobs_done=self._progress_done,
-            jobs_total=jobs_total,
-            pct=pct,
-            throughput_sym_per_s=throughput,
-            eta_s=eta_s,
+        snapshot = self._progress.build_snapshot(
+            pending_jobs=pending_jobs_override if pending_jobs_override is not None else len(self._pending_jobs),
             errors=errors,
             retries=int(getattr(self.controller, "retry_events", 0)),
-            rows_written=int(self._progress_counters.get("rows_written_total", 0)),
-            elapsed_s=float(result.duration_s) if finished and result.duration_s is not None else elapsed_s,
-            active_workers=self._active_workers,
-            pending_jobs=pending_jobs,
             throttle_events=int(getattr(self.controller, "throttle_events", 0)),
-            dlq_spooled=int(self._progress_counters.get("dlq_spooled_files_total", 0)),
-            memory_mb=float(self._progress_process.memory_info().rss / (1024 * 1024)),
-            cpu_pct=float(self._progress_process.cpu_percent(interval=None)),
             finished=finished,
+            result_duration_s=result.duration_s,
         )
-        self._update_progress_bar(progress_bar=progress_bar, snapshot=snapshot)
-        if on_progress is None:
-            if finished and show_summary:
-                print(
-                    _format_progress_summary(
-                        provider=self._router.provider,
-                        dataset=summary_dataset or result.dataset or "",
-                        snapshot=snapshot,
-                    )
-                )
-            return
-        try:
-            maybe_awaitable = on_progress(snapshot)
-            if inspect.isawaitable(maybe_awaitable):
-                await maybe_awaitable
-        except Exception as e:
-            logger.error("Error in on_progress callback: %s", e)
-        if finished and show_summary:
-            print(
-                _format_progress_summary(
-                    provider=self._router.provider,
-                    dataset=summary_dataset or result.dataset or "",
-                    snapshot=snapshot,
-                )
-            )
+        await self._progress.emit(
+            snapshot=snapshot,
+            on_progress=on_progress,
+            progress_bar=progress_bar,
+            show_summary=show_summary,
+            provider=self._router.provider,
+            dataset=summary_dataset or result.dataset or "",
+            logger=logger,
+        )
 
     def _drain_deferred_demotes(self, **_: object) -> None:
         return None
