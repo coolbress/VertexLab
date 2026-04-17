@@ -7,7 +7,15 @@ import time
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
+
+from vertex_forager.core.config import RequestSpec
+from vertex_forager.core.domain import FetchJob, FramePacket
 from vertex_forager.utils import as_dict
+
+pytestmark = pytest.mark.manual
+
+_YF_OPTIONAL_DEPS_MSG = "install optional deps with `pip install vertex-forager[yfinance]`"
 
 
 def _build_fixture_frame(ticker: str, periods: int = 252) -> object:
@@ -50,6 +58,23 @@ def _resolve_duration_s(run: object) -> float:
         if math.isfinite(fallback) and fallback > 0:
             return fallback
     raise RuntimeError("Invalid benchmark duration_s: expected a finite positive value.")
+
+
+def _resolve_paths() -> tuple[Path, Path, Path]:
+    out_dir_env = os.getenv("VF_PROFILE_OUTPUT_DIR")
+    out_dir = Path(out_dir_env) if out_dir_env else (Path.cwd() / "output" / "forager-profiles")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    return out_dir, out_dir / "profile_run.duckdb", out_dir / "profile_metrics.json"
+
+
+def _load_yfinance_client() -> object:
+    try:
+        from vertex_forager.providers.yfinance.client import YFinanceClient
+    except ImportError as err:
+        if err.name in {"pandas", "yfinance"}:
+            raise RuntimeError(f"Skipping verification: {_YF_OPTIONAL_DEPS_MSG}") from err
+        raise
+    return YFinanceClient(rate_limit=60)
 
 
 def _run_mocked_price_collection(
@@ -100,8 +125,6 @@ def _run_mocked_price_collection(
 def _measure_domain_model_construction() -> dict[str, float]:
     import polars as pl
     from pydantic import BaseModel, ConfigDict
-
-    from vertex_forager.core.config import FetchJob, FramePacket, RequestSpec
 
     class _PydanticFetchJob(BaseModel):
         provider: str
@@ -183,37 +206,15 @@ def _measure_domain_model_construction() -> dict[str, float]:
     }
 
 
-def main() -> None:
-    """Verify pipeline performance for Price data.
-
-    Executes a price data collection run for standard tickers and writes
-    performance metrics to 'profile_metrics.json' in the configured output
-    directory.
-
-    Side Effects:
-        - Creates/deletes 'profile_run.duckdb' in VF_PROFILE_OUTPUT_DIR.
-        - Writes 'profile_metrics.json' to VF_PROFILE_OUTPUT_DIR.
-    """
-    out_dir_env = os.getenv("VF_PROFILE_OUTPUT_DIR")
-    out_dir = Path(out_dir_env) if out_dir_env else (Path.cwd() / "output" / "forager-profiles")
-    out_dir.mkdir(parents=True, exist_ok=True)
-    metrics_path = out_dir / "profile_metrics.json"
-    db_path = out_dir / "profile_run.duckdb"
+def run_pipeline_perf_verification() -> dict[str, object]:
+    _, db_path, metrics_path = _resolve_paths()
+    warmup_db_path = metrics_path.with_name("profile_run_warmup.duckdb")
     if db_path.exists():
         db_path.unlink()
     try:
-        from vertex_forager.providers.yfinance.client import YFinanceClient
-    except ImportError as err:
-        if err.name in {"pandas", "yfinance"}:
-            print("Skipping verification: install optional deps with `pip install vertex-forager[yfinance]`")
-            return
-        raise
-
-    client = YFinanceClient(rate_limit=60)
-    tickers = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN"]
-    fixture_map = {ticker: _build_fixture_frame(ticker) for ticker in tickers}
-    warmup_db_path = out_dir / "profile_run_warmup.duckdb"
-    try:
+        client = _load_yfinance_client()
+        tickers = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN"]
+        fixture_map = {ticker: _build_fixture_frame(ticker) for ticker in tickers}
         run = _run_mocked_price_collection(
             client=client,
             tickers=tickers,
@@ -221,26 +222,54 @@ def main() -> None:
             warmup_db_path=warmup_db_path,
             fixture_map=fixture_map,
         )
-    except ImportError as err:
-        if err.name in {"pandas", "yfinance"}:
-            print("Skipping verification: install optional deps with `pip install vertex-forager[yfinance]`")
+        data = as_dict(run)
+        data["duration_s"] = _resolve_duration_s(run)
+        data["started_at"] = getattr(run, "started_at", None)
+        data["finished_at"] = getattr(run, "finished_at", None)
+        data["metrics_summary"] = getattr(run, "metrics_summary", {}) or {}
+        data["metrics_counters"] = getattr(run, "metrics_counters", {}) or {}
+        data["construction_benchmarks"] = _measure_domain_model_construction()
+        metrics_path.write_text(json.dumps(data, indent=2))
+        return data
+    finally:
+        if db_path.exists():
+            db_path.unlink()
+        if warmup_db_path.exists():
+            warmup_db_path.unlink()
+
+
+def _assert_pipeline_perf_budget(metrics: dict[str, object]) -> None:
+    duration_s = float(metrics["duration_s"])
+    budget_s = float(os.getenv("VF_PERF_BUDGET_PIPELINE_S", "5.0"))
+    assert duration_s < budget_s, f"pipeline perf regression: duration_s={duration_s:.3f} budget_s={budget_s:.3f}"
+    summary = metrics.get("metrics_summary")
+    assert isinstance(summary, dict)
+    assert "parse_duration_s.yfinance.price_p95" in summary
+
+
+@pytest.mark.skipif(
+    os.getenv("VF_ENABLE_PIPELINE_PERF_TEST") != "1",
+    reason="pipeline perf test disabled by default",
+)
+def test_pipeline_perf_budget() -> None:
+    metrics = run_pipeline_perf_verification()
+    _assert_pipeline_perf_budget(metrics)
+
+
+def main() -> None:
+    if os.getenv("VF_ENABLE_PIPELINE_PERF_TEST") != "1":
+        print("Skipping verification: set VF_ENABLE_PIPELINE_PERF_TEST=1")
+        return
+    try:
+        metrics = run_pipeline_perf_verification()
+    except RuntimeError as err:
+        if "Skipping verification:" in str(err):
+            print(err)
             return
         raise
-    except Exception as err:
-        raise RuntimeError("Benchmark execution failed before metrics could be written.") from err
-
-    data = as_dict(run)
-    data["duration_s"] = _resolve_duration_s(run)
-    data["started_at"] = getattr(run, "started_at", None)
-    data["finished_at"] = getattr(run, "finished_at", None)
-    data["construction_benchmarks"] = _measure_domain_model_construction()
-    metrics_path.write_text(json.dumps(data, indent=2))
+    _assert_pipeline_perf_budget(metrics)
+    _, _, metrics_path = _resolve_paths()
     print(f"Wrote metrics: {metrics_path}")
-
-    if db_path.exists():
-        db_path.unlink()
-    if warmup_db_path.exists():
-        warmup_db_path.unlink()
 
 
 if __name__ == "__main__":

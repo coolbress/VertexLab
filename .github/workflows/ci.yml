@@ -267,6 +267,44 @@ jobs:
           fi
 
   # Dedicated, non-blocking benchmark job (pushes to main only)
+  benchmark-pr:
+    name: Benchmark PR (non-blocking)
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    needs: [quality-check]
+    timeout-minutes: 15
+    if: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 pinned
+      - name: Install uv
+        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57  # v8.0.0 pinned
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0 pinned
+        with:
+          python-version: "3.10"
+      - name: Install dependencies
+        run: |
+          uv sync
+          uv pip install -e "packages/vertex-forager[yfinance]"
+      - name: Benchmark sanity check
+        env:
+          VF_ENABLE_PIPELINE_PERF_TEST: "1"
+          VF_PERF_BUDGET_PIPELINE_S: "10.0"
+          VF_PROFILE_OUTPUT_DIR: ${{ github.workspace }}/output/forager-profiles
+        run: uv run python packages/vertex-forager/tests/verification/verify_pipeline_perf.py
+      - name: Upload benchmark metrics artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0 pinned
+        with:
+          name: benchmark-pr-profile-metrics
+          path: ${{ github.workspace }}/output/forager-profiles/profile_metrics.json
+          if-no-files-found: ignore
+
+  # Dedicated, non-blocking benchmark job (pushes to main only)
   benchmark-non-blocking:
     name: Benchmark (non-blocking)
     continue-on-error: true
@@ -300,6 +338,7 @@ jobs:
         run: uv run python .github/scripts/fetch_previous_benchmark_artifact.py
       - name: Benchmark (non-blocking)
         env:
+          VF_ENABLE_PIPELINE_PERF_TEST: "1"
           VF_PROFILE_OUTPUT_DIR: ${{ github.workspace }}/output/forager-profiles
         run: uv run python packages/vertex-forager/tests/verification/verify_pipeline_perf.py
       - name: Detect benchmark metrics artifact

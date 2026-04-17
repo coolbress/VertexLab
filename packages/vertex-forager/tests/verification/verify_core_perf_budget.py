@@ -9,7 +9,8 @@ import time
 import polars as pl
 import pytest
 
-from vertex_forager.core.config import FetchJob, FramePacket, RequestSpec, RetryConfig, RunResult
+from vertex_forager.core.config import RequestSpec, RetryConfig
+from vertex_forager.core.domain import FetchJob, FramePacket, RunResult
 from vertex_forager.core.retry import RetryExecutor
 from vertex_forager.core.writerflush import (
     FlushExecutor,
@@ -84,6 +85,10 @@ class _Controller:
 )
 @pytest.mark.asyncio
 async def test_retry_and_writer_chunk_perf_budget() -> None:
+    # Baseline note:
+    # These defaults came from an initial conservative local run rather than a
+    # recorded committed baseline artifact. When the retry-allocation path is
+    # re-measured, tighten these budgets if they prove too loose.
     retry_budget_s = float(os.getenv("VF_PERF_BUDGET_RETRY_S", "1.5"))
     writer_budget_s = float(os.getenv("VF_PERF_BUDGET_WRITER_CHUNK_S", "1.0"))
 

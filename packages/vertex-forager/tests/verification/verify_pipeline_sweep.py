@@ -4,10 +4,14 @@ from pathlib import Path
 import time
 from typing import Any
 
+import pytest
+
 from vertex_forager.providers.sharadar.client import SharadarClient
 from vertex_forager.utils import load_tickers_env
 
 _YF_OPTIONAL_DEPS_MSG = "install optional deps with `pip install vertex-forager[yfinance]`"
+
+pytestmark = pytest.mark.manual
 
 
 def _get_yfinance_client(client_config: dict[str, Any]) -> Any:
@@ -215,6 +219,12 @@ def run_sweep() -> dict[str, Any]:
     if db_path.exists():
         db_path.unlink()
     return results
+
+
+def test_pipeline_sweep_collects_runs() -> None:
+    results = run_sweep()
+    assert len(results["runs"]) == len(_build_combos())
+    assert "yfinance_financials" in results["best"]
 
 
 if __name__ == "__main__":
