@@ -117,6 +117,7 @@ async def test_retry_and_writer_chunk_perf_budget() -> None:
         packets=packets,
         schema=object(),
         chunk_size=120,
+        total_rows=sum(len(p.frame) for p in packets),
         buffers={"t": packets.copy()},
         buffer_rows={"t": sum(len(p.frame) for p in packets)},
         result=RunResult(provider="test"),

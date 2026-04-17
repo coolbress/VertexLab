@@ -10,6 +10,7 @@ Covers:
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 from contextlib import asynccontextmanager
 import itertools
 import logging
@@ -644,6 +645,18 @@ async def test_progress_snapshot_uses_retained_sample_window_for_throughput(
 
     assert snapshots
     assert snapshots[-1].throughput_sym_per_s == pytest.approx(0.8)
+
+
+def test_build_summary_emits_tagged_parse_duration_percentiles() -> None:
+    router = _PaginatingRouter(pages=0)
+    engine, _ = _make_engine(router)
+    engine._hists["parse_duration_s.sharadar.price"] = deque([0.1, 0.2, 0.3])
+
+    summary = engine._compute_summary()
+
+    assert summary["parse_duration_s.sharadar.price_p50"] == 0.2
+    assert summary["parse_duration_s.sharadar.price_p95"] == 0.3
+    assert summary["parse_duration_s.sharadar.price_p99"] == 0.3
 
 
 @pytest.mark.asyncio

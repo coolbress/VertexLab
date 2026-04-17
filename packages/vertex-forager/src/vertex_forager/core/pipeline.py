@@ -393,6 +393,12 @@ class VertexForager:
             s[f"{key}_p99"] = _pctl(vals, 99.0)
         # Per-table writer latencies and rows per flush
         for key, vals_deque in self._hists.items():
+            if key.startswith("parse_duration_s."):
+                target = key.split(".", 1)[1]
+                vals = list(vals_deque)
+                s[f"parse_duration_s.{target}_p50"] = _pctl(vals, 50.0)
+                s[f"parse_duration_s.{target}_p95"] = _pctl(vals, 95.0)
+                s[f"parse_duration_s.{target}_p99"] = _pctl(vals, 99.0)
             if key.startswith("writer_flush_duration_s."):
                 table = key.split(".", 1)[1]
                 vals = list(vals_deque)
