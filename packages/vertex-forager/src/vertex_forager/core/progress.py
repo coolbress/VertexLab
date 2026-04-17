@@ -12,6 +12,8 @@ from tqdm import tqdm
 
 from vertex_forager.core.config import ProgressSnapshot
 
+PROGRESS_EMIT_INTERVAL_S = 0.1
+
 
 def compute_window_start(
     *, progress_started_at: float, progress_history: deque[tuple[float, int]], now: float
@@ -48,6 +50,7 @@ class ProgressEmitter:
         self._display_done = 0
         self._counters: dict[str, int] = {}
         self._process: psutil.Process | None = None
+        self._last_emit_at = 0.0
 
     def reset(self, *, jobs_total: int | None, jobs_done_initial: int = 0) -> None:
         self._started_at = time.monotonic()
@@ -59,6 +62,7 @@ class ProgressEmitter:
         self._display_done = jobs_done_initial
         self._counters = {}
         self._process = None
+        self._last_emit_at = 0.0
 
     def _ensure_process_initialized(self) -> psutil.Process:
         if self._process is None:
@@ -148,6 +152,10 @@ class ProgressEmitter:
         dataset: str,
         logger: Any,
     ) -> None:
+        now = time.monotonic()
+        if not snapshot.finished and self._last_emit_at and now - self._last_emit_at < PROGRESS_EMIT_INTERVAL_S:
+            return
+        self._last_emit_at = now
         if progress_bar is not None:
             delta = max(0, snapshot.jobs_done - self._display_done)
             if delta:
