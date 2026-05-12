@@ -18,5 +18,5 @@ dependencies = [
 vertex-lab = "vertex_lab.app:main"
 
 [build-system]
-requires = ["uv-build>=0.10.12,<0.11.0"]
+requires = ["uv-build>=0.11.10,<0.12.0"]
 build-backend = "uv_build"
