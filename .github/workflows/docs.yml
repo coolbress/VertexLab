@@ -22,12 +22,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 pinned
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1 pinned
       - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0 pinned
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0 pinned
         with:
           python-version: "3.14"
-      - uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57  # v8.0.0 pinned
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1 pinned
       - name: Set up Python virtual environment
         run: uv venv
       - name: Install docs deps
@@ -40,9 +40,9 @@ jobs:
   link-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 pinned
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1 pinned
       - name: Link Checker
-        uses: lycheeverse/lychee-action@8646ba30535128ac92d33dfc9133794bfdd9b411  # v2.8.0 pinned
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8  # v2.9.0 pinned
         with:
           args: --verbose --no-progress --max-concurrency 8 --max-redirects 10 --exclude '^\s*$' --exclude '^(yfinance://|mailto:)' --exclude '\.ipynb$' --exclude '^https://raw\.githubusercontent\.com/coolbress/VertexLab/python-coverage-comment-action-data/badge\.svg$' --exclude '^https://github\.com/coolbress/VertexLab/tree/python-coverage-comment-action-data$' 'packages/vertex-lab/docs/**/*.md' 'packages/vertex-forager/docs/**/*.md' 'README.md' 'packages/vertex-lab/README.md' 'CONTRIBUTING.md'
         env:
